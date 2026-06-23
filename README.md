@@ -1,6 +1,6 @@
 # Intelligent-Power-Inspection
 
-电力智能巡检平台软件端仓库。当前仓库包含 Java 后端、Vue Web 管理端和微信小程序端，用于演示变电站巡检业务中的登录鉴权、站点管理、路线规划、任务调度、机器人管理、告警处置、工单流转、检测模板、LingBot 建图、通知中心和巡检记录等能力。
+电力智能巡检平台软件端仓库。当前仓库包含 Java 后端、Vue Web 管理端和微信小程序端，用于演示变电站巡检业务中的登录鉴权、站点管理、**ROS 地图路线标注**、任务调度、机器人管理、告警处置、工单流转、检测模板、LingBot 建图、通知中心和巡检记录等能力。
 
 当前项目定位为课程/演示级可运行系统。真实机器人和生产级部署链路尚未完整接入；模型能力已拆出可替换接口和 Python FastAPI 服务骨架，默认仍以 mock runner 支撑联调，后续可替换为真实 LocateAnything 与 LingBot-Map runner。
 
@@ -11,6 +11,7 @@
 - `frontend/wechat-program/`：微信小程序端，已有页面、组件、mock 服务和后端 API 切换配置。
 - `ai-services/`：Python FastAPI 模型服务骨架，包含 LocateAnything 检测服务和 LingBot-Map 建图服务。
 - Web 端通过 Vite 代理访问后端 `/api/v1` 和 `/ws`。
+- Web 端 **巡检规划**（`/routes`）已切换为 **ROS 建图路线标注**：本地上传 `.yaml` + `.pgm`，标注起点/巡检点/方向，保存 `route.json` v2（`executorJson`）到后端，并可下载供机器人执行器加载。
 - 小程序端默认使用本地 mock；需要接真实后端时修改 `frontend/wechat-program/miniprogram/config/api.js`。
 - 后端默认使用 MySQL，测试/演示可使用 H2。
 - 后端模型网关支持 `mock` 和 `http` 两种模式；`http` 模式调用 `ai-services/` 中的 Python 服务。
@@ -98,15 +99,15 @@ Intelligent-Power-Inspection/
 │  ├─ web/
 │  │  ├─ src/
 │  │  │  ├─ api/                # HTTP 与实时通信封装
-│  │  │  ├─ components/         # 业务组件
-│  │  │  ├─ composables/        # 组合式逻辑
+│  │  │  ├─ components/         # 业务组件（含 RosMapRouteEditor）
+│  │  │  ├─ composables/        # 组合式逻辑（含 useRosMapRouteEditor）
 │  │  │  ├─ config/             # 菜单等配置
 │  │  │  ├─ layouts/            # 页面布局
 │  │  │  ├─ router/             # 路由与权限守卫
 │  │  │  ├─ stores/             # Pinia 状态
-│  │  │  ├─ types/              # TypeScript 类型
-│  │  │  ├─ utils/              # 工具函数
-│  │  │  └─ views/              # 页面视图
+│  │  │  ├─ types/              # TypeScript 类型（含 routeExecutor）
+│  │  │  ├─ utils/              # 工具函数（含 rosMap、routeExecutorJson）
+│  │  │  └─ views/              # 页面视图（RoutePlan 为 ROS 地图标注）
 │  │  ├─ docs/API.md
 │  │  ├─ package.json
 │  │  └─ vite.config.ts
@@ -389,6 +390,44 @@ Use baseline() or set baselineOnMigrate to true
 | `dispatcher` | `Disp@123` | `DISPATCHER` | 调度员，可调度任务、维护站点路线、处理告警和导出记录 |
 | `viewer` | `View@123` | `VIEWER` | 查看者，主要用于只读查看任务和监控数据 |
 
+## 巡检路线规划（Web `/routes`）
+
+Web 管理端「巡检业务 → 巡检规划」页面基于 ROS `map` 坐标系，用于在 **建图后的 PGM/YAML** 上标注机器人导航路线。
+
+### 使用流程
+
+1. 选择站点，新建或选择一条路线。
+2. 上传 `.yaml`（地图配置）和 `.pgm`（地图图像），支持拖拽；也可导入已有 `.json` 继续编辑。
+3. 切换标注模式：**起点** / **巡检点** / **方向** / **拖动**。
+4. 在右侧调整起点、路线参数与巡检点顺序（`↑` / `↓` 改变 `target_ids` 导航顺序）。
+5. 点击 **保存到平台**，通过 `PATCH /api/v1/routes/{id}` 持久化 `executorJson`。
+6. 可 **复制 JSON** 或 **下载 route.json**，供巡检执行器直接加载。
+
+### 数据格式
+
+- 主数据：`Route.executorJson`，即 **route.json version 2**，`frame_id: "map"`。
+- 坐标为 ROS map 米制坐标；方向 `yaw` 为弧度。
+- 坐标换算与 map_server 一致：
+
+```text
+x = origin_x + pixel_x * resolution
+y = origin_y + (image_height - pixel_y) * resolution
+```
+
+保存时会同步生成兼容字段 `checkpoints` 与 `path`，供任务调度、监控等页面继续显示巡检点数量与 Leaflet 折线（**不含 PGM 底图**）。
+
+### 相关代码
+
+| 路径 | 说明 |
+| --- | --- |
+| `frontend/web/src/views/RoutePlan.vue` | 路线列表 + 标注页 |
+| `frontend/web/src/components/RosMapRouteEditor.vue` | 标注 UI |
+| `frontend/web/src/stores/route.ts` | `saveExecutorRoute()` 保存标注结果 |
+| `frontend/web/src/types/routeExecutor.ts` | route.json v2 类型 |
+| `frontend/web/docs/API.md` §5.5 | 前端 Store 与 API 说明 |
+
+> YAML/PGM 由用户本地上传，当前**不**通过后端 API 存储地图文件；换地图后若点位越界，页面会提示重新标定。
+
 ## 权限点
 
 后端当前保留 12 个权限点：
@@ -445,7 +484,7 @@ Authorization: Bearer <token>
 | 认证 | `/auth/login`、`/auth/register`、`/auth/logout`、`/auth/me`、`/auth/password` |
 | 用户 | `/users`、`/users/{id}/role`、`/users/{id}/enabled`、`/users/me`、`/users/me/activities`、`/users/me/preferences` |
 | 站点区域 | `/sites`、`/sites/{id}`、`/sites/{id}/areas` |
-| 路线检查点 | `/routes`、`/routes/{id}`、`/routes/{id}/checkpoints` |
+| 路线检查点 | `/routes`、`/routes/{id}`、`/routes/{id}/checkpoints`；`PATCH /routes/{id}` 可写入 `executorJson`（ROS route.json v2） |
 | 任务 | `/tasks`、`/tasks/{id}`、`/tasks/{id}/dispatch`、`/tasks/{id}/pause`、`/tasks/{id}/resume`、`/tasks/{id}/takeover`、`/tasks/{id}/cancel`、`/tasks/{id}/events` |
 | 告警 | `/alarms`、`/alarms/{id}/ack`、`/alarms/ack-all` |
 | 工单 | `/work-orders`、`/work-orders/{id}`、`/work-orders/from-alarm/{alarmId}` |
@@ -495,6 +534,8 @@ Web 端核心业务数据已通过后端接口加载：
 - 少量 UI 偏好，例如侧边栏折叠状态。
 
 站点、路线、任务、告警、工单、机器人、检测模板、建图任务、通知、记录等核心业务数据以后端为准。任务、机器人、告警、建图任务和通知会通过 WebSocket/STOMP 实时刷新；页面首次进入时仍会通过 REST API 加载快照数据。
+
+**路线规划**：`/routes` 以 `executorJson` 为主数据；监控/任务页的 Leaflet 地图仅作兼容展示，不加载 ROS PGM 底图。
 
 ## 常用命令
 
@@ -584,10 +625,15 @@ http://localhost:5173
 http://127.0.0.1:5173
 ```
 
+### 7. 巡检规划页如何加载地图
+
+在 `/routes` 页面本地上传与 LingBot 建图产物对应的 `.yaml` 和 `.pgm` 即可。地图文件不会上传到服务器；标注结果通过 **保存到平台** 写入路线的 `executorJson` 字段。
+
 ## 当前限制
 
 - 当前是演示/课程级后端，不是生产部署方案。
 - 真实机器人控制尚未接入；`RobotGateway` 默认仍是模拟任务执行和机器人位置。
+- **巡检规划**为 ROS map 标注 + route.json v2 持久化；监控/任务页 Leaflet 地图与 PGM 标注页未统一，且 YAML/PGM 需每次本地上传。
 - LocateAnything 与 LingBot-Map 已有 Python 服务骨架和后端 HTTP 网关，但真实模型 runner 仍需按官方代码进一步封装。
 - 当前 Python 服务默认输出 mock 检测结果和 mock 建图产物。
 - 生产级日志、审计、监控、部署流水线和权限审计细节仍需进一步完善。
