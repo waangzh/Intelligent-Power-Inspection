@@ -1,0 +1,36 @@
+<view class="container">
+  <page-header title="偏好设置" description="自定义通知与界面偏好" />
+
+  <view class="card">
+    <view class="group-title">消息通知</view>
+    <view class="setting-row">
+      <view><text>告警通知</text><text class="hint">有新告警时提醒</text></view>
+      <switch checked="{{prefs.notifyAlarm}}" data-key="notifyAlarm" bindchange="onSwitch" color="#1a5fb4" />
+    </view>
+    <view class="setting-row">
+      <view><text>任务通知</text><text class="hint">任务状态变更时提醒</text></view>
+      <switch checked="{{prefs.notifyTask}}" data-key="notifyTask" bindchange="onSwitch" color="#1a5fb4" />
+    </view>
+    <view class="setting-row">
+      <view><text>系统通知</text><text class="hint">系统公告与维护提醒</text></view>
+      <switch checked="{{prefs.notifySystem}}" data-key="notifySystem" bindchange="onSwitch" color="#1a5fb4" />
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="group-title">界面偏好</view>
+    <view class="setting-row">
+      <view><text>默认站点</text><text class="hint">进入总览时默认站点</text></view>
+      <picker mode="selector" range="{{sites}}" range-key="name" bindchange="onSiteChange">
+        <view class="picker-val">{{siteLabel}} ▾</view>
+      </picker>
+    </view>
+    <view class="setting-row" wx:if="{{prefs.defaultSiteId}}">
+      <text class="link" bindtap="clearSite">清除默认站点</text>
+    </view>
+    <view class="setting-row">
+      <view><text>侧边栏折叠</text><text class="hint">默认收起左侧菜单</text></view>
+      <switch checked="{{prefs.sidebarCollapsed}}" data-key="sidebarCollapsed" bindchange="onSwitch" color="#1a5fb4" />
+    </view>
+  </view>
+</view>

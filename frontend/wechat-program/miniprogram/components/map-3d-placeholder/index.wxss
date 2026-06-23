@@ -1,0 +1,55 @@
+.map3d {
+  position: relative;
+  background: linear-gradient(180deg, #0d2137 0%, #1a3a5c 100%);
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(100, 181, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 181, 255, 0.12) 1px, transparent 1px);
+  background-size: 40rpx 40rpx;
+  transform: perspective(400rpx) rotateX(55deg);
+  transform-origin: center 80%;
+}
+.axis { position: absolute; background: rgba(255, 215, 0, 0.6); }
+.axis-x { left: 10%; right: 10%; bottom: 28%; height: 2rpx; }
+.axis-y { left: 50%; top: 20%; bottom: 28%; width: 2rpx; }
+.route-line {
+  position: absolute;
+  left: 18%;
+  top: 42%;
+  width: 64%;
+  height: 4rpx;
+  background: linear-gradient(90deg, #1a5fb4, #67c23a);
+  transform: rotate(-8deg);
+  border-radius: 4rpx;
+}
+.cp {
+  position: absolute;
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  background: #e6a23c;
+  box-shadow: 0 0 12rpx #e6a23c;
+}
+.cp1 { left: 22%; top: 46%; }
+.cp2 { left: 48%; top: 38%; }
+.cp3 { left: 72%; top: 44%; }
+.label {
+  position: absolute;
+  top: 16rpx;
+  left: 16rpx;
+  color: #64b5ff;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+.hint {
+  position: absolute;
+  bottom: 16rpx;
+  right: 16rpx;
+  color: #8aa8cc;
+  font-size: 22rpx;
+}

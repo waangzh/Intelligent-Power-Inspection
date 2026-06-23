@@ -1,0 +1,9 @@
+<view class="forbidden-page">
+  <text class="code">403</text>
+  <text class="title">无权访问</text>
+  <text class="desc">您没有权限访问此页面，请联系管理员</text>
+  <view class="actions">
+    <button type="primary" bindtap="goHome">返回首页</button>
+    <button class="btn-plain" bindtap="goBack">返回上页</button>
+  </view>
+</view>

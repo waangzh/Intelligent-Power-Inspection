@@ -1,0 +1,54 @@
+<view class="container" wx:if="{{task}}">
+  <page-header title="{{task.name}}" description="任务 ID: {{task.id}}" />
+
+  <view class="card">
+    <view class="flex-between">
+      <task-status-tag status="{{task.status}}" />
+      <button size="mini" class="btn-plain" bindtap="goBack">返回列表</button>
+    </view>
+    <progress percent="{{task.progress}}" stroke-width="8" activeColor="#1a5fb4" />
+    <view class="info-row"><text class="muted">路线</text><text>{{routeName}}</text></view>
+    <view class="info-row"><text class="muted">机器人</text><text>{{robotName}}</text></view>
+    <view class="info-row"><text class="muted">检查点</text><text>第 {{task.currentCheckpointSeq}} / {{checkpointTotal}} 个</text></view>
+    <view class="info-row"><text class="muted">创建时间</text><text>{{createdLabel}}</text></view>
+    <view class="info-row"><text class="muted">开始时间</text><text>{{startedLabel}}</text></view>
+    <view class="task-actions">
+      <button wx:if="{{canDispatch && task.status==='CREATED'}}" size="mini" type="primary" bindtap="dispatch">下发</button>
+      <button wx:if="{{canControl && task.status==='RUNNING'}}" size="mini" bindtap="pause">暂停</button>
+      <button wx:if="{{canControl && task.status==='PAUSED'}}" size="mini" type="primary" bindtap="resume">恢复</button>
+      <button wx:if="{{canControl && task.status==='RUNNING'}}" size="mini" type="warn" bindtap="takeover">接管</button>
+      <button wx:if="{{canControl && task.status!=='COMPLETED' && task.status!=='CANCELLED'}}" size="mini" bindtap="cancel">取消</button>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{route}}">
+    <view class="card-title">轨迹地图</view>
+    <map-view center="{{mapCenter}}" route="{{route}}" robotPosition="{{robotPos}}" />
+  </view>
+
+  <view class="card">
+    <view class="card-title">关联告警 ({{taskAlarms.length}})</view>
+    <view class="list-item" wx:for="{{taskAlarms}}" wx:key="id">
+      <text class="tag tag-warning">{{item.severity}}</text>
+      <text>{{item.message}}</text>
+    </view>
+    <view wx:if="{{!taskAlarms.length}}" class="muted">暂无关联告警</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">执行时间线</view>
+    <view class="timeline">
+      <view class="timeline-item" wx:for="{{events}}" wx:key="id">
+        <view class="timeline-dot dot-{{item.evType}}"></view>
+        <view class="timeline-body">
+          <view class="timeline-time">{{item.time}} · <text class="ev-{{item.evType}}">{{item.typeLabel}}</text></view>
+          <view class="timeline-msg">{{item.message}}</view>
+          <view class="muted" wx:if="{{item.checkpointName}}">检查点: {{item.checkpointName}}</view>
+          <image wx:if="{{item.imageUrl}}" class="event-img" src="{{item.imageUrl}}" mode="aspectFill" />
+        </view>
+      </view>
+    </view>
+    <view wx:if="{{!events.length}}" class="empty-hint">下发后将自动生成事件</view>
+  </view>
+</view>
+<view wx:else class="empty-hint">任务不存在</view>

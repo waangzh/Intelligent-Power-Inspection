@@ -1,0 +1,70 @@
+<view class="bigscreen">
+  <view class="bs-header">
+    <text class="bs-title">电力智能巡检 · 集控中心</text>
+    <text class="bs-clock">{{clock}}</text>
+    <view class="bs-actions">
+      <picker wx:if="{{sites.length}}" mode="selector" range="{{sites}}" range-key="name" value="{{siteIndex}}" bindchange="onSiteChange">
+        <text class="bs-btn">{{activeSite.name || '选择站点'}} ▾</text>
+      </picker>
+      <text class="bs-btn" bindtap="exitBigscreen">退出大屏</text>
+    </view>
+  </view>
+
+  <view class="kpi-grid">
+    <view class="kpi" wx:for="{{kpis}}" wx:key="label">
+      <text class="kpi-val" style="color:{{item.color}}">{{item.value}}</text>
+      <text class="kpi-lbl">{{item.label}}</text>
+    </view>
+  </view>
+
+  <view class="bs-panel">
+    <view class="bs-panel-title">站点态势 · {{activeSite.name || '—'}}</view>
+    <map-view center="{{mapCenter}}" route="{{displayRoute}}" areas="{{areas}}" robotPosition="{{robotPos}}" height="{{280}}" />
+  </view>
+
+  <view class="bs-panel ticker-panel">
+    <view class="bs-panel-title">实时告警滚动</view>
+    <view class="ticker-wrap">
+      <view class="ticker">{{tickerText}}</view>
+    </view>
+  </view>
+
+  <view class="chart-row">
+    <view class="bs-panel chart-panel">
+      <view class="bs-panel-title">告警趋势（7日）</view>
+      <simple-chart type="bar" data="{{alarmTrend}}" />
+    </view>
+    <view class="bs-panel chart-panel">
+      <view class="bs-panel-title">任务完成率</view>
+      <simple-chart type="gauge" value="{{completionRate}}" title="完成率" />
+    </view>
+  </view>
+
+  <view class="bs-panel">
+    <view class="bs-panel-title">工单概况</view>
+    <view class="wo-stats">
+      <view class="wo-stat" wx:for="{{woStats}}" wx:key="label">
+        <text class="wo-val">{{item.value}}</text>
+        <text class="wo-lbl">{{item.label}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="bs-panel">
+    <view class="bs-panel-title">机器人状态</view>
+    <view class="robot-row" wx:for="{{robots}}" wx:key="id">
+      <text>{{item.name}}</text>
+      <text class="bs-badge">{{item.battery}}%</text>
+      <text class="bs-status">{{item.status}}</text>
+    </view>
+  </view>
+
+  <view class="bs-panel">
+    <view class="bs-panel-title">进行中任务</view>
+    <view class="task-row" wx:for="{{activeTasks}}" wx:key="id">
+      <text class="task-name">{{item.name}}</text>
+      <progress percent="{{item.progress}}" stroke-width="4" activeColor="#64b5ff" backgroundColor="#2a4a6b" />
+    </view>
+    <view wx:if="{{!activeTasks.length}}" class="bs-empty">暂无进行中任务</view>
+  </view>
+</view>

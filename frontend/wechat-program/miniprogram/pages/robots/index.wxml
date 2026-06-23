@@ -1,0 +1,39 @@
+<view class="container">
+  <page-header title="机器人管理" description="注册、绑定站点与运行状态监控" />
+
+  <view class="stat-grid">
+    <view class="stat-item" wx:for="{{statusStats}}" wx:key="label">
+      <view class="stat-value">{{item.value}}</view>
+      <view class="stat-label">{{item.label}}</view>
+    </view>
+  </view>
+
+  <view class="card toolbar">
+    <button size="mini" type="primary" bindtap="toggleForm">{{showForm ? '取消' : '注册机器人'}}</button>
+  </view>
+
+  <view class="card" wx:if="{{showForm}}">
+    <view class="form-row"><text class="form-label">名称</text><input data-field="name" bindinput="onInput" placeholder="机器人名称" /></view>
+    <view class="form-row"><text class="form-label">型号</text><input data-field="model" bindinput="onInput" placeholder="设备型号" /></view>
+    <view class="form-row"><text class="form-label">序列号</text><input data-field="serialNo" bindinput="onInput" placeholder="序列号" /></view>
+    <view class="form-row">
+      <text class="form-label">站点</text>
+      <picker mode="selector" range="{{sites}}" range-key="name" value="{{form.siteIndex}}" bindchange="onSiteChange">
+        <view class="picker-val">{{sites[form.siteIndex].name || '选择站点'}} ▾</view>
+      </picker>
+    </view>
+    <button type="primary" size="mini" bindtap="addRobot">确认注册</button>
+  </view>
+
+  <view class="card" wx:for="{{robots}}" wx:key="id">
+    <view class="flex-between">
+      <text class="robot-name">{{item.name}}</text>
+      <text class="link danger" bindtap="remove" data-id="{{item.id}}">删除</text>
+    </view>
+    <view class="muted">{{item.model}} · {{item.serialNo}}</view>
+    <view class="muted">{{item.siteName}} · {{item.statusLabel}} · 固件 {{item.firmware || '-'}}</view>
+    <view class="muted">最后在线 {{item.lastOnlineLabel}}</view>
+    <progress percent="{{item.battery}}" stroke-width="4" activeColor="#1a5fb4" />
+  </view>
+  <view wx:if="{{!robots.length}}" class="empty-hint">暂无机器人</view>
+</view>

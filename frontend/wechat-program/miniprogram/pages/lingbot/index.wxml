@@ -1,0 +1,47 @@
+<view class="container">
+  <page-header title="LingBot-Map 三维建图" description="视频驱动的三维空间感知，支持巡检点位对齐与异常定位" />
+
+  <view class="card toolbar">
+    <button size="mini" type="primary" bindtap="toggleForm">{{showForm ? '取消' : '新建建图任务'}}</button>
+  </view>
+
+  <view class="info-row">
+    <view class="card info-card">
+      <view class="card-title">LingBot-Map 能力</view>
+      <view class="feature-item">· 低成本室外变电站三维重建</view>
+      <view class="feature-item">· 巡检点位与视频帧空间对齐</view>
+      <view class="feature-item">· 异常告警三维坐标回溯</view>
+      <view class="feature-item">· 支持增量更新与版本管理</view>
+    </view>
+    <view class="card info-card">
+      <view class="card-title">三维预览（演示）</view>
+      <map-3d-placeholder title="LingBot 点云空间" height="{{280}}" />
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{showForm}}">
+    <view class="form-row"><text class="form-label">任务名称</text><input bindinput="onInput" placeholder="建图任务名称" /></view>
+    <view class="form-row">
+      <text class="form-label">站点</text>
+      <picker mode="selector" range="{{sites}}" range-key="name" value="{{form.siteIndex}}" bindchange="onSiteChange">
+        <view class="picker-val">{{sites[form.siteIndex].name || '选择站点'}} ▾</view>
+      </picker>
+    </view>
+    <button type="primary" size="mini" bindtap="createJob">创建</button>
+  </view>
+
+  <view class="card">
+    <view class="card-title">建图任务列表</view>
+    <view class="job-item" wx:for="{{jobs}}" wx:key="id">
+      <view class="flex-between">
+        <text class="job-name">{{item.name}}</text>
+        <text class="tag tag-{{item.statusType}}">{{item.statusLabel}}</text>
+      </view>
+      <view class="muted">{{item.siteName}} · {{item.createdLabel}}</view>
+      <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1a5fb4" />
+      <view class="muted">点云 {{item.pointCountLabel}} · 视频 {{item.videoCount}}</view>
+      <button wx:if="{{item.status!=='COMPLETED'}}" size="mini" bindtap="simulate" data-id="{{item.id}}">推进</button>
+    </view>
+    <view wx:if="{{!jobs.length}}" class="empty-hint">暂无建图任务</view>
+  </view>
+</view>

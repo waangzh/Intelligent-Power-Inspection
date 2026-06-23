@@ -1,0 +1,8 @@
+.toolbar { display: flex; justify-content: flex-end; }
+.form-row { display: flex; align-items: center; gap: 16rpx; margin-bottom: 16rpx; }
+.form-label { width: 120rpx; color: #6b7c93; }
+.form-row input { flex: 1; border: 1rpx solid #e4e7ed; border-radius: 8rpx; padding: 12rpx; }
+.picker-val { color: #1a5fb4; }
+.robot-name { font-weight: 600; }
+.link { font-size: 26rpx; }
+.danger { color: #f56c6c; }

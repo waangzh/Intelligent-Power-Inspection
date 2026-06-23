@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "更多功能",
+  "usingComponents": {
+    "page-header": "/components/page-header/index"
+  }
+}

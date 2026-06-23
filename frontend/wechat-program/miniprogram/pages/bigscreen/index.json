@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "集控大屏",
+  "navigationBarBackgroundColor": "#0a1628",
+  "navigationBarTextStyle": "white",
+  "usingComponents": {
+    "task-status-tag": "/components/task-status-tag/index",
+    "simple-chart": "/components/simple-chart/index",
+    "map-view": "/components/map-view/index"
+  }
+}

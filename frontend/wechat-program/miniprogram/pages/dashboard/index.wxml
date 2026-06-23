@@ -1,0 +1,98 @@
+<view class="container">
+  <view class="welcome card" wx:if="{{user}}">
+    <view class="welcome-inner">
+      <user-avatar displayName="{{user.displayName}}" avatarUrl="{{user.avatarUrl}}" seed="{{user.id}}" size="96" />
+      <view class="welcome-text">
+        <text class="greeting">{{greeting}}，{{user.displayName}}</text>
+        <text class="bio">{{user.bio || '欢迎使用电力智能巡检平台'}}</text>
+      </view>
+    </view>
+    <view class="quick-actions">
+      <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/tasks/index">任务</button>
+      <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/alarms/index">告警{{unack ? '('+unack+')' : ''}}</button>
+      <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/statistics/index">统计</button>
+      <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/more/index">更多</button>
+    </view>
+  </view>
+
+  <page-header title="运行总览" description="电力巡检平台运行态势一屏掌握" />
+
+  <view class="stat-grid">
+    <view class="stat-item" wx:for="{{stats}}" wx:key="label">
+      <view class="stat-value">{{item.value}}</view>
+      <view class="stat-label">{{item.label}}</view>
+      <view class="muted trend">{{item.trend}}</view>
+    </view>
+  </view>
+
+  <view class="card chart-row">
+    <view class="chart-half">
+      <view class="card-title">告警趋势（7日）</view>
+      <simple-chart type="line" data="{{alarmChartData}}" />
+    </view>
+    <view class="chart-half">
+      <view class="card-title">任务完成率</view>
+      <simple-chart type="gauge" value="{{completionRate}}" title="完成率" />
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">今日巡检日程</view>
+    <view class="schedule-item" wx:for="{{schedule}}" wx:key="time">
+      <text class="schedule-time">{{item.time}}</text>
+      <text>{{item.text}}</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title flex-between">
+      <text>实时地图 · {{activeSite.name || '站点'}}</text>
+      <picker wx:if="{{sites.length}}" mode="selector" range="{{sites}}" range-key="name" value="{{siteIndex}}" bindchange="onSiteChange">
+        <text class="link">切换 ▾</text>
+      </picker>
+    </view>
+    <map-view wx:if="{{activeSite}}" center="{{activeSite.center}}" route="{{displayRoute}}" robotPosition="{{robotPosition}}" />
+  </view>
+
+  <view class="card">
+    <view class="card-title flex-between">
+      <text>最新告警</text>
+      <text class="link" bindtap="go" data-url="/pages/alarms/index">全部</text>
+    </view>
+    <view wx:for="{{recentAlarms}}" wx:key="id" class="list-item">
+      <text class="tag tag-{{item.sevType}}">{{item.severityLabel}}</text>
+      <text>{{item.message}}</text>
+    </view>
+    <view wx:if="{{!recentAlarms.length}}" class="empty-hint">暂无告警</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title flex-between">
+      <text>当前任务</text>
+      <text class="link" bindtap="go" data-url="/pages/tasks/index">全部</text>
+    </view>
+    <view wx:for="{{activeTasks}}" wx:key="id" class="list-item">
+      <view class="flex-between">
+        <text class="task-name" bindtap="goDetail" data-id="{{item.id}}">{{item.name}}</text>
+        <task-status-tag status="{{item.status}}" />
+      </view>
+      <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1a5fb4" />
+      <view class="task-actions" wx:if="{{canControl}}">
+        <button wx:if="{{item.status==='RUNNING'}}" size="mini" bindtap="pauseTask" data-id="{{item.id}}">暂停</button>
+        <button wx:if="{{item.status==='PAUSED'}}" size="mini" type="primary" bindtap="resumeTask" data-id="{{item.id}}">恢复</button>
+        <button wx:if="{{item.status==='RUNNING'}}" size="mini" type="warn" bindtap="takeoverTask" data-id="{{item.id}}">接管</button>
+        <button size="mini" bindtap="goDetail" data-id="{{item.id}}">详情</button>
+      </view>
+    </view>
+    <view wx:if="{{!activeTasks.length}}" class="empty-hint">暂无进行中任务</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">机器人状态</view>
+    <view wx:for="{{robots}}" wx:key="id" class="robot-row">
+      <text>{{item.name}}</text>
+      <text class="tag tag-{{item.statusType}}">{{item.status}}</text>
+      <progress percent="{{item.battery}}" stroke-width="4" style="flex:1;margin-left:16rpx;" />
+    </view>
+  </view>
+</view>

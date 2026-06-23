@@ -1,0 +1,67 @@
+<view class="container">
+  <page-header title="任务调度" description="巡检任务创建与执行控制" />
+
+  <view class="card toolbar" wx:if="{{canCreate}}">
+    <button size="mini" type="primary" bindtap="toggleCreate">{{showCreate ? '取消' : '新建任务'}}</button>
+  </view>
+
+  <view class="card form-card" wx:if="{{showCreate}}">
+    <view class="card-title">新建巡检任务</view>
+    <view class="form-row">
+      <text class="form-label">任务名称</text>
+      <input placeholder="请输入任务名称" value="{{form.name}}" bindinput="onNameInput" />
+    </view>
+    <view class="form-row">
+      <text class="form-label">巡检路线</text>
+      <picker mode="selector" range="{{routes}}" range-key="label" value="{{form.routeIndex}}" bindchange="onRouteChange">
+        <view class="picker-val">{{routes[form.routeIndex].label || '请选择'}} ▾</view>
+      </picker>
+    </view>
+    <view class="form-row">
+      <text class="form-label">执行机器人</text>
+      <picker mode="selector" range="{{availableRobots}}" range-key="label" value="{{form.robotIndex}}" bindchange="onRobotChange">
+        <view class="picker-val">{{availableRobots[form.robotIndex].label || '请选择'}} ▾</view>
+      </picker>
+    </view>
+    <button type="primary" class="btn-primary" bindtap="submitCreate">创建任务</button>
+  </view>
+
+  <view class="card active-card" wx:if="{{activeTask}}">
+    <view class="card-title flex-between">
+      <text>执行中 · {{activeTask.name}}</text>
+      <task-status-tag status="{{activeTask.status}}" />
+    </view>
+    <view class="info-row"><text class="muted">路线</text><text>{{activeRouteName}}</text></view>
+    <view class="info-row"><text class="muted">机器人</text><text>{{activeRobotName}}</text></view>
+    <progress percent="{{activeTask.progress}}" stroke-width="8" activeColor="#1a5fb4" />
+    <view class="voice-hint" wx:if="{{activeTask.status==='RUNNING'}}">🎙 行进中持续检测人员/安全帽/障碍物/火源；到点播报「已到达指定位置，开始检查」</view>
+    <map-view wx:if="{{activeRoute}}" center="{{mapCenter}}" route="{{activeRoute}}" robotPosition="{{robotPos}}" />
+    <view class="task-actions">
+      <button wx:if="{{canDispatch && activeTask.status==='CREATED'}}" size="mini" type="primary" catchtap="dispatch" data-id="{{activeTask.id}}">下发</button>
+      <button wx:if="{{canControl && activeTask.status==='RUNNING'}}" size="mini" catchtap="pause" data-id="{{activeTask.id}}">暂停</button>
+      <button wx:if="{{canControl && activeTask.status==='PAUSED'}}" size="mini" type="primary" catchtap="resume" data-id="{{activeTask.id}}">恢复</button>
+      <button wx:if="{{canControl && activeTask.status==='RUNNING'}}" size="mini" catchtap="takeover" data-id="{{activeTask.id}}">接管</button>
+      <button wx:if="{{canControl && activeTask.status!=='COMPLETED' && activeTask.status!=='CANCELLED'}}" size="mini" catchtap="cancel" data-id="{{activeTask.id}}">取消</button>
+      <button size="mini" catchtap="goDetail" data-id="{{activeTask.id}}">详情</button>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">任务列表</view>
+    <view class="list-item" wx:for="{{tasks}}" wx:key="id">
+      <view class="flex-between" bindtap="goDetail" data-id="{{item.id}}">
+        <text class="task-name">{{item.name}}</text>
+        <task-status-tag status="{{item.status}}" />
+      </view>
+      <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1a5fb4" />
+      <view class="task-actions">
+        <button wx:if="{{canDispatch && item.status==='CREATED'}}" size="mini" type="primary" catchtap="dispatch" data-id="{{item.id}}">下发</button>
+        <button wx:if="{{canControl && item.status==='RUNNING'}}" size="mini" catchtap="pause" data-id="{{item.id}}">暂停</button>
+        <button wx:if="{{canControl && item.status==='PAUSED'}}" size="mini" type="primary" catchtap="resume" data-id="{{item.id}}">恢复</button>
+        <button wx:if="{{canControl && item.status==='RUNNING'}}" size="mini" catchtap="takeover" data-id="{{item.id}}">接管</button>
+        <button wx:if="{{canControl && item.status!=='COMPLETED' && item.status!=='CANCELLED'}}" size="mini" catchtap="cancel" data-id="{{item.id}}">取消</button>
+      </view>
+    </view>
+    <view wx:if="{{!tasks.length}}" class="empty-hint">暂无任务</view>
+  </view>
+</view>

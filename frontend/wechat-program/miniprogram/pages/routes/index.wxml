@@ -1,0 +1,80 @@
+<view class="container">
+  <page-header title="巡检规划" description="路线绘制、检查点与检测策略配置" />
+
+  <view class="card toolbar">
+    <picker mode="selector" range="{{sites}}" range-key="name" value="{{siteIndex}}" bindchange="onSiteChange">
+      <view class="filter-btn">{{sites[siteIndex].name || '选择站点'}} ▾</view>
+    </picker>
+    <button size="mini" type="primary" bindtap="addRoute">新建</button>
+  </view>
+
+  <scroll-view scroll-x class="route-tabs" wx:if="{{filteredRoutes.length}}">
+    <view wx:for="{{filteredRoutes}}" wx:key="id" class="route-tab {{selectedRouteId===item.id?'active':''}}" bindtap="selectRoute" data-id="{{item.id}}">{{item.name}}</view>
+  </scroll-view>
+
+  <block wx:if="{{currentRoute}}">
+    <view class="card">
+      <view class="form-row"><text class="form-label">名称</text><input value="{{routeName}}" bindinput="onRouteName" /></view>
+      <view class="form-row"><text class="form-label">描述</text><input value="{{routeDesc}}" bindinput="onRouteDesc" /></view>
+      <view class="form-row">
+        <text class="form-label">地图</text>
+        <picker mode="selector" range="{{mapModes}}" range-key="label" value="{{mapModeIndex}}" bindchange="onMapMode">
+          <view class="picker-val">{{mapModes[mapModeIndex].label}} ▾</view>
+        </picker>
+      </view>
+      <view class="form-actions">
+        <button size="mini" type="primary" bindtap="saveMeta">保存信息</button>
+        <button size="mini" type="warn" bindtap="deleteRoute">删除路线</button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title flex-between">
+        <text>地图 · {{mapModes[mapModeIndex].label}}</text>
+        <view class="map-btns" wx:if="{{mapModes[mapModeIndex].value==='2d'}}">
+          <button size="mini" type="{{drawingPath?'warn':'primary'}}" bindtap="toggleDraw">{{drawingPath?'完成绘制':'绘制路线'}}</button>
+          <button size="mini" bindtap="clearPath">清除</button>
+          <button size="mini" bindtap="addDemoPath">示例</button>
+        </view>
+      </view>
+      <block wx:if="{{mapModes[mapModeIndex].value==='2d'}}">
+        <map-view center="{{siteCenter}}" route="{{currentRoute}}" drawMode="{{drawingPath}}" editable="{{true}}" bind:tapmap="onMapTap" bind:checkpointselect="onCpSelect" />
+        <view class="muted map-hint" wx:if="{{drawingPath}}">点击地图添加路线节点；再次点「完成绘制」结束</view>
+        <view class="muted map-hint" wx:else>点击地图可添加检查点</view>
+      </block>
+      <block wx:else>
+        <map-3d-placeholder title="路线三维视图" height="{{360}}" />
+        <view class="muted map-hint">三维模式为演示预览，路线数据与 2D 同步保存</view>
+      </block>
+    </view>
+
+    <view class="card">
+      <view class="seg-tabs">
+        <text class="seg {{activeTab==='route-det'?'on':''}}" bindtap="setTab" data-t="route-det">路线检测</text>
+        <text class="seg {{activeTab==='checkpoints'?'on':''}}" bindtap="setTab" data-t="checkpoints">检查点</text>
+      </view>
+
+      <block wx:if="{{activeTab==='route-det'}}">
+        <detection-config items="{{currentRoute.routeDetections}}" bind:change="onRouteDetectionChange" />
+      </block>
+
+      <block wx:if="{{activeTab==='checkpoints'}}">
+        <view class="cp-item {{selectedCpId===item.id?'sel':''}}" wx:for="{{currentRoute.checkpoints}}" wx:key="id" bindtap="onCpSelect" data-id="{{item.id}}">
+          <text>{{item.seq}}. {{item.name}}</text>
+          <text class="link danger" catchtap="removeCp" data-id="{{item.id}}">删除</text>
+        </view>
+        <view class="card inner" wx:if="{{selectedCp}}">
+          <view class="card-title">检查点配置 · {{selectedCp.name}}</view>
+          <view class="form-row"><text class="form-label">名称</text><input value="{{cpForm.name}}" bindinput="onCpName" /></view>
+          <view class="form-row"><text class="form-label">水平角</text><slider min="0" max="360" value="{{cpForm.pan}}" bindchange="onCpPan" show-value /></view>
+          <view class="form-row"><text class="form-label">俯仰角</text><slider min="-90" max="90" value="{{cpForm.tilt}}" bindchange="onCpTilt" show-value /></view>
+          <view class="form-row"><text class="form-label">停留秒</text><slider min="5" max="120" value="{{cpForm.dwell}}" bindchange="onCpDwell" show-value /></view>
+          <button size="mini" type="primary" bindtap="saveCp">保存检查点</button>
+          <detection-config items="{{selectedCp.detections}}" bind:change="onCpDetectionChange" />
+        </view>
+      </block>
+    </view>
+  </block>
+
+  <view wx:elif="{{sites.length}}" class="empty-hint">请选择或创建巡检路线</view>
+</view>

@@ -1,0 +1,14 @@
+<view class="auth-page">
+  <view class="auth-card">
+    <view class="brand">创建账号</view>
+    <text class="subtitle">默认角色为观察员</text>
+    <view class="form-item"><input class="input" placeholder="用户名" value="{{form.username}}" data-k="username" bindinput="onInput" /></view>
+    <view class="form-item"><input class="input" placeholder="姓名" value="{{form.displayName}}" data-k="displayName" bindinput="onInput" /></view>
+    <view class="form-item"><input class="input" placeholder="手机号（选填）" value="{{form.phone}}" data-k="phone" bindinput="onInput" /></view>
+    <view class="form-item"><input class="input" password placeholder="密码" value="{{form.password}}" data-k="password" bindinput="onInput" /></view>
+    <view class="form-item"><input class="input" password placeholder="确认密码" value="{{form.confirmPassword}}" data-k="confirmPassword" bindinput="onInput" /></view>
+    <label class="remember"><checkbox checked="{{form.agreed}}" bindtap="toggleAgreed" color="#1a5fb4" /> 我已阅读并同意服务条款</label>
+    <button class="submit btn-primary" loading="{{loading}}" bindtap="handleRegister">注 册</button>
+    <view class="footer">已有账号？<text class="link" bindtap="goLogin">去登录</text></view>
+  </view>
+</view>

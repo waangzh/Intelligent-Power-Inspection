@@ -1,0 +1,10 @@
+.user-row { display: flex; gap: 20rpx; align-items: center; margin-bottom: 16rpx; }
+.user-info { flex: 1; }
+.user-name { display: block; font-weight: 600; font-size: 30rpx; }
+.role-picker { color: #1a5fb4; font-size: 26rpx; text-align: right; }
+.self-hint { text-align: right; font-size: 24rpx; }
+.bio-line { display: block; margin-top: 4rpx; }
+.role-table-row { display: flex; gap: 12rpx; padding: 12rpx 0; border-bottom: 1rpx solid #f0f2f5; font-size: 24rpx; }
+.role-table-row.head { font-weight: 600; color: #1a2b3c; }
+.role-table-row text { flex: 1; }
+.role-table-row text:first-child { flex: 0 0 120rpx; }

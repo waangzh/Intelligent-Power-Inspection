@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "巡检规划",
+  "usingComponents": {
+    "page-header": "/components/page-header/index",
+    "map-view": "/components/map-view/index",
+    "map-3d-placeholder": "/components/map-3d-placeholder/index",
+    "detection-config": "/components/detection-config/index"
+  }
+}

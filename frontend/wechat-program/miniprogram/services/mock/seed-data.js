@@ -1,0 +1,90 @@
+const { ROUTE_DETECTIONS, CHECKPOINT_DETECTIONS } = require('../../utils/constants')
+
+function detectionItems(types) {
+  return types.map((type) => ({
+    type,
+    enabled: true,
+    threshold: 0.75,
+    prompt: type === 'SWITCH' ? '红色刀闸开关' : type === 'OIL_LEAK' ? '设备底部渗油区域' : type === 'METER' ? '压力表读数区域' : undefined,
+  }))
+}
+
+function createDemoRoutes() {
+  const c = { lat: 30.2741, lng: 120.1551 }
+  const d = 0.0003
+  const path = [
+    { lat: c.lat, lng: c.lng },
+    { lat: c.lat + d, lng: c.lng + d * 0.5 },
+    { lat: c.lat + d * 0.5, lng: c.lng + d },
+    { lat: c.lat - d * 0.3, lng: c.lng + d * 0.8 },
+  ]
+  return [{
+    id: 'route_demo_001',
+    siteId: 'site_001',
+    name: '主变区例行巡检',
+    description: '覆盖主变、GIS 设备区',
+    path,
+    mapMode: '2d',
+    routeDetections: detectionItems(ROUTE_DETECTIONS),
+    checkpoints: [
+      { id: 'cp_demo_001', routeId: 'route_demo_001', name: '1# 主变', seq: 1, position: path[1], pan: 45, tilt: -20, dwellSeconds: 25, detections: detectionItems(CHECKPOINT_DETECTIONS) },
+      { id: 'cp_demo_002', routeId: 'route_demo_001', name: 'GIS 刀闸', seq: 2, position: path[2], pan: 90, tilt: -15, dwellSeconds: 30, detections: detectionItems(CHECKPOINT_DETECTIONS) },
+      { id: 'cp_demo_003', routeId: 'route_demo_001', name: '电容器组', seq: 3, position: path[3], pan: 120, tilt: -25, dwellSeconds: 20, detections: detectionItems(CHECKPOINT_DETECTIONS) },
+    ],
+    createdAt: '2026-03-01T08:00:00Z',
+  }]
+}
+
+const defaultSites = [
+  { id: 'site_001', name: '城东 220kV 变电站', address: '浙江省杭州市余杭区', description: '主变 2 台，户外 GIS 设备区', center: { lat: 30.2741, lng: 120.1551 }, lingbotMapId: 'lingbot_map_001', createdAt: '2026-01-15T08:00:00Z' },
+  { id: 'site_002', name: '城西 110kV 变电站', address: '浙江省杭州市西湖区', description: '室内开关室 + 室外电容器组', center: { lat: 30.2599, lng: 120.12 }, createdAt: '2026-02-01T08:00:00Z' },
+  { id: 'site_003', name: '城南 500kV 变电站', address: '浙江省杭州市萧山区', description: '特高压枢纽站，户外设备规模大', center: { lat: 30.185, lng: 120.265 }, lingbotMapId: 'lingbot_map_003', createdAt: '2026-03-10T08:00:00Z' },
+]
+
+const defaultAreas = [
+  { id: 'area_001', siteId: 'site_001', name: '主变区域', polygon: [{ lat: 30.2745, lng: 120.1545 }, { lat: 30.2745, lng: 120.1558 }, { lat: 30.2738, lng: 120.1558 }, { lat: 30.2738, lng: 120.1545 }] },
+  { id: 'area_002', siteId: 'site_001', name: 'GIS 设备区', polygon: [{ lat: 30.2737, lng: 120.1546 }, { lat: 30.2737, lng: 120.1556 }, { lat: 30.2732, lng: 120.1556 }, { lat: 30.2732, lng: 120.1546 }] },
+  { id: 'area_003', siteId: 'site_002', name: '开关室', polygon: [{ lat: 30.2602, lng: 120.1195 }, { lat: 30.2602, lng: 120.1205 }, { lat: 30.2596, lng: 120.1205 }, { lat: 30.2596, lng: 120.1195 }] },
+]
+
+const defaultRobots = [
+  { id: 'robot_001', name: '巡检机器人-A1', model: 'Unitree B2', serialNo: 'UT-B2-2024-001', siteId: 'site_001', status: 'ONLINE', battery: 87, position: { lat: 30.274, lng: 120.1548 }, firmware: 'v2.3.1', lastOnlineAt: new Date().toISOString() },
+  { id: 'robot_002', name: '巡检机器人-B2', model: '云深处 X30', serialNo: 'YS-X30-2024-008', siteId: 'site_001', status: 'CHARGING', battery: 42, firmware: 'v1.8.0', lastOnlineAt: new Date(Date.now() - 3600000).toISOString() },
+  { id: 'robot_003', name: '巡检机器人-C3', model: '宇树 Go2', serialNo: 'UT-G2-2025-003', siteId: 'site_002', status: 'ONLINE', battery: 91, position: { lat: 30.2599, lng: 120.12 }, firmware: 'v3.0.2', lastOnlineAt: new Date().toISOString() },
+]
+
+const seedAlarms = [
+  { id: 'alarm_seed_001', taskId: 'task_demo', routeName: '主变区例行巡检', type: 'HELMET', severity: 'HIGH', message: '检测到作业人员未佩戴安全帽', imageUrl: 'https://picsum.photos/seed/alarm1/400/240', acknowledged: false, createdAt: new Date(Date.now() - 7200000).toISOString() },
+  { id: 'alarm_seed_002', taskId: 'task_demo', routeName: '主变区例行巡检', checkpointName: 'GIS 刀闸', type: 'SWITCH', severity: 'HIGH', message: '检查点「GIS 刀闸」开关/刀闸状态异常', imageUrl: 'https://picsum.photos/seed/alarm2/400/240', acknowledged: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
+  { id: 'alarm_seed_003', taskId: 'task_demo', routeName: '电容器组巡检', type: 'FIRE', severity: 'CRITICAL', message: '路线视野内检测到疑似火源/烟雾', imageUrl: 'https://picsum.photos/seed/alarm3/400/240', acknowledged: false, createdAt: new Date(Date.now() - 3600000).toISOString() },
+]
+
+const seedRecords = [
+  { id: 'record_seed_001', taskId: 'task_hist_001', taskName: '主变区夜间巡检', routeName: '主变区例行巡检', robotName: '巡检机器人-A1', alarmCount: 2, checkpointCount: 3, duration: '28 分钟', summary: '完成城东 220kV 变电站巡检，共 3 个检查点，触发 2 条告警', completedAt: new Date(Date.now() - 172800000).toISOString() },
+  { id: 'record_seed_002', taskId: 'task_hist_002', taskName: 'GIS 设备专项巡检', routeName: 'GIS 专项路线', robotName: '巡检机器人-B2', alarmCount: 0, checkpointCount: 5, duration: '35 分钟', summary: '完成城东 220kV 变电站巡检，共 5 个检查点，无异常告警', completedAt: new Date(Date.now() - 432000000).toISOString() },
+]
+
+const seedWorkOrders = [
+  { id: 'wo_seed_1', title: '主变区漏油异常处置', description: '告警：检查点「主变 A 相」漏油检测异常，需现场复核', status: 'PROCESSING', priority: 'HIGH', assigneeName: '张调度', createdById: 'user_admin', createdByName: '系统管理员', createdAt: '2026-06-10T08:00:00Z', updatedAt: '2026-06-11T10:00:00Z' },
+  { id: 'wo_seed_2', title: 'GIS 区未佩戴安全帽', description: '路线行进中检测到作业人员未佩戴安全帽', status: 'PENDING', priority: 'URGENT', createdById: 'user_dispatcher', createdByName: '张调度', createdAt: '2026-06-12T14:30:00Z', updatedAt: '2026-06-12T14:30:00Z' },
+]
+
+module.exports = {
+  createDemoRoutes,
+  defaultSites,
+  defaultAreas,
+  defaultRobots,
+  defaultDetectionTemplates: [
+    { id: 'tpl_route_001', name: '路线标准检测', scope: 'ROUTE', types: ['PERSON', 'HELMET', 'OBSTACLE', 'FIRE'], description: '行进过程中持续检测', prompts: {}, createdAt: '2026-01-10T08:00:00Z' },
+    { id: 'tpl_cp_001', name: '刀闸开关检测', scope: 'CHECKPOINT', types: ['SWITCH', 'METER'], description: '刀闸分合状态与表计读数', prompts: { SWITCH: '红色刀闸开关', METER: '压力表读数区域' }, createdAt: '2026-01-10T08:00:00Z' },
+    { id: 'tpl_cp_002', name: '设备渗漏检测', scope: 'CHECKPOINT', types: ['OIL_LEAK', 'FOREIGN_OBJECT', 'FIRE'], description: '渗漏、异物与烟火', prompts: { OIL_LEAK: '设备底部渗油区域' }, createdAt: '2026-02-15T08:00:00Z' },
+  ],
+  defaultLingBotJobs: [
+    { id: 'lingbot_job_001', siteId: 'site_001', siteName: '城东 220kV 变电站', name: '主变区春季建图', status: 'COMPLETED', progress: 100, pointCount: 1250000, videoCount: 48, createdAt: '2026-03-01T08:00:00Z', completedAt: '2026-03-02T18:00:00Z' },
+    { id: 'lingbot_job_002', siteId: 'site_002', siteName: '城西 110kV 变电站', name: '开关室增量更新', status: 'PROCESSING', progress: 62, pointCount: 480000, videoCount: 12, createdAt: '2026-06-01T10:00:00Z' },
+    { id: 'lingbot_job_003', siteId: 'site_003', siteName: '城南 500kV 变电站', name: '全站初始建图', status: 'PENDING', progress: 0, pointCount: 0, videoCount: 0, createdAt: '2026-06-07T09:00:00Z' },
+  ],
+  seedAlarms,
+  seedRecords,
+  seedWorkOrders,
+}

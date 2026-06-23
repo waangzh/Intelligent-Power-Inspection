@@ -1,0 +1,55 @@
+<view class="container">
+  <page-header title="工单管理" description="告警转工单与闭环复核">
+    <view slot="actions"><button size="mini" bindtap="goAlarms">从告警创建</button></view>
+  </page-header>
+
+  <view class="stat-grid">
+    <view class="stat-item {{statusFilter===item.key?'sel':''}}" wx:for="{{statusCards}}" wx:key="key" bindtap="filterByCard" data-key="{{item.key}}">
+      <view class="stat-value">{{item.value}}</view>
+      <view class="stat-label">{{item.label}}</view>
+    </view>
+  </view>
+
+  <view class="card" wx:for="{{filtered}}" wx:key="id" bindtap="openDetail" data-id="{{item.id}}">
+    <view class="flex-between">
+      <text class="wo-title">{{item.title}}</text>
+      <text class="tag tag-primary">{{item.statusLabel}}</text>
+    </view>
+    <view class="muted">工单号 {{item.id}}</view>
+    <view class="muted">优先级 {{item.priorityLabel}} · {{item.assigneeName || item.createdByName}} · {{item.createdLabel}}</view>
+    <view class="wo-desc">{{item.description}}</view>
+    <view class="wo-actions" catchtap="stop">
+      <button wx:if="{{item.status==='PENDING'}}" size="mini" catchtap="accept" data-id="{{item.id}}">接单</button>
+      <button wx:if="{{item.status==='PROCESSING'}}" size="mini" type="primary" catchtap="openResolve" data-id="{{item.id}}">提交复核</button>
+      <button wx:if="{{item.status==='REVIEW'}}" size="mini" catchtap="closeOrder" data-id="{{item.id}}">关闭</button>
+    </view>
+  </view>
+  <view wx:if="{{!filtered.length}}" class="empty-hint">暂无工单</view>
+
+  <view class="modal-mask" wx:if="{{showDetail}}" bindtap="closeDetail">
+    <view class="modal-panel" catchtap="">
+      <view class="card-title">工单详情</view>
+      <view class="detail-row"><text class="muted">工单号</text><text>{{detail.id}}</text></view>
+      <view class="detail-row"><text class="muted">标题</text><text>{{detail.title}}</text></view>
+      <view class="detail-row"><text class="muted">优先级</text><text>{{detail.priorityLabel}}</text></view>
+      <view class="detail-row"><text class="muted">状态</text><text>{{detail.statusLabel}}</text></view>
+      <view class="detail-row"><text class="muted">创建人</text><text>{{detail.createdByName || '-'}}</text></view>
+      <view class="detail-row"><text class="muted">创建时间</text><text>{{detail.createdLabel}}</text></view>
+      <view class="detail-row"><text class="muted">处理人</text><text>{{detail.assigneeName || '-'}}</text></view>
+      <view class="detail-row"><text class="muted">处理说明</text><text>{{detail.resolution || '-'}}</text></view>
+      <view class="detail-desc">{{detail.description}}</view>
+      <button size="mini" bindtap="closeDetail">关闭</button>
+    </view>
+  </view>
+
+  <view class="modal-mask" wx:if="{{showResolve}}" bindtap="closeResolve">
+    <view class="modal-panel" catchtap="">
+      <view class="card-title">提交处理结果</view>
+      <textarea placeholder="请填写现场处理情况" value="{{resolveText}}" bindinput="onResolveInput" />
+      <view class="form-actions">
+        <button size="mini" bindtap="closeResolve">取消</button>
+        <button size="mini" type="primary" bindtap="submitResolve">提交复核</button>
+      </view>
+    </view>
+  </view>
+</view>

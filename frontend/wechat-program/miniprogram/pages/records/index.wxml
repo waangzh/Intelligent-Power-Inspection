@@ -1,0 +1,47 @@
+<view class="container">
+  <page-header title="巡检记录" description="历史巡检报告与异常汇总" />
+
+  <view class="card toolbar">
+    <button wx:if="{{canExport}}" size="mini" type="primary" bindtap="exportRecords">导出 Excel</button>
+  </view>
+
+  <view class="card">
+    <input placeholder="搜索任务/路线" value="{{keyword}}" bindinput="onKeyword" />
+    <view class="filter-row">
+      <text class="chip {{alarmFilter===''?'on':''}}" bindtap="setAlarmFilter" data-v="">全部</text>
+      <text class="chip {{alarmFilter==='has'?'on':''}}" bindtap="setAlarmFilter" data-v="has">有告警</text>
+      <text class="chip {{alarmFilter==='none'?'on':''}}" bindtap="setAlarmFilter" data-v="none">无告警</text>
+    </view>
+  </view>
+
+  <view class="card record-item" wx:for="{{filtered}}" wx:key="id" bindtap="openDetail" data-id="{{item.id}}">
+    <view class="flex-between">
+      <text class="record-name">{{item.taskName}}</text>
+      <text class="muted">{{item.time}}</text>
+    </view>
+    <view class="muted">{{item.routeName}} · {{item.robotName}}</view>
+    <view class="muted">告警 {{item.alarmCount}} · 检查点 {{item.checkpointCount}} · {{item.duration}}</view>
+    <text class="link">查看报告</text>
+  </view>
+  <view wx:if="{{!filtered.length}}" class="empty-hint">暂无记录</view>
+
+  <view class="modal-mask" wx:if="{{showDetail}}" bindtap="closeDetail">
+    <view class="modal-panel" catchtap="">
+      <view class="card-title">巡检报告 · {{detail.taskName}}</view>
+      <view class="detail-row"><text class="muted">路线</text><text>{{detail.routeName}}</text></view>
+      <view class="detail-row"><text class="muted">机器人</text><text>{{detail.robotName}}</text></view>
+      <view class="detail-row"><text class="muted">耗时</text><text>{{detail.duration}}</text></view>
+      <view class="detail-summary">{{detail.summary}}</view>
+      <view class="card-title">检查点明细（演示）</view>
+      <view class="cp-row" wx:for="{{checkpointRows}}" wx:key="name">
+        <text>{{item.name}}</text>
+        <text>{{item.result}}</text>
+        <text>{{item.alarm}}</text>
+      </view>
+      <view class="form-actions">
+        <button wx:if="{{canExport}}" size="mini" type="primary" bindtap="exportPdf">导出 PDF</button>
+        <button size="mini" bindtap="closeDetail">关闭</button>
+      </view>
+    </view>
+  </view>
+</view>

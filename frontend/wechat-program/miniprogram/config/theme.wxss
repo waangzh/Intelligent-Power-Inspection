@@ -1,0 +1,6 @@
+page {
+  --pi-primary: #1a5fb4;
+  --pi-bg: #f0f4f8;
+  --pi-sidebar: #0d2137;
+  --pi-card-shadow: 0 4rpx 24rpx rgba(13, 33, 55, 0.08);
+}

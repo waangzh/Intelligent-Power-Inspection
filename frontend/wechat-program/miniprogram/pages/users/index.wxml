@@ -1,0 +1,36 @@
+<view class="container">
+  <page-header title="用户管理" description="管理系统用户与角色分配（仅管理员）" />
+
+  <view class="card user-item" wx:for="{{users}}" wx:key="id">
+    <view class="user-row">
+      <user-avatar displayName="{{item.displayName}}" avatarUrl="{{item.avatarUrl}}" seed="{{item.id}}" size="72" />
+      <view class="user-info">
+        <text class="user-name">{{item.displayName}}</text>
+        <text class="muted">@{{item.username}}</text>
+        <view class="tag-row">
+          <text class="tag tag-primary">{{item.roleLabel}}</text>
+          <text wx:if="{{item.isSelf}}" class="tag tag-info">当前用户</text>
+        </view>
+        <text class="muted">注册 {{item.createdLabel}}</text>
+        <text class="muted" wx:if="{{item.phoneText !== '-'}}">手机 {{item.phoneText}}</text>
+        <text class="muted bio-line" wx:if="{{item.bioText !== '-'}}">{{item.bioText}}</text>
+      </view>
+    </view>
+    <picker wx:if="{{!item.isSelf}}" mode="selector" range="{{roleLabelList}}" bindchange="changeRole" data-id="{{item.id}}">
+      <view class="role-picker">修改角色 ▾</view>
+    </picker>
+    <view wx:else class="muted self-hint">不可修改自己的角色</view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">角色权限说明</view>
+    <view class="role-table-row head">
+      <text>角色</text><text>说明</text><text>权限范围</text>
+    </view>
+    <view class="role-table-row" wx:for="{{roleTable}}" wx:key="role">
+      <text>{{item.role}}</text>
+      <text>{{item.desc}}</text>
+      <text>{{item.perms}}</text>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,52 @@
+<view class="container" wx:if="{{user}}">
+  <view class="profile-header card">
+    <user-avatar displayName="{{user.displayName}}" avatarUrl="{{user.avatarUrl}}" seed="{{user.id}}" size="120" />
+    <view class="profile-meta">
+      <text class="profile-name">{{user.displayName}}</text>
+      <text class="muted">@{{user.username}} · {{roleLabel}}</text>
+      <text class="muted bio-preview" wx:if="{{user.bio}}">{{user.bio}}</text>
+    </view>
+    <button size="mini" class="btn-plain" bindtap="toggleEdit">{{editing ? '取消' : '编辑资料'}}</button>
+  </view>
+
+  <view class="card" wx:if="{{!editing}}">
+    <view class="info-row"><text class="muted">姓名</text><text>{{user.displayName}}</text></view>
+    <view class="info-row"><text class="muted">用户名</text><text>{{user.username}}</text></view>
+    <view class="info-row"><text class="muted">手机</text><text>{{user.phone || '未填写'}}</text></view>
+    <view class="info-row"><text class="muted">个性签名</text><text>{{user.bio || '未填写'}}</text></view>
+    <view class="info-row"><text class="muted">角色</text><text class="tag tag-primary">{{roleLabel}}</text></view>
+    <view class="info-row"><text class="muted">注册时间</text><text>{{createdLabel}}</text></view>
+  </view>
+
+  <view class="card" wx:if="{{editing}}">
+    <view class="form-row"><text class="form-label">姓名</text><input data-field="displayName" value="{{form.displayName}}" bindinput="onInput" /></view>
+    <view class="form-row"><text class="form-label">手机</text><input data-field="phone" value="{{form.phone}}" bindinput="onInput" placeholder="选填" /></view>
+    <view class="form-row">
+      <text class="form-label">简介</text>
+      <input data-field="bio" value="{{form.bio}}" bindinput="onInput" maxlength="80" placeholder="最多 80 字" />
+    </view>
+    <text class="hint">{{form.bio ? form.bio.length : 0}}/80</text>
+    <button type="primary" size="mini" bindtap="saveProfile">保存</button>
+  </view>
+
+  <view class="card quick-entry" bindtap="goNotifications">
+    <view class="flex-between">
+      <text>消息中心</text>
+      <text wx:if="{{unreadNotifications}}" class="tag tag-danger">{{unreadNotifications}} 条未读</text>
+      <text wx:else class="muted">暂无未读</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="menu-link" wx:for="{{profileMenu}}" wx:key="path" bindtap="go" data-url="{{item.path}}">
+      <text>{{item.label}}</text>
+      <text class="arrow">›</text>
+    </view>
+    <view class="menu-link" bindtap="goMore">
+      <text>更多功能</text>
+      <text class="arrow">›</text>
+    </view>
+  </view>
+
+  <button class="logout-btn" bindtap="logout">退出登录</button>
+</view>

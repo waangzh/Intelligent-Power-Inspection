@@ -1,0 +1,48 @@
+<view class="container">
+  <page-header title="站点管理" description="变电站站点与区域划分" />
+
+  <view class="card toolbar">
+    <button size="mini" type="primary" bindtap="openAdd">新建站点</button>
+  </view>
+
+  <view class="card form-card" wx:if="{{showForm}}">
+    <view class="card-title">{{editingId ? '编辑站点' : '新建站点'}}</view>
+    <view class="form-row"><text class="form-label">名称</text><input data-field="name" value="{{form.name}}" bindinput="onInput" /></view>
+    <view class="form-row"><text class="form-label">地址</text><input data-field="address" value="{{form.address}}" bindinput="onInput" /></view>
+    <view class="form-row"><text class="form-label">描述</text><input data-field="description" value="{{form.description}}" bindinput="onInput" /></view>
+    <view class="form-row"><text class="form-label">纬度</text><input type="digit" data-field="lat" value="{{form.lat}}" bindinput="onInput" /></view>
+    <view class="form-row"><text class="form-label">经度</text><input type="digit" data-field="lng" value="{{form.lng}}" bindinput="onInput" /></view>
+    <view class="form-row"><text class="form-label">LingBot ID</text><input data-field="lingbotMapId" value="{{form.lingbotMapId}}" bindinput="onInput" placeholder="可选" /></view>
+    <view class="form-actions">
+      <button size="mini" bindtap="closeForm">取消</button>
+      <button size="mini" type="primary" bindtap="save">保存</button>
+    </view>
+  </view>
+
+  <view class="card site-item {{selectedId===item.id?'sel':''}}" wx:for="{{sites}}" wx:key="id" bindtap="selectSite" data-id="{{item.id}}">
+    <view class="flex-between">
+      <text class="site-name">{{item.name}}</text>
+      <text class="tag {{item.lingbotMapId?'tag-success':'tag-info'}}">{{item.lingbotMapId ? '已关联建图' : '未建图'}}</text>
+    </view>
+    <view class="muted">{{item.address}}</view>
+    <view class="site-actions" catchtap="stop">
+      <text class="link" catchtap="openEdit" data-id="{{item.id}}">编辑</text>
+      <text class="link danger" catchtap="remove" data-id="{{item.id}}">删除</text>
+    </view>
+  </view>
+
+  <block wx:if="{{currentSite}}">
+    <view class="card">
+      <view class="card-title flex-between">
+        <text>{{currentSite.name}} · 区域</text>
+        <button size="mini" type="primary" bindtap="addArea">添加区域</button>
+      </view>
+      <view class="area-row" wx:for="{{siteAreas}}" wx:key="id">
+        <text>{{item.name}}（{{item.polygon.length}} 顶点）</text>
+        <text class="link danger" bindtap="removeArea" data-id="{{item.id}}">删除</text>
+      </view>
+      <view wx:if="{{!siteAreas.length}}" class="muted">暂无区域，演示版添加默认矩形</view>
+      <map-view center="{{currentSite.center}}" areas="{{siteAreas}}" />
+    </view>
+  </block>
+</view>

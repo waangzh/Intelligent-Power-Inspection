@@ -1,0 +1,7 @@
+.trend.up { color: #67c23a; }
+.trend.down { color: #f56c6c; }
+.site-row { display: flex; justify-content: space-between; padding: 16rpx 0; border-bottom: 1rpx solid #f0f2f5; }
+.site-count { color: #1a5fb4; font-weight: 600; }
+.summary-row { display: flex; gap: 24rpx; }
+.summary-item { flex: 1; text-align: center; padding: 24rpx; background: #f5f8fc; border-radius: 12rpx; }
+.summary-value { display: block; font-size: 40rpx; font-weight: 700; color: #1a5fb4; }

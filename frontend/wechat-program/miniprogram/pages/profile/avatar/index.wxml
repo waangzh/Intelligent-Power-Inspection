@@ -1,0 +1,27 @@
+<view class="container">
+  <page-header title="我的头像" description="上传或更换个人头像" />
+
+  <view class="card avatar-card">
+    <view class="avatar-preview-wrap">
+      <user-avatar wx:if="{{!preview}}" displayName="{{user.displayName}}" seed="{{user.id}}" size="200" />
+      <image wx:else class="avatar-preview" src="{{preview}}" mode="aspectFill" />
+    </view>
+    <view class="avatar-actions">
+      <button size="mini" type="primary" bindtap="chooseImage">选择图片</button>
+      <button size="mini" class="btn-plain" bindtap="resetDefault">恢复默认头像</button>
+    </view>
+    <text class="hint">支持 JPG / PNG / WebP，不超过 2MB</text>
+    <button size="mini" type="primary" bindtap="save" wx:if="{{dirty}}">保存头像</button>
+  </view>
+
+  <view class="card">
+    <view class="card-title">顶栏预览</view>
+    <view class="nav-preview">
+      <user-avatar displayName="{{user.displayName}}" avatarUrl="{{preview}}" seed="{{user.id}}" size="64" />
+      <view class="nav-meta">
+        <text class="nav-name">{{user.displayName}}</text>
+        <text class="muted nav-bio">{{user.bio || '个性签名将显示在此处'}}</text>
+      </view>
+    </view>
+  </view>
+</view>

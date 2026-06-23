@@ -1,0 +1,15 @@
+.profile-header { display: flex; align-items: center; gap: 24rpx; }
+.profile-meta { flex: 1; }
+.profile-name { display: block; font-size: 34rpx; font-weight: 600; }
+.bio-preview { display: block; font-size: 24rpx; margin-top: 4rpx; }
+.info-row { display: flex; justify-content: space-between; padding: 12rpx 0; border-bottom: 1rpx solid #f0f2f5; }
+.info-row:last-child { border-bottom: none; }
+.quick-entry { margin-bottom: 16rpx; }
+.hint { font-size: 22rpx; color: #909399; margin-bottom: 12rpx; display: block; }
+.form-row { display: flex; align-items: center; gap: 16rpx; margin-bottom: 16rpx; }
+.form-label { width: 100rpx; color: #6b7c93; }
+.form-row input { flex: 1; border: 1rpx solid #e4e7ed; border-radius: 8rpx; padding: 12rpx; }
+.menu-link { display: flex; justify-content: space-between; padding: 28rpx 0; border-bottom: 1rpx solid #f0f2f5; }
+.menu-link:last-child { border-bottom: none; }
+.arrow { color: #c0c4cc; font-size: 32rpx; }
+.logout-btn { margin-top: 32rpx; background: #fff; color: #f56c6c; border: 1rpx solid #f56c6c; }

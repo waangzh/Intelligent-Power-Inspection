@@ -1,0 +1,13 @@
+<map
+  id="piMap"
+  class="map"
+  longitude="{{longitude}}"
+  latitude="{{latitude}}"
+  scale="{{scale}}"
+  markers="{{markers}}"
+  polyline="{{polyline}}"
+  polygons="{{polygons}}"
+  show-location
+  bindtap="onTap"
+  bindmarkertap="onMarkerTap"
+/>

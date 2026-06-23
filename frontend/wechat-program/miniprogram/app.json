@@ -1,0 +1,80 @@
+{
+  "pages": [
+    "pages/auth/login/index",
+    "pages/dashboard/index",
+    "pages/monitor/index",
+    "pages/alarms/index",
+    "pages/tasks/index",
+    "pages/profile/info/index",
+    "pages/auth/register/index",
+    "pages/forbidden/index",
+    "pages/more/index",
+    "pages/workorders/index",
+    "pages/notifications/index",
+    "pages/sites/index",
+    "pages/routes/index",
+    "pages/tasks/detail/index",
+    "pages/robots/index",
+    "pages/lingbot/index",
+    "pages/detection/index",
+    "pages/records/index",
+    "pages/statistics/index",
+    "pages/users/index",
+    "pages/bigscreen/index",
+    "pages/profile/avatar/index",
+    "pages/profile/security/index",
+    "pages/profile/activity/index",
+    "pages/profile/settings/index"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#0d2137",
+    "navigationBarTitleText": "电力智能巡检",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f0f4f8"
+  },
+  "tabBar": {
+    "color": "#6b7c93",
+    "selectedColor": "#1a5fb4",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/dashboard/index",
+        "text": "总览",
+        "iconPath": "assets/tabbar/dashboard.png",
+        "selectedIconPath": "assets/tabbar/dashboard-active.png"
+      },
+      {
+        "pagePath": "pages/monitor/index",
+        "text": "监控",
+        "iconPath": "assets/tabbar/monitor.png",
+        "selectedIconPath": "assets/tabbar/monitor-active.png"
+      },
+      {
+        "pagePath": "pages/alarms/index",
+        "text": "告警",
+        "iconPath": "assets/tabbar/alarms.png",
+        "selectedIconPath": "assets/tabbar/alarms-active.png"
+      },
+      {
+        "pagePath": "pages/tasks/index",
+        "text": "任务",
+        "iconPath": "assets/tabbar/tasks.png",
+        "selectedIconPath": "assets/tabbar/tasks-active.png"
+      },
+      {
+        "pagePath": "pages/profile/info/index",
+        "text": "我的",
+        "iconPath": "assets/tabbar/profile.png",
+        "selectedIconPath": "assets/tabbar/profile-active.png"
+      }
+    ]
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于在地图上展示巡检站点、路线与机器人位置"
+    }
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

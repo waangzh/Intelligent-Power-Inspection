@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "检测策略",
+  "usingComponents": {
+    "page-header": "/components/page-header/index"
+  }
+}

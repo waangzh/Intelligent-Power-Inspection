@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.npm-cache/
+__pycache__/
+*.pyc
+.venv/
+.venv*/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+target/
+.tmp/
+*.tsbuildinfo
+runtime-storage/
+ai-services/**/runtime-storage/
+ai-services/**/models/
+ai-services/**/weights/
+*.pth
+*.pt
+*.onnx
+*.ply
+*.glb
+
+# Environment
+.env
+.env.local
+.env.*.local
+frontend/wechat-program/miniprogram/project.private.config.json
+
+# Logs
+*.log
+logs/
+
+# Agent local instructions
+AGENTS.md
+agents.md
+**/AGENTS.md
+**/agents.md

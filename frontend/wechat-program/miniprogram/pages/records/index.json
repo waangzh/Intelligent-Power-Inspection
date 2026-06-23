@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "巡检记录",
+  "usingComponents": {
+    "page-header": "/components/page-header/index"
+  }
+}

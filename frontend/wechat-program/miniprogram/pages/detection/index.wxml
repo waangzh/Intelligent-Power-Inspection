@@ -1,0 +1,49 @@
+<view class="container">
+  <page-header title="检测策略" description="路线级与检查点级检测模板，集成 LocateAnything 自然语言提示" />
+
+  <view class="card toolbar">
+    <button size="mini" type="primary" bindtap="toggleForm">{{showForm ? '取消' : '新建模板'}}</button>
+  </view>
+
+  <view class="info-row">
+    <view class="card info-card">
+      <view class="card-title">LocateAnything 说明</view>
+      <view class="info-text">NVIDIA LocateAnything-3B 支持自然语言提示检测复杂目标。在检查点检测中配置提示词，例如「红色刀闸开关」「变压器底部渗油区域」，即可实现开放词汇定位。</view>
+      <text class="link" bindtap="openDoc">查看模型文档</text>
+    </view>
+    <view class="card info-card">
+      <view class="card-title">检测层级</view>
+      <view class="layer-row"><text class="layer-label">路线级</text><text>人员、安全帽、障碍物、火源（行进中持续）</text></view>
+      <view class="layer-row"><text class="layer-label">检查点级</text><text>开关、表计、漏油、烟火、异物（到点触发）</text></view>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{showForm}}">
+    <view class="form-row"><text class="form-label">名称</text><input data-field="name" bindinput="onInput" placeholder="模板名称" /></view>
+    <view class="form-row">
+      <text class="form-label">范围</text>
+      <picker mode="selector" range="{{scopeLabelList}}" bindchange="onScopeChange">
+        <view class="picker-val">{{scopeLabels[form.scope]}} ▾</view>
+      </picker>
+    </view>
+    <view class="form-row"><text class="form-label">描述</text><input data-field="description" bindinput="onInput" placeholder="模板描述" /></view>
+    <button type="primary" size="mini" bindtap="addTemplate">确认添加</button>
+  </view>
+
+  <view class="card" wx:for="{{templates}}" wx:key="id">
+    <view class="flex-between">
+      <text class="tpl-name">{{item.name}}</text>
+      <text class="link danger" bindtap="remove" data-id="{{item.id}}">删除</text>
+    </view>
+    <view class="muted">{{item.scopeLabel}}</view>
+    <view class="tag-row">
+      <text class="tag tag-primary" wx:for="{{item.types}}" wx:for-item="tp" wx:key="*this">{{typeLabels[tp] || tp}}</text>
+    </view>
+    <view class="muted">{{item.description}}</view>
+    <view class="prompt-row" wx:if="{{item.promptList.length}}">
+      <text class="prompt" wx:for="{{item.promptList}}" wx:for-item="pr" wx:key="key">{{pr.key}}: {{pr.value}}</text>
+    </view>
+    <view class="muted" wx:else>提示词 —</view>
+  </view>
+  <view wx:if="{{!templates.length}}" class="empty-hint">暂无检测模板</view>
+</view>

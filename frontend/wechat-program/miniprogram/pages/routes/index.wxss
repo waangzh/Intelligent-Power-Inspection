@@ -1,0 +1,17 @@
+.toolbar { display: flex; justify-content: space-between; align-items: center; }
+.filter-btn, .picker-val { color: #1a5fb4; font-size: 26rpx; }
+.route-tabs { white-space: nowrap; margin-bottom: 16rpx; }
+.route-tab { display: inline-block; padding: 12rpx 24rpx; margin-right: 12rpx; background: #fff; border-radius: 12rpx; font-size: 26rpx; }
+.route-tab.active { background: #1a5fb4; color: #fff; }
+.form-row { display: flex; align-items: center; gap: 16rpx; margin-bottom: 16rpx; }
+.form-label { width: 120rpx; color: #6b7c93; font-size: 26rpx; flex-shrink: 0; }
+.form-row input { flex: 1; border: 1rpx solid #e4e9f0; border-radius: 8rpx; padding: 12rpx; }
+.form-actions, .map-btns { display: flex; gap: 12rpx; flex-wrap: wrap; margin-top: 12rpx; }
+.map-hint { margin-top: 12rpx; font-size: 22rpx; }
+.seg-tabs { display: flex; gap: 24rpx; margin-bottom: 16rpx; border-bottom: 1rpx solid #f0f2f5; padding-bottom: 12rpx; }
+.seg { color: #6b7c93; padding-bottom: 8rpx; }
+.seg.on { color: #1a5fb4; border-bottom: 4rpx solid #1a5fb4; font-weight: 600; }
+.cp-item { display: flex; justify-content: space-between; padding: 16rpx; border-bottom: 1rpx solid #f0f2f5; }
+.cp-item.sel { background: #f0f7ff; }
+.inner { margin-top: 16rpx; background: #fafbfc; }
+.link.danger { color: #f56c6c; font-size: 24rpx; }

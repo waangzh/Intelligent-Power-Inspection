@@ -1,0 +1,23 @@
+<view class="chart">
+  <view class="chart-bars" wx:if="{{type==='bar'}}">
+    <view class="bar-item" wx:for="{{normalized}}" wx:key="label">
+      <view class="bar" style="height: {{item.pct}}%; background: {{item.color || '#1a5fb4'}}"></view>
+      <text class="bar-label">{{item.label}}</text>
+      <text class="bar-val">{{item.value}}</text>
+    </view>
+  </view>
+  <view class="chart-line" wx:if="{{type==='line'}}">
+    <view class="line-bars">
+      <view class="line-bar" wx:for="{{normalized}}" wx:key="label" style="height: {{item.pct}}%"></view>
+    </view>
+    <view class="line-labels">
+      <text wx:for="{{normalized}}" wx:key="label" class="line-label">{{item.label}}</text>
+    </view>
+  </view>
+  <view class="gauge" wx:if="{{type==='gauge'}}">
+    <view class="gauge-ring">
+      <text class="gauge-val">{{value}}%</text>
+    </view>
+    <text class="gauge-title">{{title}}</text>
+  </view>
+</view>

@@ -1,0 +1,11 @@
+.toolbar { margin-bottom: 16rpx; }
+.filter-row { display: flex; gap: 12rpx; margin-top: 12rpx; }
+.chip { padding: 8rpx 20rpx; background: #f0f4f8; border-radius: 8rpx; font-size: 24rpx; }
+.chip.on { background: #1a5fb4; color: #fff; }
+.record-name { font-weight: 600; }
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 99; }
+.modal-panel { width: 90%; background: #fff; border-radius: 20rpx; padding: 32rpx; max-height: 85vh; overflow-y: auto; }
+.detail-row { display: flex; justify-content: space-between; padding: 8rpx 0; }
+.detail-summary { margin: 16rpx 0; color: #606266; }
+.cp-row { display: flex; justify-content: space-between; padding: 8rpx 0; border-bottom: 1rpx solid #f0f2f5; font-size: 24rpx; }
+.form-actions { display: flex; gap: 16rpx; justify-content: flex-end; margin-top: 16rpx; }

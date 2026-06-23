@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "工单管理",
+  "usingComponents": {
+    "page-header": "/components/page-header/index"
+  }
+}

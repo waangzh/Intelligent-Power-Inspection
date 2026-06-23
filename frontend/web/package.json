@@ -1,0 +1,30 @@
+{
+  "name": "power-inspection-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit -p tsconfig.app.json && vue-tsc --noEmit -p tsconfig.node.json && vite build --configLoader runner",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "echarts": "^5.5.1",
+    "element-plus": "^2.9.0",
+    "leaflet": "^1.9.4",
+    "pinia": "^2.3.0",
+    "three": "^0.171.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.15",
+    "@types/node": "^22.10.2",
+    "@types/three": "^0.171.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3",
+    "vue-tsc": "^2.1.10"
+  }
+}

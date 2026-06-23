@@ -1,0 +1,12 @@
+.chart { padding: 8rpx 0; }
+.chart-bars, .line-bars { display: flex; align-items: flex-end; justify-content: space-around; height: 200rpx; }
+.bar-item { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
+.bar, .line-bar { width: 60%; min-height: 8rpx; background: #1a5fb4; border-radius: 6rpx 6rpx 0 0; }
+.line-bar { background: #e6a23c; opacity: 0.85; }
+.bar-label, .line-label { font-size: 20rpx; color: #909399; margin-top: 8rpx; }
+.bar-val { font-size: 20rpx; color: #1a2b3c; }
+.line-labels { display: flex; justify-content: space-around; margin-top: 8rpx; }
+.gauge { text-align: center; padding: 16rpx; }
+.gauge-ring { width: 160rpx; height: 160rpx; border-radius: 50%; border: 12rpx solid #1a5fb4; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+.gauge-val { font-size: 36rpx; font-weight: 700; color: #1a5fb4; }
+.gauge-title { font-size: 24rpx; color: #6b7c93; margin-top: 12rpx; display: block; }

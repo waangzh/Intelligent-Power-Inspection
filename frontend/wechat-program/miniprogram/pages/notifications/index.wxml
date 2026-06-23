@@ -1,0 +1,27 @@
+<view class="container">
+  <page-header title="消息中心" description="系统通知与业务提醒" />
+
+  <view class="card toolbar">
+    <picker mode="selector" range="{{typeOptions}}" range-key="label" bindchange="onTypeChange">
+      <view class="filter-btn">{{typeLabel}} ▾</view>
+    </picker>
+    <view class="toolbar-right">
+      <text class="link" bindtap="toggleUnread">{{unreadOnly ? '显示全部' : '仅未读'}}</text>
+      <text class="link" bindtap="markAllRead">全部已读</text>
+    </view>
+  </view>
+
+  <view class="card ntf-item {{item.read ? '' : 'unread'}}" wx:for="{{filtered}}" wx:key="id" bindtap="openItem" data-id="{{item.id}}">
+    <view class="flex-between">
+      <text class="tag tag-primary">{{item.typeLabel}}</text>
+      <text class="muted">{{item.time}}</text>
+    </view>
+    <view class="ntf-title">{{item.title}}</view>
+    <view class="muted">{{item.content}}</view>
+    <view class="ntf-actions" catchtap="stop">
+      <text wx:if="{{!item.read}}" class="link" catchtap="markRead" data-id="{{item.id}}">标为已读</text>
+      <text class="link danger" catchtap="remove" data-id="{{item.id}}">删除</text>
+    </view>
+  </view>
+  <view wx:if="{{!filtered.length}}" class="empty-hint">暂无消息</view>
+</view>

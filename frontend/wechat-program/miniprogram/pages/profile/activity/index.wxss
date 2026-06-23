@@ -1,0 +1,2 @@
+.act-item { margin-bottom: 16rpx; }
+.act-msg { margin-top: 8rpx; font-size: 28rpx; }

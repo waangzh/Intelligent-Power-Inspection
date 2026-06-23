@@ -1,0 +1,19 @@
+<view class="container">
+  <page-header title="统计分析" description="巡检任务、告警与设备运行趋势" />
+
+  <view class="stat-grid">
+    <view class="stat-item" wx:for="{{kpis}}" wx:key="label">
+      <view class="stat-value">{{item.value}}</view>
+      <view class="stat-label">{{item.label}}</view>
+      <view class="muted">{{item.trend}}</view>
+    </view>
+  </view>
+
+  <view class="card"><view class="card-title">近 7 日告警趋势</view><simple-chart type="line" data="{{alarmTrend}}" /></view>
+  <view class="card"><view class="card-title">任务完成率</view><simple-chart type="gauge" value="{{completionRate}}" title="完成率" /></view>
+  <view class="card"><view class="card-title">告警类型分布</view><simple-chart type="bar" data="{{alarmTypeChart}}" /></view>
+  <view class="card"><view class="card-title">告警级别分布</view><simple-chart type="bar" data="{{severityChart}}" /></view>
+  <view class="card"><view class="card-title">机器人电量</view><simple-chart type="bar" data="{{batteryChart}}" /></view>
+  <view class="card"><view class="card-title">各站点巡检次数</view><simple-chart type="bar" data="{{siteStats}}" /></view>
+  <view class="card"><view class="card-title">任务状态对比</view><simple-chart type="bar" data="{{taskStack}}" /></view>
+</view>

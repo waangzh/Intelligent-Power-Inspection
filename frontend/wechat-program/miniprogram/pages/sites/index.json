@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "站点管理",
+  "usingComponents": {
+    "page-header": "/components/page-header/index",
+    "map-view": "/components/map-view/index"
+  }
+}

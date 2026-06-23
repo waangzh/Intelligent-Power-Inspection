@@ -1,0 +1,5 @@
+.setting-row { display: flex; justify-content: space-between; align-items: center; padding: 24rpx 0; border-bottom: 1rpx solid #f0f2f5; }
+.setting-row:last-child { border-bottom: none; }
+.group-title { font-size: 28rpx; font-weight: 600; margin-bottom: 8rpx; color: #1a2b3c; }
+.hint { display: block; font-size: 22rpx; color: #909399; margin-top: 4rpx; }
+.picker-val { color: #1a5fb4; font-size: 26rpx; }

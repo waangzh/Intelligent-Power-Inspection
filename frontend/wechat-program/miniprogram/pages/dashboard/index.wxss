@@ -1,0 +1,13 @@
+.welcome-inner { display: flex; gap: 24rpx; align-items: center; margin-bottom: 20rpx; }
+.chart-row { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.chart-half { flex: 1; min-width: 45%; }
+.schedule-item { display: flex; gap: 16rpx; padding: 12rpx 0; border-bottom: 1rpx solid #f0f2f5; }
+.schedule-time { color: #1a5fb4; font-weight: 600; width: 100rpx; }
+.trend { font-size: 22rpx; }
+.greeting { font-size: 32rpx; font-weight: 600; display: block; }
+.bio { font-size: 24rpx; color: #6b7c93; }
+.quick-actions { display: flex; gap: 12rpx; flex-wrap: wrap; }
+.task-name { color: #1a5fb4; font-weight: 500; }
+.task-actions { margin-top: 12rpx; }
+.robot-row { display: flex; align-items: center; gap: 12rpx; padding: 12rpx 0; }
+.link { color: #1a5fb4; font-size: 26rpx; }

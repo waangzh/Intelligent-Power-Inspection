@@ -1,0 +1,20 @@
+name: ipi-locate-anything
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - fastapi>=0.111,<1
+      - uvicorn>=0.30,<1
+      - pydantic>=2,<3
+      - pytest>=8,<9
+      - httpx>=0.27,<1
+      - Pillow>=10,<12
+      - transformers>=4.57,<5
+      - huggingface_hub>=0.34,<1
+      - hf_xet>=1.1,<2
+
+# 真实 LocateAnything 还需要 PyTorch。Windows 上 conda CUDA 包容易出现校验或路径冲突，
+# 因此 PyTorch CUDA wheel 单独安装：
+# conda run -n ipi-locate-anything python -m pip install -r requirements-torch-cu121.txt
