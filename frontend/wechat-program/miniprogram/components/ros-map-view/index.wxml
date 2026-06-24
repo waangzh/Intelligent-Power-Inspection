@@ -1,0 +1,10 @@
+<view class="ros-map-wrap" style="height: {{height}}rpx">
+  <canvas
+    type="2d"
+    id="rosCanvas"
+    class="ros-canvas"
+    bindtouchstart="onTouchStart"
+    bindtouchmove="onTouchMove"
+    bindtouchend="onTouchEnd"
+  />
+</view>

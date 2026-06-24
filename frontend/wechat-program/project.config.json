@@ -2,7 +2,12 @@
   "description": "电力智能巡检平台 - 微信小程序",
   "packOptions": {
     "ignore": [],
-    "include": []
+    "include": [
+      {
+        "type": "file",
+        "value": "assets/maps/site_001/map.txt"
+      }
+    ]
   },
   "setting": {
     "bundle": false,
@@ -47,7 +52,7 @@
     "disableSWC": true
   },
   "compileType": "miniprogram",
-  "libVersion": "3.5.5",
+  "libVersion": "3.16.1",
   "appid": "wx1c7328cd369d11ba",
   "projectname": "power-inspection-wechat",
   "condition": {},

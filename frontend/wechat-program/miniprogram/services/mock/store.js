@@ -20,6 +20,7 @@ const KEYS = {
   detection: 'pi_detection_templates',
   lingbot: 'pi_lingbot_jobs',
   notifications: 'pi_notifications',
+  slamMaps: 'pi_slam_maps',
 }
 
 const AVATAR_COLORS = ['#1a5fb4', '#67c23a', '#e6a23c', '#f56c6c', '#909399', '#626aef']

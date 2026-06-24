@@ -18,8 +18,12 @@
   "simulatorPluginLibVersion": {},
   "packOptions": {
     "ignore": [],
-    "include": []
+    "include": [
+      { "type": "file", "value": "assets/maps/site_001/map.txt" },
+      { "type": "file", "value": "assets/maps/site_002/map.txt" },
+      { "type": "file", "value": "assets/maps/site_003/map.txt" }
+    ]
   },
-  "appid": "touristappid",
+  "appid": "wx1c7328cd369d11ba",
   "editorSetting": {}
 }

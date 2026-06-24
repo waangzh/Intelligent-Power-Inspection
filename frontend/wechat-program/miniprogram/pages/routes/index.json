@@ -1,9 +1,7 @@
 {
-  "navigationBarTitleText": "巡检规划",
+  "navigationBarTitleText": "巡检路线标注工具",
   "usingComponents": {
     "page-header": "/components/page-header/index",
-    "map-view": "/components/map-view/index",
-    "map-3d-placeholder": "/components/map-3d-placeholder/index",
-    "detection-config": "/components/detection-config/index"
+    "ros-map-view": "/components/ros-map-view/index"
   }
 }

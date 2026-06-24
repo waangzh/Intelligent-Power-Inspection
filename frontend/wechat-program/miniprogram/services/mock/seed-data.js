@@ -18,13 +18,42 @@ function createDemoRoutes() {
     { lat: c.lat + d * 0.5, lng: c.lng + d },
     { lat: c.lat - d * 0.3, lng: c.lng + d * 0.8 },
   ]
+  const rosRoute = {
+    version: 2,
+    frame_id: 'map',
+    active_route_id: 'route_patrol_001',
+    start_pose: {
+      name: '初始起点',
+      pose: { x: 0.5, y: -0.5, yaw: 0.2 },
+      publish_initial_pose: true,
+      covariance: { x: 0.25, y: 0.25, yaw: 0.0685 },
+    },
+    targets: [
+      { id: 'target_001', name: '1# 主变', pose: { x: 2.5, y: 0.8, yaw: 1.2 }, task_duration_sec: 25 },
+      { id: 'target_002', name: 'GIS 刀闸', pose: { x: 4.2, y: -0.6, yaw: 0.5 }, task_duration_sec: 30 },
+      { id: 'target_003', name: '电容器组', pose: { x: 1.8, y: 1.5, yaw: -0.8 }, task_duration_sec: 20 },
+    ],
+    routes: [{
+      id: 'route_patrol_001',
+      name: '主变区例行巡检',
+      target_ids: ['target_001', 'target_002', 'target_003'],
+      return_to_start: true,
+      loop: { enabled: false, wait_sec: 600, max_cycles: 0 },
+      goal_timeout_sec: 120,
+      max_retries_per_checkpoint: 1,
+      failure_policy: 'abort_and_return_home',
+    }],
+    schedules: [],
+  }
+
   return [{
     id: 'route_demo_001',
     siteId: 'site_001',
     name: '主变区例行巡检',
     description: '覆盖主变、GIS 设备区',
     path,
-    mapMode: '2d',
+    mapMode: 'ros2d',
+    rosRoute,
     routeDetections: detectionItems(ROUTE_DETECTIONS),
     checkpoints: [
       { id: 'cp_demo_001', routeId: 'route_demo_001', name: '1# 主变', seq: 1, position: path[1], pan: 45, tilt: -20, dwellSeconds: 25, detections: detectionItems(CHECKPOINT_DETECTIONS) },
@@ -69,9 +98,17 @@ const seedWorkOrders = [
   { id: 'wo_seed_2', title: 'GIS 区未佩戴安全帽', description: '路线行进中检测到作业人员未佩戴安全帽', status: 'PENDING', priority: 'URGENT', createdById: 'user_dispatcher', createdByName: '张调度', createdAt: '2026-06-12T14:30:00Z', updatedAt: '2026-06-12T14:30:00Z' },
 ]
 
+/** 云端地图库默认条目（yaml + png；site_002/003 演示复用 site_001 栅格） */
+const defaultSlamMapRegistry = {
+  site_001: { yamlUrl: '/assets/maps/site_001/map.txt', pngUrl: '/assets/maps/site_001/map.png', source: 'bundled' },
+  site_002: { yamlUrl: '/assets/maps/site_002/map.txt', pngUrl: '/assets/maps/site_001/map.png', source: 'bundled' },
+  site_003: { yamlUrl: '/assets/maps/site_003/map.txt', pngUrl: '/assets/maps/site_001/map.png', source: 'bundled' },
+}
+
 module.exports = {
   createDemoRoutes,
   defaultSites,
+  defaultSlamMapRegistry,
   defaultAreas,
   defaultRobots,
   defaultDetectionTemplates: [

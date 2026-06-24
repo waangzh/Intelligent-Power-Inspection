@@ -1,8 +1,9 @@
 const apiConfig = require('../config/api')
 const http = require('../utils/request')
 const mock = require('./mock/store')
-const { uid } = require('../utils/storage')
+const { uid, loadFromStorage } = require('../utils/storage')
 const { ROUTE_DETECTIONS, CHECKPOINT_DETECTIONS } = require('../utils/constants')
+const { createEmptyRosRoute } = require('../utils/ros-route')
 
 function useMock() {
   return apiConfig.useMock
@@ -156,6 +157,78 @@ async function removeArea(id) {
   await http.del(`/sites/areas/${id}`)
 }
 
+function getPersistedSlamMap(siteId) {
+  const maps = loadFromStorage(mock.KEYS.slamMaps, {})
+  const stored = maps[siteId]
+  if (!stored) return null
+  return {
+    yamlText: stored.yamlText,
+    pngBase64: stored.pngBase64,
+    source: 'cloud',
+    updatedAt: stored.updatedAt,
+  }
+}
+
+/** 站点 SLAM 地图资源（yaml + png/pgm，与标注工具 / 机器人共用） */
+async function getSiteSlamMap(siteId) {
+  if (useMock()) {
+    const persisted = getPersistedSlamMap(siteId)
+    if (persisted) return persisted
+    const seed = require('./mock/seed-data')
+    const entry = seed.defaultSlamMapRegistry[siteId]
+    if (entry) return entry
+    throw new Error('该站点暂无 SLAM 地图')
+  }
+  return http.get(`/sites/${siteId}/slam-map`)
+}
+
+async function saveSiteSlamMap(siteId, payload) {
+  const { yamlText, pngBase64 } = payload
+  if (!yamlText || !pngBase64) throw new Error('yaml 与 png 数据不能为空')
+  if (useMock()) {
+    const maps = loadFromStorage(mock.KEYS.slamMaps, {})
+    maps[siteId] = {
+      yamlText,
+      pngBase64,
+      updatedAt: new Date().toISOString(),
+    }
+    mock.save(mock.KEYS.slamMaps, maps)
+    const { clearSlamMapCache } = require('../utils/slam-map')
+    clearSlamMapCache(siteId)
+    return maps[siteId]
+  }
+  return http.put(`/sites/${siteId}/slam-map`, { yamlText, pngBase64 })
+}
+
+async function removeSiteSlamMap(siteId) {
+  if (useMock()) {
+    const maps = loadFromStorage(mock.KEYS.slamMaps, {})
+    delete maps[siteId]
+    mock.save(mock.KEYS.slamMaps, maps)
+    const { clearSlamMapCache } = require('../utils/slam-map')
+    clearSlamMapCache(siteId)
+    return
+  }
+  await http.del(`/sites/${siteId}/slam-map`)
+}
+
+async function listSiteSlamMaps() {
+  if (useMock()) {
+    const seed = require('./mock/seed-data')
+    const persisted = loadFromStorage(mock.KEYS.slamMaps, {})
+    const siteIds = new Set([
+      ...Object.keys(seed.defaultSlamMapRegistry),
+      ...Object.keys(persisted),
+    ])
+    return [...siteIds].map((siteId) => ({
+      siteId,
+      source: persisted[siteId] ? 'cloud' : 'bundled',
+      updatedAt: persisted[siteId] ? persisted[siteId].updatedAt : null,
+    }))
+  }
+  return http.get('/sites/slam-maps')
+}
+
 // ==================== Routes ====================
 function defaultDetectionItems(types) {
   return types.map((type) => ({
@@ -182,15 +255,17 @@ async function saveRoute(route) {
 }
 
 async function createRoute(siteId, name, description = '') {
+  const id = uid('route')
   const route = {
-    id: uid('route'),
+    id,
     siteId,
     name,
     description,
     path: [],
     routeDetections: defaultDetectionItems(ROUTE_DETECTIONS),
     checkpoints: [],
-    mapMode: '2d',
+    mapMode: 'ros2d',
+    rosRoute: createEmptyRosRoute(id, name),
     createdAt: new Date().toISOString(),
   }
   if (useMock()) {
@@ -503,6 +578,10 @@ module.exports = {
   removeSite,
   addArea,
   removeArea,
+  getSiteSlamMap,
+  saveSiteSlamMap,
+  removeSiteSlamMap,
+  listSiteSlamMaps,
   getRoutes,
   saveRoute,
   createRoute,

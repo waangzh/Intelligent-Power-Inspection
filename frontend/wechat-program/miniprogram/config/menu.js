@@ -21,7 +21,7 @@ const menuGroups = [
     title: '巡检业务',
     items: [
       { path: '/pages/sites/index', label: '站点管理', icon: '🏭', permission: 'site:edit' },
-      { path: '/pages/routes/index', label: '巡检规划', icon: '🗺️', permission: 'route:edit' },
+      { path: '/pages/routes/index', label: '路线标注', icon: '🗺️', permission: 'route:edit' },
       { path: '/pages/tasks/index', label: '任务调度', icon: '▶️', permission: 'task:view' },
     ],
   },

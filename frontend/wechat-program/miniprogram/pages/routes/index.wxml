@@ -1,5 +1,5 @@
 <view class="container">
-  <page-header title="巡检规划" description="路线绘制、检查点与检测策略配置" />
+  <page-header title="巡检路线标注工具" description="点击地图设置起点或追加巡检点；选择「方向」后点选一个点，再点击或拖拽确定朝向。" />
 
   <view class="card toolbar">
     <picker mode="selector" range="{{sites}}" range-key="name" value="{{siteIndex}}" bindchange="onSiteChange">
@@ -13,66 +13,145 @@
   </scroll-view>
 
   <block wx:if="{{currentRoute}}">
-    <view class="card">
-      <view class="form-row"><text class="form-label">名称</text><input value="{{routeName}}" bindinput="onRouteName" /></view>
-      <view class="form-row"><text class="form-label">描述</text><input value="{{routeDesc}}" bindinput="onRouteDesc" /></view>
-      <view class="form-row">
-        <text class="form-label">地图</text>
-        <picker mode="selector" range="{{mapModes}}" range-key="label" value="{{mapModeIndex}}" bindchange="onMapMode">
-          <view class="picker-val">{{mapModes[mapModeIndex].label}} ▾</view>
-        </picker>
+    <view class="card map-card">
+      <view class="map-toolbar">
+        <view class="map-file-btns">
+          <button size="mini" bindtap="importSlamYaml">YAML 地图配置</button>
+          <button size="mini" bindtap="importSlamPgm">PGM 地图图像</button>
+          <button size="mini" bindtap="importRosRoute">导入路线 JSON</button>
+        </view>
+        <view class="map-view-btns">
+          <button size="mini" bindtap="fitMapView">适配</button>
+          <button size="mini" bindtap="zoomMapIn">放大</button>
+          <button size="mini" bindtap="zoomMapOut">缩小</button>
+        </view>
+        <view class="mode-group">
+          <button size="mini" class="mode-btn {{editMode==='start'?'active':''}}" bindtap="setEditMode" data-mode="start">起点</button>
+          <button size="mini" class="mode-btn {{editMode==='target'?'active':''}}" bindtap="setEditMode" data-mode="target">巡检点</button>
+          <button size="mini" class="mode-btn {{editMode==='yaw'?'active':''}}" bindtap="setEditMode" data-mode="yaw">方向</button>
+          <button size="mini" class="mode-btn {{editMode==='pan'?'active':''}}" bindtap="setEditMode" data-mode="pan">拖动</button>
+        </view>
       </view>
-      <view class="form-actions">
-        <button size="mini" type="primary" bindtap="saveMeta">保存信息</button>
-        <button size="mini" type="warn" bindtap="deleteRoute">删除路线</button>
+
+      <view class="muted map-hint map-import-hint" wx:if="{{slamMapImportHint && !slamMapLoading && !slamMapError}}">{{slamMapImportHint}}</view>
+
+      <view class="map-canvas-area">
+        <ros-map-view
+          id="rosMap"
+          mapMeta="{{slamMap}}"
+          mapImage="{{slamMap.imagePath || ''}}"
+          rosRoute="{{rosRoute}}"
+          editable="{{true}}"
+          mode="{{editMode}}"
+          selectedTargetId="{{selectedTargetId}}"
+          yawTargetKind="{{yawTargetKind}}"
+          yawTargetId="{{yawTargetId}}"
+          bind:setstart="onSetStart"
+          bind:addtarget="onAddTarget"
+          bind:movetarget="onMoveTarget"
+          bind:setyaw="onSetYaw"
+          bind:selecttarget="onSelectTarget"
+          bind:yawtargetchange="onYawTargetChange"
+          bind:mapcursor="onMapCursor"
+        />
+        <view class="map-overlay" wx:if="{{slamMapLoading}}">{{slamMapImportHint || '正在加载地图…'}}</view>
+        <view class="map-overlay map-overlay--error" wx:elif="{{slamMapError}}">
+          {{slamMapError}}<text wx:if="{{!slamMapImportHint}}"> · 可点「YAML 地图配置」+「PGM 地图图像」从聊天记录加载</text>
+        </view>
+      </view>
+
+      <view class="map-hud" wx:if="{{!slamMapLoading}}">
+        <text>{{mapHud.info}}</text>
+        <text class="map-hud-cursor">{{mapHud.cursorText}}</text>
       </view>
     </view>
 
-    <view class="card">
+    <view class="card ros-config" wx:if="{{rosRoute}}">
+      <view class="card-title">起点</view>
+      <view class="form-row"><text class="form-label">名称</text><input value="{{startForm.name}}" data-field="name" bindinput="onStartField" /></view>
+      <view class="grid-3">
+        <view class="form-row compact"><text class="form-label">x</text><input type="digit" value="{{startForm.x}}" data-field="x" bindinput="onStartField" /></view>
+        <view class="form-row compact"><text class="form-label">y</text><input type="digit" value="{{startForm.y}}" data-field="y" bindinput="onStartField" /></view>
+        <view class="form-row compact"><text class="form-label">yaw(rad)</text><input type="digit" value="{{startForm.yaw}}" data-field="yaw" bindinput="onStartField" /></view>
+      </view>
+      <label class="check-line"><checkbox checked="{{startForm.publishInitialPose}}" bindchange="onStartPublishChange" />发布 /initialpose</label>
+      <view class="grid-3">
+        <view class="form-row compact"><text class="form-label">cov x</text><input type="digit" value="{{startForm.covX}}" data-field="covX" bindinput="onStartField" /></view>
+        <view class="form-row compact"><text class="form-label">cov y</text><input type="digit" value="{{startForm.covY}}" data-field="covY" bindinput="onStartField" /></view>
+        <view class="form-row compact"><text class="form-label">cov yaw</text><input type="digit" value="{{startForm.covYaw}}" data-field="covYaw" bindinput="onStartField" /></view>
+      </view>
+    </view>
+
+    <view class="card ros-config" wx:if="{{rosRoute}}">
+      <view class="card-title">路线</view>
+      <view class="grid-2">
+        <view class="form-row compact"><text class="form-label">路线 ID</text><input value="{{routeMetaForm.routeId}}" data-field="routeId" bindinput="onRouteMetaField" /></view>
+        <view class="form-row compact"><text class="form-label">默认路线</text><input value="{{routeMetaForm.activeRouteId}}" data-field="activeRouteId" bindinput="onRouteMetaField" /></view>
+      </view>
+      <view class="form-row"><text class="form-label">路线名称</text><input value="{{routeMetaForm.jsonRouteName}}" data-field="jsonRouteName" bindinput="onRouteMetaField" /></view>
+      <view class="grid-2">
+        <view class="form-row compact"><text class="form-label">导航超时(s)</text><input type="number" value="{{routeForm.goalTimeoutSec}}" data-field="goalTimeoutSec" bindinput="onRouteField" /></view>
+        <view class="form-row compact"><text class="form-label">失败重试</text><input type="number" value="{{routeForm.maxRetries}}" data-field="maxRetries" bindinput="onRouteField" /></view>
+      </view>
+      <view class="grid-2">
+        <view class="form-row compact">
+          <text class="form-label">失败策略</text>
+          <picker mode="selector" range="{{failurePolicies}}" range-key="label" value="{{routeForm.failurePolicyIndex}}" bindchange="onFailurePolicyChange">
+            <view class="picker-val">{{failurePolicies[routeForm.failurePolicyIndex].label}} ▾</view>
+          </picker>
+        </view>
+        <view class="form-row compact"><text class="form-label">循环等待(s)</text><input type="number" value="{{routeForm.loopWaitSec}}" data-field="loopWaitSec" bindinput="onRouteField" /></view>
+      </view>
+      <view class="grid-2 check-grid">
+        <label class="check-line"><checkbox checked="{{returnToStart}}" bindchange="onReturnToStartChange" />返航</label>
+        <label class="check-line"><checkbox checked="{{routeForm.loopEnabled}}" bindchange="onRouteLoopChange" />循环</label>
+      </view>
+      <view class="form-row"><text class="form-label">循环次数，0 表示一直循环</text><input type="number" value="{{routeForm.loopMaxCycles}}" data-field="loopMaxCycles" bindinput="onRouteField" /></view>
+    </view>
+
+    <view class="card ros-config" wx:if="{{rosRoute}}">
       <view class="card-title flex-between">
-        <text>地图 · {{mapModes[mapModeIndex].label}}</text>
-        <view class="map-btns" wx:if="{{mapModes[mapModeIndex].value==='2d'}}">
-          <button size="mini" type="{{drawingPath?'warn':'primary'}}" bindtap="toggleDraw">{{drawingPath?'完成绘制':'绘制路线'}}</button>
-          <button size="mini" bindtap="clearPath">清除</button>
-          <button size="mini" bindtap="addDemoPath">示例</button>
+        <text>巡检点</text>
+        <view class="target-btns">
+          <button size="mini" bindtap="addCenterTarget">追加中心点</button>
+          <button size="mini" type="warn" bindtap="clearAllTargets">清空巡检点</button>
         </view>
       </view>
-      <block wx:if="{{mapModes[mapModeIndex].value==='2d'}}">
-        <map-view center="{{siteCenter}}" route="{{currentRoute}}" drawMode="{{drawingPath}}" editable="{{true}}" bind:tapmap="onMapTap" bind:checkpointselect="onCpSelect" />
-        <view class="muted map-hint" wx:if="{{drawingPath}}">点击地图添加路线节点；再次点「完成绘制」结束</view>
-        <view class="muted map-hint" wx:else>点击地图可添加检查点</view>
-      </block>
-      <block wx:else>
-        <map-3d-placeholder title="路线三维视图" height="{{360}}" />
-        <view class="muted map-hint">三维模式为演示预览，路线数据与 2D 同步保存</view>
-      </block>
+
+      <view class="ros-target-list" wx:if="{{rosTargets.length}}">
+        <view class="ros-target-row {{selectedTargetId===item.id?'sel':''}}" wx:for="{{rosTargets}}" wx:key="id" bindtap="onRosTargetSelect" data-id="{{item.id}}">
+          <view class="ros-badge">{{index + 1}}</view>
+          <view class="ros-target-body">
+            <input value="{{item.name}}" data-id="{{item.id}}" data-field="name" bindinput="onTargetField" catchtap="noop" placeholder="名称" />
+            <view class="grid-2 target-coords">
+              <input type="digit" value="{{item.pose.x}}" data-id="{{item.id}}" data-field="x" bindinput="onTargetField" catchtap="noop" placeholder="x" />
+              <input type="digit" value="{{item.pose.y}}" data-id="{{item.id}}" data-field="y" bindinput="onTargetField" catchtap="noop" placeholder="y" />
+            </view>
+            <view class="grid-2 target-coords">
+              <input type="digit" value="{{item.pose.yaw}}" data-id="{{item.id}}" data-field="yaw" bindinput="onTargetField" catchtap="noop" placeholder="yaw(rad)" />
+              <input type="digit" value="{{item.task_duration_sec}}" data-id="{{item.id}}" data-field="task_duration_sec" bindinput="onTargetField" catchtap="noop" placeholder="停留秒数" />
+            </view>
+            <text class="muted ros-meta">{{item.id}} | yaw(rad) / task_duration_sec</text>
+          </view>
+          <view class="ros-actions">
+            <button size="mini" catchtap="orientRosTarget" data-id="{{item.id}}">↗</button>
+            <button size="mini" catchtap="moveRosTarget" data-id="{{item.id}}" data-delta="-1">↑</button>
+            <button size="mini" catchtap="moveRosTarget" data-id="{{item.id}}" data-delta="1">↓</button>
+            <button size="mini" catchtap="removeRosTarget" data-id="{{item.id}}">×</button>
+          </view>
+        </view>
+      </view>
+
+      <view class="target-status {{targetStatusError?'error':''}}">{{targetStatus}}</view>
     </view>
 
-    <view class="card">
-      <view class="seg-tabs">
-        <text class="seg {{activeTab==='route-det'?'on':''}}" bindtap="setTab" data-t="route-det">路线检测</text>
-        <text class="seg {{activeTab==='checkpoints'?'on':''}}" bindtap="setTab" data-t="checkpoints">检查点</text>
+    <view class="card ros-config" wx:if="{{rosRoute}}">
+      <view class="card-title">JSON 预览</view>
+      <textarea class="json-preview" value="{{jsonPreview}}" disabled maxlength="-1" />
+      <view class="footer-btns">
+        <button size="mini" bindtap="copyRosRoute">复制 JSON</button>
+        <button size="mini" type="primary" bindtap="exportRosRoute">下载 route.json</button>
       </view>
-
-      <block wx:if="{{activeTab==='route-det'}}">
-        <detection-config items="{{currentRoute.routeDetections}}" bind:change="onRouteDetectionChange" />
-      </block>
-
-      <block wx:if="{{activeTab==='checkpoints'}}">
-        <view class="cp-item {{selectedCpId===item.id?'sel':''}}" wx:for="{{currentRoute.checkpoints}}" wx:key="id" bindtap="onCpSelect" data-id="{{item.id}}">
-          <text>{{item.seq}}. {{item.name}}</text>
-          <text class="link danger" catchtap="removeCp" data-id="{{item.id}}">删除</text>
-        </view>
-        <view class="card inner" wx:if="{{selectedCp}}">
-          <view class="card-title">检查点配置 · {{selectedCp.name}}</view>
-          <view class="form-row"><text class="form-label">名称</text><input value="{{cpForm.name}}" bindinput="onCpName" /></view>
-          <view class="form-row"><text class="form-label">水平角</text><slider min="0" max="360" value="{{cpForm.pan}}" bindchange="onCpPan" show-value /></view>
-          <view class="form-row"><text class="form-label">俯仰角</text><slider min="-90" max="90" value="{{cpForm.tilt}}" bindchange="onCpTilt" show-value /></view>
-          <view class="form-row"><text class="form-label">停留秒</text><slider min="5" max="120" value="{{cpForm.dwell}}" bindchange="onCpDwell" show-value /></view>
-          <button size="mini" type="primary" bindtap="saveCp">保存检查点</button>
-          <detection-config items="{{selectedCp.detections}}" bind:change="onCpDetectionChange" />
-        </view>
-      </block>
     </view>
   </block>
 
