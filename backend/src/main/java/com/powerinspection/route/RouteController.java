@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -42,37 +43,51 @@ public class RouteController extends CrudSupport {
     if (siteId != null && !siteId.isBlank()) {
       routes = routes.stream().filter(route -> siteId.equals(String.valueOf(route.get("siteId")))).toList();
     }
+    routes = routes.stream().map(RouteExecutorSupport::attachRosAlias).toList();
     return ApiResponse.ok(routes);
   }
 
   @GetMapping("/{id}")
   public ApiResponse<Map<String, Object>> route(@PathVariable String id) {
-    return ApiResponse.ok(dataStore.get(DataCategory.ROUTE, id));
+    return ApiResponse.ok(RouteExecutorSupport.attachRosAlias(dataStore.get(DataCategory.ROUTE, id)));
   }
 
   @PostMapping
   public ApiResponse<Map<String, Object>> createRoute(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureSiteExists(String.valueOf(body.get("siteId")));
+    body.putIfAbsent("id", Ids.next("route"));
     body.putIfAbsent("path", List.of());
     body.putIfAbsent("checkpoints", List.of());
     body.putIfAbsent("mapMode", "2d");
-    return ApiResponse.ok(create(DataCategory.ROUTE, "route", body));
+    RouteExecutorSupport.normalizeRoute(body);
+    return ApiResponse.ok(RouteExecutorSupport.attachRosAlias(create(DataCategory.ROUTE, "route", body)));
   }
 
   @GetMapping("/{id}/checkpoints")
   public ApiResponse<List<Map<String, Object>>> routeCheckpoints(@PathVariable String id) {
-    return ApiResponse.ok(checkpoints(dataStore.get(DataCategory.ROUTE, id)));
+    return ApiResponse.ok(RouteExecutorSupport.compatibleCheckpoints(dataStore.get(DataCategory.ROUTE, id)));
   }
 
   @PatchMapping("/{id}")
   public ApiResponse<Map<String, Object>> updateRoute(@PathVariable String id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(updateRoutePayload(id, body));
+  }
+
+  @PutMapping("/{id}")
+  public ApiResponse<Map<String, Object>> replaceRoute(@PathVariable String id, @RequestBody Map<String, Object> body) {
+    return ApiResponse.ok(updateRoutePayload(id, body));
+  }
+
+  private Map<String, Object> updateRoutePayload(String id, Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(id);
     if (body.containsKey("siteId")) {
       ensureSiteExists(String.valueOf(body.get("siteId")));
     }
-    return ApiResponse.ok(update(DataCategory.ROUTE, id, body));
+    body.put("id", id);
+    RouteExecutorSupport.normalizeRoute(body);
+    return RouteExecutorSupport.attachRosAlias(update(DataCategory.ROUTE, id, body));
   }
 
   @DeleteMapping("/{id}")

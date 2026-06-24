@@ -1,6 +1,7 @@
 package com.powerinspection.robot;
 
 import com.powerinspection.common.ApiException;
+import com.powerinspection.route.RouteExecutorSupport;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -35,7 +36,7 @@ public class SimulationRobotGateway implements RobotGateway {
   @Override
   @SuppressWarnings("unchecked")
   public RobotProgressSnapshot advanceTask(Map<String, Object> robot, Map<String, Object> task, Map<String, Object> route) {
-    List<Map<String, Object>> path = route.get("path") instanceof List<?> rawPath ? (List<Map<String, Object>>) rawPath : List.of();
+    List<Map<String, Object>> path = RouteExecutorSupport.compatiblePath(route);
     if (path.isEmpty()) {
       throw ApiException.badRequest("路线缺少路径点，无法执行任务");
     }
@@ -43,7 +44,7 @@ public class SimulationRobotGateway implements RobotGateway {
     int pathIndex = Math.min(path.size() - 1, (int) Math.floor((nextProgress / 100.0) * (path.size() - 1)));
     Map<String, Object> position = path.get(pathIndex);
 
-    List<Map<String, Object>> checkpoints = route.get("checkpoints") instanceof List<?> rawCheckpoints ? (List<Map<String, Object>>) rawCheckpoints : List.of();
+    List<Map<String, Object>> checkpoints = RouteExecutorSupport.compatibleCheckpoints(route);
     int checkpointSeq = checkpoints.isEmpty() ? 0 : Math.min(checkpoints.size(), (int) Math.ceil((nextProgress / 100.0) * checkpoints.size()));
     return new RobotProgressSnapshot(nextProgress, checkpointSeq, position);
   }

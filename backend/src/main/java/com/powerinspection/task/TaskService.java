@@ -11,6 +11,7 @@ import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotProgressSnapshot;
+import com.powerinspection.route.RouteExecutorSupport;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -215,7 +216,7 @@ public class TaskService {
     Map<String, Object> position = progress.position();
     updateRobot(text(task.get("robotId")), map("position", position, "status", "BUSY", "currentTaskId", taskId));
 
-    List<Map<String, Object>> checkpoints = route.get("checkpoints") instanceof List<?> rawCheckpoints ? (List<Map<String, Object>>) rawCheckpoints : List.of();
+    List<Map<String, Object>> checkpoints = RouteExecutorSupport.compatibleCheckpoints(route);
     int newSeq = progress.currentCheckpointSeq();
     int oldSeq = number(task.get("currentCheckpointSeq"));
     if (newSeq > oldSeq && newSeq <= checkpoints.size()) {
@@ -434,11 +435,13 @@ public class TaskService {
     }
   }
 
-  @SuppressWarnings("unchecked")
   private void validateRouteReady(Map<String, Object> route) {
-    List<Map<String, Object>> path = route.get("path") instanceof List<?> rawPath ? (List<Map<String, Object>>) rawPath : List.of();
+    if (RouteExecutorSupport.hasExecutorTargets(route)) {
+      return;
+    }
+    List<Map<String, Object>> path = RouteExecutorSupport.compatiblePath(route);
     if (path.isEmpty()) {
-      throw ApiException.badRequest("路线缺少路径点，无法下发任务");
+      throw ApiException.badRequest("Route has no path or executor targets");
     }
   }
 

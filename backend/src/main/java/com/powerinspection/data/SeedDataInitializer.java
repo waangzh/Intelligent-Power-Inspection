@@ -162,9 +162,39 @@ public class SeedDataInitializer implements ApplicationRunner {
       map("id", "cp_demo_002", "routeId", "route_demo_001", "name", "GIS 刀闸", "seq", 2, "position", path.get(2), "pan", 90, "tilt", -15, "dwellSeconds", 30, "detections", detectionItems("SWITCH", "METER", "OIL_LEAK", "FIRE", "FOREIGN_OBJECT")),
       map("id", "cp_demo_003", "routeId", "route_demo_001", "name", "电容器组", "seq", 3, "position", path.get(3), "pan", 120, "tilt", -25, "dwellSeconds", 20, "detections", detectionItems("SWITCH", "METER", "OIL_LEAK", "FIRE", "FOREIGN_OBJECT"))
     );
-    dataStore.upsert(DataCategory.ROUTE, map("id", "route_demo_001", "siteId", "site_001", "name", "主变区例行巡检", "description", "覆盖主变、GIS 设备区", "path", path, "mapMode", "2d", "routeDetections", detectionItems("PERSON", "HELMET", "OBSTACLE", "FIRE"), "checkpoints", cps, "createdAt", "2026-03-01T08:00:00Z"));
+    Map<String, Object> executorJson = rosRouteDemo();
+    dataStore.upsert(DataCategory.ROUTE, map("id", "route_demo_001", "siteId", "site_001", "name", "Main transformer patrol", "description", "ROS demo route", "path", path, "mapMode", "ros2d", "routeDetections", detectionItems("PERSON", "HELMET", "OBSTACLE", "FIRE"), "checkpoints", cps, "executorJson", executorJson, "rosRoute", executorJson, "createdAt", "2026-03-01T08:00:00Z"));
   }
 
+  private Map<String, Object> rosRouteDemo() {
+    return map(
+      "version", 2,
+      "frame_id", "map",
+      "active_route_id", "route_patrol_001",
+      "start_pose", map(
+        "name", "Initial pose",
+        "pose", map("x", 0.5, "y", -0.5, "yaw", 0.2),
+        "publish_initial_pose", true,
+        "covariance", map("x", 0.25, "y", 0.25, "yaw", 0.0685)
+      ),
+      "targets", List.of(
+        map("id", "target_001", "name", "Target 1", "pose", map("x", 2.5, "y", 0.8, "yaw", 1.2), "task_duration_sec", 25),
+        map("id", "target_002", "name", "Target 2", "pose", map("x", 4.2, "y", -0.6, "yaw", 0.5), "task_duration_sec", 30),
+        map("id", "target_003", "name", "Target 3", "pose", map("x", 1.8, "y", 1.5, "yaw", -0.8), "task_duration_sec", 20)
+      ),
+      "routes", List.of(map(
+        "id", "route_patrol_001",
+        "name", "Main patrol route",
+        "target_ids", List.of("target_001", "target_002", "target_003"),
+        "return_to_start", true,
+        "loop", map("enabled", false, "wait_sec", 600, "max_cycles", 0),
+        "goal_timeout_sec", 120,
+        "max_retries_per_checkpoint", 1,
+        "failure_policy", "abort_and_return_home"
+      )),
+      "schedules", List.of()
+    );
+  }
   private void lingbot(String id, String siteId, String siteName, String name, String status, int progress, int pointCount, int videoCount, String createdAt, String completedAt) {
     Map<String, Object> item = map("id", id, "siteId", siteId, "siteName", siteName, "name", name, "status", status, "progress", progress, "pointCount", pointCount, "videoCount", videoCount, "createdAt", createdAt);
     if (completedAt != null) {

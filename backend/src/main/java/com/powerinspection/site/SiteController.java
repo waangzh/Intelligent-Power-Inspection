@@ -8,6 +8,8 @@ import com.powerinspection.data.DataStoreService;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,9 +39,27 @@ public class SiteController extends CrudSupport {
     return ApiResponse.ok(list(DataCategory.SITE));
   }
 
+  @GetMapping("/slam-maps")
+  public ApiResponse<List<Map<String, Object>>> slamMaps() {
+    List<Map<String, Object>> maps = dataStore.list(DataCategory.SLAM_MAP).stream()
+      .map(this::slamMapSummary)
+      .toList();
+    return ApiResponse.ok(maps);
+  }
+
   @GetMapping("/{id}")
   public ApiResponse<Map<String, Object>> site(@PathVariable String id) {
     return ApiResponse.ok(dataStore.get(DataCategory.SITE, id));
+  }
+
+  @GetMapping("/{id}/slam-map")
+  public ApiResponse<Map<String, Object>> slamMap(@PathVariable String id) {
+    ensureSiteExists(id);
+    Map<String, Object> item = dataStore.find(DataCategory.SLAM_MAP, id);
+    if (item == null) {
+      throw ApiException.notFound("SLAM map does not exist");
+    }
+    return ApiResponse.ok(item);
   }
 
   @GetMapping("/areas")
@@ -64,9 +85,43 @@ public class SiteController extends CrudSupport {
     ensureSiteNotReferenced(id);
     delete(DataCategory.SITE, id);
     dataStore.deleteWhere(DataCategory.AREA, "siteId", id);
+    dataStore.delete(DataCategory.SLAM_MAP, id);
     return ApiResponse.ok();
   }
 
+  @PutMapping("/{id}/slam-map")
+  public ApiResponse<Map<String, Object>> saveSlamMap(@PathVariable String id, @RequestBody Map<String, Object> body) {
+    permissionService.require(currentUser.get(), Permission.SITE_EDIT);
+    ensureSiteExists(id);
+    String yamlText = text(body.get("yamlText"));
+    String pngBase64 = text(body.get("pngBase64"));
+    if (yamlText == null || yamlText.isBlank() || pngBase64 == null || pngBase64.isBlank()) {
+      throw ApiException.badRequest("yamlText and pngBase64 are required");
+    }
+    String now = Instant.now().toString();
+    Map<String, Object> item = new LinkedHashMap<>();
+    item.put("id", id);
+    item.put("siteId", id);
+    item.put("yamlText", yamlText);
+    item.put("pngBase64", pngBase64);
+    item.put("source", text(body.getOrDefault("source", "cloud")));
+    item.put("updatedAt", now);
+    Map<String, Object> existing = dataStore.find(DataCategory.SLAM_MAP, id);
+    if (existing != null && existing.get("createdAt") != null) {
+      item.put("createdAt", existing.get("createdAt"));
+    } else {
+      item.put("createdAt", now);
+    }
+    return ApiResponse.ok(dataStore.upsert(DataCategory.SLAM_MAP, item));
+  }
+
+  @DeleteMapping("/{id}/slam-map")
+  public ApiResponse<Void> deleteSlamMap(@PathVariable String id) {
+    permissionService.require(currentUser.get(), Permission.SITE_EDIT);
+    ensureSiteExists(id);
+    dataStore.delete(DataCategory.SLAM_MAP, id);
+    return ApiResponse.ok();
+  }
   @GetMapping("/{id}/areas")
   public ApiResponse<List<Map<String, Object>>> areasBySite(@PathVariable String id) {
     return ApiResponse.ok(list(DataCategory.AREA).stream().filter(area -> id.equals(String.valueOf(area.get("siteId")))).toList());
@@ -102,6 +157,17 @@ public class SiteController extends CrudSupport {
     return ApiResponse.ok();
   }
 
+  private Map<String, Object> slamMapSummary(Map<String, Object> item) {
+    Map<String, Object> summary = new LinkedHashMap<>();
+    summary.put("siteId", item.get("siteId"));
+    summary.put("source", item.getOrDefault("source", "cloud"));
+    summary.put("updatedAt", item.get("updatedAt"));
+    return summary;
+  }
+
+  private String text(Object value) {
+    return value == null ? null : value.toString();
+  }
   private void ensureSiteExists(String siteId) {
     if (dataStore.find(DataCategory.SITE, siteId) == null) {
       throw ApiException.badRequest("站点不存在");
