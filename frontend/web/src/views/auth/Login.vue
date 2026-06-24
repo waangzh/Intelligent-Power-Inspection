@@ -90,8 +90,8 @@ async function handleLogin() {
   try {
     await authStore.login(form.username, form.password, form.remember)
     ElMessage.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/dashboard'
-    router.replace(redirect)
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
+    await router.replace(redirect)
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '登录失败')
   } finally {

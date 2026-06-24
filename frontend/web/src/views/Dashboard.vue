@@ -250,7 +250,7 @@ function robotStatusLabel(s: Robot['status']) {
 }
 
 function robotStatusType(s: Robot['status']) {
-  return { ONLINE: 'success', OFFLINE: 'info', BUSY: 'warning', CHARGING: '' }[s] as '' | 'success' | 'warning' | 'info'
+  return { ONLINE: 'success', OFFLINE: 'info', BUSY: 'warning', CHARGING: 'info' }[s] as 'success' | 'warning' | 'info'
 }
 
 function batteryColor(p: number) {
