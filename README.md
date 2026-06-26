@@ -245,35 +245,35 @@ frontend/wechat-program/miniprogram/config/api.js
 
 模型服务默认使用 mock runner，不需要下载模型权重，适合先验证 Spring Boot 与 Python 服务之间的 HTTP 协议。
 
-创建并安装 Python 依赖：
+使用 conda 环境安装 Python 依赖：
 
 ```powershell
-cd ai-services
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r .\locate-anything-service\requirements.txt
+conda env create -f ai-services/locate-anything-service/environment.yml
+conda activate ipi-locate-anything
 ```
 
-如果系统默认 `python` 来自 MSYS，可能缺少部分 Windows wheel。可改用标准 Windows CPython，例如：
+如果需要运行真实 LocateAnything 模型，还需安装 PyTorch CUDA wheel：
 
 ```powershell
-D:\Python\Python3.13.0\python.exe -m venv .venv313
-.\.venv313\Scripts\python.exe -m pip install -r .\locate-anything-service\requirements.txt
+conda run -n ipi-locate-anything python -m pip install -r ai-services/locate-anything-service/requirements-torch-cu126.txt
 ```
 
 启动 LocateAnything 服务：
 
 ```powershell
+conda activate ipi-locate-anything
 cd ai-services\locate-anything-service
 $env:PYTHONPATH=".."
-..\.venv313\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 9001
+uvicorn app:app --host 0.0.0.0 --port 9001
 ```
 
 启动 LingBot-Map 服务：
 
 ```powershell
+conda activate ipi-locate-anything
 cd ai-services\lingbot-map-service
 $env:PYTHONPATH=".."
-..\.venv313\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 9002
+uvicorn app:app --host 0.0.0.0 --port 9002
 ```
 
 后端切换到 HTTP 模型网关：
@@ -578,13 +578,14 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 cd backend
 mvn test
 
-cd ..\ai-services\locate-anything-service
+conda activate ipi-locate-anything
+cd ai-services\locate-anything-service
 $env:PYTHONPATH=".."
-..\.venv313\Scripts\python.exe -m pytest tests
+python -m pytest tests
 
 cd ..\lingbot-map-service
 $env:PYTHONPATH=".."
-..\.venv313\Scripts\python.exe -m pytest tests
+python -m pytest tests
 ```
 
 ## 常见问题
@@ -637,4 +638,4 @@ http://127.0.0.1:5173
 - LocateAnything 与 LingBot-Map 已有 Python 服务骨架和后端 HTTP 网关，但真实模型 runner 仍需按官方代码进一步封装。
 - 当前 Python 服务默认输出 mock 检测结果和 mock 建图产物。
 - 生产级日志、审计、监控、部署流水线和权限审计细节仍需进一步完善。
-- `backend/target/`、`frontend/web/dist/`、`frontend/web/node_modules/`、`ai-services/.venv*/`、`runtime-storage/`、模型权重和点云/mesh 等产物不应提交。
+- `backend/target/`、`frontend/web/dist/`、`frontend/web/node_modules/`、`runtime-storage/`、模型权重和点云/mesh 等产物不应提交。
