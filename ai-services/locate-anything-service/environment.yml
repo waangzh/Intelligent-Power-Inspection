@@ -17,4 +17,4 @@ dependencies:
 
 # 真实 LocateAnything 还需要 PyTorch。Windows 上 conda CUDA 包容易出现校验或路径冲突，
 # 因此 PyTorch CUDA wheel 单独安装：
-# conda run -n ipi-locate-anything python -m pip install -r requirements-torch-cu121.txt
+# conda run -n ipi-locate-anything python -m pip install -r requirements-torch-cu126.txt

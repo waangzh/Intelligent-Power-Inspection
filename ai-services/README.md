@@ -11,18 +11,16 @@
 
 ```powershell
 cd ai-services/locate-anything-service
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+conda activate ipi-locate-anything
 $env:PYTHONPATH=".."
-.venv\Scripts\uvicorn app:app --host 0.0.0.0 --port 9001
+uvicorn app:app --host 0.0.0.0 --port 9001
 ```
 
 ```powershell
 cd ai-services/lingbot-map-service
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+conda activate ipi-locate-anything
 $env:PYTHONPATH=".."
-.venv\Scripts\uvicorn app:app --host 0.0.0.0 --port 9002
+uvicorn app:app --host 0.0.0.0 --port 9002
 ```
 
 默认实现是 mock runner，用于先稳定后端与 Python 服务之间的协议。真实 LocateAnything / LingBot-Map 接入时，只替换各服务的 `model_runner.py` / `runner.py`。
