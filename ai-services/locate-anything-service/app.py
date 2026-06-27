@@ -1,3 +1,6 @@
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 from fastapi import FastAPI
 
 from common.errors import model_error

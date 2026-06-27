@@ -26,19 +26,17 @@ conda run -n ipi-locate-anything python -m pip install -r locate-anything-servic
 
 ## 开发启动
 
-启动服务前必须设置 `PYTHONPATH=".."`，否则 `common` 模块无法导入。使用 conda 环境 `ipi-locate-anything`。
+启动服务前使用 conda 环境 `ipi-locate-anything`。
 
 ```bash
 conda activate ipi-locate-anything
 cd ai-services/locate-anything-service
-$env:PYTHONPATH=".."
 uvicorn app:app --host 0.0.0.0 --port 9001
 ```
 
 ```bash
 conda activate ipi-locate-anything
 cd ai-services/lingbot-map-service
-$env:PYTHONPATH=".."
 uvicorn app:app --host 0.0.0.0 --port 9002
 ```
 
@@ -47,11 +45,9 @@ uvicorn app:app --host 0.0.0.0 --port 9002
 ```bash
 conda activate ipi-locate-anything
 cd ai-services/locate-anything-service
-$env:PYTHONPATH=".."
 python -m pytest tests/ -v
 
 cd ai-services/lingbot-map-service
-$env:PYTHONPATH=".."
 python -m pytest tests/ -v
 ```
 

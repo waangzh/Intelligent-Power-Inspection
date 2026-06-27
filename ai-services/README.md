@@ -12,14 +12,12 @@
 ```powershell
 cd ai-services/locate-anything-service
 conda activate ipi-locate-anything
-$env:PYTHONPATH=".."
 uvicorn app:app --host 0.0.0.0 --port 9001
 ```
 
 ```powershell
 cd ai-services/lingbot-map-service
 conda activate ipi-locate-anything
-$env:PYTHONPATH=".."
 uvicorn app:app --host 0.0.0.0 --port 9002
 ```
 

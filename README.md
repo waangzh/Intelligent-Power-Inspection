@@ -263,7 +263,6 @@ conda run -n ipi-locate-anything python -m pip install -r ai-services/locate-any
 ```powershell
 conda activate ipi-locate-anything
 cd ai-services\locate-anything-service
-$env:PYTHONPATH=".."
 uvicorn app:app --host 0.0.0.0 --port 9001
 ```
 
@@ -272,7 +271,6 @@ uvicorn app:app --host 0.0.0.0 --port 9001
 ```powershell
 conda activate ipi-locate-anything
 cd ai-services\lingbot-map-service
-$env:PYTHONPATH=".."
 uvicorn app:app --host 0.0.0.0 --port 9002
 ```
 
@@ -562,7 +560,7 @@ Web 端核心业务数据已通过后端接口加载：
 
 ### Python 模型服务
 
-在对应服务目录执行，并设置 `PYTHONPATH=..`：
+在对应服务目录执行：
 
 | 命令 | 说明 |
 | --- | --- |
@@ -580,11 +578,9 @@ mvn test
 
 conda activate ipi-locate-anything
 cd ai-services\locate-anything-service
-$env:PYTHONPATH=".."
 python -m pytest tests
 
 cd ..\lingbot-map-service
-$env:PYTHONPATH=".."
 python -m pytest tests
 ```
 
