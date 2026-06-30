@@ -7,6 +7,7 @@ import re
 import httpx
 import logging
 import time
+from threading import Lock
 
 from common.schemas import LocateCheckpointRequest, LocateFinding
 from common.storage import ensure_dir, public_url
@@ -218,9 +219,10 @@ class LocateAnythingWorker:
 
 class LocateAnythingRunner:
     def __init__(self) -> None:
-        self.ready = True
+        self.ready = False
         self.model_version = settings.model_version
         self.worker: LocateAnythingWorker | None = None
+        self._load_lock = Lock()
         self.warnings: list[str] = []
 
     def locate_checkpoint(self, request: LocateCheckpointRequest) -> list[LocateFinding]:
@@ -266,8 +268,12 @@ class LocateAnythingRunner:
     def _predict(self, image_url: str, prompt: str, generation_mode: str) -> str:
         return self._worker().generate(image_url, prompt, generation_mode)
 
-    def _worker(self) -> LocateAnythingWorker:
-        if self.worker is None:
+    def load_model(self) -> None:
+        if self.worker is not None:
+            return
+        with self._load_lock:
+            if self.worker is not None:
+                return
             logger.info(
                 "LocateAnything real model loading modelPath=%s device=%s dtype=%s maxNewTokens=%s",
                 settings.model_path,
@@ -275,8 +281,16 @@ class LocateAnythingRunner:
                 settings.dtype,
                 settings.max_new_tokens,
             )
+            started_at = time.perf_counter()
             self.worker = LocateAnythingWorker()
-            logger.info("LocateAnything real model loaded modelPath=%s", settings.model_path)
+            self.ready = True
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000)
+            logger.info("LocateAnything real model loaded modelPath=%s elapsedMs=%s", settings.model_path, elapsed_ms)
+
+    def _worker(self) -> LocateAnythingWorker:
+        self.load_model()
+        if self.worker is None:
+            raise RuntimeError("LocateAnything real model is not loaded")
         return self.worker
 
 

@@ -17,6 +17,9 @@ venv/
 .DS_Store
 Thumbs.db
 
+# Tests
+ai-services/**/tests/
+
 # Build
 dist/
 build/

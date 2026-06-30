@@ -1,6 +1,7 @@
 import logging
 import os, sys
 import time
+from contextlib import asynccontextmanager
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -17,7 +18,13 @@ from model_runner import runner
 configure_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="LocateAnything Service", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    runner.load_model()
+    yield
+
+
+app = FastAPI(title="LocateAnything Service", version="0.1.0", lifespan=lifespan)
 annotated_dir = ensure_dir(settings.annotated_output_dir)
 app.mount("/files/annotated", StaticFiles(directory=annotated_dir), name="annotated")
 
