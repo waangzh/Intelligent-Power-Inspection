@@ -2,7 +2,7 @@
 
 电力智能巡检平台软件端仓库。当前仓库包含 Java 后端、Vue Web 管理端和微信小程序端，用于演示变电站巡检业务中的登录鉴权、站点管理、**ROS 地图路线标注**、任务调度、机器人管理、告警处置、工单流转、检测模板、LingBot 建图、通知中心和巡检记录等能力。
 
-当前项目定位为课程/演示级可运行系统。真实机器人和生产级部署链路尚未完整接入；模型能力已拆出可替换接口和 Python FastAPI 服务骨架，默认仍以 mock runner 支撑联调，后续可替换为真实 LocateAnything 与 LingBot-Map runner。
+当前项目定位为课程/演示级可运行系统。真实机器人和生产级部署链路尚未完整接入；LocateAnything 已接入 Python 真实模型服务，Spring Boot 默认通过 HTTP 模型网关调用该服务；LingBot-Map 仍保留可替换的 Python 服务接口。
 
 ## 当前状态
 
@@ -127,7 +127,7 @@ Intelligent-Power-Inspection/
 │  ├─ common/                  # Python 服务共享 schema、错误、存储和日志工具
 │  ├─ locate-anything-service/  # 检查点图像检测服务，默认端口 9001
 │  │  ├─ app.py
-│  │  ├─ model_runner.py        # 当前为 mock runner，后续封装 LocateAnythingWorker
+│  │  ├─ model_runner.py        # LocateAnything 真实模型 runner
 │  │  ├─ parser.py              # 解析 <box>/<point>/none 输出
 │  │  └─ tests/
 │  └─ lingbot-map-service/      # 三维建图异步服务，默认端口 9002
@@ -243,7 +243,7 @@ frontend/wechat-program/miniprogram/config/api.js
 
 ### 方式四：Python 模型服务联调
 
-模型服务默认使用 mock runner，不需要下载模型权重，适合先验证 Spring Boot 与 Python 服务之间的 HTTP 协议。
+LocateAnything 服务已接入真实模型 runner。启动 Spring Boot 前请先启动 Python 服务，后端默认通过 HTTP 网关调用 `http://127.0.0.1:9001`。
 
 使用 conda 环境安装 Python 依赖：
 
@@ -278,13 +278,13 @@ uvicorn app:app --host 0.0.0.0 --port 9002
 
 ```powershell
 cd backend
-$env:MODEL_MODE="http"
-$env:LOCATE_ANYTHING_BASE_URL="http://127.0.0.1:9001"
-$env:LINGBOT_MAP_BASE_URL="http://127.0.0.1:9002"
+$env:APP_MODEL_MODE="http"
+$env:APP_MODEL_LOCATE_ANYTHING_BASE_URL="http://127.0.0.1:9001"
+$env:APP_MODEL_LINGBOT_MAP_BASE_URL="http://127.0.0.1:9002"
 mvn spring-boot:test-run
 ```
 
-> 注意：上述 Python 服务当前只提供 mock runner。真实模型接入时，分别替换 `ai-services/locate-anything-service/model_runner.py` 和 `ai-services/lingbot-map-service/runner.py`。
+> 注意：LocateAnything 当前已使用真实模型 runner；LingBot-Map 仍可按需替换 `ai-services/lingbot-map-service/runner.py`。
 
 ## 模型接入架构
 
@@ -303,14 +303,14 @@ Web / 小程序
 ```yaml
 app:
   model:
-    mode: ${MODEL_MODE:mock}
+    mode: ${APP_MODEL_MODE:http}
     service-token: ${MODEL_SERVICE_TOKEN:}
     locate-anything:
-      base-url: ${LOCATE_ANYTHING_BASE_URL:http://127.0.0.1:9001}
-      timeout-seconds: ${LOCATE_ANYTHING_TIMEOUT_SECONDS:30}
+      base-url: ${APP_MODEL_LOCATE_ANYTHING_BASE_URL:http://127.0.0.1:9001}
+      timeout-seconds: ${APP_MODEL_LOCATE_ANYTHING_TIMEOUT_SECONDS:120}
     lingbot-map:
-      base-url: ${LINGBOT_MAP_BASE_URL:http://127.0.0.1:9002}
-      timeout-seconds: ${LINGBOT_MAP_TIMEOUT_SECONDS:10}
+      base-url: ${APP_MODEL_LINGBOT_MAP_BASE_URL:http://127.0.0.1:9002}
+      timeout-seconds: ${APP_MODEL_LINGBOT_MAP_TIMEOUT_SECONDS:30}
 ```
 
 模式说明：
@@ -631,7 +631,7 @@ http://127.0.0.1:5173
 - 当前是演示/课程级后端，不是生产部署方案。
 - 真实机器人控制尚未接入；`RobotGateway` 默认仍是模拟任务执行和机器人位置。
 - **巡检规划**为 ROS map 标注 + route.json v2 持久化；监控/任务页 Leaflet 地图与 PGM 标注页未统一，且 YAML/PGM 需每次本地上传。
-- LocateAnything 与 LingBot-Map 已有 Python 服务骨架和后端 HTTP 网关，但真实模型 runner 仍需按官方代码进一步封装。
-- 当前 Python 服务默认输出 mock 检测结果和 mock 建图产物。
+- LocateAnything 已接入真实 Python 模型服务并由 Spring Boot HTTP 网关调用；LingBot-Map 仍是可替换服务接口。
+- LocateAnything Python 服务默认使用真实模型 runner；LingBot-Map 当前仍默认输出 mock 建图产物。
 - 生产级日志、审计、监控、部署流水线和权限审计细节仍需进一步完善。
 - `backend/target/`、`frontend/web/dist/`、`frontend/web/node_modules/`、`runtime-storage/`、模型权重和点云/mesh 等产物不应提交。

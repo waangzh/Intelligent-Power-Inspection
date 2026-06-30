@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 @Service
-@ConditionalOnProperty(prefix = "app.model", name = "mode", havingValue = "mock", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "app.model", name = "mode", havingValue = "mock")
 public class MockLocateAnythingGateway implements LocateAnythingGateway {
   private final Random random = new Random();
 

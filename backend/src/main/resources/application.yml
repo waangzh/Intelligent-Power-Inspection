@@ -1,13 +1,13 @@
-server:
+﻿server:
   port: 8080
 
 spring:
   application:
     name: power-inspection-backend
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/power_inspection?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
+    url: ${DB_URL:jdbc:mysql://112.124.49.152:3306/ipi?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:ipi}
+    password: ${DB_PASSWORD:NiWeTBafZtARycS3}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -26,3 +26,12 @@ app:
     ttl-seconds: ${JWT_TTL_SECONDS:604800}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  model:
+    mode: ${APP_MODEL_MODE:http}
+    service-token: ${APP_MODEL_SERVICE_TOKEN:}
+    locate-anything:
+      base-url: ${APP_MODEL_LOCATE_ANYTHING_BASE_URL:http://127.0.0.1:9001}
+      timeout-seconds: ${APP_MODEL_LOCATE_ANYTHING_TIMEOUT_SECONDS:120}
+    lingbot-map:
+      base-url: ${APP_MODEL_LINGBOT_MAP_BASE_URL:http://127.0.0.1:9002}
+      timeout-seconds: ${APP_MODEL_LINGBOT_MAP_TIMEOUT_SECONDS:30}

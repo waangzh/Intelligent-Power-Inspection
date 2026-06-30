@@ -44,6 +44,7 @@ class HttpModelGatewayTests {
             "score": null,
             "outputType": "box",
             "normalizedBox": [120, 80, 360, 260],
+            "pixelBox": [48, 32, 144, 104],
             "imageUrl": "http://example.test/annotated.jpg",
             "rawAnswer": "<box><120><80><360><260></box>"
           }
@@ -63,7 +64,9 @@ class HttpModelGatewayTests {
 
     assertThat(findings).hasSize(1);
     assertThat(findings.get(0).type()).isEqualTo("SWITCH");
-    assertThat(findings.get(0).bbox()).containsExactly(120, 80, 360, 260);
+    assertThat(findings.get(0).bbox()).containsExactly(48, 32, 144, 104);
+    assertThat(findings.get(0).imageUrl()).isEqualTo("http://example.test/annotated.jpg");
+    assertThat(findings.get(0).rawResult()).containsEntry("rawAnswer", "<box><120><80><360><260></box>");
   }
 
   @Test

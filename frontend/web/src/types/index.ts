@@ -202,3 +202,21 @@ export interface InspectionRecord {
   summary: string
   completedAt: string
 }
+
+export interface LocateAnythingFinding {
+  type: DetectionType
+  prompt?: string
+  score: number
+  bbox: number[]
+  label: string
+  imageUrl?: string
+  rawResult?: Record<string, unknown>
+}
+
+export interface ManualDetectionResponse {
+  requestId: string
+  inputImageUrl: string
+  resultImageUrl?: string
+  findings: LocateAnythingFinding[]
+  warnings: string[]
+}

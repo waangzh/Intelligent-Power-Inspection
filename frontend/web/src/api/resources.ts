@@ -7,6 +7,7 @@ import type {
   InspectionRecord,
   InspectionTask,
   LingBotMapJob,
+  ManualDetectionResponse,
   Robot,
   Route,
   TaskEvent,
@@ -67,6 +68,7 @@ export const resourcesApi = {
   createDetectionTemplate: (template: DetectionTemplate) =>
     http.post<DetectionTemplate>('/detection-templates', template),
   removeDetectionTemplate: (id: string) => http.delete<void>(`/detection-templates/${id}`),
+  manualLocateDetection: (form: FormData) => http.postForm<ManualDetectionResponse>(`/detections/manual`, form),
 
   listLingBotJobs: () => http.get<LingBotMapJob[]>('/lingbot/jobs'),
   createLingBotJob: (job: LingBotMapJob) => http.post<LingBotMapJob>('/lingbot/jobs', job),

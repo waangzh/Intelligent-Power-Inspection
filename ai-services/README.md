@@ -21,7 +21,7 @@ conda activate ipi-locate-anything
 uvicorn app:app --host 0.0.0.0 --port 9002
 ```
 
-默认实现是 mock runner，用于先稳定后端与 Python 服务之间的协议。真实 LocateAnything / LingBot-Map 接入时，只替换各服务的 `model_runner.py` / `runner.py`。
+LocateAnything 服务已接入真实模型 runner；LingBot-Map 仍可通过替换 `lingbot-map-service/runner.py` 接入真实建图实现。
 
 ## 后端配置
 

@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 @Service
-@ConditionalOnProperty(prefix = "app.model", name = "mode", havingValue = "mock", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "app.model", name = "mode", havingValue = "mock")
 public class MockLingBotMapGateway implements LingBotMapGateway {
   @Override
   public Map<String, Object> createJob(Map<String, Object> payload) {
