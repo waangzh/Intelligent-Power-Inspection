@@ -220,7 +220,7 @@ class LocateAnythingRunner:
     def __init__(self) -> None:
         self.ready = True
         self.model_version = settings.model_version
-        self.worker = LocateAnythingWorker() if settings.use_real_model else None
+        self.worker: LocateAnythingWorker | None = None
         self.warnings: list[str] = []
 
     def locate_checkpoint(self, request: LocateCheckpointRequest) -> list[LocateFinding]:
@@ -264,9 +264,20 @@ class LocateAnythingRunner:
         return findings
 
     def _predict(self, image_url: str, prompt: str, generation_mode: str) -> str:
-        if self.worker is not None:
-            return self.worker.generate(image_url, prompt, generation_mode)
-        return f"<ref>{prompt}</ref><box><120><80><360><260></box>"
+        return self._worker().generate(image_url, prompt, generation_mode)
+
+    def _worker(self) -> LocateAnythingWorker:
+        if self.worker is None:
+            logger.info(
+                "LocateAnything real model loading modelPath=%s device=%s dtype=%s maxNewTokens=%s",
+                settings.model_path,
+                settings.device,
+                settings.dtype,
+                settings.max_new_tokens,
+            )
+            self.worker = LocateAnythingWorker()
+            logger.info("LocateAnything real model loaded modelPath=%s", settings.model_path)
+        return self.worker
 
 
 runner = LocateAnythingRunner()

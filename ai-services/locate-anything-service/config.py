@@ -6,12 +6,8 @@ SERVICE_DIR = Path(__file__).resolve().parent
 
 
 class Settings:
-    use_real_model: bool = os.getenv("LOCATE_ANYTHING_USE_REAL_MODEL", "false").lower() == "true"
     model_path: str = os.getenv("LOCATE_ANYTHING_MODEL_PATH", "../model/locate-anything-service")
-    model_version: str = os.getenv(
-        "LOCATE_ANYTHING_MODEL_VERSION",
-        model_path if use_real_model else "mock-locate-anything",
-    )
+    model_version: str = os.getenv("LOCATE_ANYTHING_MODEL_VERSION", model_path)
     device: str = os.getenv("LOCATE_ANYTHING_DEVICE", "cuda")
     dtype: str = os.getenv("LOCATE_ANYTHING_DTYPE", "bfloat16")
     max_new_tokens: int = int(os.getenv("LOCATE_ANYTHING_MAX_NEW_TOKENS", "128"))

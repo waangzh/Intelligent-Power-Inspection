@@ -3,6 +3,7 @@ from PIL import Image
 
 from app import annotated_dir, app
 from config import settings
+from model_runner import runner
 
 
 client = TestClient(app)
@@ -14,6 +15,11 @@ def test_locate_checkpoint_api(tmp_path, monkeypatch):
     Image.new("RGB", (1000, 500), color="white").save(source_image)
     monkeypatch.setattr(settings, "annotated_output_dir", str(output_dir))
     monkeypatch.setattr(settings, "annotated_base_url", "http://127.0.0.1:9001/files/annotated")
+    monkeypatch.setattr(
+        runner,
+        "_predict",
+        lambda image_url, prompt, generation_mode: "<ref>switch</ref><box><120><80><360><260></box>",
+    )
 
     response = client.post(
         "/v1/locate/checkpoint",
@@ -31,6 +37,7 @@ def test_locate_checkpoint_api(tmp_path, monkeypatch):
     assert body["findings"][0]["type"] == "SWITCH"
     assert body["findings"][0]["imageUrl"] == "http://127.0.0.1:9001/files/annotated/task_001_cp_001_0.jpg"
     assert (output_dir / "task_001_cp_001_0.jpg").exists()
+
 
 def test_annotated_static_files_are_served():
     static_file = annotated_dir / "static_test.txt"
