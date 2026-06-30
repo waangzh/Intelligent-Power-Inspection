@@ -25,6 +25,7 @@ target/
 *.tsbuildinfo
 runtime-storage/
 ai-services/**/runtime-storage/
+ai-services/**/annotated-images/
 ai-services/**/models/
 ai-services/**/weights/
 *.pth

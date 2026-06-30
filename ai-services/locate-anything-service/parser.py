@@ -1,18 +1,21 @@
+import html
 import re
 
 
-BOX_PATTERN = re.compile(r"<box><(\d+)><(\d+)><(\d+)><(\d+)></box>")
-POINT_PATTERN = re.compile(r"<box><(\d+)><(\d+)></box>")
+BOX_PATTERN = re.compile(r"<box>\s*<\s*(\d+)\s*>\s*<\s*(\d+)\s*>\s*<\s*(\d+)\s*>\s*<\s*(\d+)\s*>\s*</box>", re.IGNORECASE)
+POINT_PATTERN = re.compile(r"<box>\s*<\s*(\d+)\s*>\s*<\s*(\d+)\s*>\s*</box>", re.IGNORECASE)
 NONE_PATTERN = re.compile(r"<box>\s*none\s*</box>", re.IGNORECASE)
 
 
 def parse_answer(answer: str, image_width: int | None = None, image_height: int | None = None) -> dict:
-    if not answer or NONE_PATTERN.search(answer):
+    normalized_answer = html.unescape(answer or "")
+    if not normalized_answer or NONE_PATTERN.search(normalized_answer):
         return {"outputType": "none", "normalizedBox": None, "pixelBox": None, "point": None}
 
-    box_match = BOX_PATTERN.search(answer)
+    box_match = BOX_PATTERN.search(normalized_answer)
     if box_match:
-        normalized_box = [int(value) for value in box_match.groups()]
+        raw_box = [int(value) for value in box_match.groups()]
+        normalized_box = normalize_box_order(raw_box)
         return {
             "outputType": "box",
             "normalizedBox": normalized_box,
@@ -20,7 +23,7 @@ def parse_answer(answer: str, image_width: int | None = None, image_height: int 
             "point": None,
         }
 
-    point_match = POINT_PATTERN.search(answer)
+    point_match = POINT_PATTERN.search(normalized_answer)
     if point_match:
         normalized_point = [int(value) for value in point_match.groups()]
         return {
@@ -31,6 +34,13 @@ def parse_answer(answer: str, image_width: int | None = None, image_height: int 
         }
 
     return {"outputType": "none", "normalizedBox": None, "pixelBox": None, "point": None}
+
+
+def normalize_box_order(box: list[int]) -> list[int]:
+    first, second, third, fourth = box
+    if second > third:
+        return [first, third, second, fourth]
+    return box
 
 
 def to_pixel_box(box: list[int], width: int | None, height: int | None) -> list[int] | None:
