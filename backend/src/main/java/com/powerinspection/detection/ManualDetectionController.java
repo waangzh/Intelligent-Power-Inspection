@@ -8,8 +8,6 @@ import com.powerinspection.common.ApiResponse;
 import com.powerinspection.common.Ids;
 import com.powerinspection.config.ModelFileWebConfig;
 import com.powerinspection.model.LocateAnythingFinding;
-import com.powerinspection.model.LocateAnythingGateway;
-import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
@@ -19,11 +17,12 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,13 +39,13 @@ public class ManualDetectionController {
   };
   private static final Path UPLOAD_DIR = ModelFileWebConfig.MODEL_FILE_ROOT.resolve("locate-anything").resolve("uploads");
 
-  private final LocateAnythingGateway locateAnythingGateway;
+  private final ManualDetectionService manualDetectionService;
   private final ObjectMapper objectMapper;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public ManualDetectionController(LocateAnythingGateway locateAnythingGateway, ObjectMapper objectMapper, PermissionService permissionService, CurrentUser currentUser) {
-    this.locateAnythingGateway = locateAnythingGateway;
+  public ManualDetectionController(ManualDetectionService manualDetectionService, ObjectMapper objectMapper, PermissionService permissionService, CurrentUser currentUser) {
+    this.manualDetectionService = manualDetectionService;
     this.objectMapper = objectMapper;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
@@ -76,19 +75,13 @@ public class ManualDetectionController {
     }
 
     String inputImageUrl = publicImageUrl(request, filename);
-    Map<String, Object> task = map("id", requestId, "name", "Manual LocateAnything Detection", "createdAt", Instant.now().toString());
-    Map<String, Object> route = map("id", "manual_route", "name", "Manual Detection");
-    Map<String, Object> checkpoint = map("id", "manual_checkpoint", "name", "Manual Upload");
-    List<LocateAnythingFinding> findings = locateAnythingGateway.detectCheckpoint(
-      new LocateAnythingRequest(task, route, checkpoint, inputImageUrl, enabledDetections)
-    );
-    String resultImageUrl = findings.stream()
-      .map(LocateAnythingFinding::imageUrl)
-      .filter(value -> value != null && !value.isBlank())
-      .findFirst()
-      .orElse(null);
+    return ApiResponse.ok(manualDetectionService.submit(requestId, inputImageUrl, enabledDetections));
+  }
 
-    return ApiResponse.ok(new ManualDetectionResponse(requestId, inputImageUrl, resultImageUrl, findings, List.of()));
+  @GetMapping("/manual/{requestId}")
+  public ApiResponse<ManualDetectionResponse> get(@PathVariable String requestId) {
+    permissionService.require(currentUser.get(), Permission.DETECTION_MANAGE);
+    return ApiResponse.ok(manualDetectionService.get(requestId));
   }
 
   private void validateImage(MultipartFile image) {
@@ -143,20 +136,17 @@ public class ManualDetectionController {
     return value == null ? null : value.toString();
   }
 
-  private Map<String, Object> map(Object... values) {
-    Map<String, Object> item = new LinkedHashMap<>();
-    for (int i = 0; i + 1 < values.length; i += 2) {
-      item.put(values[i].toString(), values[i + 1]);
-    }
-    return item;
-  }
-
   public record ManualDetectionResponse(
     String requestId,
+    String status,
     String inputImageUrl,
     String resultImageUrl,
     List<LocateAnythingFinding> findings,
-    List<String> warnings
+    List<String> warnings,
+    String errorMessage,
+    String createdAt,
+    String startedAt,
+    String completedAt
   ) {
   }
 }

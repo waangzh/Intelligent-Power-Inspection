@@ -23,6 +23,8 @@ uvicorn app:app --host 0.0.0.0 --port 9002
 
 LocateAnything 服务已接入真实模型 runner；LingBot-Map 仍可通过替换 `lingbot-map-service/runner.py` 接入真实建图实现。
 
+LocateAnything 标注结果图默认保存到 `locate-anything-service/annotated-images/`，并通过 `http://127.0.0.1:9001/files/annotated/{filename}` 访问。该目录仅保留 `.gitkeep`，实际生成的图片不提交 Git。
+
 ## 后端配置
 
 ```yaml
@@ -31,6 +33,8 @@ app:
     mode: http
     locate-anything:
       base-url: http://127.0.0.1:9001
+      timeout-seconds: 900
+      generation-mode: fast
     lingbot-map:
       base-url: http://127.0.0.1:9002
 ```

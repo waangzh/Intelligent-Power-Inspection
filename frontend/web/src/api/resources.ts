@@ -69,6 +69,7 @@ export const resourcesApi = {
     http.post<DetectionTemplate>('/detection-templates', template),
   removeDetectionTemplate: (id: string) => http.delete<void>(`/detection-templates/${id}`),
   manualLocateDetection: (form: FormData) => http.postForm<ManualDetectionResponse>(`/detections/manual`, form),
+  getManualLocateDetection: (requestId: string) => http.get<ManualDetectionResponse>(`/detections/manual/${requestId}`),
 
   listLingBotJobs: () => http.get<LingBotMapJob[]>('/lingbot/jobs'),
   createLingBotJob: (job: LingBotMapJob) => http.post<LingBotMapJob>('/lingbot/jobs', job),

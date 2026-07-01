@@ -9,6 +9,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,10 @@ class HttpModelGatewayTests {
 
   @Test
   void httpLocateAnythingGatewayMapsFindings() {
-    server.createContext("/v1/locate/checkpoint", exchange -> writeJson(exchange, """
+    AtomicReference<String> requestBody = new AtomicReference<>();
+    server.createContext("/v1/locate/checkpoint", exchange -> {
+      requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+      writeJson(exchange, """
       {
         "provider": "locate-anything",
         "modelVersion": "mock",
@@ -51,7 +55,8 @@ class HttpModelGatewayTests {
         ],
         "warnings": []
       }
-      """));
+      """);
+    });
 
     HttpLocateAnythingGateway gateway = new HttpLocateAnythingGateway(properties(baseUrl, baseUrl));
     List<LocateAnythingFinding> findings = gateway.detectCheckpoint(new LocateAnythingRequest(
@@ -67,6 +72,7 @@ class HttpModelGatewayTests {
     assertThat(findings.get(0).bbox()).containsExactly(48, 32, 144, 104);
     assertThat(findings.get(0).imageUrl()).isEqualTo("http://example.test/annotated.jpg");
     assertThat(findings.get(0).rawResult()).containsEntry("rawAnswer", "<box><120><80><360><260></box>");
+    assertThat(requestBody.get()).contains("\"generationMode\":\"fast\"");
   }
 
   @Test

@@ -13,6 +13,7 @@ import org.springframework.web.client.RestClientException;
 @ConditionalOnProperty(prefix = "app.model", name = "mode", havingValue = "http")
 public class HttpLocateAnythingGateway implements LocateAnythingGateway {
   private final RestClient restClient;
+  private final String generationMode;
 
   public HttpLocateAnythingGateway(ModelProperties properties) {
     this.restClient = HttpModelSupport.restClient(
@@ -20,6 +21,7 @@ public class HttpLocateAnythingGateway implements LocateAnythingGateway {
       properties.getLocateAnything().getTimeoutSeconds(),
       properties.getServiceToken()
     );
+    this.generationMode = properties.getLocateAnything().getGenerationMode();
   }
 
   @Override
@@ -29,7 +31,7 @@ public class HttpLocateAnythingGateway implements LocateAnythingGateway {
     payload.put("requestId", text(request.task().get("id")) + "_" + text(request.checkpoint().get("id")));
     payload.put("imageUrl", request.imageUrl());
     payload.put("detections", request.detections());
-    payload.put("generationMode", "hybrid");
+    payload.put("generationMode", generationMode);
 
     try {
       Map<String, Object> response = restClient.post()

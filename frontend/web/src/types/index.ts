@@ -215,8 +215,13 @@ export interface LocateAnythingFinding {
 
 export interface ManualDetectionResponse {
   requestId: string
+  status: 'RUNNING' | 'SUCCEEDED' | 'FAILED'
   inputImageUrl: string
   resultImageUrl?: string
   findings: LocateAnythingFinding[]
   warnings: string[]
+  errorMessage?: string
+  createdAt?: string
+  startedAt?: string
+  completedAt?: string
 }

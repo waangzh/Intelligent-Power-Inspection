@@ -3,6 +3,7 @@ package com.powerinspection.detection;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -39,7 +40,7 @@ class ManualDetectionControllerTests {
   LocateAnythingGateway locateAnythingGateway;
 
   @Test
-  void manualDetectionUploadsImageAndReturnsModelFindings() throws Exception {
+  void manualDetectionUploadsImageAndReturnsAsyncJobThenModelFindings() throws Exception {
     given(locateAnythingGateway.detectCheckpoint(any())).willReturn(List.of(new LocateAnythingFinding(
       "SWITCH",
       "红色刀闸开关",
@@ -63,16 +64,44 @@ class ManualDetectionControllerTests {
       "[{\"type\":\"SWITCH\",\"enabled\":true,\"prompt\":\"红色刀闸开关\",\"threshold\":0.75}]".getBytes(StandardCharsets.UTF_8)
     );
 
-    mockMvc.perform(multipart("/api/v1/detections/manual")
+    String token = login("admin", "Admin@123");
+    String created = mockMvc.perform(multipart("/api/v1/detections/manual")
         .file(image)
         .file(detections)
-        .header("Authorization", bearer(login("admin", "Admin@123"))))
+        .header("Authorization", bearer(token)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.requestId").exists())
+      .andExpect(jsonPath("$.data.status").value("RUNNING"))
       .andExpect(jsonPath("$.data.inputImageUrl", containsString("/model-files/locate-anything/uploads/")))
+      .andReturn()
+      .getResponse()
+      .getContentAsString(StandardCharsets.UTF_8);
+    String requestId = objectMapper.readTree(created).path("data").path("requestId").asText();
+
+    JsonNode finished = awaitJob(requestId, token);
+    mockMvc.perform(get("/api/v1/detections/manual/" + requestId).header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.status").value("SUCCEEDED"))
       .andExpect(jsonPath("$.data.resultImageUrl").value("http://127.0.0.1:9001/files/annotated/manual_0.jpg"))
       .andExpect(jsonPath("$.data.findings[0].type").value("SWITCH"))
       .andExpect(jsonPath("$.data.findings[0].bbox[0]").value(12));
+    org.assertj.core.api.Assertions.assertThat(finished.path("status").asText()).isEqualTo("SUCCEEDED");
+  }
+
+  private JsonNode awaitJob(String requestId, String token) throws Exception {
+    for (int i = 0; i < 20; i += 1) {
+      String response = mockMvc.perform(get("/api/v1/detections/manual/" + requestId).header("Authorization", bearer(token)))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getContentAsString(StandardCharsets.UTF_8);
+      JsonNode data = objectMapper.readTree(response).path("data");
+      if (!"RUNNING".equals(data.path("status").asText())) {
+        return data;
+      }
+      Thread.sleep(100);
+    }
+    throw new AssertionError("manual detection job did not finish");
   }
 
   private String login(String username, String password) throws Exception {

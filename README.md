@@ -274,17 +274,14 @@ cd ai-services\lingbot-map-service
 uvicorn app:app --host 0.0.0.0 --port 9002
 ```
 
-后端切换到 HTTP 模型网关：
+后端默认已经使用 HTTP 模型网关，IDEA 直接启动 Spring Boot 即可连接本机 Python 服务：
 
 ```powershell
 cd backend
-$env:APP_MODEL_MODE="http"
-$env:APP_MODEL_LOCATE_ANYTHING_BASE_URL="http://127.0.0.1:9001"
-$env:APP_MODEL_LINGBOT_MAP_BASE_URL="http://127.0.0.1:9002"
 mvn spring-boot:test-run
 ```
 
-> 注意：LocateAnything 当前已使用真实模型 runner；LingBot-Map 仍可按需替换 `ai-services/lingbot-map-service/runner.py`。
+> 注意：LocateAnything 当前已使用真实模型 runner，默认 `generation-mode: fast`、超时 `900s`；LingBot-Map 仍可按需替换 `ai-services/lingbot-map-service/runner.py`。
 
 ## 模型接入架构
 
@@ -303,22 +300,35 @@ Web / 小程序
 ```yaml
 app:
   model:
-    mode: ${APP_MODEL_MODE:http}
-    service-token: ${MODEL_SERVICE_TOKEN:}
+    mode: http
+    service-token: ${APP_MODEL_SERVICE_TOKEN:}
     locate-anything:
-      base-url: ${APP_MODEL_LOCATE_ANYTHING_BASE_URL:http://127.0.0.1:9001}
-      timeout-seconds: ${APP_MODEL_LOCATE_ANYTHING_TIMEOUT_SECONDS:120}
+      base-url: http://127.0.0.1:9001
+      timeout-seconds: 900
+      generation-mode: fast
     lingbot-map:
       base-url: ${APP_MODEL_LINGBOT_MAP_BASE_URL:http://127.0.0.1:9002}
       timeout-seconds: ${APP_MODEL_LINGBOT_MAP_TIMEOUT_SECONDS:30}
 ```
 
+如需临时覆盖 LocateAnything 参数，可通过 `APP_MODEL_LOCATE_ANYTHING_BASE_URL`、`APP_MODEL_LOCATE_ANYTHING_TIMEOUT_SECONDS`、`APP_MODEL_LOCATE_ANYTHING_GENERATION_MODE` 环境变量调整，或直接修改 `backend/src/main/resources/application.yml`。
+
 模式说明：
 
 | 模式 | 行为 |
 | --- | --- |
-| `mock` | 使用 Java 内置 mock 网关，默认模式，适合无 Python 服务时演示 |
-| `http` | 使用 HTTP 网关调用 `ai-services/` 的 FastAPI 服务 |
+| `mock` | 使用 Java 内置 mock 网关，测试环境默认使用，适合无 Python 服务时演示 |
+| `http` | 使用 HTTP 网关调用 `ai-services/` 的 FastAPI 服务，默认运行模式 |
+
+### 手动上传检测接口
+
+手动检测使用异步任务接口，避免 LocateAnything 长时间推理导致 Apifox 或浏览器请求超时。
+
+1. `POST /api/v1/detections/manual` 使用 `multipart/form-data` 上传图片和检测项，立即返回 `requestId` 与 `status: RUNNING`。
+2. `GET /api/v1/detections/manual/{requestId}` 查询任务状态，状态可能为 `RUNNING`、`SUCCEEDED`、`FAILED`。
+3. 完成后响应包含 `inputImageUrl`、`resultImageUrl`、`findings`、`warnings`；前端检测策略页会自动轮询该查询接口。
+
+Apifox 测试时先调用 POST 拿到 `requestId`，再每隔几秒调用 GET 查询结果，不需要把单个请求超时时间拉到模型完整推理时长。
 
 LocateAnything 服务接口：
 

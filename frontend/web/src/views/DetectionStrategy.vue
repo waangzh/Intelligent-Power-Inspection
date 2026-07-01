@@ -56,11 +56,31 @@
           <template #header>
             <div class="card-header compact">
               <span class="card-title">检测结果</span>
-              <el-tag v-if="manualResult" type="info" effect="plain">{{ manualResult.findings.length }} 个结果</el-tag>
+              <el-tag v-if="manualResult" :type="manualStatusTagType" effect="plain">{{ manualStatusLabel }}</el-tag>
             </div>
           </template>
 
           <div v-if="manualResult" class="result-stack">
+            <el-alert
+              v-if="manualResult.status === 'RUNNING'"
+              title="模型检测中，结果会自动刷新"
+              type="info"
+              show-icon
+              :closable="false"
+            />
+            <el-alert
+              v-if="manualResult.status === 'FAILED'"
+              :title="manualResult.errorMessage || '模型检测失败'"
+              type="error"
+              show-icon
+              :closable="false"
+            />
+            <el-progress
+              v-if="manualResult.status === 'RUNNING'"
+              :percentage="100"
+              :indeterminate="true"
+              :duration="3"
+            />
             <div class="image-compare">
               <figure>
                 <figcaption>原图</figcaption>
@@ -151,7 +171,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import DetectionConfig from '@/components/DetectionConfig.vue'
@@ -178,6 +198,21 @@ const previewUrl = ref('')
 const detecting = ref(false)
 const manualResult = ref<ManualDetectionResponse | null>(null)
 const manualItems = ref<DetectionItem[]>(CHECKPOINT_DETECTIONS.map((type) => defaultDetectionItem(type)))
+let manualPollingTimer: ReturnType<typeof setInterval> | null = null
+
+const manualStatusLabel = computed(() => {
+  if (!manualResult.value) return ''
+  if (manualResult.value.status === 'RUNNING') return '检测中'
+  if (manualResult.value.status === 'SUCCEEDED') return `${manualResult.value.findings.length} 个结果`
+  return '检测失败'
+})
+
+const manualStatusTagType = computed(() => {
+  if (!manualResult.value) return 'info'
+  if (manualResult.value.status === 'SUCCEEDED') return 'success'
+  if (manualResult.value.status === 'FAILED') return 'danger'
+  return 'warning'
+})
 
 function defaultDetectionItem(type: DetectionType): DetectionItem {
   const promptMap: Partial<Record<DetectionType, string>> = {
@@ -230,17 +265,53 @@ async function submitManualDetection() {
   detecting.value = true
   try {
     manualResult.value = await resourcesApi.manualLocateDetection(payload)
-    ElMessage.success('模型检测完成')
+    ElMessage.success('检测任务已提交')
+    startManualDetectionPolling(manualResult.value.requestId)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '模型检测失败')
-  } finally {
     detecting.value = false
   }
 }
 
+function startManualDetectionPolling(requestId: string) {
+  stopManualDetectionPolling()
+  manualPollingTimer = setInterval(() => {
+    void refreshManualDetection(requestId)
+  }, 3000)
+  void refreshManualDetection(requestId)
+}
+
+async function refreshManualDetection(requestId: string) {
+  try {
+    const result = await resourcesApi.getManualLocateDetection(requestId)
+    manualResult.value = result
+    if (result.status === 'RUNNING') return
+    stopManualDetectionPolling()
+    detecting.value = false
+    if (result.status === 'SUCCEEDED') {
+      ElMessage.success('模型检测完成')
+    } else {
+      ElMessage.error(result.errorMessage || '模型检测失败')
+    }
+  } catch (error) {
+    stopManualDetectionPolling()
+    detecting.value = false
+    ElMessage.error(error instanceof Error ? error.message : '查询检测结果失败')
+  }
+}
+
+function stopManualDetectionPolling() {
+  if (manualPollingTimer) {
+    clearInterval(manualPollingTimer)
+    manualPollingTimer = null
+  }
+}
+
 function resetManualDetection() {
+  stopManualDetectionPolling()
   selectedFile.value = null
   manualResult.value = null
+  detecting.value = false
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
   if (fileInputRef.value) fileInputRef.value.value = ''
@@ -276,6 +347,7 @@ function create() {
 }
 
 onBeforeUnmount(() => {
+  stopManualDetectionPolling()
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
 })
 </script>

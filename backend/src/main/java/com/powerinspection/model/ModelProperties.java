@@ -43,7 +43,8 @@ public class ModelProperties {
 
   public static class LocateAnything {
     private String baseUrl = "http://127.0.0.1:9001";
-    private int timeoutSeconds = 120;
+    private int timeoutSeconds = 900;
+    private String generationMode = "fast";
 
     public String getBaseUrl() {
       return baseUrl;
@@ -59,6 +60,14 @@ public class ModelProperties {
 
     public void setTimeoutSeconds(int timeoutSeconds) {
       this.timeoutSeconds = timeoutSeconds;
+    }
+
+    public String getGenerationMode() {
+      return generationMode;
+    }
+
+    public void setGenerationMode(String generationMode) {
+      this.generationMode = generationMode;
     }
   }
 
