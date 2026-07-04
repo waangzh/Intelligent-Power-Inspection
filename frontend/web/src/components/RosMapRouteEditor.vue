@@ -2,18 +2,13 @@
   <div class="ros-route-editor" @dragenter.prevent @dragover.prevent @drop.prevent="onDrop">
     <section class="workspace">
       <div class="toolbar">
-        <label class="file-control">
-          YAML 地图配置
-          <input type="file" accept=".yaml,.yml,text/yaml" @change="onYamlChange" />
-        </label>
-        <label class="file-control">
-          PGM 地图图像
-          <input type="file" accept=".pgm,image/x-portable-graymap" @change="onPgmChange" />
-        </label>
-        <label class="file-control">
-          导入路线 JSON
-          <input type="file" accept=".json,application/json" @change="onJsonChange" />
-        </label>
+        <input ref="yamlInputRef" type="file" accept=".yaml,.yml,text/yaml" hidden @change="onYamlChange" />
+        <input ref="pgmInputRef" type="file" accept=".pgm,image/x-portable-graymap" hidden @change="onPgmChange" />
+        <input ref="jsonInputRef" type="file" accept=".json,application/json" hidden @change="onJsonChange" />
+        <el-button size="small" @click="yamlInputRef?.click()">YAML</el-button>
+        <el-button size="small" @click="pgmInputRef?.click()">PGM</el-button>
+        <el-button size="small" @click="jsonInputRef?.click()">导入 JSON</el-button>
+        <el-divider direction="vertical" />
         <el-button size="small" @click="fitToScreen">适配</el-button>
         <el-button size="small" @click="zoomIn">放大</el-button>
         <el-button size="small" @click="zoomOut">缩小</el-button>
@@ -32,6 +27,7 @@
           @wheel="onWheel"
           @contextmenu.prevent
         />
+        <div v-if="!mapLoaded" class="map-empty">拖入或点击上方按钮加载 YAML + PGM 地图</div>
       </div>
 
       <div class="hud">
@@ -41,45 +37,88 @@
     </section>
 
     <aside class="sidebar">
-      <div class="side-head">
-        <h2>路线标注</h2>
-        <p>点击地图设置起点或追加巡检点；选择“方向”后点选点位，再点击或拖拽确定朝向。</p>
-      </div>
-
-      <div class="side-scroll">
-        <section class="section">
-          <h3>起点</h3>
-          <label>
-            名称
-            <el-input v-model="form.startName" size="small" @change="syncForm" />
-          </label>
-          <div class="grid-3">
-            <label>x<el-input-number v-model="form.startX" size="small" :step="0.001" controls-position="right" @change="syncForm" /></label>
-            <label>y<el-input-number v-model="form.startY" size="small" :step="0.001" controls-position="right" @change="syncForm" /></label>
-            <label>yaw(rad)<el-input-number v-model="form.startYaw" size="small" :step="0.001" controls-position="right" @change="syncForm" /></label>
+      <el-tabs v-model="activeTab" class="config-tabs">
+        <el-tab-pane label="巡检点" name="targets">
+          <div class="tab-toolbar">
+            <el-button size="small" @click="addTargetAtCenter">追加中心点</el-button>
+            <el-button size="small" type="danger" plain :disabled="!targets.length" @click="confirmClearTargets">
+              清空
+            </el-button>
           </div>
-          <label class="check-line">
+
+          <div v-if="targets.length" class="target-list">
+            <button
+              v-for="(target, index) in targets"
+              :key="target.id"
+              type="button"
+              class="target-item"
+              :class="{ selected: selectedTargetId === target.id }"
+              @click="selectTarget(target.id)"
+            >
+              <span class="target-badge">{{ index + 1 }}</span>
+              <span class="target-summary">
+                <strong>{{ target.name }}</strong>
+                <small>({{ target.x.toFixed(2) }}, {{ target.y.toFixed(2) }})</small>
+              </span>
+              <span class="target-actions" @click.stop>
+                <el-button size="small" link @click="moveTarget(target.id, -1)">↑</el-button>
+                <el-button size="small" link @click="moveTarget(target.id, 1)">↓</el-button>
+                <el-button size="small" link type="danger" @click="deleteTarget(target.id)">删</el-button>
+              </span>
+            </button>
+          </div>
+          <div v-else class="tab-empty">在地图上点击添加巡检点</div>
+
+          <template v-if="selectedTarget">
+            <div class="edit-block">
+              <label>名称<el-input v-model="selectedTarget.name" size="small" @change="updateTargetField(selectedTarget.id, 'name', selectedTarget.name)" /></label>
+              <div class="grid-2">
+                <label>x<el-input-number v-model="selectedTarget.x" size="small" :step="0.001" controls-position="right" @change="updateTargetField(selectedTarget.id, 'x', selectedTarget.x)" /></label>
+                <label>y<el-input-number v-model="selectedTarget.y" size="small" :step="0.001" controls-position="right" @change="updateTargetField(selectedTarget.id, 'y', selectedTarget.y)" /></label>
+              </div>
+              <div class="grid-2">
+                <label>yaw(rad)<el-input-number v-model="selectedTarget.yaw" size="small" :step="0.001" controls-position="right" @change="updateTargetField(selectedTarget.id, 'yaw', selectedTarget.yaw)" /></label>
+                <label>停留(s)<el-input-number v-model="selectedTarget.taskDuration" size="small" :step="0.1" controls-position="right" @change="updateTargetField(selectedTarget.id, 'taskDuration', selectedTarget.taskDuration)" /></label>
+              </div>
+              <el-button size="small" @click="orientTarget(selectedTarget.id)">设置方向</el-button>
+            </div>
+          </template>
+
+          <p class="status" :class="targetStatus.kind">{{ targetStatus.text }}</p>
+        </el-tab-pane>
+
+        <el-tab-pane label="起点" name="start">
+          <div class="edit-block">
+            <label>名称<el-input v-model="form.startName" size="small" @change="syncForm" /></label>
+            <div class="grid-3">
+              <label>x<el-input-number v-model="form.startX" size="small" :step="0.001" controls-position="right" @change="syncForm" /></label>
+              <label>y<el-input-number v-model="form.startY" size="small" :step="0.001" controls-position="right" @change="syncForm" /></label>
+              <label>yaw<el-input-number v-model="form.startYaw" size="small" :step="0.001" controls-position="right" @change="syncForm" /></label>
+            </div>
             <el-checkbox v-model="form.publishInitialPose" @change="syncForm">发布 /initialpose</el-checkbox>
-          </label>
-          <div class="grid-3">
-            <label>cov x<el-input-number v-model="form.covX" size="small" :step="0.0001" controls-position="right" @change="syncForm" /></label>
-            <label>cov y<el-input-number v-model="form.covY" size="small" :step="0.0001" controls-position="right" @change="syncForm" /></label>
-            <label>cov yaw<el-input-number v-model="form.covYaw" size="small" :step="0.0001" controls-position="right" @change="syncForm" /></label>
+            <el-collapse>
+              <el-collapse-item title="高级选项" name="advanced">
+                <div class="grid-3">
+                  <label>cov x<el-input-number v-model="form.covX" size="small" :step="0.0001" controls-position="right" @change="syncForm" /></label>
+                  <label>cov y<el-input-number v-model="form.covY" size="small" :step="0.0001" controls-position="right" @change="syncForm" /></label>
+                  <label>cov yaw<el-input-number v-model="form.covYaw" size="small" :step="0.0001" controls-position="right" @change="syncForm" /></label>
+                </div>
+              </el-collapse-item>
+            </el-collapse>
           </div>
-        </section>
+        </el-tab-pane>
 
-        <section class="section">
-          <h3>路线</h3>
-          <div class="grid-2">
-            <label>路线 ID<el-input v-model="form.routeId" size="small" @change="onRouteIdChange" /></label>
-            <label>默认路线<el-input v-model="form.activeRouteId" size="small" @change="syncForm" /></label>
-          </div>
-          <label>路线名称<el-input v-model="form.routeName" size="small" @change="syncForm" /></label>
-          <div class="grid-2">
-            <label>导航超时(s)<el-input-number v-model="form.goalTimeout" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
-            <label>失败重试<el-input-number v-model="form.maxRetries" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
-          </div>
-          <div class="grid-2">
+        <el-tab-pane label="路线" name="route">
+          <div class="edit-block">
+            <label>路线名称<el-input v-model="form.routeName" size="small" @change="syncForm" /></label>
+            <div class="grid-2">
+              <label>路线 ID<el-input v-model="form.routeId" size="small" @change="onRouteIdChange" /></label>
+              <label>默认路线<el-input v-model="form.activeRouteId" size="small" @change="syncForm" /></label>
+            </div>
+            <div class="grid-2">
+              <label>超时(s)<el-input-number v-model="form.goalTimeout" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
+              <label>失败重试<el-input-number v-model="form.maxRetries" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
+            </div>
             <label>
               失败策略
               <el-select v-model="form.failurePolicy" size="small" @change="syncForm">
@@ -87,100 +126,33 @@
                 <el-option label="abort" value="abort" />
               </el-select>
             </label>
-            <label>循环等待(s)<el-input-number v-model="form.loopWait" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
-          </div>
-          <div class="grid-2 check-row">
-            <el-checkbox v-model="form.returnToStart" @change="syncForm">返航</el-checkbox>
-            <el-checkbox v-model="form.loopEnabled" @change="syncForm">循环</el-checkbox>
-          </div>
-          <label>循环次数，0 表示一直循环<el-input-number v-model="form.maxCycles" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
-        </section>
-
-        <section class="section">
-          <h3>巡检点</h3>
-          <div class="grid-2 actions-row">
-            <el-button size="small" @click="addTargetAtCenter">追加中心点</el-button>
-            <el-button size="small" type="danger" plain @click="confirmClearTargets">清空巡检点</el-button>
-          </div>
-          <div
-            v-for="(target, index) in targets"
-            :key="target.id"
-            class="target-row"
-            :class="{ selected: selectedTargetId === target.id }"
-            @click="selectTarget(target.id)"
-          >
-            <div class="badge">{{ index + 1 }}</div>
-            <div class="target-fields">
-              <el-input
-                v-model="target.name"
-                size="small"
-                @click.stop
-                @change="updateTargetField(target.id, 'name', target.name)"
-              />
-              <div class="grid-2">
-                <el-input-number
-                  v-model="target.x"
-                  size="small"
-                  :step="0.001"
-                  controls-position="right"
-                  @click.stop
-                  @change="updateTargetField(target.id, 'x', target.x)"
-                />
-                <el-input-number
-                  v-model="target.y"
-                  size="small"
-                  :step="0.001"
-                  controls-position="right"
-                  @click.stop
-                  @change="updateTargetField(target.id, 'y', target.y)"
-                />
-              </div>
-              <div class="grid-2">
-                <el-input-number
-                  v-model="target.yaw"
-                  size="small"
-                  :step="0.001"
-                  controls-position="right"
-                  @click.stop
-                  @change="updateTargetField(target.id, 'yaw', target.yaw)"
-                />
-                <el-input-number
-                  v-model="target.taskDuration"
-                  size="small"
-                  :step="0.1"
-                  controls-position="right"
-                  @click.stop
-                  @change="updateTargetField(target.id, 'taskDuration', target.taskDuration)"
-                />
-              </div>
-              <div class="target-meta">{{ target.id }} | yaw(rad) / task_duration_sec</div>
+            <div class="check-row">
+              <el-checkbox v-model="form.returnToStart" @change="syncForm">返航</el-checkbox>
+              <el-checkbox v-model="form.loopEnabled" @change="syncForm">循环</el-checkbox>
             </div>
-            <div class="row-actions">
-              <el-button size="small" @click.stop="orientTarget(target.id)">↗</el-button>
-              <el-button size="small" @click.stop="moveTarget(target.id, -1)">↑</el-button>
-              <el-button size="small" @click.stop="moveTarget(target.id, 1)">↓</el-button>
-              <el-button size="small" type="danger" plain @click.stop="deleteTarget(target.id)">×</el-button>
-            </div>
+            <template v-if="form.loopEnabled">
+              <div class="grid-2">
+                <label>循环等待(s)<el-input-number v-model="form.loopWait" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
+                <label>循环次数<el-input-number v-model="form.maxCycles" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
+              </div>
+            </template>
           </div>
-          <p class="status" :class="targetStatus.kind">{{ targetStatus.text }}</p>
-        </section>
+        </el-tab-pane>
 
-        <section class="section">
-          <h3>JSON 预览</h3>
+        <el-tab-pane label="JSON" name="json">
           <textarea class="json-preview" readonly :value="jsonPreview" />
-        </section>
-      </div>
-
-      <div class="footer">
-        <el-button @click="copyJson">复制 JSON</el-button>
-        <el-button type="primary" @click="downloadJson">下载 route.json</el-button>
-      </div>
+          <div class="json-actions">
+            <el-button size="small" @click="copyJson">复制</el-button>
+            <el-button size="small" type="primary" @click="downloadJson">下载 route.json</el-button>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRosMapRouteEditor } from '@/composables/useRosMapRouteEditor'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
@@ -197,6 +169,10 @@ const emit = defineEmits<{
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const wrapRef = ref<HTMLElement | null>(null)
+const yamlInputRef = ref<HTMLInputElement | null>(null)
+const pgmInputRef = ref<HTMLInputElement | null>(null)
+const jsonInputRef = ref<HTMLInputElement | null>(null)
+const activeTab = ref('targets')
 
 const editor = useRosMapRouteEditor(canvasRef, wrapRef, {
   initialJson: props.initialJson,
@@ -233,6 +209,12 @@ const {
   onMouseDown,
   onWheel,
 } = editor
+
+const mapLoaded = computed(() => mapInfo.value.includes('px'))
+
+const selectedTarget = computed(() =>
+  targets.value.find((t) => t.id === selectedTargetId.value) ?? null,
+)
 
 function syncForm() {
   emit('change', exportDocument())
@@ -298,7 +280,7 @@ defineExpose({ exportDocument })
 <style scoped>
 .ros-route-editor {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) 380px;
+  grid-template-columns: minmax(420px, 1fr) 360px;
   gap: 12px;
   min-height: 640px;
 }
@@ -306,7 +288,7 @@ defineExpose({ exportDocument })
 .workspace,
 .sidebar {
   background: #fff;
-  border: 1px solid #d8dee6;
+  border: 1px solid #e4e7ed;
   border-radius: 8px;
   min-height: 0;
   overflow: hidden;
@@ -322,27 +304,15 @@ defineExpose({ exportDocument })
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  padding: 10px;
-  border-bottom: 1px solid #d8dee6;
-  background: #fbfcfd;
-}
-
-.file-control {
-  display: grid;
-  gap: 3px;
-  font-size: 12px;
-  color: #667085;
-  min-width: 140px;
-}
-
-.file-control input[type='file'] {
-  font-size: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #ebeef5;
+  background: #fff;
 }
 
 .mode-group {
   display: inline-flex;
-  border: 1px solid #d8dee6;
-  border-radius: 7px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
   overflow: hidden;
   margin-left: auto;
 }
@@ -350,27 +320,23 @@ defineExpose({ exportDocument })
 .mode-group button {
   border: 0;
   background: #fff;
-  min-width: 64px;
-  min-height: 32px;
+  min-width: 56px;
+  min-height: 30px;
+  font-size: 13px;
   cursor: pointer;
 }
 
 .mode-group button.active {
-  background: #e6fffb;
-  color: #115e59;
-  font-weight: 700;
+  background: #ecfdf5;
+  color: #0f766e;
+  font-weight: 600;
 }
 
 .map-wrap {
   position: relative;
   min-height: 420px;
   overflow: hidden;
-  background:
-    linear-gradient(45deg, #e8edf2 25%, transparent 25%),
-    linear-gradient(-45deg, #e8edf2 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #e8edf2 75%),
-    linear-gradient(-45deg, transparent 75%, #e8edf2 75%);
-  background-size: 24px 24px;
+  background: #f5f7fa;
 }
 
 canvas {
@@ -380,60 +346,136 @@ canvas {
   cursor: crosshair;
 }
 
+.map-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #909399;
+  font-size: 14px;
+  pointer-events: none;
+}
+
 .hud {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
-  border-top: 1px solid #d8dee6;
-  color: #667085;
-  font-size: 13px;
-  background: #fbfcfd;
+  padding: 8px 12px;
+  border-top: 1px solid #ebeef5;
+  color: #909399;
+  font-size: 12px;
+  background: #fff;
 }
 
 .sidebar {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
 }
 
-.side-head {
-  padding: 12px;
-  border-bottom: 1px solid #d8dee6;
+.config-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 640px;
 }
 
-.side-head h2 {
+.config-tabs :deep(.el-tabs__header) {
   margin: 0;
-  font-size: 16px;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid #ebeef5;
 }
 
-.side-head p {
-  margin: 6px 0 0;
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.side-scroll {
+.config-tabs :deep(.el-tabs__content) {
+  flex: 1;
   overflow: auto;
   padding: 12px;
 }
 
-.section {
-  border-bottom: 1px solid #d8dee6;
-  padding-bottom: 14px;
-  margin-bottom: 14px;
+.tab-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.section h3 {
-  margin: 0 0 10px;
-  font-size: 14px;
+.target-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.target-item {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.target-item.selected {
+  border-color: #0f766e;
+  background: #ecfdf5;
+}
+
+.target-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.target-summary {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.target-summary strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-summary small {
+  color: #909399;
+  font-size: 12px;
+}
+
+.target-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.tab-empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: #c0c4cc;
+  font-size: 13px;
+}
+
+.edit-block {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
 }
 
 .grid-2,
 .grid-3 {
   display: grid;
   gap: 8px;
-  margin-top: 8px;
 }
 
 .grid-2 {
@@ -447,91 +489,44 @@ canvas {
 label {
   display: grid;
   gap: 4px;
-  color: #667085;
+  color: #606266;
   font-size: 12px;
 }
 
-.check-line,
 .check-row {
-  margin-top: 8px;
-}
-
-.actions-row {
-  margin-bottom: 8px;
-}
-
-.target-row {
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
-  gap: 8px;
-  align-items: start;
-  padding: 8px;
-  border: 1px solid #d8dee6;
-  border-radius: 7px;
-  margin-bottom: 8px;
-  cursor: pointer;
-}
-
-.target-row.selected {
-  outline: 2px solid rgba(15, 118, 110, 0.25);
-  border-color: #0f766e;
-}
-
-.badge {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #2563eb;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.target-meta {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #667085;
-}
-
-.row-actions {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: 16px;
 }
 
 .status {
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.45;
+  margin-top: 12px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .status.error {
-  color: #b42318;
-  font-weight: 700;
+  color: #f56c6c;
 }
 
 .json-preview {
   width: 100%;
-  height: 160px;
+  height: 420px;
   resize: vertical;
-  border: 1px solid #d8dee6;
+  border: 1px solid #ebeef5;
   border-radius: 6px;
-  padding: 8px;
+  padding: 10px;
   font-family: Consolas, 'Courier New', monospace;
   font-size: 12px;
-  background: #0f172a;
-  color: #dbeafe;
+  background: #fafafa;
+  color: #303133;
+  box-sizing: border-box;
 }
 
-.footer {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.json-actions {
+  display: flex;
   gap: 8px;
-  padding: 12px;
-  border-top: 1px solid #d8dee6;
-  background: #fbfcfd;
+  margin-top: 10px;
 }
 
 @media (max-width: 1200px) {

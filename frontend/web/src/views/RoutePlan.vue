@@ -24,29 +24,37 @@
 
     <el-row :gutter="16">
       <el-col :span="5">
-        <el-card shadow="never" class="route-list-card">
-          <template #header>路线列表</template>
-          <el-menu :default-active="selectedRouteId" @select="selectRoute">
-            <el-menu-item v-for="r in siteRoutes" :key="r.id" :index="r.id">
-              <span>{{ r.name }}</span>
-              <el-tag size="small" style="margin-left: 8px">{{ targetCount(r) }} 点</el-tag>
-            </el-menu-item>
-          </el-menu>
-          <div v-if="!siteRoutes.length" class="empty-hint">暂无路线，请先新建</div>
-        </el-card>
+        <div class="route-list-panel">
+          <div class="route-list-head">路线列表</div>
+          <div v-if="siteRoutes.length" class="route-list-body">
+            <button
+              v-for="r in siteRoutes"
+              :key="r.id"
+              type="button"
+              class="route-item"
+              :class="{ active: selectedRouteId === r.id }"
+              @click="selectRoute(r.id)"
+            >
+              <span class="route-name">{{ r.name }}</span>
+              <span class="route-meta">{{ targetCount(r) }} 点</span>
+            </button>
+          </div>
+          <div v-else class="empty-hint">暂无路线，请先新建</div>
+        </div>
       </el-col>
 
       <el-col :span="19">
         <RosMapRouteEditor
           v-if="currentRoute"
+          ref="editorRef"
           :key="currentRoute.id"
           :initial-json="currentRoute.executorJson ?? undefined"
           :default-route-id="currentRoute.id"
           @change="onEditorChange"
         />
-        <el-card v-else shadow="never">
+        <div v-else class="empty-panel">
           <div class="empty-hint">请选择或创建巡检路线</div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
   </div>
@@ -70,6 +78,7 @@ const { can } = usePermission()
 const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
 const selectedRouteId = ref('')
 const pendingDoc = ref<RouteExecutorDocument | null>(null)
+const editorRef = ref<InstanceType<typeof RosMapRouteEditor> | null>(null)
 
 const siteRoutes = computed(() => routeStore.getRoutesBySite(selectedSiteId.value))
 const currentRoute = computed(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
@@ -132,8 +141,71 @@ function deleteRoute() {
 </script>
 
 <style scoped>
-.route-list-card {
+.route-list-panel {
   min-height: 640px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.route-list-head {
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  border-bottom: 1px solid #ebeef5;
+  background: #fff;
+}
+
+.route-list-body {
+  padding: 8px;
+}
+
+.route-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.route-item:hover {
+  background: #f5f7fa;
+}
+
+.route-item.active {
+  background: #ecfdf5;
+  box-shadow: inset 3px 0 0 #0f766e;
+}
+
+.route-name {
+  font-size: 14px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-meta {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.empty-panel {
+  min-height: 640px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
 }
 
 .empty-hint {

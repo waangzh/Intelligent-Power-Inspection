@@ -106,7 +106,7 @@ export const useRouteStore = defineStore('route', () => {
         routeId,
         name: target!.name,
         seq: index + 1,
-        position: { lat: target!.pose.y, lng: target!.pose.x },
+        position: { lat: target!.pose.y, lng: target!.pose.x, x: target!.pose.x, y: target!.pose.y },
         pan: Math.round(((target!.pose.yaw || 0) * 180) / Math.PI),
         tilt: -15,
         dwellSeconds: target!.task_duration_sec ?? 5,
