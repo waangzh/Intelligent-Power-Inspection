@@ -352,6 +352,7 @@ DELETE /v1/reconstruction/jobs/{jobId}
 模型产物约定：
 
 - `runtime-storage/`、模型权重、点云、mesh 等大文件不提交到 Git。
+- `ai-services/model/` 与 `ai-services/.cache/` 是本地模型和依赖缓存目录，已加入 `.gitignore`，不要手动暂存。
 - 第一版 Python 服务会生成 mock artifacts；真实部署时建议替换为 MinIO、OSS 或 COS。
 - LingBot-Map 的 viewer 仅作为调试工具，不作为正式后端 API。
 
@@ -423,6 +424,8 @@ y = origin_y + (image_height - pixel_y) * resolution
 ```
 
 保存时会同步生成兼容字段 `checkpoints` 与 `path`，供任务调度、监控等页面继续显示巡检点数量与 Leaflet 折线（**不含 PGM 底图**）。
+
+后端保存 `executorJson` 时会校验 route.json v2 的基础结构，包括 `active_route_id`、`start_pose.pose`、`targets[].pose`、`routes[].target_ids` 引用关系、重复 target id、超时/重试/停留参数和失败策略；PGM 空闲区、越界点等地图像素级校验仍由前端在本地上传 YAML/PGM 后完成。
 
 ### 相关代码
 
@@ -641,6 +644,7 @@ http://127.0.0.1:5173
 - 当前是演示/课程级后端，不是生产部署方案。
 - 真实机器人控制尚未接入；`RobotGateway` 默认仍是模拟任务执行和机器人位置。
 - **巡检规划**为 ROS map 标注 + route.json v2 持久化；监控/任务页 Leaflet 地图与 PGM 标注页未统一，且 YAML/PGM 需每次本地上传。
+- 后端只校验 route.json v2 的结构与引用关系，不保存 YAML/PGM，也不复算地图 free/unknown/occupied 像素。
 - LocateAnything 已接入真实 Python 模型服务并由 Spring Boot HTTP 网关调用；LingBot-Map 仍是可替换服务接口。
 - LocateAnything Python 服务默认使用真实模型 runner；LingBot-Map 当前仍默认输出 mock 建图产物。
 - 生产级日志、审计、监控、部署流水线和权限审计细节仍需进一步完善。
