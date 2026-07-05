@@ -53,11 +53,11 @@ public class MockLingBotMapGateway implements LingBotMapGateway {
     if (rawArtifacts instanceof Map<?, ?> artifacts && artifacts.get("pointCloudUrl") != null) {
       return Map.of("id", id, "url", artifacts.get("pointCloudUrl"));
     }
-    return Map.of("id", id, "url", "/mock/pointcloud/" + id + ".ply");
+    return Map.of("id", id, "url", "/model-files/lingbot/maps/map_" + id + "/cloud.ply");
   }
 
   private Map<String, Object> artifacts(String id) {
-    return Map.of("pointCloudUrl", "/mock/pointcloud/" + id + ".ply");
+    return Map.of("pointCloudUrl", "/model-files/lingbot/maps/map_" + id + "/cloud.ply");
   }
 
   private int number(Object value) {

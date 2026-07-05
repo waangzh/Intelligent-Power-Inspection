@@ -81,7 +81,11 @@ public class HttpLingBotMapGateway implements LingBotMapGateway {
     if (rawArtifacts instanceof Map<?, ?> artifacts && artifacts.get("pointCloudUrl") != null) {
       return Map.of("id", job.get("id"), "url", artifacts.get("pointCloudUrl"));
     }
-    return Map.of("id", job.get("id"), "url", "/mock/pointcloud/" + job.get("id") + ".ply");
+    String mapId = text(job.get("mapId"));
+    if (mapId == null || mapId.isBlank()) {
+      mapId = "map_" + job.get("id");
+    }
+    return Map.of("id", job.get("id"), "url", "/model-files/lingbot/maps/" + mapId + "/cloud.ply");
   }
 
   private void mergeStatus(Map<String, Object> job, Map<String, Object> response) {

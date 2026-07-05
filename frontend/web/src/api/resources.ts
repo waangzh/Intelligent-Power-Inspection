@@ -7,6 +7,7 @@ import type {
   InspectionRecord,
   InspectionTask,
   LingBotMapJob,
+  LingBotVideoUploadResponse,
   ManualDetectionResponse,
   Robot,
   Route,
@@ -74,6 +75,8 @@ export const resourcesApi = {
   listLingBotJobs: () => http.get<LingBotMapJob[]>('/lingbot/jobs'),
   createLingBotJob: (job: LingBotMapJob) => http.post<LingBotMapJob>('/lingbot/jobs', job),
   simulateLingBotJob: (id: string) => http.post<LingBotMapJob>(`/lingbot/jobs/${id}/simulate`),
+  refreshLingBotJob: (id: string) => http.post<LingBotMapJob>(`/lingbot/jobs/${id}/refresh`),
+  uploadLingBotVideo: (form: FormData) => http.postForm<LingBotVideoUploadResponse>('/lingbot/uploads/video', form),
 
   listNotifications: () => http.get<AppNotification[]>('/notifications'),
   markNotificationRead: (id: string) => http.patch<AppNotification>(`/notifications/${id}/read`),

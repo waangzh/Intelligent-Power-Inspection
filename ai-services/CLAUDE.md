@@ -57,7 +57,8 @@ python -m pytest tests/ -v
 
 - `LOCATE_ANYTHING_USE_REAL_MODEL=true` — 加载 LocateAnything 模型（需 GPU）
 - `LOCATE_ANYTHING_MODEL_PATH=../model/locate-anything-service` — 模型路径（默认本地）
-- `LINGBOT_MAP_USE_REAL_MODEL=true` — 使用真实建图（当前尚未接入）
-- `LINGBOT_STORAGE_DIR=../runtime-storage/maps` — 建图产物存储目录
+- `LINGBOT_MAP_USE_REAL_MODEL=true` — 使用真实建图外部命令
+- `LINGBOT_MAP_COMMAND="python D:\path\to\lingbot_demo.py"` — 真实建图命令，服务会追加输入、输出和参数选项
+- `LINGBOT_STORAGE_DIR=../../backend/runtime-storage/lingbot/maps` — 建图产物存储目录，默认写入后端 `/model-files/lingbot/maps` 可访问位置
 
 服务之间交互流程：后端先调用 locate-anything 获取检测结果，再（可选）调用 lingbot-map 进行三维重建。

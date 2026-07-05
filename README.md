@@ -133,7 +133,7 @@ Intelligent-Power-Inspection/
 │  └─ lingbot-map-service/      # 三维建图异步服务，默认端口 9002
 │     ├─ app.py
 │     ├─ job_store.py
-│     ├─ runner.py              # 当前为 mock runner，后续封装 LingBot-Map
+│     ├─ runner.py              # 默认 mock，支持通过外部命令封装 LingBot-Map
 │     ├─ worker.py
 │     └─ tests/
 ├─ .gitignore
@@ -274,6 +274,17 @@ cd ai-services\lingbot-map-service
 uvicorn app:app --host 0.0.0.0 --port 9002
 ```
 
+如需让 LingBot-Map 调用真实建图命令，继续在同一 conda 环境下配置：
+
+```powershell
+$env:LINGBOT_MAP_USE_REAL_MODEL="true"
+$env:LINGBOT_MAP_COMMAND="python D:\path\to\lingbot_demo.py"
+$env:LINGBOT_MAP_TIMEOUT_SECONDS="3600"
+uvicorn app:app --host 0.0.0.0 --port 9002
+```
+
+`LINGBOT_MAP_COMMAND` 会收到 `--input`、`--output`、`--output-profile`、`--fps`、`--stride`、`--keyframe-interval`、`--window-size`、`--mask-sky` 参数。命令需在输出目录生成 `cloud.ply`、`mesh.glb`、`trajectory.json`、`metadata.json`，可选生成 `preview.mp4`。
+
 后端默认已经使用 HTTP 模型网关，IDEA 直接启动 Spring Boot 即可连接本机 Python 服务：
 
 ```powershell
@@ -281,7 +292,7 @@ cd backend
 mvn spring-boot:test-run
 ```
 
-> 注意：LocateAnything 当前已使用真实模型 runner，默认 `generation-mode: fast`、超时 `900s`；LingBot-Map 仍可按需替换 `ai-services/lingbot-map-service/runner.py`。
+> 注意：LocateAnything 当前已使用真实模型 runner，默认 `generation-mode: fast`、超时 `900s`；LingBot-Map 默认 mock，设置 `LINGBOT_MAP_USE_REAL_MODEL=true` 和 `LINGBOT_MAP_COMMAND` 后会调用外部真实建图命令。
 
 ## 模型接入架构
 
@@ -353,7 +364,8 @@ DELETE /v1/reconstruction/jobs/{jobId}
 
 - `runtime-storage/`、模型权重、点云、mesh 等大文件不提交到 Git。
 - `ai-services/model/` 与 `ai-services/.cache/` 是本地模型和依赖缓存目录，已加入 `.gitignore`，不要手动暂存。
-- 第一版 Python 服务会生成 mock artifacts；真实部署时建议替换为 MinIO、OSS 或 COS。
+- LingBot-Map 上传视频保存在 `backend/runtime-storage/lingbot/uploads`，建图产物默认保存在 `backend/runtime-storage/lingbot/maps`，并通过 `/model-files/lingbot/...` 访问。
+- 默认 Python 服务会生成 mock artifacts；真实部署时可用 `LINGBOT_MAP_COMMAND` 封装官方 demo.py，长期建议替换为 MinIO、OSS 或 COS。
 - LingBot-Map 的 viewer 仅作为调试工具，不作为正式后端 API。
 
 ## 数据库与 Flyway
@@ -645,7 +657,7 @@ http://127.0.0.1:5173
 - 真实机器人控制尚未接入；`RobotGateway` 默认仍是模拟任务执行和机器人位置。
 - **巡检规划**为 ROS map 标注 + route.json v2 持久化；监控/任务页 Leaflet 地图与 PGM 标注页未统一，且 YAML/PGM 需每次本地上传。
 - 后端只校验 route.json v2 的结构与引用关系，不保存 YAML/PGM，也不复算地图 free/unknown/occupied 像素。
-- LocateAnything 已接入真实 Python 模型服务并由 Spring Boot HTTP 网关调用；LingBot-Map 仍是可替换服务接口。
-- LocateAnything Python 服务默认使用真实模型 runner；LingBot-Map 当前仍默认输出 mock 建图产物。
+- LocateAnything 已接入真实 Python 模型服务并由 Spring Boot HTTP 网关调用；LingBot-Map 默认 mock，已支持通过外部命令适配真实建图。
+- LocateAnything Python 服务默认使用真实模型 runner；LingBot-Map 真实模式需要配置 `LINGBOT_MAP_USE_REAL_MODEL=true` 与 `LINGBOT_MAP_COMMAND`。
 - 生产级日志、审计、监控、部署流水线和权限审计细节仍需进一步完善。
 - `backend/target/`、`frontend/web/dist/`、`frontend/web/node_modules/`、`runtime-storage/`、模型权重和点云/mesh 等产物不应提交。

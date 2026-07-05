@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -25,6 +26,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -407,19 +409,104 @@ class PowerInspectionApplicationTests {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.read").value(true));
 
-    String lingbotJobId = postAndReadId("/api/v1/lingbot/jobs", adminToken, json("id", "lingbot_test_api", "siteId", "site_001", "siteName", "城东 220kV 变电站", "name", "接口建图测试"));
+    MockMultipartFile video = new MockMultipartFile(
+      "video",
+      "mapping.mp4",
+      MediaType.valueOf("video/mp4").toString(),
+      new byte[] {1, 2, 3, 4}
+    );
+    String uploadResponse = mockMvc.perform(multipart("/api/v1/lingbot/uploads/video")
+        .file(video)
+        .header("Authorization", bearer(adminToken)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.videoUrl", containsString("/model-files/lingbot/uploads/")))
+      .andExpect(jsonPath("$.data.filename", containsString(".mp4")))
+      .andExpect(jsonPath("$.data.size").value(4))
+      .andReturn()
+      .getResponse()
+      .getContentAsString(StandardCharsets.UTF_8);
+    String videoUrl = objectMapper.readTree(uploadResponse).path("data").path("videoUrl").asText();
+
+    MockMultipartFile invalidVideo = new MockMultipartFile(
+      "video",
+      "mapping.txt",
+      MediaType.TEXT_PLAIN_VALUE,
+      new byte[] {1}
+    );
+    mockMvc.perform(multipart("/api/v1/lingbot/uploads/video")
+        .file(invalidVideo)
+        .header("Authorization", bearer(adminToken)))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("仅支持 MP4、MOV、AVI、MKV、WEBM 视频"));
+
+    MockMultipartFile emptyVideo = new MockMultipartFile(
+      "video",
+      "empty.mp4",
+      MediaType.valueOf("video/mp4").toString(),
+      new byte[] {}
+    );
+    mockMvc.perform(multipart("/api/v1/lingbot/uploads/video")
+        .file(emptyVideo)
+        .header("Authorization", bearer(adminToken)))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("请上传建图视频"));
+
+    mockMvc.perform(post("/api/v1/lingbot/jobs")
+        .header("Authorization", bearer(adminToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json(
+          "id", "lingbot_missing_video",
+          "siteId", "site_001",
+          "siteName", "城东 220kV 变电站",
+          "name", "缺少视频输入",
+          "inputKind", "video"
+        )))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("视频建图任务必须提供 videoUrl"));
+
+    mockMvc.perform(post("/api/v1/lingbot/jobs")
+        .header("Authorization", bearer(adminToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json(
+          "id", "lingbot_missing_image_folder",
+          "siteId", "site_001",
+          "siteName", "城东 220kV 变电站",
+          "name", "缺少图片序列输入",
+          "inputKind", "image_sequence"
+        )))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("图片序列建图任务必须提供 imageFolderUrl"));
+
+    String lingbotJobId = postAndReadId("/api/v1/lingbot/jobs", adminToken, json(
+      "id", "lingbot_test_api",
+      "siteId", "site_001",
+      "siteName", "城东 220kV 变电站",
+      "name", "接口建图测试",
+      "inputKind", "video",
+      "videoUrl", videoUrl,
+      "fps", 12,
+      "stride", 2,
+      "keyframeInterval", 6,
+      "windowSize", 18,
+      "outputProfile", "preview",
+      "maskSky", true
+    ));
 
     mockMvc.perform(get("/api/v1/lingbot/jobs/" + lingbotJobId).header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("PENDING"));
 
-    mockMvc.perform(post("/api/v1/lingbot/jobs/" + lingbotJobId + "/simulate").header("Authorization", bearer(adminToken)))
+    mockMvc.perform(post("/api/v1/lingbot/jobs/" + lingbotJobId + "/refresh").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.progress").value(15));
 
+    mockMvc.perform(post("/api/v1/lingbot/jobs/" + lingbotJobId + "/simulate").header("Authorization", bearer(adminToken)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.progress").value(30));
+
     mockMvc.perform(get("/api/v1/lingbot/maps/" + lingbotJobId + "/pointcloud").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.url").value("/mock/pointcloud/" + lingbotJobId + ".ply"));
+      .andExpect(jsonPath("$.data.url").value("/model-files/lingbot/maps/map_" + lingbotJobId + "/cloud.ply"));
 
     mockMvc.perform(delete("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk());

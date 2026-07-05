@@ -77,9 +77,13 @@ class HttpModelGatewayTests {
 
   @Test
   void httpLingBotMapGatewayMapsStatusAndArtifacts() {
-    server.createContext("/v1/reconstruction/jobs", exchange -> writeJson(exchange, """
+    AtomicReference<String> requestBody = new AtomicReference<>();
+    server.createContext("/v1/reconstruction/jobs", exchange -> {
+      requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+      writeJson(exchange, """
       {"jobId":"py_job_001","status":"QUEUED","progress":0}
-      """));
+      """);
+    });
     server.createContext("/v1/reconstruction/jobs/py_job_001", exchange -> writeJson(exchange, """
       {
         "jobId": "py_job_001",
@@ -93,12 +97,13 @@ class HttpModelGatewayTests {
       """));
 
     HttpLingBotMapGateway gateway = new HttpLingBotMapGateway(properties(baseUrl, baseUrl));
-    Map<String, Object> created = gateway.createJob(Map.of("id", "lingbot_001", "siteId", "site_001"));
+    Map<String, Object> created = gateway.createJob(Map.of("id", "lingbot_001", "siteId", "site_001", "videoUrl", "http://example.test/video.mp4"));
     Map<String, Object> completed = gateway.advanceJob(created);
     Map<String, Object> pointCloud = gateway.pointCloud(completed);
 
     assertThat(created.get("status")).isEqualTo("PENDING");
     assertThat(created.get("externalJobId")).isEqualTo("py_job_001");
+    assertThat(requestBody.get()).contains("\"videoUrl\":\"http://example.test/video.mp4\"");
     assertThat(completed.get("status")).isEqualTo("COMPLETED");
     assertThat(completed.get("frameCount")).isEqualTo(1200);
     assertThat(completed).doesNotContainKey("videoCount");
