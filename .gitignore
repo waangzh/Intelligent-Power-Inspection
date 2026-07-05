@@ -27,6 +27,8 @@ target/
 .tmp/
 *.tsbuildinfo
 runtime-storage/
+ai-services/.cache/
+ai-services/model/
 ai-services/**/runtime-storage/
 ai-services/**/annotated-images/*
 !ai-services/**/annotated-images/.gitkeep
@@ -49,6 +51,7 @@ frontend/wechat-program/miniprogram/project.private.config.json
 logs/
 
 # Agent local instructions
+.claude/
 AGENTS.md
 agents.md
 **/AGENTS.md

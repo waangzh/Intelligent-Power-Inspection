@@ -95,9 +95,79 @@ public final class RouteExecutorSupport {
     if (!"map".equals(String.valueOf(executor.get("frame_id")))) {
       throw ApiException.badRequest("executorJson.frame_id must be map");
     }
+    String activeRouteId = requiredText(executor.get("active_route_id"), "executorJson.active_route_id is required");
+    Map<String, Object> startPose = requireMap(executor.get("start_pose"), "executorJson.start_pose must be an object");
+    requirePose(startPose.get("pose"), "executorJson.start_pose.pose");
+    if (startPose.containsKey("covariance")) {
+      Map<String, Object> covariance = requireMap(startPose.get("covariance"), "executorJson.start_pose.covariance must be an object");
+      requireFiniteNumber(covariance.get("x"), "executorJson.start_pose.covariance.x must be a number");
+      requireFiniteNumber(covariance.get("y"), "executorJson.start_pose.covariance.y must be a number");
+      requireFiniteNumber(covariance.get("yaw"), "executorJson.start_pose.covariance.yaw must be a number");
+    }
+
+    Object rawTargets = executor.get("targets");
+    if (!(rawTargets instanceof List<?>)) {
+      throw ApiException.badRequest("executorJson.targets must be a list");
+    }
+    List<Map<String, Object>> targets = castMapList((List<?>) rawTargets);
+    Map<String, Map<String, Object>> targetById = new LinkedHashMap<>();
+    for (int i = 0; i < targets.size(); i++) {
+      Map<String, Object> target = targets.get(i);
+      String id = requiredText(target.get("id"), "executorJson.targets[" + i + "].id is required");
+      if (targetById.put(id, target) != null) {
+        throw ApiException.badRequest("executorJson.targets contains duplicate id: " + id);
+      }
+      requirePose(target.get("pose"), "executorJson.targets[" + i + "].pose");
+      if (target.containsKey("task_duration_sec")) {
+        requireNonNegativeNumber(target.get("task_duration_sec"), "executorJson.targets[" + i + "].task_duration_sec must be a non-negative number");
+      }
+    }
+
     Object rawRoutes = executor.get("routes");
     if (!(rawRoutes instanceof List<?>) || ((List<?>) rawRoutes).isEmpty()) {
       throw ApiException.badRequest("executorJson.routes must contain one route");
+    }
+    boolean activeRouteFound = false;
+    List<Map<String, Object>> routes = castMapList((List<?>) rawRoutes);
+    for (int i = 0; i < routes.size(); i++) {
+      Map<String, Object> route = routes.get(i);
+      String id = requiredText(route.get("id"), "executorJson.routes[" + i + "].id is required");
+      activeRouteFound = activeRouteFound || activeRouteId.equals(id);
+      Object rawIds = route.get("target_ids");
+      if (rawIds != null) {
+        if (!(rawIds instanceof List<?>)) {
+          throw ApiException.badRequest("executorJson.routes[" + i + "].target_ids must be a list");
+        }
+        for (Object rawId : (List<?>) rawIds) {
+          String targetId = requiredText(rawId, "executorJson.routes[" + i + "].target_ids contains blank id");
+          if (!targetById.containsKey(targetId)) {
+            throw ApiException.badRequest("executorJson target_ids references missing target: " + targetId);
+          }
+        }
+      }
+      if (route.containsKey("goal_timeout_sec")) {
+        requireNonNegativeNumber(route.get("goal_timeout_sec"), "executorJson.routes[" + i + "].goal_timeout_sec must be a non-negative number");
+      }
+      if (route.containsKey("max_retries_per_checkpoint")) {
+        requireNonNegativeNumber(route.get("max_retries_per_checkpoint"), "executorJson.routes[" + i + "].max_retries_per_checkpoint must be a non-negative number");
+      }
+      Object failurePolicy = route.get("failure_policy");
+      if (failurePolicy != null && !List.of("abort_and_return_home", "abort").contains(String.valueOf(failurePolicy))) {
+        throw ApiException.badRequest("executorJson.routes[" + i + "].failure_policy is invalid");
+      }
+      Object loop = route.get("loop");
+      if (loop != null) {
+        Map<String, Object> loopMap = requireMap(loop, "executorJson.routes[" + i + "].loop must be an object");
+        if (loopMap.containsKey("wait_sec")) {
+          requireNonNegativeNumber(loopMap.get("wait_sec"), "executorJson.routes[" + i + "].loop.wait_sec must be a non-negative number");
+        }
+        if (loopMap.containsKey("max_cycles")) {
+          requireNonNegativeNumber(loopMap.get("max_cycles"), "executorJson.routes[" + i + "].loop.max_cycles must be a non-negative number");
+        }
+      }
+    }
+    if (!activeRouteFound) {
+      throw ApiException.badRequest("executorJson.active_route_id must reference a route id");
     }
   }
 
@@ -173,9 +243,23 @@ public final class RouteExecutorSupport {
     return position;
   }
 
+  private static void requirePose(Object value, String field) {
+    Map<String, Object> pose = requireMap(value, field + " must be an object");
+    requireFiniteNumber(pose.get("x"), field + ".x must be a number");
+    requireFiniteNumber(pose.get("y"), field + ".y must be a number");
+    requireFiniteNumber(pose.get("yaw"), field + ".yaw must be a number");
+  }
+
   @SuppressWarnings("unchecked")
   private static List<Map<String, Object>> castMapList(List<?> list) {
-    return new ArrayList<>((List<Map<String, Object>>) list);
+    List<Map<String, Object>> result = new ArrayList<>();
+    for (Object item : list) {
+      if (!(item instanceof Map<?, ?>)) {
+        throw ApiException.badRequest("executorJson list entries must be objects");
+      }
+      result.add(new LinkedHashMap<>((Map<String, Object>) item));
+    }
+    return result;
   }
 
   @SuppressWarnings("unchecked")
@@ -184,6 +268,21 @@ public final class RouteExecutorSupport {
       return new LinkedHashMap<>((Map<String, Object>) value);
     }
     return new LinkedHashMap<>();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> requireMap(Object value, String message) {
+    if (value instanceof Map<?, ?>) {
+      return new LinkedHashMap<>((Map<String, Object>) value);
+    }
+    throw ApiException.badRequest(message);
+  }
+
+  private static String requiredText(Object value, String message) {
+    if (value == null || value.toString().isBlank()) {
+      throw ApiException.badRequest(message);
+    }
+    return value.toString();
   }
 
   private static Integer number(Object value) {
@@ -216,6 +315,36 @@ public final class RouteExecutorSupport {
       return Double.parseDouble(value.toString());
     } catch (NumberFormatException ex) {
       return fallback;
+    }
+  }
+
+  private static double requireFiniteNumber(Object value, String message) {
+    Double n = decimal(value);
+    if (n == null || !Double.isFinite(n)) {
+      throw ApiException.badRequest(message);
+    }
+    return n;
+  }
+
+  private static double requireNonNegativeNumber(Object value, String message) {
+    double n = requireFiniteNumber(value, message);
+    if (n < 0) {
+      throw ApiException.badRequest(message);
+    }
+    return n;
+  }
+
+  private static Double decimal(Object value) {
+    if (value instanceof Number) {
+      return ((Number) value).doubleValue();
+    }
+    if (value == null) {
+      return null;
+    }
+    try {
+      return Double.parseDouble(value.toString());
+    } catch (NumberFormatException ex) {
+      return null;
     }
   }
 }
