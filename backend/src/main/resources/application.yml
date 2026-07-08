@@ -36,3 +36,8 @@ app:
     lingbot-map:
       base-url: ${APP_MODEL_LINGBOT_MAP_BASE_URL:http://127.0.0.1:9002}
       timeout-seconds: ${APP_MODEL_LINGBOT_MAP_TIMEOUT_SECONDS:30}
+    llm:
+      base-url: ${APP_MODEL_LLM_BASE_URL:http://127.0.0.1:9003}
+      api-key: ${APP_MODEL_LLM_API_KEY:}
+      model: ${APP_MODEL_LLM_MODEL:gpt-4o-mini}
+      timeout-seconds: ${APP_MODEL_LLM_TIMEOUT_SECONDS:60}

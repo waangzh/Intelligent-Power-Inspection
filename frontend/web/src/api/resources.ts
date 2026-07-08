@@ -14,6 +14,7 @@ import type {
   TaskEvent,
 } from '@/types'
 import type { AppNotification, NotificationType } from '@/types/notification'
+import type { AgentAction, AgentSession, CreateAgentSessionRequest } from '@/types/agent'
 import type { WorkOrder, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
 
@@ -98,4 +99,11 @@ export const resourcesApi = {
     read: false,
     createdAt: new Date().toISOString(),
   }),
+
+  listAgentSessions: () => http.get<AgentSession[]>('/agents/sessions'),
+  createAgentSession: (body: CreateAgentSessionRequest) => http.post<AgentSession>('/agents/sessions', body),
+  getAgentSession: (id: string) => http.get<AgentSession>(`/agents/sessions/${id}`),
+  rerunAgentSession: (id: string) => http.post<AgentSession>(`/agents/sessions/${id}/runs`),
+  confirmAgentAction: (id: string) => http.post<AgentAction>(`/agents/actions/${id}/confirm`),
+  rejectAgentAction: (id: string) => http.post<AgentAction>(`/agents/actions/${id}/reject`),
 }

@@ -1,10 +1,11 @@
-export type NotificationType = 'ALARM' | 'TASK' | 'WORKORDER' | 'SYSTEM'
+export type NotificationType = 'ALARM' | 'TASK' | 'WORKORDER' | 'SYSTEM' | 'AGENT'
 
 export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   ALARM: '告警',
   TASK: '任务',
   WORKORDER: '工单',
   SYSTEM: '系统',
+  AGENT: 'Agent',
 }
 
 export interface AppNotification {

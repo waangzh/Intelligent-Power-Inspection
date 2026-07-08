@@ -14,6 +14,10 @@ public final class DataCategory {
   public static final String DETECTION_TEMPLATE = "detectionTemplates";
   public static final String LINGBOT_JOB = "lingbotJobs";
   public static final String NOTIFICATION = "notifications";
+  public static final String AGENT_SESSION = "agentSessions";
+  public static final String AGENT_RUN = "agentRuns";
+  public static final String AGENT_ACTION = "agentActions";
+  public static final String AGENT_EVIDENCE = "agentEvidence";
 
   private DataCategory() {
   }

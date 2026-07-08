@@ -68,6 +68,12 @@ const router = createRouter({
           meta: { title: '消息中心', requiresAuth: true, breadcrumbs: [{ label: '运维中心' }, { label: '消息中心' }] },
         },
         {
+          path: 'agents',
+          name: 'Agents',
+          component: () => import('@/views/AgentDisposition.vue'),
+          meta: { title: '巡检处置 Agent', requiresAuth: true, permission: 'task:dispatch', breadcrumbs: [{ label: '运维中心' }, { label: '巡检处置 Agent' }] },
+        },
+        {
           path: 'sites',
           name: 'Sites',
           component: () => import('@/views/SiteManage.vue'),

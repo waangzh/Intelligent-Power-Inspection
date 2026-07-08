@@ -91,7 +91,7 @@ function fmt(iso: string) {
 }
 
 function typeTag(t: NotificationType): '' | 'success' | 'warning' | 'danger' | 'info' {
-  return { ALARM: 'danger', TASK: 'warning', WORKORDER: '', SYSTEM: 'info' }[t] as '' | 'success' | 'warning' | 'danger' | 'info'
+  return { ALARM: 'danger', TASK: 'warning', WORKORDER: '', SYSTEM: 'info', AGENT: 'success' }[t] as '' | 'success' | 'warning' | 'danger' | 'info'
 }
 </script>
 
