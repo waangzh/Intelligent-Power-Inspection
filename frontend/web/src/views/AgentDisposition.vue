@@ -15,20 +15,79 @@
 
     <div class="agent-grid">
       <section class="panel input-panel">
-        <div class="panel-title">输入</div>
+        <div class="panel-title">分析对象</div>
         <el-form label-position="top" size="small">
-          <el-form-item label="任务 ID">
-            <el-input v-model="form.taskId" clearable placeholder="task_demo" />
+          <el-form-item label="关联告警">
+            <el-select
+              v-model="form.alarmId"
+              clearable
+              filterable
+              placeholder="选择需要处置的告警"
+              style="width: 100%"
+              @change="onAlarmChange"
+            >
+              <el-option
+                v-for="alarm in alarmOptions"
+                :key="alarm.id"
+                :label="alarmOptionLabel(alarm)"
+                :value="alarm.id"
+              >
+                <div class="option-main">
+                  <span>{{ alarm.message }}</span>
+                  <el-tag size="small" :type="alarmSeverityType(alarm.severity)">{{ alarmSeverityLabel(alarm.severity) }}</el-tag>
+                </div>
+                <div class="option-sub">{{ alarm.routeName }} · {{ fmt(alarm.createdAt) }}</div>
+              </el-option>
+            </el-select>
           </el-form-item>
-          <el-form-item label="告警 ID">
-            <el-input v-model="form.alarmId" clearable placeholder="alarm_seed_001" />
+          <el-form-item label="关联任务">
+            <el-select
+              v-model="form.taskId"
+              clearable
+              filterable
+              placeholder="选择巡检任务"
+              style="width: 100%"
+              @change="onTaskChange"
+            >
+              <el-option
+                v-for="task in taskOptions"
+                :key="task.id"
+                :label="taskOptionLabel(task)"
+                :value="task.id"
+              >
+                <div class="option-main">
+                  <span>{{ task.name }}</span>
+                  <el-tag size="small">{{ taskStatusLabel(task.status) }}</el-tag>
+                </div>
+                <div class="option-sub">{{ fmt(task.createdAt) }}</div>
+              </el-option>
+            </el-select>
           </el-form-item>
+          <el-alert
+            v-if="isAlarmOnlyAnalysis"
+            class="degraded-alert"
+            type="warning"
+            :closable="false"
+            show-icon
+            title="未找到该告警的关联任务，将仅基于告警证据进行分析。"
+            description="分析结果可能缺少任务路线、机器人、执行过程等上下文。"
+          />
+          <div v-if="selectedAlarm || selectedTask" class="context-box">
+            <div v-if="selectedAlarm" class="context-row">
+              <span>告警</span>
+              <strong>{{ selectedAlarm.message }}</strong>
+            </div>
+            <div v-if="selectedTask" class="context-row">
+              <span>任务</span>
+              <strong>{{ selectedTask.name }}</strong>
+            </div>
+          </div>
           <el-form-item label="补充说明">
             <el-input v-model="form.prompt" type="textarea" :rows="4" resize="none" />
           </el-form-item>
           <el-button type="primary" :loading="agentStore.loading" class="run-button" @click="createSession">
             <el-icon><CaretRight /></el-icon>
-            启动分析
+            {{ runButtonLabel }}
           </el-button>
         </el-form>
 
@@ -152,13 +211,21 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { CaretRight, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { useAlarmStore } from '@/stores/alarm'
 import { useAgentStore } from '@/stores/agent'
+import { useTaskStore } from '@/stores/task'
+import { ALARM_SEVERITY_LABELS, TASK_STATUS_LABELS } from '@/types'
+import type { Alarm, AlarmSeverity, InspectionTask, TaskStatus } from '@/types'
 import type { AgentAction, AgentAnalysis, AgentStatus } from '@/types/agent'
 
+const pageRoute = useRoute()
 const agentStore = useAgentStore()
+const alarmStore = useAlarmStore()
+const taskStore = useTaskStore()
 const form = reactive({
   taskId: '',
   alarmId: '',
@@ -166,15 +233,39 @@ const form = reactive({
 })
 
 const analysis = computed<AgentAnalysis | undefined>(() => agentStore.activeSession?.analysis)
+const selectedAlarm = computed(() => alarmStore.alarms.find((item) => item.id === form.alarmId))
+const selectedTask = computed(() => taskStore.getTaskById(form.taskId))
+const taskOptions = computed(() => taskStore.tasks)
+const alarmOptions = computed(() => {
+  if (!form.taskId) return alarmStore.alarms
+  return alarmStore.alarms.filter((item) => item.taskId === form.taskId || item.id === form.alarmId)
+})
+const isAlarmOnlyAnalysis = computed(() => Boolean(selectedAlarm.value && !selectedTask.value))
+const runButtonLabel = computed(() => {
+  if (isAlarmOnlyAnalysis.value) return '仅基于告警分析'
+  if (selectedTask.value) return '启动完整分析'
+  return '启动分析'
+})
 const activeSubtitle = computed(() => {
   const session = agentStore.activeSession
   if (!session) return '选择或创建一个会话'
-  return [session.taskId, session.alarmId].filter(Boolean).join(' / ') || session.inputType
+  const taskName = session.taskId ? taskStore.getTaskById(session.taskId)?.name : ''
+  const alarmMessage = session.alarmId ? alarmStore.alarms.find((item) => item.id === session.alarmId)?.message : ''
+  return [alarmMessage, taskName].filter(Boolean).join(' / ') || session.title || session.inputType
 })
 
 onMounted(async () => {
-  await agentStore.loadSessions()
-  if (agentStore.sessions[0]) {
+  await Promise.allSettled([
+    agentStore.loadSessions(),
+    taskStore.tasks.length ? Promise.resolve() : taskStore.loadDynamic(),
+    alarmStore.alarms.length ? Promise.resolve() : alarmStore.load(),
+  ])
+  form.taskId = firstQuery(pageRoute.query.taskId)
+  form.alarmId = firstQuery(pageRoute.query.alarmId)
+  if (form.alarmId) {
+    onAlarmChange(form.alarmId)
+  }
+  if (!form.taskId && !form.alarmId && agentStore.sessions[0]) {
     await agentStore.loadSession(agentStore.sessions[0].id)
   }
 })
@@ -185,15 +276,62 @@ onUnmounted(() => {
 
 async function createSession() {
   if (!form.taskId.trim() && !form.alarmId.trim() && !form.prompt.trim()) {
-    ElMessage.warning('请至少填写任务、告警或补充说明')
+    ElMessage.warning('请选择任务、告警或填写补充说明')
     return
   }
-  await agentStore.createSession({
-    taskId: form.taskId.trim() || undefined,
-    alarmId: form.alarmId.trim() || undefined,
-    prompt: form.prompt.trim() || undefined,
-  })
-  ElMessage.success('Agent 分析已启动')
+  if (form.taskId.trim() && !selectedTask.value) {
+    ElMessage.warning('所选任务不存在，请重新选择任务或仅按告警分析')
+    return
+  }
+  try {
+    await agentStore.createSession({
+      taskId: selectedTask.value ? form.taskId.trim() : undefined,
+      alarmId: form.alarmId.trim() || undefined,
+      prompt: form.prompt.trim() || undefined,
+    })
+    ElMessage.success('Agent 分析已启动')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'Agent 分析启动失败')
+  }
+}
+
+function onAlarmChange(alarmId: string | number | boolean | undefined) {
+  const alarm = alarmStore.alarms.find((item) => item.id === String(alarmId ?? ''))
+  if (alarm?.taskId && taskStore.getTaskById(alarm.taskId)) {
+    form.taskId = alarm.taskId
+  }
+}
+
+function onTaskChange(taskId: string | number | boolean | undefined) {
+  const selectedTaskId = String(taskId ?? '')
+  if (selectedTaskId && form.alarmId && selectedAlarm.value?.taskId !== selectedTaskId) {
+    form.alarmId = ''
+  }
+}
+
+function firstQuery(value: unknown) {
+  if (Array.isArray(value)) return value[0] ?? ''
+  return typeof value === 'string' ? value : ''
+}
+
+function alarmOptionLabel(alarm: Alarm) {
+  return `${alarmSeverityLabel(alarm.severity)} · ${alarm.message}`
+}
+
+function taskOptionLabel(task: InspectionTask) {
+  return `${task.name} · ${taskStatusLabel(task.status)}`
+}
+
+function alarmSeverityLabel(severity: AlarmSeverity) {
+  return ALARM_SEVERITY_LABELS[severity]
+}
+
+function alarmSeverityType(severity: AlarmSeverity) {
+  return { LOW: 'info', MEDIUM: 'warning', HIGH: 'warning', CRITICAL: 'danger' }[severity] as 'info' | 'warning' | 'danger'
+}
+
+function taskStatusLabel(status: TaskStatus) {
+  return TASK_STATUS_LABELS[status]
 }
 
 async function confirm(action: AgentAction) {
@@ -290,6 +428,55 @@ function defectLabel(level: AgentAnalysis['defectLevel']) {
 
 .run-button {
   width: 100%;
+}
+
+.degraded-alert {
+  margin: 0 0 12px;
+}
+
+.option-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.option-main span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option-sub {
+  color: var(--agent-muted);
+  font-size: 12px;
+}
+
+.context-box {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 12px;
+  border: 1px solid var(--agent-border);
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.context-row {
+  display: grid;
+  gap: 4px;
+}
+
+.context-row span {
+  color: var(--agent-muted);
+  font-size: 12px;
+}
+
+.context-row strong {
+  color: #172033;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .history-title,

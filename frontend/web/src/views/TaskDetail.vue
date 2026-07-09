@@ -1,11 +1,12 @@
 <template>
   <div v-if="task">
-    <PageHeader :title="task.name" :description="`任务 ID: ${task.id}`" :breadcrumbs="breadcrumbs">
+    <PageHeader :title="task.name" description="巡检任务详情" :breadcrumbs="breadcrumbs">
       <template #actions>
         <TaskStatusTag :status="task.status" />
         <el-button v-if="can('task:dispatch') && task.status === 'CREATED'" type="primary" @click="taskStore.dispatch(task.id)">下发</el-button>
         <el-button v-if="can('task:control') && task.status === 'RUNNING'" @click="taskStore.pause(task.id)">暂停</el-button>
         <el-button v-if="can('task:control') && task.status === 'PAUSED'" type="primary" @click="taskStore.resume(task.id)">恢复</el-button>
+        <el-button v-if="can('task:dispatch')" type="success" @click="openAgent">Agent 分析</el-button>
         <el-button @click="router.push('/tasks')">返回列表</el-button>
       </template>
     </PageHeader>
@@ -131,6 +132,10 @@ function timelineType(type: TaskEvent['type']) {
   if (type === 'ALARM') return 'danger'
   if (type === 'COMPLETE') return 'success'
   return 'primary'
+}
+
+function openAgent() {
+  router.push({ path: '/agents', query: { taskId: taskId.value } })
 }
 </script>
 

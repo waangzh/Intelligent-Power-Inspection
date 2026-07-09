@@ -43,14 +43,15 @@ public class AgentService {
   }
 
   public Map<String, Object> createSession(Map<String, Object> body, UserEntity user) {
+    Map<String, Object> input = normalizeInput(body);
     String now = Instant.now().toString();
     Map<String, Object> session = new LinkedHashMap<>();
     session.put("id", Ids.next("agent_session"));
-    session.put("title", title(body));
-    session.put("inputType", inputType(body));
-    putIfText(session, "taskId", body.get("taskId"));
-    putIfText(session, "alarmId", body.get("alarmId"));
-    putIfText(session, "prompt", body.get("prompt"));
+    session.put("title", title(input));
+    session.put("inputType", inputType(input));
+    putIfText(session, "taskId", input.get("taskId"));
+    putIfText(session, "alarmId", input.get("alarmId"));
+    putIfText(session, "prompt", input.get("prompt"));
     session.put("status", STATUS_RUNNING);
     session.put("createdById", user.getId());
     session.put("createdAt", now);
@@ -59,6 +60,37 @@ public class AgentService {
     Map<String, Object> run = createRun(session);
     executor.submit(() -> runSession(new LinkedHashMap<>(session), user, run));
     return detail(text(session.get("id")));
+  }
+
+  private Map<String, Object> normalizeInput(Map<String, Object> body) {
+    Map<String, Object> input = new LinkedHashMap<>(body == null ? map() : body);
+    String taskId = text(input.get("taskId"));
+    String alarmId = text(input.get("alarmId"));
+    String prompt = text(input.get("prompt"));
+    boolean explicitTaskId = hasText(taskId);
+    if (!hasText(taskId) && !hasText(alarmId) && !hasText(prompt)) {
+      throw ApiException.badRequest("请至少选择任务、告警或填写补充说明");
+    }
+
+    if (hasText(alarmId)) {
+      Map<String, Object> alarm = dataStore.find(DataCategory.ALARM, alarmId);
+      if (alarm == null) {
+        throw ApiException.badRequest("告警不存在");
+      }
+      String alarmTaskId = text(alarm.get("taskId"));
+      if (hasText(taskId) && hasText(alarmTaskId) && !taskId.equals(alarmTaskId)) {
+        throw ApiException.badRequest("告警不属于所选任务");
+      }
+      if (!hasText(taskId) && hasText(alarmTaskId)) {
+        input.put("taskId", alarmTaskId);
+        taskId = alarmTaskId;
+      }
+    }
+
+    if (explicitTaskId && dataStore.find(DataCategory.TASK, taskId) == null) {
+      throw ApiException.badRequest("任务不存在");
+    }
+    return input;
   }
 
   public List<Map<String, Object>> sessions() {
@@ -395,11 +427,15 @@ public class AgentService {
   }
 
   private String title(Map<String, Object> body) {
-    if (hasText(text(body.get("alarmId")))) {
-      return "告警处置 " + body.get("alarmId");
+    String alarmId = text(body.get("alarmId"));
+    if (hasText(alarmId)) {
+      Map<String, Object> alarm = dataStore.find(DataCategory.ALARM, alarmId);
+      return "告警处置：" + abbreviate(firstText(alarm == null ? null : alarm.get("message"), "巡检异常"), 24);
     }
-    if (hasText(text(body.get("taskId")))) {
-      return "任务处置 " + body.get("taskId");
+    String taskId = text(body.get("taskId"));
+    if (hasText(taskId)) {
+      Map<String, Object> task = dataStore.find(DataCategory.TASK, taskId);
+      return "任务处置：" + abbreviate(firstText(task == null ? null : task.get("name"), "巡检任务"), 24);
     }
     return "巡检处置 Agent";
   }

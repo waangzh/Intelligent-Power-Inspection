@@ -52,6 +52,7 @@
           type="danger"
           @click="cancelTask(activeTask.id)"
         >取消任务</el-button>
+        <el-button v-if="can('task:dispatch')" type="success" @click="openAgentForTask(activeTask.id)">Agent 分析</el-button>
         <el-button @click="router.push(`/tasks/${activeTask.id}`)">任务详情</el-button>
       </div>
     </el-card>
@@ -83,12 +84,13 @@
         <el-table-column label="创建时间" width="160">
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button v-if="can('task:dispatch') && row.status === 'CREATED'" text type="primary" size="small" @click="taskStore.dispatch(row.id)">下发</el-button>
             <el-button v-if="can('task:control') && row.status === 'RUNNING'" text size="small" @click="taskStore.pause(row.id)">暂停</el-button>
             <el-button v-if="can('task:control') && row.status === 'PAUSED'" text type="primary" size="small" @click="taskStore.resume(row.id)">恢复</el-button>
             <el-button v-if="can('task:control') && row.status === 'RUNNING'" text type="warning" size="small" @click="taskStore.takeover(row.id)">接管</el-button>
+            <el-button v-if="can('task:dispatch')" text type="success" size="small" @click="openAgentForTask(row.id)">Agent</el-button>
             <el-button text size="small" @click="router.push(`/tasks/${row.id}`)">详情</el-button>
             <el-button
               v-if="can('task:control') && !['COMPLETED', 'CANCELLED'].includes(row.status)"
@@ -225,6 +227,10 @@ function cancelTask(id: string) {
       ElMessage.success('任务已取消')
     })
     .catch(() => {})
+}
+
+function openAgentForTask(taskId: string) {
+  router.push({ path: '/agents', query: { taskId } })
 }
 </script>
 

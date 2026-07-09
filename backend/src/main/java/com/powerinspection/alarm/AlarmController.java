@@ -29,6 +29,7 @@ public class AlarmController {
 
   @GetMapping
   public ApiResponse<List<Map<String, Object>>> alarms() {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
     return ApiResponse.ok(dataStore.list(DataCategory.ALARM));
   }
 

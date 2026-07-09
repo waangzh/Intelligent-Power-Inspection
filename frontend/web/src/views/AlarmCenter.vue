@@ -52,7 +52,7 @@
                 <el-tag :type="row.acknowledged ? 'info' : 'danger'" size="small">{{ row.acknowledged ? '已确认' : '待处理' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column v-if="can('alarm:ack')" label="操作" width="150">
+            <el-table-column v-if="can('alarm:ack') || can('task:dispatch')" label="操作" width="210">
               <template #default="{ row }">
                 <el-button v-if="!row.acknowledged" text type="primary" size="small" @click.stop="alarmStore.acknowledge(row.id)">确认</el-button>
                 <el-button
@@ -63,6 +63,13 @@
                   @click.stop="createWorkOrder(row)"
                 >转工单</el-button>
                 <el-tag v-else size="small" type="info">已转工单</el-tag>
+                <el-button
+                  v-if="can('task:dispatch')"
+                  text
+                  type="success"
+                  size="small"
+                  @click.stop="openAgentForAlarm(row)"
+                >Agent 处置</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -90,6 +97,7 @@
               @click="createWorkOrder(selected)"
             >转为工单</el-button>
             <el-button v-else size="small" @click="router.push('/workorders')">查看工单</el-button>
+            <el-button v-if="can('task:dispatch')" type="success" size="small" @click="openAgentForAlarm(selected)">Agent 处置</el-button>
           </div>
         </el-card>
         <el-card v-else shadow="never"><div class="empty-hint">点击告警查看详情</div></el-card>
@@ -171,6 +179,10 @@ function createWorkOrder(alarm: Alarm) {
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '创建失败')
   }
+}
+
+function openAgentForAlarm(alarm: Alarm) {
+  router.push({ path: '/agents', query: { alarmId: alarm.id } })
 }
 </script>
 
