@@ -49,7 +49,12 @@
         <el-card shadow="never" style="margin-bottom: 16px">
           <template #header>轨迹地图</template>
           <div style="height: 280px">
-            <Map2D :center="mapCenter" :route="route ?? null" :robot-position="robotPos" />
+            <Map2D
+              :center="mapCenter"
+              :fallback-center="fallbackCenter"
+              :route="route ?? null"
+              :robot-position="robotPos"
+            />
           </div>
         </el-card>
         <el-card shadow="never">
@@ -99,7 +104,10 @@ const robot = computed(() => (task.value ? robotStore.getRobotById(task.value.ro
 const events = computed(() => taskStore.getEventsByTask(taskId.value))
 const taskAlarms = computed(() => alarmStore.alarms.filter((a) => a.taskId === taskId.value))
 
-const mapCenter = computed(() => route.value?.path[0] ?? siteStore.sites[0]?.center ?? { lat: 30.27, lng: 120.15 })
+const fallbackCenter = computed(() =>
+  route.value ? siteStore.getSiteById(route.value.siteId)?.center ?? siteStore.sites[0]?.center : siteStore.sites[0]?.center,
+)
+const mapCenter = computed(() => route.value?.path[0] ?? fallbackCenter.value ?? { lat: 30.27, lng: 120.15 })
 const robotPos = computed(() => robot.value?.position ?? null)
 
 const breadcrumbs = [

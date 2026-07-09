@@ -18,7 +18,12 @@
             </div>
           </template>
           <div style="height: 400px">
-            <Map2D :center="mapCenter" :route="activeRoute" :robot-position="robotPos" />
+            <Map2D
+              :center="mapCenter"
+              :fallback-center="fallbackCenter"
+              :route="activeRoute"
+              :robot-position="robotPos"
+            />
           </div>
         </el-card>
       </el-col>
@@ -74,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Map2D from '@/components/Map2D.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useRobotStore } from '@/stores/robot'
@@ -88,6 +93,15 @@ const routeStore = useRouteStore()
 const siteStore = useSiteStore()
 
 const selectedRobotId = ref(robotStore.robots[0]?.id ?? '')
+watch(
+  () => robotStore.robots.map((robot) => robot.id),
+  (ids) => {
+    if (ids.length > 0 && !ids.includes(selectedRobotId.value)) {
+      selectedRobotId.value = ids[0]
+    }
+  },
+  { immediate: true },
+)
 
 const selectedRobot = computed(() => robotStore.getRobotById(selectedRobotId.value))
 const activeTask = computed(() => taskStore.getActiveTask())
@@ -99,6 +113,10 @@ const mapCenter = computed(() => {
   if (r?.position) return r.position
   if (r?.siteId) return siteStore.getSiteById(r.siteId)?.center ?? { lat: 30.27, lng: 120.15 }
   return { lat: 30.27, lng: 120.15 }
+})
+const fallbackCenter = computed(() => {
+  const siteId = selectedRobot.value?.siteId
+  return siteId ? siteStore.getSiteById(siteId)?.center ?? mapCenter.value : mapCenter.value
 })
 const robotPos = computed(() => selectedRobot.value?.position ?? null)
 const videoUrl = computed(() => `https://picsum.photos/seed/monitor_${selectedRobotId.value}/640/360`)

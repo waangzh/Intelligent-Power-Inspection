@@ -57,7 +57,7 @@
             </el-table-column>
           </el-table>
           <div style="height: 320px; margin-top: 12px">
-            <Map2D :center="currentSite.center" :areas="areas" />
+            <Map2D :center="currentSite.center" :fallback-center="currentSite.center" :areas="areas" />
           </div>
         </el-card>
         <el-card v-else shadow="never">
@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Map2D from '@/components/Map2D.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -126,6 +126,19 @@ import type { Site } from '@/types'
 const siteStore = useSiteStore()
 const { can } = usePermission()
 const currentSite = ref<Site | null>(siteStore.sites[0] ?? null)
+watch(
+  () => siteStore.sites,
+  (sites) => {
+    if (!currentSite.value && sites.length > 0) {
+      currentSite.value = sites[0]
+      return
+    }
+    if (currentSite.value && !sites.some((site) => site.id === currentSite.value?.id)) {
+      currentSite.value = sites[0] ?? null
+    }
+  },
+  { immediate: true },
+)
 const siteDialogVisible = ref(false)
 const areaDialogVisible = ref(false)
 const editingSite = ref<Site | null>(null)

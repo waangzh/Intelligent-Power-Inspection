@@ -84,10 +84,23 @@ const siteRoutes = computed(() => routeStore.getRoutesBySite(selectedSiteId.valu
 const currentRoute = computed(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
 
 watch(
+  () => siteStore.sites.map((site) => site.id),
+  (ids) => {
+    if (ids.length > 0 && !ids.includes(selectedSiteId.value)) {
+      selectedSiteId.value = ids[0]
+    }
+  },
+  { immediate: true },
+)
+
+watch(
   siteRoutes,
   (routes) => {
-    if (!selectedRouteId.value && routes.length) {
+    if (routes.length && !routes.some((route) => route.id === selectedRouteId.value)) {
       selectRoute(routes[0].id)
+    } else if (!routes.length) {
+      selectedRouteId.value = ''
+      pendingDoc.value = null
     }
   },
   { immediate: true },

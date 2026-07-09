@@ -35,6 +35,7 @@
           <div style="height: 220px">
             <Map2D
               :center="mapCenter"
+              :fallback-center="fallbackCenter"
               :route="activeRoute"
               :robot-position="robotPos"
             />
@@ -166,8 +167,11 @@ const activeRoute = computed(() =>
 const mapCenter = computed(() => {
   const route = activeRoute.value
   if (route?.path[0]) return route.path[0]
-  if (route) return siteStore.getSiteById(route.siteId)?.center ?? { lat: 30.27, lng: 120.15 }
-  return { lat: 30.27, lng: 120.15 }
+  return fallbackCenter.value ?? { lat: 30.27, lng: 120.15 }
+})
+const fallbackCenter = computed(() => {
+  const route = activeRoute.value
+  return route ? siteStore.getSiteById(route.siteId)?.center ?? siteStore.sites[0]?.center : siteStore.sites[0]?.center
 })
 const robotPos = computed(() => {
   if (!activeTask.value) return null

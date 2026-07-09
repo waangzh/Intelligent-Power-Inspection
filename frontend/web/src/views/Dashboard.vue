@@ -76,6 +76,7 @@
             <Map2D
               v-if="activeSite"
               :center="activeSite.center"
+              :fallback-center="activeSite.center"
               :areas="siteStore.getAreasBySite(selectedSiteId)"
               :route="displayRoute"
               :robot-position="robotPosition"
@@ -139,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ChartCard from '@/components/ChartCard.vue'
 import Map2D from '@/components/Map2D.vue'
@@ -167,6 +168,15 @@ const robotStore = useRobotStore()
 const alarmStore = useAlarmStore()
 
 const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
+watch(
+  () => siteStore.sites.map((site) => site.id),
+  (ids) => {
+    if (ids.length > 0 && !ids.includes(selectedSiteId.value)) {
+      selectedSiteId.value = ids[0]
+    }
+  },
+  { immediate: true },
+)
 const activeSite = computed(() => siteStore.getSiteById(selectedSiteId.value))
 const displayRoute = computed(() => {
   const active = taskStore.getActiveTask()
