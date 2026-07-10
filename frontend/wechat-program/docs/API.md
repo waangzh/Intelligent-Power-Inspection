@@ -116,7 +116,7 @@ type UserRole = 'ADMIN' | 'DISPATCHER' | 'VIEWER'
 type Permission =
   | 'task:view' | 'task:create' | 'task:dispatch' | 'task:control'
   | 'site:edit' | 'route:edit' | 'alarm:ack'
-  | 'robot:manage' | 'lingbot:manage' | 'detection:manage'
+  | 'robot:manage' | 'detection:manage'
   | 'user:manage' | 'record:export'
 ```
 
@@ -180,13 +180,12 @@ type Permission =
 
 状态：`PENDING → PROCESSING → REVIEW → CLOSED`
 
-### 5.6 机器人 / 检测 / LingBot / 通知
+### 5.6 机器人 / 检测 / 通知
 
 | 模块 | 主要方法 | HTTP 前缀 |
 |------|----------|-----------|
 | 机器人 | `getRobots`, `addRobot`, `removeRobot` | `/robots` |
 | 检测策略 | `getDetectionTemplates`, `addDetectionTemplate`, `removeDetectionTemplate` | `/detection-templates` |
-| LingBot | `getLingBotJobs`, `createLingBotJob`, `simulateLingBotProgress` | `/lingbot/jobs` |
 | 通知 | `getNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `removeNotification` | `/notifications` |
 
 ### 5.7 聚合
@@ -211,7 +210,7 @@ type Permission =
 | `pi_tasks` / `pi_records` / `pi_task_events` | 任务相关 |
 | `pi_alarms` / `pi_work_orders` | 告警与工单 |
 | `pi_robots` / `pi_detection_templates` | 机器人与检测 |
-| `pi_lingbot_jobs` / `pi_notifications` | 建图与通知 |
+| `pi_notifications` | 通知 |
 
 ---
 
@@ -232,7 +231,6 @@ type Permission =
 | `pages/tasks/index` | `/tasks` | `task:view` |
 | `pages/tasks/detail/index` | `/tasks/:id` | `task:view` |
 | `pages/robots/index` | `/robots` | `robot:manage` |
-| `pages/lingbot/index` | `/lingbot` | `lingbot:manage` |
 | `pages/detection/index` | `/detection` | `detection:manage` |
 | `pages/records/index` | `/records` | 登录 |
 | `pages/statistics/index` | `/statistics` | 登录 |

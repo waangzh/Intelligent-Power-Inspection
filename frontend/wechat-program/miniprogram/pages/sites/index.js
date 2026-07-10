@@ -9,7 +9,7 @@ Page({
     siteAreas: [],
     showForm: false,
     editingId: '',
-    form: { name: '', address: '', description: '', lat: '30.2741', lng: '120.1551', lingbotMapId: '' },
+    form: { name: '', address: '', description: '', lat: '30.2741', lng: '120.1551' },
   },
 
   onShow() {
@@ -39,7 +39,7 @@ Page({
     this.setData({
       showForm: true,
       editingId: '',
-      form: { name: '', address: '', description: '', lat: '30.2741', lng: '120.1551', lingbotMapId: '' },
+      form: { name: '', address: '', description: '', lat: '30.2741', lng: '120.1551' },
     })
   },
 
@@ -55,7 +55,6 @@ Page({
         description: site.description || '',
         lat: String(site.center?.lat ?? 30.2741),
         lng: String(site.center?.lng ?? 120.1551),
-        lingbotMapId: site.lingbotMapId || '',
       },
     })
   },
@@ -78,7 +77,6 @@ Page({
       address: form.address,
       description: form.description,
       center: { lat: parseFloat(form.lat) || 30.2741, lng: parseFloat(form.lng) || 120.1551 },
-      lingbotMapId: form.lingbotMapId || undefined,
       createdAt: editingId ? undefined : new Date().toISOString(),
     }
     await api.saveSite(site)

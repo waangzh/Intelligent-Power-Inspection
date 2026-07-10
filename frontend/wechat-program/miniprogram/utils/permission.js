@@ -2,7 +2,7 @@ const ROLE_PERMISSIONS = {
   ADMIN: [
     'task:view', 'task:create', 'task:dispatch', 'task:control',
     'site:edit', 'route:edit', 'alarm:ack', 'robot:manage',
-    'lingbot:manage', 'detection:manage', 'user:manage', 'record:export',
+    'detection:manage', 'user:manage', 'record:export',
   ],
   DISPATCHER: [
     'task:view', 'task:create', 'task:dispatch', 'task:control',

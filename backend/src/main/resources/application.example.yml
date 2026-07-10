@@ -33,9 +33,6 @@ app:
       base-url: http://127.0.0.1:9001
       timeout-seconds: 900
       generation-mode: fast
-    lingbot-map:
-      base-url: ${APP_MODEL_LINGBOT_MAP_BASE_URL:http://127.0.0.1:9002}
-      timeout-seconds: ${APP_MODEL_LINGBOT_MAP_TIMEOUT_SECONDS:30}
     llm:
       base-url: ${APP_MODEL_LLM_BASE_URL:http://127.0.0.1:9003}
       api-key: ${APP_MODEL_LLM_API_KEY:}

@@ -9,7 +9,6 @@ export type Permission =
   | 'route:edit'
   | 'alarm:ack'
   | 'robot:manage'
-  | 'lingbot:manage'
   | 'detection:manage'
   | 'user:manage'
   | 'record:export'
@@ -29,7 +28,6 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'route:edit',
     'alarm:ack',
     'robot:manage',
-    'lingbot:manage',
     'detection:manage',
     'user:manage',
     'record:export',

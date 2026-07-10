@@ -15,7 +15,6 @@
     "pages/routes/index",
     "pages/tasks/detail/index",
     "pages/robots/index",
-    "pages/lingbot/index",
     "pages/detection/index",
     "pages/records/index",
     "pages/statistics/index",

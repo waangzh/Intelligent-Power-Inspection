@@ -6,7 +6,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ModelProperties {
   private String mode = "http";
   private LocateAnything locateAnything = new LocateAnything();
-  private LingBotMap lingbotMap = new LingBotMap();
   private Llm llm = new Llm();
   private String serviceToken;
 
@@ -24,14 +23,6 @@ public class ModelProperties {
 
   public void setLocateAnything(LocateAnything locateAnything) {
     this.locateAnything = locateAnything;
-  }
-
-  public LingBotMap getLingbotMap() {
-    return lingbotMap;
-  }
-
-  public void setLingbotMap(LingBotMap lingbotMap) {
-    this.lingbotMap = lingbotMap;
   }
 
   public Llm getLlm() {
@@ -77,27 +68,6 @@ public class ModelProperties {
 
     public void setGenerationMode(String generationMode) {
       this.generationMode = generationMode;
-    }
-  }
-
-  public static class LingBotMap {
-    private String baseUrl = "http://127.0.0.1:9002";
-    private int timeoutSeconds = 30;
-
-    public String getBaseUrl() {
-      return baseUrl;
-    }
-
-    public void setBaseUrl(String baseUrl) {
-      this.baseUrl = baseUrl;
-    }
-
-    public int getTimeoutSeconds() {
-      return timeoutSeconds;
-    }
-
-    public void setTimeoutSeconds(int timeoutSeconds) {
-      this.timeoutSeconds = timeoutSeconds;
     }
   }
 

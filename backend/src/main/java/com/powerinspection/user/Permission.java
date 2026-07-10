@@ -9,7 +9,6 @@ public enum Permission {
   ROUTE_EDIT("route:edit"),
   ALARM_ACK("alarm:ack"),
   ROBOT_MANAGE("robot:manage"),
-  LINGBOT_MANAGE("lingbot:manage"),
   DETECTION_MANAGE("detection:manage"),
   USER_MANAGE("user:manage"),
   RECORD_EXPORT("record:export");

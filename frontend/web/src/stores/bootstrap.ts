@@ -1,6 +1,5 @@
 import { useAlarmStore } from '@/stores/alarm'
 import { useDetectionStore } from '@/stores/detection'
-import { useLingBotStore } from '@/stores/lingbot'
 import { useNotificationStore } from '@/stores/notification'
 import { useRobotStore } from '@/stores/robot'
 import { useRouteStore } from '@/stores/route'
@@ -8,7 +7,7 @@ import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { connectRealtime, disconnectRealtime, subscribeTopic } from '@/api/realtime'
-import type { Alarm, InspectionTask, LingBotMapJob, Robot, TaskEvent } from '@/types'
+import type { Alarm, InspectionTask, Robot, TaskEvent } from '@/types'
 import type { AppNotification } from '@/types/notification'
 
 const SESSION_KEY = 'pi_session'
@@ -23,7 +22,6 @@ export async function loadAppData() {
   const alarmStore = useAlarmStore()
   const workOrderStore = useWorkOrderStore()
   const detectionStore = useDetectionStore()
-  const lingbotStore = useLingBotStore()
   const notificationStore = useNotificationStore()
 
   await Promise.allSettled([
@@ -34,7 +32,6 @@ export async function loadAppData() {
     alarmStore.load(),
     workOrderStore.load(),
     detectionStore.load(),
-    lingbotStore.load(),
     notificationStore.load(),
   ])
   startRealtime()
@@ -58,9 +55,6 @@ export function startRealtime() {
     subscribeTopic<Alarm>('/topic/alarms', (alarm) => {
       useAlarmStore().applyRemoteAlarm(alarm)
       void useNotificationStore().load()
-    }),
-    subscribeTopic<LingBotMapJob>('/topic/lingbot/jobs', (job) => {
-      useLingBotStore().applyRemoteJob(job)
     }),
     subscribeTopic<AppNotification>('/topic/notifications', (notification) => {
       useNotificationStore().applyRemoteNotification(notification)

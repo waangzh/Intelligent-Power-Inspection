@@ -104,12 +104,6 @@ const router = createRouter({
           meta: { title: '机器人管理', requiresAuth: true, permission: 'robot:manage', breadcrumbs: [{ label: '资产感知' }, { label: '机器人管理' }] },
         },
         {
-          path: 'lingbot',
-          name: 'LingBot',
-          component: () => import('@/views/LingBotMap.vue'),
-          meta: { title: 'LingBot 建图', requiresAuth: true, permission: 'lingbot:manage', breadcrumbs: [{ label: '资产感知' }, { label: 'LingBot 建图' }] },
-        },
-        {
           path: 'detection',
           name: 'Detection',
           component: () => import('@/views/DetectionStrategy.vue'),

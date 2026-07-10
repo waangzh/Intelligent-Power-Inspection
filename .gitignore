@@ -19,9 +19,6 @@ Thumbs.db
 
 # Tests
 ai-services/**/tests/
-!ai-services/lingbot-map-service/tests/
-!ai-services/lingbot-map-service/tests/**
-ai-services/lingbot-map-service/tests/__pycache__/
 
 # Build
 dist/

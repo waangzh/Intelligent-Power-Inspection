@@ -65,9 +65,9 @@ function createDemoRoutes() {
 }
 
 const defaultSites = [
-  { id: 'site_001', name: '城东 220kV 变电站', address: '浙江省杭州市余杭区', description: '主变 2 台，户外 GIS 设备区', center: { lat: 30.2741, lng: 120.1551 }, lingbotMapId: 'lingbot_map_001', createdAt: '2026-01-15T08:00:00Z' },
+  { id: 'site_001', name: '城东 220kV 变电站', address: '浙江省杭州市余杭区', description: '主变 2 台，户外 GIS 设备区', center: { lat: 30.2741, lng: 120.1551 }, createdAt: '2026-01-15T08:00:00Z' },
   { id: 'site_002', name: '城西 110kV 变电站', address: '浙江省杭州市西湖区', description: '室内开关室 + 室外电容器组', center: { lat: 30.2599, lng: 120.12 }, createdAt: '2026-02-01T08:00:00Z' },
-  { id: 'site_003', name: '城南 500kV 变电站', address: '浙江省杭州市萧山区', description: '特高压枢纽站，户外设备规模大', center: { lat: 30.185, lng: 120.265 }, lingbotMapId: 'lingbot_map_003', createdAt: '2026-03-10T08:00:00Z' },
+  { id: 'site_003', name: '城南 500kV 变电站', address: '浙江省杭州市萧山区', description: '特高压枢纽站，户外设备规模大', center: { lat: 30.185, lng: 120.265 }, createdAt: '2026-03-10T08:00:00Z' },
 ]
 
 const defaultAreas = [
@@ -115,11 +115,6 @@ module.exports = {
     { id: 'tpl_route_001', name: '路线标准检测', scope: 'ROUTE', types: ['PERSON', 'HELMET', 'OBSTACLE', 'FIRE'], description: '行进过程中持续检测', prompts: {}, createdAt: '2026-01-10T08:00:00Z' },
     { id: 'tpl_cp_001', name: '刀闸开关检测', scope: 'CHECKPOINT', types: ['SWITCH', 'METER'], description: '刀闸分合状态与表计读数', prompts: { SWITCH: '红色刀闸开关', METER: '压力表读数区域' }, createdAt: '2026-01-10T08:00:00Z' },
     { id: 'tpl_cp_002', name: '设备渗漏检测', scope: 'CHECKPOINT', types: ['OIL_LEAK', 'FOREIGN_OBJECT', 'FIRE'], description: '渗漏、异物与烟火', prompts: { OIL_LEAK: '设备底部渗油区域' }, createdAt: '2026-02-15T08:00:00Z' },
-  ],
-  defaultLingBotJobs: [
-    { id: 'lingbot_job_001', siteId: 'site_001', siteName: '城东 220kV 变电站', name: '主变区春季建图', status: 'COMPLETED', progress: 100, pointCount: 1250000, videoCount: 48, createdAt: '2026-03-01T08:00:00Z', completedAt: '2026-03-02T18:00:00Z' },
-    { id: 'lingbot_job_002', siteId: 'site_002', siteName: '城西 110kV 变电站', name: '开关室增量更新', status: 'PROCESSING', progress: 62, pointCount: 480000, videoCount: 12, createdAt: '2026-06-01T10:00:00Z' },
-    { id: 'lingbot_job_003', siteId: 'site_003', siteName: '城南 500kV 变电站', name: '全站初始建图', status: 'PENDING', progress: 0, pointCount: 0, videoCount: 0, createdAt: '2026-06-07T09:00:00Z' },
   ],
   seedAlarms,
   seedRecords,

@@ -473,40 +473,6 @@ async function removeDetectionTemplate(id) {
   await http.del(`/detection-templates/${id}`)
 }
 
-// ==================== LingBot ====================
-async function getLingBotJobs() {
-  if (useMock()) return mock.getState().lingbotJobs
-  return http.get('/lingbot/jobs')
-}
-
-async function createLingBotJob(siteId, siteName, name) {
-  if (useMock()) {
-    const jobs = mock.getState().lingbotJobs
-    const job = { id: uid('lingbot'), siteId, siteName, name, status: 'PENDING', progress: 0, pointCount: 0, videoCount: 0, createdAt: new Date().toISOString() }
-    jobs.unshift(job)
-    mock.save(mock.KEYS.lingbot, jobs)
-    return job
-  }
-  return http.post('/lingbot/jobs', { siteId, name })
-}
-
-async function simulateLingBotProgress(id) {
-  if (useMock()) {
-    const jobs = mock.getState().lingbotJobs
-    const idx = jobs.findIndex((j) => j.id === id)
-    if (idx < 0) return
-    const job = jobs[idx]
-    if (job.status === 'PENDING') job.status = 'PROCESSING'
-    job.progress = Math.min(100, job.progress + 15)
-    job.pointCount += Math.floor(Math.random() * 50000) + 10000
-    job.videoCount += 1
-    if (job.progress >= 100) { job.status = 'COMPLETED'; job.completedAt = new Date().toISOString() }
-    mock.save(mock.KEYS.lingbot, jobs)
-    return job
-  }
-  return http.post(`/lingbot/jobs/${id}/simulate`)
-}
-
 // ==================== Notifications ====================
 async function getNotifications(userId) {
   if (useMock()) {
@@ -607,9 +573,6 @@ module.exports = {
   getDetectionTemplates,
   addDetectionTemplate,
   removeDetectionTemplate,
-  getLingBotJobs,
-  createLingBotJob,
-  simulateLingBotProgress,
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,

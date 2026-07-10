@@ -36,7 +36,7 @@
           <el-icon :size="19"><Menu /></el-icon>
         </el-button>
         <span class="page-title">{{ currentTitle }}</span>
-        <el-tag class="product-tag" type="info" size="small" effect="plain">LocateAnything + LingBot-Map</el-tag>
+        <el-tag class="product-tag" type="info" size="small" effect="plain">LocateAnything</el-tag>
       </div>
 
       <button type="button" class="global-search" aria-label="搜索并打开应用导航" @click="navOpen = true">

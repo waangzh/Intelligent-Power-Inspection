@@ -21,12 +21,6 @@
           >
             <el-table-column prop="name" label="站点名称" />
             <el-table-column prop="address" label="地址" show-overflow-tooltip />
-            <el-table-column label="LingBot-Map" width="110">
-              <template #default="{ row }">
-                <el-tag v-if="row.lingbotMapId" type="success" size="small">已关联</el-tag>
-                <el-tag v-else type="info" size="small">未建图</el-tag>
-              </template>
-            </el-table-column>
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
                 <el-button v-if="can('site:edit')" text type="primary" size="small" @click.stop="openSiteDialog(row)">编辑</el-button>
@@ -82,9 +76,6 @@
         </el-form-item>
         <el-form-item label="中心经度">
           <el-input-number v-model="siteForm.center.lng" :step="0.0001" :precision="4" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="LingBot ID">
-          <el-input v-model="siteForm.lingbotMapId" placeholder="三维建图 ID（可选）" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -148,7 +139,6 @@ const siteForm = reactive({
   address: '',
   description: '',
   center: { lat: 30.2741, lng: 120.1551 },
-  lingbotMapId: '',
 })
 
 const areaForm = reactive({ name: '' })
@@ -169,7 +159,6 @@ function openSiteDialog(site?: Site) {
       address: site.address,
       description: site.description,
       center: { ...site.center },
-      lingbotMapId: site.lingbotMapId ?? '',
     })
   } else {
     Object.assign(siteForm, {
@@ -177,7 +166,6 @@ function openSiteDialog(site?: Site) {
       address: '',
       description: '',
       center: { lat: 30.2741, lng: 120.1551 },
-      lingbotMapId: '',
     })
   }
   siteDialogVisible.value = true
@@ -194,7 +182,6 @@ function saveSite() {
       address: siteForm.address,
       description: siteForm.description,
       center: { ...siteForm.center },
-      lingbotMapId: siteForm.lingbotMapId || undefined,
     })
     ElMessage.success('站点已更新')
   } else {
@@ -203,7 +190,6 @@ function saveSite() {
       address: siteForm.address,
       description: siteForm.description,
       center: { ...siteForm.center },
-      lingbotMapId: siteForm.lingbotMapId || undefined,
     })
     currentSite.value = site
     ElMessage.success('站点已创建')

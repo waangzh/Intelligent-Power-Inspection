@@ -71,7 +71,6 @@ export interface Site {
   address: string
   description: string
   center: LatLng
-  lingbotMapId?: string
   createdAt: string
 }
 
@@ -147,51 +146,6 @@ export interface DetectionTemplate {
   description: string
   prompts: Record<string, string>
   createdAt: string
-}
-
-export type LingBotMapStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
-export type LingBotMapInputKind = 'video' | 'image_sequence'
-export type LingBotMapOutputProfile = 'preview' | 'viewer-ready' | 'rendered-video' | 'predictions'
-
-export interface LingBotMapArtifacts {
-  pointCloudUrl?: string
-  meshUrl?: string
-  trajectoryUrl?: string
-  previewVideoUrl?: string
-  metadataUrl?: string
-}
-
-export interface LingBotMapJob {
-  id: string
-  siteId: string
-  siteName: string
-  name: string
-  status: LingBotMapStatus
-  progress: number
-  pointCount: number
-  videoCount: number
-  inputKind?: LingBotMapInputKind
-  videoUrl?: string
-  imageFolderUrl?: string
-  fps?: number
-  stride?: number
-  keyframeInterval?: number
-  windowSize?: number
-  outputProfile?: LingBotMapOutputProfile
-  maskSky?: boolean
-  externalJobId?: string
-  frameCount?: number
-  mapId?: string
-  artifacts?: LingBotMapArtifacts
-  errorMessage?: string
-  createdAt: string
-  completedAt?: string
-}
-
-export interface LingBotVideoUploadResponse {
-  videoUrl: string
-  filename: string
-  size: number
 }
 
 export interface InspectionTask {

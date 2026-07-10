@@ -29,7 +29,6 @@ const menuGroups = [
     title: '资产感知',
     items: [
       { path: '/pages/robots/index', label: '机器人管理', icon: '🤖', permission: 'robot:manage' },
-      { path: '/pages/lingbot/index', label: 'LingBot 建图', icon: '📦', permission: 'lingbot:manage' },
       { path: '/pages/detection/index', label: '检测策略', icon: '👁️', permission: 'detection:manage' },
     ],
   },

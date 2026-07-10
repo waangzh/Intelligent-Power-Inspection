@@ -58,7 +58,7 @@ class HttpModelGatewayTests {
       """);
     });
 
-    HttpLocateAnythingGateway gateway = new HttpLocateAnythingGateway(properties(baseUrl, baseUrl));
+    HttpLocateAnythingGateway gateway = new HttpLocateAnythingGateway(properties(baseUrl));
     List<LocateAnythingFinding> findings = gateway.detectCheckpoint(new LocateAnythingRequest(
       Map.of("id", "task_001"),
       Map.of("id", "route_001"),
@@ -75,47 +75,10 @@ class HttpModelGatewayTests {
     assertThat(requestBody.get()).contains("\"generationMode\":\"fast\"");
   }
 
-  @Test
-  void httpLingBotMapGatewayMapsStatusAndArtifacts() {
-    AtomicReference<String> requestBody = new AtomicReference<>();
-    server.createContext("/v1/reconstruction/jobs", exchange -> {
-      requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-      writeJson(exchange, """
-      {"jobId":"py_job_001","status":"QUEUED","progress":0}
-      """);
-    });
-    server.createContext("/v1/reconstruction/jobs/py_job_001", exchange -> writeJson(exchange, """
-      {
-        "jobId": "py_job_001",
-        "status": "SUCCEEDED",
-        "progress": 100,
-        "mapId": "map_001",
-        "frameCount": 1200,
-        "pointCount": 120000,
-        "artifacts": {"pointCloudUrl": "http://example.test/maps/map_001/cloud.ply"}
-      }
-      """));
-
-    HttpLingBotMapGateway gateway = new HttpLingBotMapGateway(properties(baseUrl, baseUrl));
-    Map<String, Object> created = gateway.createJob(Map.of("id", "lingbot_001", "siteId", "site_001", "videoUrl", "http://example.test/video.mp4"));
-    Map<String, Object> completed = gateway.advanceJob(created);
-    Map<String, Object> pointCloud = gateway.pointCloud(completed);
-
-    assertThat(created.get("status")).isEqualTo("PENDING");
-    assertThat(created.get("externalJobId")).isEqualTo("py_job_001");
-    assertThat(requestBody.get()).contains("\"videoUrl\":\"http://example.test/video.mp4\"");
-    assertThat(completed.get("status")).isEqualTo("COMPLETED");
-    assertThat(completed.get("frameCount")).isEqualTo(1200);
-    assertThat(completed).doesNotContainKey("videoCount");
-    assertThat(pointCloud.get("url")).isEqualTo("http://example.test/maps/map_001/cloud.ply");
-  }
-
-  private ModelProperties properties(String locateBaseUrl, String lingbotBaseUrl) {
+  private ModelProperties properties(String locateBaseUrl) {
     ModelProperties properties = new ModelProperties();
     properties.getLocateAnything().setBaseUrl(locateBaseUrl);
     properties.getLocateAnything().setTimeoutSeconds(5);
-    properties.getLingbotMap().setBaseUrl(lingbotBaseUrl);
-    properties.getLingbotMap().setTimeoutSeconds(5);
     return properties;
   }
 

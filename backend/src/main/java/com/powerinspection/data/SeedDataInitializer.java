@@ -77,9 +77,9 @@ public class SeedDataInitializer implements ApplicationRunner {
 
   private void seedBusinessData() {
     if (dataStore.list(DataCategory.SITE).isEmpty()) {
-      site("site_001", "城东 220kV 变电站", "浙江省杭州市余杭区", "主变 2 台，户外 GIS 设备区", 30.2741, 120.1551, "lingbot_map_001", "2026-01-15T08:00:00Z");
-      site("site_002", "城西 110kV 变电站", "浙江省杭州市西湖区", "室内开关室 + 室外电容器组", 30.2599, 120.12, null, "2026-02-01T08:00:00Z");
-      site("site_003", "城南 500kV 变电站", "浙江省杭州市萧山区", "特高压枢纽站，户外设备规模大", 30.185, 120.265, "lingbot_map_003", "2026-03-10T08:00:00Z");
+      site("site_001", "城东 220kV 变电站", "浙江省杭州市余杭区", "主变 2 台，户外 GIS 设备区", 30.2741, 120.1551, "2026-01-15T08:00:00Z");
+      site("site_002", "城西 110kV 变电站", "浙江省杭州市西湖区", "室内开关室 + 室外电容器组", 30.2599, 120.12, "2026-02-01T08:00:00Z");
+      site("site_003", "城南 500kV 变电站", "浙江省杭州市萧山区", "特高压枢纽站，户外设备规模大", 30.185, 120.265, "2026-03-10T08:00:00Z");
     }
     if (dataStore.list(DataCategory.AREA).isEmpty()) {
       area("area_001", "site_001", "主变区域", List.of(latLng(30.2745, 120.1545), latLng(30.2745, 120.1558), latLng(30.2738, 120.1558), latLng(30.2738, 120.1545)));
@@ -98,11 +98,6 @@ public class SeedDataInitializer implements ApplicationRunner {
     }
     if (dataStore.list(DataCategory.ROUTE).isEmpty()) {
       routeDemo();
-    }
-    if (dataStore.list(DataCategory.LINGBOT_JOB).isEmpty()) {
-      lingbot("lingbot_job_001", "site_001", "城东 220kV 变电站", "主变区春季建图", "COMPLETED", 100, 1250000, 48, "2026-03-01T08:00:00Z", "2026-03-02T18:00:00Z");
-      lingbot("lingbot_job_002", "site_002", "城西 110kV 变电站", "开关室增量更新", "PROCESSING", 62, 480000, 12, "2026-06-01T10:00:00Z", null);
-      lingbot("lingbot_job_003", "site_003", "城南 500kV 变电站", "全站初始建图", "PENDING", 0, 0, 0, "2026-06-07T09:00:00Z", null);
     }
     if (dataStore.list(DataCategory.ALARM).isEmpty()) {
       alarm("alarm_seed_001", "task_demo", "主变区例行巡检", null, "HELMET", "HIGH", "检测到作业人员未佩戴安全帽", "https://picsum.photos/seed/alarm1/400/240", false);
@@ -124,11 +119,8 @@ public class SeedDataInitializer implements ApplicationRunner {
     }
   }
 
-  private void site(String id, String name, String address, String description, double lat, double lng, String lingbotMapId, String createdAt) {
+  private void site(String id, String name, String address, String description, double lat, double lng, String createdAt) {
     Map<String, Object> item = map("id", id, "name", name, "address", address, "description", description, "center", latLng(lat, lng), "createdAt", createdAt);
-    if (lingbotMapId != null) {
-      item.put("lingbotMapId", lingbotMapId);
-    }
     dataStore.upsert(DataCategory.SITE, item);
   }
 
@@ -195,14 +187,6 @@ public class SeedDataInitializer implements ApplicationRunner {
       "schedules", List.of()
     );
   }
-  private void lingbot(String id, String siteId, String siteName, String name, String status, int progress, int pointCount, int videoCount, String createdAt, String completedAt) {
-    Map<String, Object> item = map("id", id, "siteId", siteId, "siteName", siteName, "name", name, "status", status, "progress", progress, "pointCount", pointCount, "videoCount", videoCount, "createdAt", createdAt);
-    if (completedAt != null) {
-      item.put("completedAt", completedAt);
-    }
-    dataStore.upsert(DataCategory.LINGBOT_JOB, item);
-  }
-
   private void alarm(String id, String taskId, String routeName, String checkpointName, String type, String severity, String message, String imageUrl, boolean acknowledged) {
     Map<String, Object> item = map("id", id, "taskId", taskId, "routeName", routeName, "type", type, "severity", severity, "message", message, "imageUrl", imageUrl, "acknowledged", acknowledged, "createdAt", Instant.now().minusSeconds(3600).toString());
     if (checkpointName != null) {

@@ -18,7 +18,6 @@ const KEYS = {
   workOrders: 'pi_work_orders',
   robots: 'pi_robots',
   detection: 'pi_detection_templates',
-  lingbot: 'pi_lingbot_jobs',
   notifications: 'pi_notifications',
   slamMaps: 'pi_slam_maps',
 }
@@ -92,7 +91,6 @@ function getState() {
     workOrders: initList(KEYS.workOrders, seed.seedWorkOrders),
     robots: initList(KEYS.robots, seed.defaultRobots),
     detectionTemplates: initList(KEYS.detection, seed.defaultDetectionTemplates),
-    lingbotJobs: initList(KEYS.lingbot, seed.defaultLingBotJobs),
     notifications: loadFromStorage(KEYS.notifications, []),
   }
 }

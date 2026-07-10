@@ -1,8 +1,0 @@
-.info-row { display: flex; flex-wrap: wrap; gap: 16rpx; margin-bottom: 16rpx; }
-.info-card { flex: 1; min-width: 45%; }
-.feature-item { font-size: 26rpx; color: #606266; padding: 8rpx 0; }
-.job-item { padding: 16rpx 0; border-bottom: 1rpx solid #f0f2f5; }
-.job-name { font-weight: 600; }
-.form-row { display: flex; align-items: center; gap: 16rpx; margin-bottom: 16rpx; }
-.form-label { width: 140rpx; color: #6b7c93; }
-.picker-val { color: #1a5fb4; }

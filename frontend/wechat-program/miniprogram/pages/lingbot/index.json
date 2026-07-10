@@ -1,7 +1,0 @@
-{
-  "navigationBarTitleText": "LingBot 建图",
-  "usingComponents": {
-    "page-header": "/components/page-header/index",
-    "map-3d-placeholder": "/components/map-3d-placeholder/index"
-  }
-}

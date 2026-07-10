@@ -44,7 +44,6 @@ export const menuGroups: MenuGroup[] = [
     title: '资产感知',
     items: [
       { path: '/robots', label: '机器人管理', icon: 'Cpu', permission: 'robot:manage' },
-      { path: '/lingbot', label: 'LingBot 建图', icon: 'Box', permission: 'lingbot:manage' },
       { path: '/detection', label: '检测策略', icon: 'View', permission: 'detection:manage' },
     ],
   },
