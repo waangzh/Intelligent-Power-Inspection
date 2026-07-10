@@ -7,6 +7,7 @@ import type {
   InspectionRecord,
   InspectionTask,
   ManualDetectionResponse,
+  MapAsset,
   Robot,
   Route,
   TaskEvent,
@@ -35,6 +36,12 @@ export const resourcesApi = {
     http.patch<Checkpoint>(`/routes/${routeId}/checkpoints/${checkpointId}`, patch),
   removeCheckpoint: (routeId: string, checkpointId: string) =>
     http.delete<void>(`/routes/${routeId}/checkpoints/${checkpointId}`),
+
+  uploadMapAsset: (form: FormData) => http.postForm<MapAsset>('/map-assets', form),
+  getMapAsset: (id: string) => http.get<MapAsset>(`/map-assets/${id}`),
+  getMapAssetYaml: (id: string) => http.get<Blob>(`/map-assets/${id}/yaml`),
+  getMapAssetPgm: (id: string) => http.get<Blob>(`/map-assets/${id}/pgm`),
+  removeMapAsset: (id: string) => http.delete<void>(`/map-assets/${id}`),
 
   listTasks: () => http.get<InspectionTask[]>('/tasks'),
   createTask: (task: InspectionTask) => http.post<InspectionTask>('/tasks', task),

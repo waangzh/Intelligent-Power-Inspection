@@ -9,14 +9,14 @@
         <el-select v-model="selectedSiteId" placeholder="选择站点" style="width: 220px" @change="onSiteChange">
           <el-option v-for="s in siteStore.sites" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
-        <el-button v-if="can('route:edit')" type="primary" :disabled="!selectedSiteId" @click="createRoute">
+        <el-button v-if="can('route:edit')" type="primary" :disabled="!selectedSiteId" :loading="creatingRoute" @click="createRoute">
           <el-icon><Plus /></el-icon>
           新建路线
         </el-button>
-        <el-button v-if="can('route:edit') && currentRoute" type="success" @click="saveToPlatform">
+        <el-button v-if="can('route:edit') && currentRoute" type="success" :loading="savingRoute" @click="saveToPlatform">
           保存到平台
         </el-button>
-        <el-button v-if="can('route:edit') && currentRoute" type="danger" plain @click="deleteRoute">
+        <el-button v-if="can('route:edit') && currentRoute" type="danger" plain :loading="deletingRoute" @click="deleteRoute">
           删除路线
         </el-button>
       </template>
@@ -50,7 +50,9 @@
           :key="currentRoute.id"
           :initial-json="currentRoute.executorJson ?? undefined"
           :default-route-id="currentRoute.id"
+          :map-id="currentRoute.mapId"
           @change="onEditorChange"
+          @map-files-change="onMapFilesChange"
         />
         <div v-else class="empty-panel">
           <div class="empty-hint">请选择或创建巡检路线</div>
@@ -63,12 +65,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { resourcesApi } from '@/api/resources'
 import PageHeader from '@/components/PageHeader.vue'
 import RosMapRouteEditor from '@/components/RosMapRouteEditor.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
-import type { Route } from '@/types'
+import type { MapAsset, MapAssetFiles, Route } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
 
 const siteStore = useSiteStore()
@@ -79,6 +82,10 @@ const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
 const selectedRouteId = ref('')
 const pendingDoc = ref<RouteExecutorDocument | null>(null)
 const editorRef = ref<InstanceType<typeof RosMapRouteEditor> | null>(null)
+const creatingRoute = ref(false)
+const savingRoute = ref(false)
+const deletingRoute = ref(false)
+const pendingMapFiles = ref<MapAssetFiles | null>(null)
 
 const siteRoutes = computed(() => routeStore.getRoutesBySite(selectedSiteId.value))
 const currentRoute = computed(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
@@ -101,6 +108,7 @@ watch(
     } else if (!routes.length) {
       selectedRouteId.value = ''
       pendingDoc.value = null
+      pendingMapFiles.value = null
     }
   },
   { immediate: true },
@@ -113,43 +121,99 @@ function targetCount(route: Route) {
 function onSiteChange() {
   selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
   pendingDoc.value = currentRoute.value?.executorJson ?? null
+  pendingMapFiles.value = null
 }
 
 function selectRoute(id: string) {
   selectedRouteId.value = id
   pendingDoc.value = routeStore.getRouteById(id)?.executorJson ?? null
+  pendingMapFiles.value = null
 }
 
-function createRoute() {
-  const route = routeStore.createRoute(selectedSiteId.value, `巡检路线 ${siteRoutes.value.length + 1}`)
-  selectRoute(route.id)
-  pendingDoc.value = null
-  ElMessage.success('路线已创建，请加载 YAML/PGM 地图并开始标注')
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+async function createRoute() {
+  if (creatingRoute.value) return
+  creatingRoute.value = true
+  try {
+    const route = await routeStore.createRoute(selectedSiteId.value, `巡检路线 ${siteRoutes.value.length + 1}`)
+    selectRoute(route.id)
+    pendingDoc.value = null
+    ElMessage.success('路线已创建，请加载 YAML/PGM 地图并开始标注')
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '路线创建失败'))
+  } finally {
+    creatingRoute.value = false
+  }
 }
 
 function onEditorChange(doc: RouteExecutorDocument) {
   pendingDoc.value = doc
 }
 
-function saveToPlatform() {
+function onMapFilesChange(files: MapAssetFiles) {
+  pendingMapFiles.value = files
+}
+
+async function saveToPlatform() {
   if (!currentRoute.value || !pendingDoc.value) {
     ElMessage.warning('请先在地图上标注路线')
     return
   }
-  routeStore.saveExecutorRoute(currentRoute.value.id, pendingDoc.value)
-  ElMessage.success('路线已保存到平台')
+  if (!currentRoute.value.mapId && !pendingMapFiles.value) {
+    ElMessage.warning('请先导入完整的 YAML/PGM 地图')
+    return
+  }
+  if (savingRoute.value) return
+  savingRoute.value = true
+  let uploadedAsset: MapAsset | null = null
+  try {
+    if (pendingMapFiles.value) {
+      const form = new FormData()
+      form.append('siteId', currentRoute.value.siteId)
+      form.append('yaml', pendingMapFiles.value.yaml)
+      form.append('pgm', pendingMapFiles.value.pgm)
+      uploadedAsset = await resourcesApi.uploadMapAsset(form)
+    }
+    const mapId = uploadedAsset?.id ?? currentRoute.value.mapId
+    if (!mapId) throw new Error('地图资产上传失败')
+    await routeStore.saveExecutorRoute(currentRoute.value.id, pendingDoc.value, mapId)
+    pendingMapFiles.value = null
+    ElMessage.success('路线已保存到平台')
+  } catch (error) {
+    if (uploadedAsset) {
+      try {
+        await resourcesApi.removeMapAsset(uploadedAsset.id)
+      } catch {
+        // A late response failure may still leave the asset referenced by the route.
+      }
+    }
+    ElMessage.error(errorMessage(error, '路线保存失败'))
+  } finally {
+    savingRoute.value = false
+  }
 }
 
-function deleteRoute() {
+async function deleteRoute() {
   if (!currentRoute.value) return
-  ElMessageBox.confirm('确定删除该路线？', '确认', { type: 'warning' })
-    .then(() => {
-      routeStore.removeRoute(currentRoute.value!.id)
-      selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
-      pendingDoc.value = currentRoute.value?.executorJson ?? null
-      ElMessage.success('已删除')
-    })
-    .catch(() => {})
+  try {
+    await ElMessageBox.confirm('确定删除该路线？', '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  deletingRoute.value = true
+  try {
+    await routeStore.removeRoute(currentRoute.value.id)
+    selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
+    pendingDoc.value = currentRoute.value?.executorJson ?? null
+    ElMessage.success('已删除')
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '路线删除失败'))
+  } finally {
+    deletingRoute.value = false
+  }
 }
 </script>
 

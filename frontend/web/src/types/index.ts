@@ -108,10 +108,37 @@ export interface Route {
   path: LatLng[]
   routeDetections: DetectionItem[]
   checkpoints: Checkpoint[]
-  mapMode: '2d' | '3d'
+  mapMode: '2d' | '3d' | 'ros2d'
+  /** Persisted ROS map asset referenced by this route. */
+  mapId?: string | null
   /** ROS map route executor JSON (version 2). */
   executorJson?: import('@/types/routeExecutor').RouteExecutorDocument | null
   createdAt: string
+}
+
+export interface MapAsset {
+  id: string
+  siteId: string
+  status: 'AVAILABLE'
+  yamlName: string
+  pgmName: string
+  image: string
+  resolution: number
+  origin: [number, number, number]
+  negate: number
+  width: number
+  height: number
+  yamlSize: number
+  pgmSize: number
+  yamlSha256: string
+  pgmSha256: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MapAssetFiles {
+  yaml: File
+  pgm: File
 }
 
 export interface Robot {

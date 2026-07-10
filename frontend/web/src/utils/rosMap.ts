@@ -1,42 +1,73 @@
 import type { RosMapState } from '@/types/routeExecutor'
+import { parseDocument } from 'yaml'
 
 export function round3(value: number): number {
   return Math.round(Number(value) * 1000) / 1000
 }
 
 export function parseYaml(text: string): Partial<RosMapState> {
-  const config: Record<string, unknown> = {}
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.split('#')[0].trim()
-    if (!line) continue
-    const match = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/)
-    if (!match) continue
-    const key = match[1]
-    let value: unknown = match[2].trim()
-    if (
-      (typeof value === 'string' && value.startsWith('"') && value.endsWith('"')) ||
-      (typeof value === 'string' && value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = (value as string).slice(1, -1)
-    } else if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
-      value = value
-        .slice(1, -1)
-        .split(',')
-        .map((part) => Number(part.trim()))
-    } else if (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value)) {
-      value = Number(value)
-    }
-    config[key] = value
+  if (text.length > 1024 * 1024) {
+    throw new Error('YAML 文件过大，最大支持 1 MB。')
   }
 
-  const patch: Partial<RosMapState> = {}
-  if (typeof config.resolution === 'number') patch.resolution = config.resolution
-  if (Array.isArray(config.origin) && config.origin.length >= 3) {
-    patch.origin = [Number(config.origin[0]), Number(config.origin[1]), Number(config.origin[2])]
+  const document = parseDocument(text, { prettyErrors: true, strict: true, uniqueKeys: true })
+  if (document.errors.length) {
+    throw new Error(`YAML 解析失败：${document.errors[0].message}`)
   }
-  if (typeof config.negate === 'number') patch.negate = config.negate
-  if (typeof config.image === 'string') patch.image = config.image
-  return patch
+
+  let value: unknown
+  try {
+    value = document.toJS({ maxAliasCount: 0 })
+  } catch (error) {
+    throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : String(error)}`)
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('YAML 根节点必须是地图配置对象。')
+  }
+
+  const config = value as Record<string, unknown>
+  const image = typeof config.image === 'string' ? config.image.trim() : ''
+  const resolution = Number(config.resolution)
+  const origin = config.origin
+  if (!image) throw new Error('YAML 缺少有效的 image 字段。')
+  if (!/\.pgm$/i.test(image)) throw new Error('当前地图编辑器只支持 YAML 引用 PGM 图像。')
+  if (!Number.isFinite(resolution) || resolution <= 0) {
+    throw new Error('YAML 的 resolution 必须是大于 0 的数字。')
+  }
+  if (!Array.isArray(origin) || origin.length !== 3 || origin.some((item) => !Number.isFinite(Number(item)))) {
+    throw new Error('YAML 的 origin 必须包含 3 个有效数字。')
+  }
+
+  const negateValue = config.negate ?? 0
+  const negate = typeof negateValue === 'boolean' ? Number(negateValue) : Number(negateValue)
+  if (negate !== 0 && negate !== 1) throw new Error('YAML 的 negate 只能是 0、1、false 或 true。')
+
+  for (const key of ['free_thresh', 'occupied_thresh'] as const) {
+    if (config[key] === undefined) continue
+    const threshold = Number(config[key])
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+      throw new Error(`YAML 的 ${key} 必须是 0 到 1 之间的数字。`)
+    }
+  }
+  if (config.free_thresh !== undefined && config.occupied_thresh !== undefined) {
+    if (Number(config.free_thresh) >= Number(config.occupied_thresh)) {
+      throw new Error('YAML 的 free_thresh 必须小于 occupied_thresh。')
+    }
+  }
+  if (config.mode !== undefined && !['trinary', 'scale', 'raw'].includes(String(config.mode))) {
+    throw new Error('YAML 的 mode 只能是 trinary、scale 或 raw。')
+  }
+
+  return {
+    image,
+    resolution,
+    origin: [Number(origin[0]), Number(origin[1]), Number(origin[2])],
+    negate,
+  }
+}
+
+export function rosMapImageFileName(image: string): string {
+  return image.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ''
 }
 
 function readAsciiToken(bytes: Uint8Array, indexRef: { index: number }): string {
@@ -65,9 +96,15 @@ export function parsePgm(buffer: ArrayBuffer): Pick<RosMapState, 'width' | 'heig
   const width = Number(readAsciiToken(bytes, indexRef))
   const height = Number(readAsciiToken(bytes, indexRef))
   const maxVal = Number(readAsciiToken(bytes, indexRef))
-  while (indexRef.index < bytes.length && bytes[indexRef.index] <= 32) indexRef.index += 1
   if (magic !== 'P5' || !width || !height || maxVal <= 0 || maxVal > 255) {
     throw new Error('只支持 8-bit P5 PGM 地图。')
+  }
+  if (bytes[indexRef.index] === 13 && bytes[indexRef.index + 1] === 10) {
+    indexRef.index += 2
+  } else if (bytes[indexRef.index] <= 32) {
+    indexRef.index += 1
+  } else {
+    throw new Error('PGM 文件头与像素数据之间缺少分隔符。')
   }
   const expected = width * height
   const pixels = bytes.slice(indexRef.index, indexRef.index + expected)

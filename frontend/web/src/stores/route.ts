@@ -29,7 +29,7 @@ export const useRouteStore = defineStore('route', () => {
     routes.value = await resourcesApi.listRoutes()
   }
 
-  function createRoute(siteId: string, name: string, description = '') {
+  async function createRoute(siteId: string, name: string, description = '') {
     const route: Route = {
       id: uid('route'),
       siteId,
@@ -41,22 +41,22 @@ export const useRouteStore = defineStore('route', () => {
       mapMode: '2d',
       createdAt: new Date().toISOString(),
     }
-    routes.value.push(route)
-    void resourcesApi.createRoute(route).then(updateLocalRoute)
-    return route
+    const saved = await resourcesApi.createRoute(route)
+    routes.value.push(saved)
+    return saved
   }
 
-  function updateRoute(id: string, patch: Partial<Route>) {
+  async function updateRoute(id: string, patch: Partial<Route>) {
     const idx = routes.value.findIndex((r) => r.id === id)
-    if (idx >= 0) {
-      routes.value[idx] = { ...routes.value[idx], ...patch }
-      void resourcesApi.updateRoute(id, patch).then(updateLocalRoute)
-    }
+    if (idx < 0) throw new Error('待保存的路线不存在。')
+    const saved = await resourcesApi.updateRoute(id, patch)
+    updateLocalRoute(saved)
+    return saved
   }
 
-  function removeRoute(id: string) {
+  async function removeRoute(id: string) {
+    await resourcesApi.removeRoute(id)
     routes.value = routes.value.filter((r) => r.id !== id)
-    void resourcesApi.removeRoute(id)
   }
 
   function addCheckpoint(routeId: string, checkpoint: Omit<Checkpoint, 'id' | 'routeId' | 'seq' | 'detections'>) {
@@ -114,16 +114,17 @@ export const useRouteStore = defineStore('route', () => {
       }))
   }
 
-  function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument) {
+  async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument, mapId: string) {
     const routeName = doc.routes[0]?.name || doc.active_route_id
     const checkpoints = checkpointsFromExecutor(routeId, doc)
     const path = checkpoints.map((cp) => cp.position)
-    updateRoute(routeId, {
+    return updateRoute(routeId, {
       name: routeName,
       executorJson: doc,
       checkpoints,
       path,
       mapMode: '2d',
+      mapId,
     })
   }
 

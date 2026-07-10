@@ -28,6 +28,10 @@ public class ApiException extends RuntimeException {
     return new ApiException(HttpStatus.NOT_FOUND, 404, message);
   }
 
+  public static ApiException conflict(String message) {
+    return new ApiException(HttpStatus.CONFLICT, 409, message);
+  }
+
   public HttpStatus status() {
     return status;
   }

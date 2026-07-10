@@ -6,6 +6,7 @@ import com.powerinspection.common.ApiResponse;
 import com.powerinspection.common.Ids;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.mapasset.MapAssetService;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
@@ -30,11 +31,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class RouteController extends CrudSupport {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
+  private final MapAssetService mapAssetService;
 
-  public RouteController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser) {
+  public RouteController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, MapAssetService mapAssetService) {
     super(dataStore);
     this.permissionService = permissionService;
     this.currentUser = currentUser;
+    this.mapAssetService = mapAssetService;
   }
 
   @GetMapping
@@ -55,7 +58,9 @@ public class RouteController extends CrudSupport {
   @PostMapping
   public ApiResponse<Map<String, Object>> createRoute(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
-    ensureSiteExists(String.valueOf(body.get("siteId")));
+    String siteId = String.valueOf(body.get("siteId"));
+    ensureSiteExists(siteId);
+    validateMapAsset(body.get("mapId"), siteId);
     body.putIfAbsent("id", Ids.next("route"));
     body.putIfAbsent("path", List.of());
     body.putIfAbsent("checkpoints", List.of());
@@ -82,19 +87,30 @@ public class RouteController extends CrudSupport {
   private Map<String, Object> updateRoutePayload(String id, Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(id);
-    if (body.containsKey("siteId")) {
-      ensureSiteExists(String.valueOf(body.get("siteId")));
-    }
+    Map<String, Object> current = dataStore.get(DataCategory.ROUTE, id);
+    String siteId = body.containsKey("siteId") ? String.valueOf(body.get("siteId")) : String.valueOf(current.get("siteId"));
+    ensureSiteExists(siteId);
+    Object mapId = body.containsKey("mapId") ? body.get("mapId") : current.get("mapId");
+    validateMapAsset(mapId, siteId);
+    String previousMapId = text(current.get("mapId"));
     body.put("id", id);
     RouteExecutorSupport.normalizeRoute(body);
-    return RouteExecutorSupport.attachRosAlias(update(DataCategory.ROUTE, id, body));
+    current.putAll(body);
+    Map<String, Object> updated = RouteExecutorSupport.attachRosAlias(dataStore.upsert(DataCategory.ROUTE, current));
+    String updatedMapId = text(updated.get("mapId"));
+    if (previousMapId != null && !previousMapId.equals(updatedMapId)) {
+      mapAssetService.deleteIfUnreferenced(previousMapId);
+    }
+    return updated;
   }
 
   @DeleteMapping("/{id}")
   public ApiResponse<Void> deleteRoute(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(id);
+    String mapId = text(dataStore.get(DataCategory.ROUTE, id).get("mapId"));
     delete(DataCategory.ROUTE, id);
+    mapAssetService.deleteIfUnreferenced(mapId);
     return ApiResponse.ok();
   }
 
@@ -164,6 +180,16 @@ public class RouteController extends CrudSupport {
     if (dataStore.find(DataCategory.SITE, siteId) == null) {
       throw ApiException.badRequest("站点不存在");
     }
+  }
+
+  private void validateMapAsset(Object rawMapId, String siteId) {
+    String mapId = text(rawMapId);
+    if (mapId != null) mapAssetService.ensureAvailableForSite(mapId, siteId);
+  }
+
+  private String text(Object value) {
+    if (value == null || value.toString().isBlank() || "null".equals(value.toString())) return null;
+    return value.toString();
   }
 
   private void ensureNoActiveTaskForRoute(String routeId) {

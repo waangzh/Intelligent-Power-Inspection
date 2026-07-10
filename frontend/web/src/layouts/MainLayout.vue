@@ -259,7 +259,7 @@ function handleUserCommand(command: string) {
 
 .sidebar-brand strong {
   overflow: hidden;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
@@ -270,11 +270,12 @@ function handleUserCommand(command: string) {
 }
 
 .sidebar-group-title {
-  padding: 13px 18px 5px;
-  color: #6682a1;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1;
+  padding: 16px 18px 7px;
+  color: #718ba8;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -287,7 +288,7 @@ function handleUserCommand(command: string) {
 
 .sidebar-menu {
   width: auto;
-  padding: 0 10px;
+  padding: 0 11px;
   border-right: 0;
   background: transparent;
 }
@@ -298,14 +299,17 @@ function handleUserCommand(command: string) {
 }
 
 .sidebar-menu :deep(.el-menu-item) {
-  height: 34px;
-  margin: 2px 0;
-  padding: 0 11px !important;
-  color: #afc0d4;
+  height: 42px;
+  margin: 1px 0;
+  padding: 0 12px !important;
+  color: #bdcad9;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
   transition: color var(--pi-motion), border-color var(--pi-motion), background-color var(--pi-motion), box-shadow var(--pi-motion);
 }
 
@@ -315,10 +319,10 @@ function handleUserCommand(command: string) {
 }
 
 .sidebar-menu :deep(.el-menu-item .el-icon) {
-  width: 18px;
-  margin-right: 9px;
+  width: 20px;
+  margin-right: 10px;
   color: #9fb4ca;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .sidebar-menu.el-menu--collapse :deep(.el-menu-item .el-icon) {
@@ -628,8 +632,11 @@ function handleUserCommand(command: string) {
 }
 
 :deep(.app-nav-drawer .el-menu-item) {
+  min-height: 44px;
   color: #afc0d4;
   background: transparent;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 :deep(.app-nav-drawer .el-menu-item:hover) {

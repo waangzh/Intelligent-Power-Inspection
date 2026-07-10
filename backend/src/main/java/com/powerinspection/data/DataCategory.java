@@ -4,6 +4,7 @@ public final class DataCategory {
   public static final String SITE = "sites";
   public static final String AREA = "areas";
   public static final String SLAM_MAP = "slamMaps";
+  public static final String MAP_ASSET = "mapAssets";
   public static final String ROUTE = "routes";
   public static final String ROBOT = "robots";
   public static final String TASK = "tasks";
