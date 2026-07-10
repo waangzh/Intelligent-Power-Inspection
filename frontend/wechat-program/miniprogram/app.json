@@ -19,7 +19,6 @@
     "pages/records/index",
     "pages/statistics/index",
     "pages/users/index",
-    "pages/bigscreen/index",
     "pages/profile/avatar/index",
     "pages/profile/security/index",
     "pages/profile/activity/index",

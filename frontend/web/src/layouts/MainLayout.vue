@@ -57,10 +57,6 @@
             <span>告警</span>
           </el-button>
         </el-badge>
-        <el-button class="topbar-action control-action" text @click="router.push('/bigscreen')">
-          <el-icon><Monitor /></el-icon>
-          <span>集控</span>
-        </el-button>
         <el-divider direction="vertical" />
         <el-dropdown trigger="click" @command="handleUserCommand">
           <span class="user-dropdown">

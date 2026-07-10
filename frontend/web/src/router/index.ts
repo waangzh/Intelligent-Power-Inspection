@@ -173,12 +173,6 @@ const router = createRouter({
         },
       ],
     },
-    {
-      path: '/bigscreen',
-      name: 'BigScreen',
-      component: () => import('@/views/BigScreen.vue'),
-      meta: { title: '集控大屏', requiresAuth: true },
-    },
   ],
 })
 

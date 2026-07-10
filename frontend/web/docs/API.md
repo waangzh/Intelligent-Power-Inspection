@@ -530,7 +530,6 @@ interface Alarm {
 | `/dashboard` | 运行总览 | 登录 |
 | `/monitor` | 实时监控 | 登录 |
 | `/alarms` | 告警中心 | 登录 |
-| `/bigscreen` | 集控大屏 | 登录 |
 | `/workorders` | 工单管理 | `task:dispatch` |
 | `/notifications` | 消息中心 | 登录 |
 | `/sites` | 站点管理 | `site:edit` |

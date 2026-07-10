@@ -7,7 +7,6 @@ const menuGroups = [
       { path: '/pages/dashboard/index', label: '运行总览', icon: '📊' },
       { path: '/pages/monitor/index', label: '实时监控', icon: '📡' },
       { path: '/pages/alarms/index', label: '告警中心', icon: '🔔' },
-      { path: '/pages/bigscreen/index', label: '集控大屏', icon: '🖥️' },
     ],
   },
   {

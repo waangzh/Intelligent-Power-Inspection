@@ -223,7 +223,6 @@ type Permission =
 | `pages/dashboard/index` | `/dashboard` | 登录 |
 | `pages/monitor/index` | `/monitor` | 登录 |
 | `pages/alarms/index` | `/alarms` | 登录 |
-| `pages/bigscreen/index` | `/bigscreen` | 登录 |
 | `pages/workorders/index` | `/workorders` | `task:dispatch` |
 | `pages/notifications/index` | `/notifications` | 登录 |
 | `pages/sites/index` | `/sites` | `site:edit` |

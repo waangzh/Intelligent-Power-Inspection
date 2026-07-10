@@ -21,7 +21,6 @@ export const menuGroups: MenuGroup[] = [
       { path: '/dashboard', label: '运行总览', icon: 'Odometer' },
       { path: '/monitor', label: '实时监控', icon: 'Monitor' },
       { path: '/alarms', label: '告警中心', icon: 'Bell' },
-      { path: '/bigscreen', label: '集控大屏', icon: 'FullScreen' },
     ],
   },
   {
