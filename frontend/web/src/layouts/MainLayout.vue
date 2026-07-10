@@ -658,8 +658,7 @@ function handleUserCommand(command: string) {
     max-width: 300px;
   }
 
-  .product-tag,
-  .control-action {
+  .product-tag {
     display: none;
   }
 }
