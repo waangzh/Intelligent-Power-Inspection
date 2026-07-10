@@ -25,7 +25,7 @@ MySQL / H2 测试数据库
 | **认证** | JWT Token，前端 `pi_session` 保存会话 |
 | **鉴权** | 后端 Spring Security + 前端路由守卫，基于 `UserRole` + `Permission` |
 | **数据** | 后端数据库持久化，刷新后从 `/api/v1` 恢复 |
-| **实时** | 后端调度器模拟任务进度，并通过 WebSocket/STOMP topic 推送；前端启动后订阅实时更新 |
+| **实时** | 后端调度器模拟任务/建图进度，并通过 WebSocket/STOMP topic 推送；前端启动后订阅实时更新 |
 
 ---
 
@@ -71,6 +71,7 @@ type Permission =
   | 'route:edit'      // 巡检规划
   | 'alarm:ack'       // 告警确认
   | 'robot:manage'    // 机器人管理
+  | 'lingbot:manage'  // LingBot 建图
   | 'detection:manage'// 检测策略
   | 'user:manage'     // 用户管理
   | 'record:export'   // 记录导出
@@ -85,7 +86,7 @@ type Permission =
 | site:edit / route:edit | ✅ | ✅ | ❌ |
 | alarm:ack | ✅ | ✅ | ❌ |
 | record:export | ✅ | ✅ | ❌ |
-| robot / detection / user:manage | ✅ | ❌ | ❌ |
+| robot / lingbot / detection / user:manage | ✅ | ❌ | ❌ |
 
 **路由守卫**：未登录 → `/login`；无权限 → `/403`  
 **用户管理**：额外限制 `roles: ['ADMIN']`
@@ -272,6 +273,7 @@ interface Site {
   address: string
   description: string
   center: { lat: number; lng: number }
+  lingbotMapId?: string    // 关联三维建图 ID
   createdAt: string
 }
 ```
@@ -495,7 +497,37 @@ interface Alarm {
 
 ---
 
-### 5.11 消息通知 — `useNotificationStore`
+### 5.11 LingBot 建图 — `useLingBotStore`
+
+**Key**：`pi_lingbot_jobs`
+
+| 方法 | 说明 |
+|------|------|
+| `createJob(siteId, siteName, name)` | 创建建图任务（状态 `PENDING`） |
+| `simulateProgress(id)` | **演示**：进度 +15%，点云数假增 |
+
+**LingBotMapJob**：
+
+```typescript
+interface LingBotMapJob {
+  id: string
+  siteId: string
+  siteName: string
+  name: string
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  progress: number        // 0～100
+  pointCount: number
+  videoCount: number
+  createdAt: string
+  completedAt?: string
+}
+```
+
+> ⚠️ **未对接**真实 LingBot-Map，当前为后端模拟建图进度。
+
+---
+
+### 5.12 消息通知 — `useNotificationStore`
 
 **数据来源**：后端 `/api/v1/notifications`，新通知通过 `/topic/notifications` 或 `/topic/notifications/{userId}` 推送。
 
@@ -517,7 +549,7 @@ interface Alarm {
 |-----|------|
 | `pi_session` | 登录会话，包含 JWT token、当前用户和可选过期时间 |
 
-核心业务数据（用户、站点、路线、任务、告警、工单、机器人、检测模板、通知、记录）由后端数据库持久化。
+核心业务数据（用户、站点、路线、任务、告警、工单、机器人、检测模板、建图任务、通知、记录）由后端数据库持久化。
 
 ---
 
@@ -530,6 +562,7 @@ interface Alarm {
 | `/dashboard` | 运行总览 | 登录 |
 | `/monitor` | 实时监控 | 登录 |
 | `/alarms` | 告警中心 | 登录 |
+| `/bigscreen` | 集控大屏 | 登录 |
 | `/workorders` | 工单管理 | `task:dispatch` |
 | `/notifications` | 消息中心 | 登录 |
 | `/sites` | 站点管理 | `site:edit` |
@@ -537,6 +570,7 @@ interface Alarm {
 | `/tasks` | 任务调度 | `task:view` |
 | `/tasks/:id` | 任务详情 | `task:view` |
 | `/robots` | 机器人管理 | `robot:manage` |
+| `/lingbot` | LingBot 建图 | `lingbot:manage` |
 | `/detection` | 检测策略 | `detection:manage` |
 | `/records` | 巡检记录 | 登录 |
 | `/statistics` | 统计分析 | 登录 |
@@ -611,6 +645,9 @@ Content-Type: application/json
 | 检测 | CRUD | `/detection-templates` | `useDetectionStore` |
 | 记录 | GET | `/records` | `useTaskStore.records` |
 | 记录 | POST | `/records/export` | 导出 CSV |
+| 建图 | POST | `/lingbot/jobs` | 创建建图任务 |
+| 建图 | GET | `/lingbot/jobs/{id}` | 查询任务状态 |
+| 建图 | GET | `/lingbot/maps/{id}/pointcloud` | 点云/模型 URL |
 | 通知 | GET | `/notifications` | `forUser` |
 | 通知 | PATCH | `/notifications/{id}/read` | `markRead` |
 
@@ -652,6 +689,8 @@ Content-Type: application/json
 /topic/robots                → 机器人状态/遥测更新
 /topic/robots/{robotId}      → 单机器人状态/遥测更新
 /topic/alarms                → 新告警推送
+/topic/lingbot/jobs          → 建图任务更新
+/topic/lingbot/jobs/{id}     → 单建图任务更新
 /topic/notifications         → 全员通知
 /topic/notifications/{userId}→ 用户通知
 ```
@@ -663,6 +702,7 @@ Content-Type: application/json
 | 问题 | 答案 |
 |------|------|
 | 有没有 HTTP API？ | **有**，`/api/v1` |
+| 三维建图真实吗？ | **否**，后端 `simulate` 模拟 |
 | 任务执行真实吗？ | **半真实**，后端调度器模拟进度、事件、机器人位置和记录 |
 | 路线规划真实吗？ | **半真实**，`/routes` 为 ROS map 标注 + route.json v2；PGM/YAML 本地上传，平台持久化 `executorJson` |
 | 检测/告警真实吗？ | **否**，后端随机模拟 + picsum 占位图 |

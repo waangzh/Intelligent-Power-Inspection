@@ -6,8 +6,9 @@ import type {
   DetectionTemplate,
   InspectionRecord,
   InspectionTask,
+  LingBotMapJob,
+  LingBotVideoUploadResponse,
   ManualDetectionResponse,
-  MapAsset,
   Robot,
   Route,
   TaskEvent,
@@ -37,12 +38,6 @@ export const resourcesApi = {
   removeCheckpoint: (routeId: string, checkpointId: string) =>
     http.delete<void>(`/routes/${routeId}/checkpoints/${checkpointId}`),
 
-  uploadMapAsset: (form: FormData) => http.postForm<MapAsset>('/map-assets', form),
-  getMapAsset: (id: string) => http.get<MapAsset>(`/map-assets/${id}`),
-  getMapAssetYaml: (id: string) => http.get<Blob>(`/map-assets/${id}/yaml`),
-  getMapAssetPgm: (id: string) => http.get<Blob>(`/map-assets/${id}/pgm`),
-  removeMapAsset: (id: string) => http.delete<void>(`/map-assets/${id}`),
-
   listTasks: () => http.get<InspectionTask[]>('/tasks'),
   createTask: (task: InspectionTask) => http.post<InspectionTask>('/tasks', task),
   dispatchTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/dispatch`),
@@ -63,8 +58,8 @@ export const resourcesApi = {
     http.post<WorkOrder>(`/work-orders/from-alarm/${alarmId}`, { assigneeName }),
   updateWorkOrderStatus: (id: string, status: WorkOrderStatus, extra?: { resolution?: string }) =>
     http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
-  assignWorkOrder: (id: string, assigneeName: string) =>
-    http.patch<WorkOrder>(`/work-orders/${id}/assign`, { assigneeName }),
+  assignWorkOrder: (id: string, assignee: { name: string; id?: string }) =>
+    http.patch<WorkOrder>(`/work-orders/${id}/assign`, { assigneeName: assignee.name, assigneeId: assignee.id }),
 
   listRobots: () => http.get<Robot[]>('/robots'),
   createRobot: (robot: Robot) => http.post<Robot>('/robots', robot),
@@ -77,6 +72,12 @@ export const resourcesApi = {
   removeDetectionTemplate: (id: string) => http.delete<void>(`/detection-templates/${id}`),
   manualLocateDetection: (form: FormData) => http.postForm<ManualDetectionResponse>(`/detections/manual`, form),
   getManualLocateDetection: (requestId: string) => http.get<ManualDetectionResponse>(`/detections/manual/${requestId}`),
+
+  listLingBotJobs: () => http.get<LingBotMapJob[]>('/lingbot/jobs'),
+  createLingBotJob: (job: LingBotMapJob) => http.post<LingBotMapJob>('/lingbot/jobs', job),
+  simulateLingBotJob: (id: string) => http.post<LingBotMapJob>(`/lingbot/jobs/${id}/simulate`),
+  refreshLingBotJob: (id: string) => http.post<LingBotMapJob>(`/lingbot/jobs/${id}/refresh`),
+  uploadLingBotVideo: (form: FormData) => http.postForm<LingBotVideoUploadResponse>('/lingbot/uploads/video', form),
 
   listNotifications: () => http.get<AppNotification[]>('/notifications'),
   markNotificationRead: (id: string) => http.patch<AppNotification>(`/notifications/${id}/read`),

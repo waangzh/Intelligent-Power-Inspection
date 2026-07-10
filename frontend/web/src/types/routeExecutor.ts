@@ -15,10 +15,21 @@ export interface RouteExecutorTarget {
   taskDuration: number
 }
 
+export interface RouteMapSnapshot {
+  width: number
+  height: number
+  resolution: number
+  origin: [number, number, number]
+  negate: number
+  pgm_base64: string
+}
+
 export interface RouteExecutorDocument {
   version: 2
   frame_id: 'map'
   active_route_id: string
+  /** 保存路线时附带的 2D 建图快照，供实时监控复用 */
+  map_snapshot?: RouteMapSnapshot
   start_pose: {
     name: string
     pose: MapPose

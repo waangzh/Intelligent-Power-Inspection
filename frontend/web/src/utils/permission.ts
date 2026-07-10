@@ -12,6 +12,12 @@ export type Permission =
   | 'detection:manage'
   | 'user:manage'
   | 'record:export'
+  | 'workorder:view'
+  | 'workorder:create'
+  | 'workorder:assign'
+  | 'workorder:process'
+  | 'workorder:review'
+  | 'alarm:policy'
 
 export interface AccessRule {
   permission?: Permission
@@ -31,6 +37,11 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'detection:manage',
     'user:manage',
     'record:export',
+    'workorder:view',
+    'workorder:create',
+    'workorder:assign',
+    'workorder:review',
+    'alarm:policy',
   ],
   DISPATCHER: [
     'task:view',
@@ -41,6 +52,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'route:edit',
     'alarm:ack',
     'record:export',
+    'workorder:view',
+    'workorder:process',
   ],
   VIEWER: ['task:view'],
 }

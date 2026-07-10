@@ -22,7 +22,7 @@ export interface RouteFormState {
   maxCycles: number
 }
 
-export function createDefaultRouteForm(routeId = 'route_patrol_001'): RouteFormState {
+export function createDefaultRouteForm(routeId = 'route_patrol_001', routeName?: string): RouteFormState {
   return {
     startName: '初始起点',
     startX: 0,
@@ -34,7 +34,7 @@ export function createDefaultRouteForm(routeId = 'route_patrol_001'): RouteFormS
     covYaw: 0.0685,
     routeId,
     activeRouteId: routeId,
-    routeName: '本地巡逻路线',
+    routeName: routeName?.trim() || '本地巡逻路线',
     goalTimeout: 120,
     maxRetries: 1,
     failurePolicy: 'abort_and_return_home',
@@ -150,6 +150,15 @@ export function buildRouteJson(form: RouteFormState, targets: RouteExecutorTarge
       },
     ],
     schedules: [],
+  }
+}
+
+export function withPlatformRouteName(doc: RouteExecutorDocument, platformName: string): RouteExecutorDocument {
+  const name = platformName.trim()
+  if (!name || !doc.routes[0]) return doc
+  return {
+    ...doc,
+    routes: [{ ...doc.routes[0], name }, ...doc.routes.slice(1)],
   }
 }
 

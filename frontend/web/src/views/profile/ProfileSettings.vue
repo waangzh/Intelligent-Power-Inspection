@@ -32,6 +32,12 @@
           <span class="item-hint">默认收起左侧菜单</span>
         </el-form-item>
       </div>
+
+      <div v-if="can('alarm:policy')" class="settings-group">
+        <h4 class="group-title">告警转工单策略</h4>
+        <p class="group-desc">按告警级别配置自动或人工转工单，保存后立即生效</p>
+        <AlarmEscalationPolicy />
+      </div>
     </el-form>
 
     <div class="form-footer">
@@ -44,6 +50,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import AlarmEscalationPolicy from '@/components/AlarmEscalationPolicy.vue'
+import { usePermission } from '@/composables/usePermission'
 import { useAuthStore } from '@/stores/auth'
 import { useProfileStore } from '@/stores/profile'
 import { useSiteStore } from '@/stores/site'
@@ -52,6 +60,7 @@ import type { UserPreferences } from '@/types/auth'
 const authStore = useAuthStore()
 const profileStore = useProfileStore()
 const siteStore = useSiteStore()
+const { can } = usePermission()
 const saving = ref(false)
 
 const form = reactive<UserPreferences>({
@@ -121,6 +130,12 @@ onMounted(loadPrefs)
   font-weight: 600;
   color: #1a2b3c;
   border-bottom: 1px solid #f0f2f5;
+}
+
+.group-desc {
+  margin: -8px 0 14px;
+  font-size: 12px;
+  color: #909399;
 }
 
 .item-hint {

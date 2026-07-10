@@ -4,6 +4,7 @@ import { resourcesApi } from '@/api/resources'
 import type { Checkpoint, DetectionItem, DetectionType, Route } from '@/types'
 import { CHECKPOINT_DETECTIONS, ROUTE_DETECTIONS } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
+import { withPlatformRouteName } from '@/utils/routeExecutorJson'
 import { uid } from '@/utils/storage'
 
 function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
@@ -41,22 +42,24 @@ export const useRouteStore = defineStore('route', () => {
       mapMode: '2d',
       createdAt: new Date().toISOString(),
     }
+    routes.value.push(route)
     const saved = await resourcesApi.createRoute(route)
-    routes.value.push(saved)
+    updateLocalRoute(saved)
     return saved
   }
 
   async function updateRoute(id: string, patch: Partial<Route>) {
     const idx = routes.value.findIndex((r) => r.id === id)
-    if (idx < 0) throw new Error('待保存的路线不存在。')
+    if (idx < 0) return
+    routes.value[idx] = { ...routes.value[idx], ...patch }
     const saved = await resourcesApi.updateRoute(id, patch)
     updateLocalRoute(saved)
     return saved
   }
 
   async function removeRoute(id: string) {
-    await resourcesApi.removeRoute(id)
     routes.value = routes.value.filter((r) => r.id !== id)
+    await resourcesApi.removeRoute(id)
   }
 
   function addCheckpoint(routeId: string, checkpoint: Omit<Checkpoint, 'id' | 'routeId' | 'seq' | 'detections'>) {
@@ -114,17 +117,18 @@ export const useRouteStore = defineStore('route', () => {
       }))
   }
 
-  async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument, mapId: string) {
-    const routeName = doc.routes[0]?.name || doc.active_route_id
-    const checkpoints = checkpointsFromExecutor(routeId, doc)
+  async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument) {
+    const route = routes.value.find((r) => r.id === routeId)
+    const platformName = route?.name?.trim() || doc.routes[0]?.name || doc.active_route_id
+    const executorJson = withPlatformRouteName(doc, platformName)
+    const checkpoints = checkpointsFromExecutor(routeId, executorJson)
     const path = checkpoints.map((cp) => cp.position)
     return updateRoute(routeId, {
-      name: routeName,
-      executorJson: doc,
+      name: platformName,
+      executorJson,
       checkpoints,
       path,
       mapMode: '2d',
-      mapId,
     })
   }
 

@@ -59,7 +59,7 @@ const router = createRouter({
           path: 'workorders',
           name: 'WorkOrders',
           component: () => import('@/views/WorkOrderManage.vue'),
-          meta: { title: '工单管理', requiresAuth: true, permission: 'task:dispatch', breadcrumbs: [{ label: '运维中心' }, { label: '工单管理' }] },
+          meta: { title: '工单管理', requiresAuth: true, permission: 'workorder:view', breadcrumbs: [{ label: '运维中心' }, { label: '工单管理' }] },
         },
         {
           path: 'notifications',
@@ -172,6 +172,12 @@ const router = createRouter({
           meta: { title: '无权限', requiresAuth: true },
         },
       ],
+    },
+    {
+      path: '/bigscreen',
+      name: 'BigScreen',
+      component: () => import('@/views/BigScreen.vue'),
+      meta: { title: '集控大屏', requiresAuth: true },
     },
   ],
 })

@@ -2,7 +2,7 @@
   <div class="agent-page">
     <PageHeader
       title="巡检处置 Agent"
-      description="任务、告警、证据与待确认动作"
+      description="基于告警/任务证据的智能研判助手：汇总证据、分析缺陷等级、生成处置建议与工单草稿，需人工确认后执行"
       :breadcrumbs="[{ label: '运维中心' }, { label: '巡检处置 Agent' }]"
     >
       <template #actions>

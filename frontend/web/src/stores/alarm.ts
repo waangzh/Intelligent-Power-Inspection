@@ -3,6 +3,10 @@ import { computed, ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { Alarm, AlarmSeverity, Checkpoint, DetectionType, InspectionTask } from '@/types'
 import { DETECTION_LABELS } from '@/types'
+import { useAlarmPolicyStore } from '@/stores/alarmPolicy'
+import { useAuthStore } from '@/stores/auth'
+import { useWorkOrderStore } from '@/stores/workOrder'
+import { hasPermission } from '@/utils/permission'
 import { uid } from '@/utils/storage'
 
 const ROUTE_ALARM_TYPES: DetectionType[] = ['PERSON', 'HELMET', 'FIRE', 'OBSTACLE']
@@ -25,6 +29,29 @@ export const useAlarmStore = defineStore('alarm', () => {
 
   async function load() {
     alarms.value = await resourcesApi.listAlarms()
+    await tryAutoConvertPending()
+  }
+
+  async function tryAutoConvertForAlarm(alarm: Alarm) {
+    const policyStore = useAlarmPolicyStore()
+    const workOrderStore = useWorkOrderStore()
+    const authStore = useAuthStore()
+    const user = authStore.user
+    if (!user || !hasPermission(user.role, 'workorder:create')) return
+    if (workOrderStore.getByAlarmId(alarm.id)) return
+    if (!policyStore.shouldAutoConvert(alarm.severity)) return
+    try {
+      await workOrderStore.createFromAlarm(alarm, { id: user.id, name: user.displayName }, { autoConverted: true })
+      if (!alarm.acknowledged) acknowledge(alarm.id)
+    } catch {
+      // 已转工单或接口失败时忽略
+    }
+  }
+
+  async function tryAutoConvertPending() {
+    for (const alarm of alarms.value) {
+      await tryAutoConvertForAlarm(alarm)
+    }
   }
 
   function addAlarm(partial: Omit<Alarm, 'id' | 'createdAt' | 'acknowledged'>) {
@@ -100,6 +127,7 @@ export const useAlarmStore = defineStore('alarm', () => {
     const idx = alarms.value.findIndex((a) => a.id === alarm.id)
     if (idx >= 0) alarms.value[idx] = alarm
     else alarms.value.unshift(alarm)
+    void tryAutoConvertForAlarm(alarm)
   }
 
   return {

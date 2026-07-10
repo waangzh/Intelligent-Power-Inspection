@@ -2,7 +2,7 @@
   <div>
     <PageHeader
       title="实时监控"
-      description="机器人位姿、任务进度与视频画面（演示）"
+      description="基于 ROS 建图的机器人位姿追踪（2D 底图 + 3D 叠加）"
       :breadcrumbs="[{ label: '监控中心' }, { label: '实时监控' }]"
     />
 
@@ -17,13 +17,8 @@
               </el-select>
             </div>
           </template>
-          <div style="height: 400px">
-            <Map2D
-              :center="mapCenter"
-              :fallback-center="fallbackCenter"
-              :route="activeRoute"
-              :robot-position="robotPos"
-            />
+          <div class="map-panel">
+            <RosSlamMonitorMap :route="displayRoute" :robot-position="robotPos" />
           </div>
         </el-card>
       </el-col>
@@ -80,17 +75,15 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import Map2D from '@/components/Map2D.vue'
+import RosSlamMonitorMap from '@/components/RosSlamMonitorMap.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useRobotStore } from '@/stores/robot'
 import { useRouteStore } from '@/stores/route'
-import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
 
 const robotStore = useRobotStore()
 const taskStore = useTaskStore()
 const routeStore = useRouteStore()
-const siteStore = useSiteStore()
 
 const selectedRobotId = ref(robotStore.robots[0]?.id ?? '')
 watch(
@@ -104,19 +97,20 @@ watch(
 )
 
 const selectedRobot = computed(() => robotStore.getRobotById(selectedRobotId.value))
-const activeTask = computed(() => taskStore.getActiveTask())
-const activeRoute = computed(() =>
-  activeTask.value ? routeStore.getRouteById(activeTask.value.routeId) ?? null : null,
-)
-const mapCenter = computed(() => {
-  const r = selectedRobot.value
-  if (r?.position) return r.position
-  if (r?.siteId) return siteStore.getSiteById(r.siteId)?.center ?? { lat: 30.27, lng: 120.15 }
-  return { lat: 30.27, lng: 120.15 }
+const robotTask = computed(() => {
+  const robot = selectedRobot.value
+  if (!robot?.currentTaskId) return null
+  return taskStore.getTaskById(robot.currentTaskId) ?? null
 })
-const fallbackCenter = computed(() => {
+const displayRoute = computed(() => {
+  const routeId = robotTask.value?.routeId
+  if (routeId) return routeStore.getRouteById(routeId) ?? null
   const siteId = selectedRobot.value?.siteId
-  return siteId ? siteStore.getSiteById(siteId)?.center ?? mapCenter.value : mapCenter.value
+  if (siteId) {
+    const siteRoutes = routeStore.getRoutesBySite(siteId)
+    return siteRoutes.find((r) => r.executorJson?.map_snapshot) ?? siteRoutes[0] ?? null
+  }
+  return null
 })
 const robotPos = computed(() => selectedRobot.value?.position ?? null)
 const videoUrl = computed(() => `https://picsum.photos/seed/monitor_${selectedRobotId.value}/640/360`)
@@ -132,6 +126,10 @@ function taskName(taskId?: string) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.map-panel {
+  height: 400px;
 }
 
 .video-placeholder {

@@ -66,8 +66,8 @@ const userStore = useUserStore()
 const authStore = useAuthStore()
 
 const roleTable = [
-  { role: '管理员', desc: '系统全权管理', perms: '全部功能 + 用户管理' },
-  { role: '调度员', desc: '日常运维调度', perms: '任务下发/控制、站点路线编辑、告警确认' },
+  { role: '管理员', desc: '系统全权管理', perms: '转工单、指派/改派调度员、复核关闭，不现场处理' },
+  { role: '调度员', desc: '现场运维处置', perms: '处理工单、提交复核（不可转工单/指派/复核）' },
   { role: '观察员', desc: '只读浏览', perms: '查看监控、告警、记录，不可操作任务' },
 ]
 

@@ -63,6 +63,9 @@ export const ALARM_SEVERITY_LABELS: Record<AlarmSeverity, string> = {
 export interface LatLng {
   lat: number
   lng: number
+  x?: number
+  y?: number
+  yaw?: number
 }
 
 export interface Site {
@@ -71,6 +74,9 @@ export interface Site {
   address: string
   description: string
   center: LatLng
+  lingbotMapId?: string
+  /** 设备端建图是否已上传（由设备推送地图数据后标记） */
+  deviceMapUploaded?: boolean
   createdAt: string
 }
 
@@ -108,37 +114,10 @@ export interface Route {
   path: LatLng[]
   routeDetections: DetectionItem[]
   checkpoints: Checkpoint[]
-  mapMode: '2d' | '3d' | 'ros2d'
-  /** Persisted ROS map asset referenced by this route. */
-  mapId?: string | null
+  mapMode: '2d' | '3d'
   /** ROS map route executor JSON (version 2). */
   executorJson?: import('@/types/routeExecutor').RouteExecutorDocument | null
   createdAt: string
-}
-
-export interface MapAsset {
-  id: string
-  siteId: string
-  status: 'AVAILABLE'
-  yamlName: string
-  pgmName: string
-  image: string
-  resolution: number
-  origin: [number, number, number]
-  negate: number
-  width: number
-  height: number
-  yamlSize: number
-  pgmSize: number
-  yamlSha256: string
-  pgmSha256: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface MapAssetFiles {
-  yaml: File
-  pgm: File
 }
 
 export interface Robot {
@@ -173,6 +152,51 @@ export interface DetectionTemplate {
   description: string
   prompts: Record<string, string>
   createdAt: string
+}
+
+export type LingBotMapStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+export type LingBotMapInputKind = 'video' | 'image_sequence'
+export type LingBotMapOutputProfile = 'preview' | 'viewer-ready' | 'rendered-video' | 'predictions'
+
+export interface LingBotMapArtifacts {
+  pointCloudUrl?: string
+  meshUrl?: string
+  trajectoryUrl?: string
+  previewVideoUrl?: string
+  metadataUrl?: string
+}
+
+export interface LingBotMapJob {
+  id: string
+  siteId: string
+  siteName: string
+  name: string
+  status: LingBotMapStatus
+  progress: number
+  pointCount: number
+  videoCount: number
+  inputKind?: LingBotMapInputKind
+  videoUrl?: string
+  imageFolderUrl?: string
+  fps?: number
+  stride?: number
+  keyframeInterval?: number
+  windowSize?: number
+  outputProfile?: LingBotMapOutputProfile
+  maskSky?: boolean
+  externalJobId?: string
+  frameCount?: number
+  mapId?: string
+  artifacts?: LingBotMapArtifacts
+  errorMessage?: string
+  createdAt: string
+  completedAt?: string
+}
+
+export interface LingBotVideoUploadResponse {
+  videoUrl: string
+  filename: string
+  size: number
 }
 
 export interface InspectionTask {

@@ -2,13 +2,14 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch, type Ref } from
 import type { EditorMode, RouteExecutorDocument, RouteExecutorTarget, RosMapState } from '@/types/routeExecutor'
 import {
   createDefaultMapState,
+  decodeMapSnapshot,
+  encodeMapSnapshot,
   isMapCoordinateInside,
   mapToPixel,
   parsePgm,
   parseYaml,
   pixelToMap,
   rebuildMapBitmap,
-  rosMapImageFileName,
   round3,
 } from '@/utils/rosMap'
 import {
@@ -32,6 +33,7 @@ export function useRosMapRouteEditor(
   options?: {
     initialJson?: RouteExecutorDocument | null
     defaultRouteId?: string
+    defaultRouteName?: string
     onChange?: (doc: RouteExecutorDocument) => void
   },
 ) {
@@ -44,7 +46,9 @@ export function useRosMapRouteEditor(
   const yawPreview = ref<{ x: number; y: number } | null>(null)
   const drag = ref<DragState | null>(null)
   const nextTargetNo = ref(1)
-  const form = reactive<RouteFormState>(createDefaultRouteForm(options?.defaultRouteId))
+  const form = reactive<RouteFormState>(
+    createDefaultRouteForm(options?.defaultRouteId, options?.defaultRouteName),
+  )
   const activeRouteIdSynced = ref(true)
   const cursorInfo = ref('map: -, -')
   const mapInfo = ref('等待加载地图')
@@ -105,21 +109,14 @@ export function useRosMapRouteEditor(
     return canvasRef.value?.getContext('2d') ?? null
   }
 
-  let mapInfoDirty = true
-
   function updateMapInfoText() {
-    if (!mapInfoDirty) return
-    mapInfoDirty = false
     if (!map.width) {
-      mapInfo.value = map.yamlName
-        ? `${map.yamlName} 已加载（image: ${map.image}），请继续选择对应的 PGM 文件`
-        : '请选择或拖入 .yaml 和 .pgm 地图文件'
+      mapInfo.value = '请选择或拖入 .yaml 和 .pgm 地图文件'
       return
     }
     const wMeters = (map.width * map.resolution).toFixed(2)
     const hMeters = (map.height * map.resolution).toFixed(2)
-    const files = [map.yamlName, map.pgmName || map.image].filter(Boolean).join(' + ')
-    mapInfo.value = `${files} | ${map.width}x${map.height}px | ${wMeters}m x ${hMeters}m | res=${map.resolution}`
+    mapInfo.value = `${map.pgmName || map.image} | ${map.width}x${map.height}px | ${wMeters}m x ${hMeters}m | res=${map.resolution}`
   }
 
   function drawArrow(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: number, color: string) {
@@ -388,20 +385,8 @@ export function useRosMapRouteEditor(
   }
 
   function applyYamlText(text: string, fileName?: string) {
-    const patch = parseYaml(text)
-    const keepsExistingPgm =
-      map.pgmName &&
-      patch.image &&
-      rosMapImageFileName(patch.image).toLowerCase() === rosMapImageFileName(map.pgmName).toLowerCase()
-    if (!keepsExistingPgm) {
-      map.width = 0
-      map.height = 0
-      map.pixels = null
-      map.pgmName = ''
-    }
-    Object.assign(map, patch)
     if (fileName) map.yamlName = fileName
-    mapInfoDirty = true
+    Object.assign(map, parseYaml(text))
     if (map.pixels) {
       mapBitmapCtx = mapBitmapCanvas.getContext('2d')
       rebuildMapBitmap(map, mapBitmapCanvas)
@@ -411,15 +396,7 @@ export function useRosMapRouteEditor(
   }
 
   function applyPgmBuffer(buffer: ArrayBuffer, fileName?: string) {
-    if (
-      fileName &&
-      map.yamlName &&
-      rosMapImageFileName(map.image).toLowerCase() !== rosMapImageFileName(fileName).toLowerCase()
-    ) {
-      throw new Error(`YAML 引用 ${map.image}，请选择对应的 PGM 文件。`)
-    }
     if (fileName) map.pgmName = fileName
-    mapInfoDirty = true
     const parsed = parsePgm(buffer)
     map.width = parsed.width
     map.height = parsed.height
@@ -431,6 +408,12 @@ export function useRosMapRouteEditor(
   }
 
   function importRouteJson(doc: RouteExecutorDocument) {
+    if (doc.map_snapshot) {
+      Object.assign(map, createDefaultMapState(), decodeMapSnapshot(doc.map_snapshot))
+      mapBitmapCtx = mapBitmapCanvas.getContext('2d')
+      rebuildMapBitmap(map, mapBitmapCanvas)
+      updateMapInfoText()
+    }
     const loaded = loadRouteJson(doc, form)
     targets.value = loaded.targets
     nextTargetNo.value = loaded.nextTargetNo
@@ -444,7 +427,10 @@ export function useRosMapRouteEditor(
   }
 
   function exportDocument(): RouteExecutorDocument {
-    return buildRouteJson(form, targets.value)
+    const doc = buildRouteJson(form, targets.value)
+    const snapshot = encodeMapSnapshot(map)
+    if (snapshot) doc.map_snapshot = snapshot
+    return doc
   }
 
   function emitChange() {
@@ -600,29 +586,22 @@ export function useRosMapRouteEditor(
   }
 
   async function handleDroppedFiles(files: FileList | File[]) {
-    const selected = Array.from(files)
-    const yamlFiles = selected.filter((file) => /\.ya?ml$/i.test(file.name))
-    const pgmFiles = selected.filter((file) => /\.pgm$/i.test(file.name))
-    if (yamlFiles.length > 1) throw new Error('一次只能导入一个 YAML 地图配置。')
-    if (yamlFiles[0]) applyYamlText(await yamlFiles[0].text(), yamlFiles[0].name)
-
-    if (pgmFiles.length) {
-      const expectedName = rosMapImageFileName(map.image).toLowerCase()
-      const matches = map.yamlName
-        ? pgmFiles.filter((file) => rosMapImageFileName(file.name).toLowerCase() === expectedName)
-        : pgmFiles
-      if (matches.length !== 1) {
-        throw new Error(
-          map.yamlName
-            ? `请选择 YAML 中 image 指向的 ${map.image}。`
-            : '一次只能导入一个 PGM 地图图像。',
-        )
+    for (const file of files) {
+      if (/\.ya?ml$/i.test(file.name)) {
+        applyYamlText(await file.text(), file.name)
+      } else if (/\.pgm$/i.test(file.name)) {
+        try {
+          applyPgmBuffer(await file.arrayBuffer(), file.name)
+        } catch (error) {
+          alert(error instanceof Error ? error.message : String(error))
+        }
+      } else if (/\.json$/i.test(file.name)) {
+        try {
+          importRouteJson(JSON.parse(await file.text()))
+        } catch (error) {
+          alert(error instanceof Error ? error.message : String(error))
+        }
       }
-      applyPgmBuffer(await matches[0].arrayBuffer(), matches[0].name)
-    }
-
-    for (const file of selected.filter((item) => /\.json$/i.test(item.name))) {
-      importRouteJson(JSON.parse(await file.text()))
     }
   }
 
@@ -630,6 +609,10 @@ export function useRosMapRouteEditor(
     () => options?.initialJson,
     (doc) => {
       if (doc) importRouteJson(doc)
+      if (options?.defaultRouteName?.trim()) {
+        form.routeName = options.defaultRouteName.trim()
+        emitChange()
+      }
     },
     { immediate: true },
   )

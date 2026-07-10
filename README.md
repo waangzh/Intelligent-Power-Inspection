@@ -2,16 +2,19 @@
 
 电力智能巡检平台软件端仓库。当前仓库包含 Java 后端、Vue Web 管理端和微信小程序端，用于演示变电站巡检业务中的登录鉴权、站点管理、**ROS 地图路线标注**、任务调度、机器人管理、告警处置、工单流转、检测模板、通知中心和巡检记录等能力。
 
-当前项目定位为课程/演示级可运行系统。真实机器人和生产级部署链路尚未完整接入；LocateAnything 已接入 Python 真实模型服务，Spring Boot 默认通过 HTTP 模型网关调用该服务。
+当前项目定位为课程/演示级可运行系统。真实机器人和生产级部署链路尚未完整接入；LocateAnything 已接入 Python 真实模型服务，Spring Boot 默认通过 HTTP 模型网关调用该服务。Web 管理端已移除 LingBot 建图菜单（后端与 `ai-services/` 仍保留 LingBot-Map 接口，供设备侧或其他端接入）。
 
 ## 当前状态
 
 - `backend/`：Spring Boot 3.3.6 / Java 17 / Maven 后端。
 - `frontend/web/`：Vue 3 / Vite / TypeScript / Pinia Web 管理端。
 - `frontend/wechat-program/`：微信小程序端，已有页面、组件、mock 服务和后端 API 切换配置。
-- `ai-services/`：Python FastAPI 模型服务骨架，包含 LocateAnything 检测服务。
+- `ai-services/`：Python FastAPI 模型服务骨架，包含 LocateAnything 检测服务和 LingBot-Map 建图服务。
 - Web 端通过 Vite 代理访问后端 `/api/v1` 和 `/ws`。
-- Web 端 **巡检规划**（`/routes`）已切换为 **ROS 建图路线标注**：本地上传 `.yaml` + `.pgm`，标注起点/巡检点/方向，保存 `route.json` v2（`executorJson`）到后端，并可下载供机器人执行器加载。
+- Web 端 **巡检规划**（`/routes`）已切换为 **ROS 建图路线标注**：本地上传 `.yaml` + `.pgm`，标注起点/巡检点/方向，保存 `route.json` v2（`executorJson`）到后端，并可下载供机器人执行器加载；**保存到平台**时保留左侧列表的平台路线名称，不会覆盖为默认的「本地巡逻路线」。
+- Web 端 **实时监控**（`/monitor`）复用路线中的 ROS 地图快照与机器人位置叠加展示（`RosSlamMonitorMap`），需先在巡检规划中保存带 `map_snapshot` 的路线。
+- Web 端 **工单管理**按角色分流：管理员转工单、指派/改派、复核；调度员处理工单并提交复核（详见下文「工单流转」）。
+- Web 端 **告警转工单策略**配置在「个人中心 → 偏好设置」，仅管理员可见；**消息中心**与**告警中心**入口在顶部栏图标，不在左侧导航重复出现。
 - 小程序端默认使用本地 mock；需要接真实后端时修改 `frontend/wechat-program/miniprogram/config/api.js`。
 - 后端默认使用 MySQL，测试/演示可使用 H2。
 - 后端模型网关支持 `mock` 和 `http` 两种模式；`http` 模式调用 `ai-services/` 中的 Python 服务。
@@ -61,6 +64,7 @@
 - Pydantic
 - Pytest
 - LocateAnything 服务骨架
+- LingBot-Map 异步建图服务骨架
 
 ## 目录结构
 
@@ -78,6 +82,7 @@ Intelligent-Power-Inspection/
 │     │  │  ├─ config/          # Security、CORS、JWT、WebSocket 配置
 │     │  │  ├─ data/            # 通用 JSON 数据仓库与种子数据
 │     │  │  ├─ detection/       # 检测模板
+│     │  │  ├─ lingbot/         # LingBot 建图
 │     │  │  ├─ notification/    # 通知
 │     │  │  ├─ record/          # 巡检记录导出
 │     │  │  ├─ robot/           # 机器人与模拟网关
@@ -97,7 +102,7 @@ Intelligent-Power-Inspection/
 │  ├─ web/
 │  │  ├─ src/
 │  │  │  ├─ api/                # HTTP 与实时通信封装
-│  │  │  ├─ components/         # 业务组件（含 RosMapRouteEditor）
+│  │  │  ├─ components/         # 业务组件（RosMapRouteEditor、RosSlamMonitorMap 等）
 │  │  │  ├─ composables/        # 组合式逻辑（含 useRosMapRouteEditor）
 │  │  │  ├─ config/             # 菜单等配置
 │  │  │  ├─ layouts/            # 页面布局
@@ -128,7 +133,12 @@ Intelligent-Power-Inspection/
 │  │  ├─ model_runner.py        # LocateAnything 真实模型 runner
 │  │  ├─ parser.py              # 解析 <box>/<point>/none 输出
 │  │  └─ tests/
-
+│  └─ lingbot-map-service/      # 三维建图异步服务，默认端口 9002
+│     ├─ app.py
+│     ├─ job_store.py
+│     ├─ runner.py              # 默认 mock，支持通过外部命令封装 LingBot-Map
+│     ├─ worker.py
+│     └─ tests/
 ├─ .gitignore
 └─ README.md
 ```
@@ -259,6 +269,25 @@ cd ai-services\locate-anything-service
 uvicorn app:app --host 0.0.0.0 --port 9001
 ```
 
+启动 LingBot-Map 服务：
+
+```powershell
+conda activate ipi-locate-anything
+cd ai-services\lingbot-map-service
+uvicorn app:app --host 0.0.0.0 --port 9002
+```
+
+如需让 LingBot-Map 调用真实建图命令，继续在同一 conda 环境下配置：
+
+```powershell
+$env:LINGBOT_MAP_USE_REAL_MODEL="true"
+$env:LINGBOT_MAP_COMMAND="python D:\path\to\lingbot_demo.py"
+$env:LINGBOT_MAP_TIMEOUT_SECONDS="3600"
+uvicorn app:app --host 0.0.0.0 --port 9002
+```
+
+`LINGBOT_MAP_COMMAND` 会收到 `--input`、`--output`、`--output-profile`、`--fps`、`--stride`、`--keyframe-interval`、`--window-size`、`--mask-sky` 参数。命令需在输出目录生成 `cloud.ply`、`mesh.glb`、`trajectory.json`、`metadata.json`，可选生成 `preview.mp4`。
+
 后端默认已经使用 HTTP 模型网关，IDEA 直接启动 Spring Boot 即可连接本机 Python 服务：
 
 ```powershell
@@ -266,7 +295,7 @@ cd backend
 mvn spring-boot:test-run
 ```
 
-> 注意：LocateAnything 当前已使用真实模型 runner，默认 `generation-mode: fast`、超时 `900s`。
+> 注意：LocateAnything 当前已使用真实模型 runner，默认 `generation-mode: fast`、超时 `900s`；LingBot-Map 默认 mock，设置 `LINGBOT_MAP_USE_REAL_MODEL=true` 和 `LINGBOT_MAP_COMMAND` 后会调用外部真实建图命令。
 
 ## 模型接入架构
 
@@ -275,7 +304,7 @@ mvn spring-boot:test-run
 ```text
 Web / 小程序
   -> Spring Boot 后端
-    -> LocateAnythingGateway
+    -> LocateAnythingGateway / LingBotMapGateway
       -> Python FastAPI 模型服务
         -> 模型 runner / artifact 存储
 ```
@@ -291,7 +320,9 @@ app:
       base-url: http://127.0.0.1:9001
       timeout-seconds: 900
       generation-mode: fast
-
+    lingbot-map:
+      base-url: ${APP_MODEL_LINGBOT_MAP_BASE_URL:http://127.0.0.1:9002}
+      timeout-seconds: ${APP_MODEL_LINGBOT_MAP_TIMEOUT_SECONDS:30}
 ```
 
 如需临时覆盖 LocateAnything 参数，可通过 `APP_MODEL_LOCATE_ANYTHING_BASE_URL`、`APP_MODEL_LOCATE_ANYTHING_TIMEOUT_SECONDS`、`APP_MODEL_LOCATE_ANYTHING_GENERATION_MODE` 环境变量调整，或直接修改 `backend/src/main/resources/application.yml`。
@@ -321,10 +352,24 @@ GET  /ready
 POST /v1/locate/checkpoint
 ```
 
+LingBot-Map 服务接口：
+
+```text
+GET    /health
+GET    /ready
+POST   /v1/reconstruction/jobs
+GET    /v1/reconstruction/jobs/{jobId}
+GET    /v1/reconstruction/jobs/{jobId}/artifacts
+DELETE /v1/reconstruction/jobs/{jobId}
+```
+
 模型产物约定：
 
 - `runtime-storage/`、模型权重、点云、mesh 等大文件不提交到 Git。
 - `ai-services/model/` 与 `ai-services/.cache/` 是本地模型和依赖缓存目录，已加入 `.gitignore`，不要手动暂存。
+- LingBot-Map 上传视频保存在 `backend/runtime-storage/lingbot/uploads`，建图产物默认保存在 `backend/runtime-storage/lingbot/maps`，并通过 `/model-files/lingbot/...` 访问。
+- 默认 Python 服务会生成 mock artifacts；真实部署时可用 `LINGBOT_MAP_COMMAND` 封装官方 demo.py，长期建议替换为 MinIO、OSS 或 COS。
+- LingBot-Map 的 viewer 仅作为调试工具，不作为正式后端 API。
 
 ## 数据库与 Flyway
 
@@ -365,9 +410,49 @@ Use baseline() or set baselineOnMigrate to true
 
 | 用户名 | 密码 | 角色 | 说明 |
 | --- | --- | --- | --- |
-| `admin` | `Admin@123` | `ADMIN` | 管理员，拥有全部权限 |
-| `dispatcher` | `Disp@123` | `DISPATCHER` | 调度员，可调度任务、维护站点路线、处理告警和导出记录 |
-| `viewer` | `View@123` | `VIEWER` | 查看者，主要用于只读查看任务和监控数据 |
+| `admin` | `Admin@123` | `ADMIN` | 管理员：转工单、指派/改派调度员、复核关闭；不现场处理工单 |
+| `dispatcher` | `Disp@123` | `DISPATCHER` | 调度员：处理指派给自己的工单、提交复核；可维护站点/路线、调度任务、确认告警 |
+| `viewer` | `View@123` | `VIEWER` | 观察员：只读查看任务与监控数据 |
+
+## Web 导航与入口
+
+左侧导航按业务分组展示（监控中心、运维中心、巡检业务等），**不包含**消息中心与告警中心，避免与顶部栏重复。
+
+顶部栏右侧提供：
+
+- 消息图标 → `/notifications`（未读角标）
+- 告警图标 → `/alarms`（未确认角标）
+
+## 工单流转（Web）
+
+Web 端在 `frontend/web/src/utils/permission.ts` 中细化了工单相关权限，流程如下：
+
+```text
+告警转工单 → 待处理（待指派）
+    ↓ 管理员「指派」
+处理中（调度员开始处置）
+    ↓ 调度员「提交复核」
+待复核
+    ↓ 管理员「确认复核」
+已关闭 / 退回处理中
+
+处理中 → 管理员「改派」→ 仍为处理中（仅更换处理人）
+```
+
+| 角色 | 可做 | 不可做 |
+| --- | --- | --- |
+| `ADMIN` | 告警转工单、指派/改派、复核关闭 | 接单、现场处理、提交复核 |
+| `DISPATCHER` | 处理指派给自己的工单、提交复核 | 转工单、指派/改派、复核 |
+| `VIEWER` | — | 无工单操作权限 |
+
+说明：
+
+- 管理员指派后工单**直接进入「处理中」**，无需调度员再点「接单」。
+- 新建工单时后端不再把创建人默认写成处理人；历史脏数据会在加载时归一化。
+- 工单支持结构化现场处理表单与管理员复核表单；地点信息来自关联告警/站点。
+- 告警转工单策略（按级别自动/人工）在 **个人中心 → 偏好设置**，仅 `ADMIN` 可配置。
+
+相关页面：`/workorders`、`/alarms`、`/profile/settings`。
 
 ## 巡检路线规划（Web `/routes`）
 
@@ -381,6 +466,8 @@ Web 管理端「巡检业务 → 巡检规划」页面基于 ROS `map` 坐标系
 4. 在右侧调整起点、路线参数与巡检点顺序（`↑` / `↓` 改变 `target_ids` 导航顺序）。
 5. 点击 **保存到平台**，通过 `PATCH /api/v1/routes/{id}` 持久化 `executorJson`。
 6. 可 **复制 JSON** 或 **下载 route.json**，供巡检执行器直接加载。
+
+**路线名称**：左侧列表中的平台路线名（如「巡检路线 1」）与 `executorJson.routes[0].name` 分离维护。保存时以平台名称为准同步写入 JSON，避免被编辑器默认值「本地巡逻路线」覆盖。右侧「路线」页签中的「路线名称」会在打开路线时自动带入平台名称。
 
 ### 数据格式
 
@@ -403,13 +490,17 @@ y = origin_y + (image_height - pixel_y) * resolution
 | --- | --- |
 | `frontend/web/src/views/RoutePlan.vue` | 路线列表 + 标注页 |
 | `frontend/web/src/components/RosMapRouteEditor.vue` | 标注 UI |
+| `frontend/web/src/components/RosSlamMonitorMap.vue` | 实时监控 ROS 底图 + 机器人叠加 |
 | `frontend/web/src/stores/route.ts` | `saveExecutorRoute()` 保存标注结果 |
+| `frontend/web/src/utils/routeExecutorJson.ts` | route.json 构建与 `withPlatformRouteName()` |
 | `frontend/web/src/types/routeExecutor.ts` | route.json v2 类型 |
 | `frontend/web/docs/API.md` §5.5 | 前端 Store 与 API 说明 |
 
 > YAML/PGM 由用户本地上传，当前**不**通过后端 API 存储地图文件；换地图后若点位越界，页面会提示重新标定。
 
 ## 权限点
+
+### 后端权限点
 
 后端当前保留 12 个权限点：
 
@@ -421,17 +512,33 @@ y = origin_y + (image_height - pixel_y) * resolution
 - `route:edit`
 - `alarm:ack`
 - `robot:manage`
+- `lingbot:manage`
 - `detection:manage`
 - `user:manage`
 - `record:export`
 
-角色权限大致如下：
+后端角色权限大致如下：
 
 | 角色 | 权限范围 |
 | --- | --- |
-| `ADMIN` | 全部权限 |
+| `ADMIN` | 全部后端权限 |
 | `DISPATCHER` | 任务查看、创建、下发、控制，站点/路线维护，告警确认，记录导出 |
 | `VIEWER` | 基础任务查看 |
+
+### Web 前端扩展权限
+
+Web 管理端在 `frontend/web/src/utils/permission.ts` 中额外定义了工单与告警策略相关权限，用于菜单与按钮级控制：
+
+- `workorder:view` / `workorder:create` / `workorder:assign` / `workorder:process` / `workorder:review`
+- `alarm:policy`
+
+| 角色 | Web 工单与策略 |
+| --- | --- |
+| `ADMIN` | 查看/创建/指派/改派/复核工单；配置告警转工单策略 |
+| `DISPATCHER` | 查看并处理指派给自己的工单 |
+| `VIEWER` | 无工单相关权限 |
+
+> 说明：工单 API 目前仍复用后端的 `task:dispatch` 鉴权；Web 端通过前端权限与业务逻辑约束管理员/调度员分工，生产环境建议在 `WorkOrderController` 中补充后端级权限校验。
 
 ## API 与实时推送
 
@@ -471,6 +578,7 @@ Authorization: Bearer <token>
 | 机器人 | `/robots`、`/robots/{id}`、`/robots/{id}/telemetry` |
 | 检测模板 | `/detection-templates`、`/detection-templates/{id}` |
 | 记录 | `/records`、`/records/export` |
+| 建图 | `/lingbot/jobs`、`/lingbot/jobs/{id}`、`/lingbot/jobs/{id}/simulate`、`/lingbot/maps/{id}/pointcloud` |
 | 通知 | `/notifications`、`/notifications/{id}/read`、`/notifications/read-all` |
 
 WebSocket/STOMP 端点：
@@ -488,6 +596,8 @@ ws://localhost:8080/ws
 /topic/robots/{robotId}
 /topic/robots
 /topic/alarms
+/topic/lingbot/jobs/{id}
+/topic/lingbot/jobs
 /topic/notifications
 /topic/notifications/{userId}
 ```
@@ -508,11 +618,12 @@ Web 端核心业务数据已通过后端接口加载：
 浏览器本地仍会保存：
 
 - `pi_session`：JWT token 和当前用户会话。
+- `pi_alarm_escalation_policy`：告警转工单策略（管理员在偏好设置中配置）。
 - 少量 UI 偏好，例如侧边栏折叠状态。
 
 站点、路线、任务、告警、工单、机器人、检测模板、通知、记录等核心业务数据以后端为准。任务、机器人、告警和通知会通过 WebSocket/STOMP 实时刷新；页面首次进入时仍会通过 REST API 加载快照数据。
 
-**路线规划**：`/routes` 以 `executorJson` 为主数据；监控/任务页的 Leaflet 地图仅作兼容展示，不加载 ROS PGM 底图。
+**路线规划**：`/routes` 以 `executorJson` 为主数据；保存时附带 `map_snapshot` 供实时监控页复用 ROS 底图。任务详情等页面的 Leaflet 地图仅作兼容展示。
 
 ## 常用命令
 
@@ -545,6 +656,7 @@ Web 端核心业务数据已通过后端接口加载：
 | --- | --- |
 | `python -m pytest tests` | 运行当前模型服务测试 |
 | `python -m uvicorn app:app --host 0.0.0.0 --port 9001` | 启动 LocateAnything 服务 |
+| `python -m uvicorn app:app --host 0.0.0.0 --port 9002` | 启动 LingBot-Map 服务 |
 
 当前验证过的命令：
 
@@ -556,6 +668,9 @@ mvn test
 
 conda activate ipi-locate-anything
 cd ai-services\locate-anything-service
+python -m pytest tests
+
+cd ..\lingbot-map-service
 python -m pytest tests
 ```
 
@@ -599,15 +714,26 @@ http://127.0.0.1:5173
 
 ### 7. 巡检规划页如何加载地图
 
-在 `/routes` 页面本地上传 `.yaml` 和 `.pgm` 即可。地图文件不会上传到服务器；标注结果通过 **保存到平台** 写入路线的 `executorJson` 字段。
+在 `/routes` 页面本地上传与建图产物对应的 `.yaml` 和 `.pgm` 即可。地图文件不会上传到服务器；标注结果通过 **保存到平台** 写入路线的 `executorJson` 字段（含可选 `map_snapshot`）。保存后左侧路线名称保持不变。
+
+### 8. 保存到平台后路线名称变了
+
+若路线名称被改成「本地巡逻路线」，说明使用的是旧版前端。当前版本会以左侧列表的平台名称为准，并同步到 `executorJson.routes[0].name`。请刷新页面（`Ctrl+F5`）后重新保存。
+
+### 9. 实时监控没有地图
+
+`/monitor` 依赖路线 `executorJson` 中的 `map_snapshot`。请先在 **巡检规划** 中加载 YAML/PGM、标注并 **保存到平台**，再打开实时监控查看对应任务路线。
 
 ## 当前限制
 
 - 当前是演示/课程级后端，不是生产部署方案。
 - 真实机器人控制尚未接入；`RobotGateway` 默认仍是模拟任务执行和机器人位置。
-- **巡检规划**为 ROS map 标注 + route.json v2 持久化；监控/任务页 Leaflet 地图与 PGM 标注页未统一，且 YAML/PGM 需每次本地上传。
+- **巡检规划**为 ROS map 标注 + route.json v2 持久化；YAML/PGM 需每次本地上传，地图文件不入库。
+- **实时监控**已支持 ROS 底图 + 机器人叠加，但依赖路线中保存的 `map_snapshot`；任务详情等页面仍可能使用 Leaflet 折线兼容展示。
 - 后端只校验 route.json v2 的结构与引用关系，不保存 YAML/PGM，也不复算地图 free/unknown/occupied 像素。
-- LocateAnything 已接入真实 Python 模型服务并由 Spring Boot HTTP 网关调用。
-- LocateAnything Python 服务默认使用真实模型 runner。
+- Web 端已移除 LingBot 建图页面；后端与 `ai-services/lingbot-map-service` 仍保留，供其他端或设备侧接入。
+- LocateAnything 已接入真实 Python 模型服务并由 Spring Boot HTTP 网关调用；LingBot-Map 默认 mock，已支持通过外部命令适配真实建图。
+- 工单角色分工目前以 Web 前端权限为主，后端工单 API 尚未按 `workorder:*` 细分鉴权。
+- 微信小程序端尚未同步 Web 端的工单流程与导航调整。
 - 生产级日志、审计、监控、部署流水线和权限审计细节仍需进一步完善。
 - `backend/target/`、`frontend/web/dist/`、`frontend/web/node_modules/`、`runtime-storage/`、模型权重和点云/mesh 等产物不应提交。

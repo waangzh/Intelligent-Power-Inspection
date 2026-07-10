@@ -15,7 +15,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" style="margin-bottom: 16px">
+    <el-row :gutter="16">
       <el-col :span="16">
         <el-card shadow="never">
           <template #header>
@@ -47,29 +47,31 @@
             <el-table-column label="时间" width="150">
               <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
             </el-table-column>
-            <el-table-column label="状态" width="80">
+            <el-table-column label="状态" width="100">
               <template #default="{ row }">
                 <el-tag :type="row.acknowledged ? 'info' : 'danger'" size="small">{{ row.acknowledged ? '已确认' : '待处理' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column v-if="can('alarm:ack') || can('task:dispatch')" label="操作" width="210">
+            <el-table-column v-if="can('alarm:ack') || can('workorder:create') || can('task:dispatch')" label="操作" width="240">
               <template #default="{ row }">
-                <el-button v-if="!row.acknowledged" text type="primary" size="small" @click.stop="alarmStore.acknowledge(row.id)">确认</el-button>
+                <el-button v-if="can('alarm:ack') && !row.acknowledged" text type="primary" size="small" @click.stop="alarmStore.acknowledge(row.id)">确认</el-button>
                 <el-button
-                  v-if="!workOrderStore.getByAlarmId(row.id)"
+                  v-if="can('workorder:create') && !workOrderStore.getByAlarmId(row.id)"
                   text
                   type="warning"
                   size="small"
                   @click.stop="createWorkOrder(row)"
                 >转工单</el-button>
-                <el-tag v-else size="small" type="info">已转工单</el-tag>
+                <el-tag v-else-if="workOrderStore.getByAlarmId(row.id)" size="small" type="info">
+                  {{ workOrderStore.getByAlarmId(row.id)?.autoConverted ? '已自动转工单' : '已转工单' }}
+                </el-tag>
                 <el-button
                   v-if="can('task:dispatch')"
                   text
                   type="success"
                   size="small"
                   @click.stop="openAgentForAlarm(row)"
-                >Agent 处置</el-button>
+                >Agent 研判</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -88,16 +90,16 @@
             <el-descriptions-item label="描述">{{ selected.message }}</el-descriptions-item>
           </el-descriptions>
           <img v-if="selected.imageUrl" :src="selected.imageUrl" class="alarm-img" alt="截图" />
-          <div v-if="can('alarm:ack') && selected" style="margin-top: 12px; display: flex; gap: 8px">
-            <el-button v-if="!selected.acknowledged" type="primary" size="small" @click="alarmStore.acknowledge(selected.id)">确认告警</el-button>
+          <div v-if="selected" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px">
+            <el-button v-if="can('alarm:ack') && !selected.acknowledged" type="primary" size="small" @click="alarmStore.acknowledge(selected.id)">确认告警</el-button>
             <el-button
-              v-if="!workOrderStore.getByAlarmId(selected.id)"
+              v-if="can('workorder:create') && !workOrderStore.getByAlarmId(selected.id)"
               type="warning"
               size="small"
               @click="createWorkOrder(selected)"
             >转为工单</el-button>
-            <el-button v-else size="small" @click="router.push('/workorders')">查看工单</el-button>
-            <el-button v-if="can('task:dispatch')" type="success" size="small" @click="openAgentForAlarm(selected)">Agent 处置</el-button>
+            <el-button v-else-if="workOrderStore.getByAlarmId(selected.id)" size="small" @click="router.push('/workorders')">查看工单</el-button>
+            <el-button v-if="can('task:dispatch')" type="success" size="small" @click="openAgentForAlarm(selected)">Agent 研判</el-button>
           </div>
         </el-card>
         <el-card v-else shadow="never"><div class="empty-hint">点击告警查看详情</div></el-card>
@@ -168,13 +170,13 @@ function severityType(s: AlarmSeverity) {
   return { LOW: 'info', MEDIUM: 'warning', HIGH: 'warning', CRITICAL: 'danger' }[s] as 'info' | 'warning' | 'danger'
 }
 
-function createWorkOrder(alarm: Alarm) {
+async function createWorkOrder(alarm: Alarm) {
   const user = authStore.user
   if (!user) return
   try {
-    const order = workOrderStore.createFromAlarm(alarm, { id: user.id, name: user.displayName })
+    const order = await workOrderStore.createFromAlarm(alarm, { id: user.id, name: user.displayName })
     if (!alarm.acknowledged) alarmStore.acknowledge(alarm.id)
-    ElMessage.success(`工单 ${order.id} 已创建`)
+    ElMessage.success(`工单 ${order.id} 已创建，请前往工单管理指派调度员`)
     router.push('/workorders')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '创建失败')
