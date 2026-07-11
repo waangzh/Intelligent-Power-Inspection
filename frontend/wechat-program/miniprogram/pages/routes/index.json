@@ -1,7 +1,0 @@
-{
-  "navigationBarTitleText": "巡检路线标注工具",
-  "usingComponents": {
-    "page-header": "/components/page-header/index",
-    "ros-map-view": "/components/ros-map-view/index"
-  }
-}

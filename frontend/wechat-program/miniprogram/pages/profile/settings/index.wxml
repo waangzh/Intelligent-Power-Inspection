@@ -33,4 +33,29 @@
       <switch checked="{{prefs.sidebarCollapsed}}" data-key="sidebarCollapsed" bindchange="onSwitch" color="#1a5fb4" />
     </view>
   </view>
+
+  <view class="card" wx:if="{{canManagePolicy}}">
+    <view class="group-title">告警转工单策略</view>
+    <text class="group-desc">按告警级别配置自动或人工转工单，保存后立即生效</text>
+    <view class="policy-row" wx:for="{{policyRows}}" wx:key="severity">
+      <view class="policy-head">
+        <text class="tag tag-{{item.sevType}}">{{item.label}}</text>
+        <text class="policy-hint">{{item.hint}}</text>
+      </view>
+      <view class="policy-modes">
+        <text
+          class="mode-chip {{item.mode==='AUTO'?'on':''}}"
+          bindtap="setPolicyMode"
+          data-severity="{{item.severity}}"
+          data-mode="AUTO"
+        >自动转工单</text>
+        <text
+          class="mode-chip {{item.mode==='MANUAL'?'on':''}}"
+          bindtap="setPolicyMode"
+          data-severity="{{item.severity}}"
+          data-mode="MANUAL"
+        >人工转工单</text>
+      </view>
+    </view>
+  </view>
 </view>

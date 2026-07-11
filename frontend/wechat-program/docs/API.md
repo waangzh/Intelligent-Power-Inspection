@@ -118,6 +118,8 @@ type Permission =
   | 'site:edit' | 'route:edit' | 'alarm:ack'
   | 'robot:manage' | 'detection:manage'
   | 'user:manage' | 'record:export'
+  | 'workorder:view' | 'workorder:create' | 'workorder:assign'
+  | 'workorder:process' | 'workorder:review'
 ```
 
 页面守卫：`app.requireAuth()` + `app.requirePermission(permission, roles?)`
@@ -223,20 +225,12 @@ type Permission =
 | `pages/dashboard/index` | `/dashboard` | 登录 |
 | `pages/monitor/index` | `/monitor` | 登录 |
 | `pages/alarms/index` | `/alarms` | 登录 |
-| `pages/workorders/index` | `/workorders` | `task:dispatch` |
+| `pages/workorders/index` | `/workorders` | `workorder:view` |
 | `pages/notifications/index` | `/notifications` | 登录 |
-| `pages/sites/index` | `/sites` | `site:edit` |
-| `pages/routes/index` | `/routes` | `route:edit` |
 | `pages/tasks/index` | `/tasks` | `task:view` |
 | `pages/tasks/detail/index` | `/tasks/:id` | `task:view` |
-| `pages/robots/index` | `/robots` | `robot:manage` |
-| `pages/detection/index` | `/detection` | `detection:manage` |
-| `pages/records/index` | `/records` | 登录 |
-| `pages/statistics/index` | `/statistics` | 登录 |
-| `pages/users/index` | `/users` | ADMIN + `user:manage` |
 | `pages/profile/*/index` | `/profile/*` | 登录 |
 | `pages/forbidden/index` | `/403` | 登录 |
-| `pages/more/index` | — | 功能中心入口 |
 
 ### 通知 link 映射（`config/menu.js` → `mapNotificationLink`）
 

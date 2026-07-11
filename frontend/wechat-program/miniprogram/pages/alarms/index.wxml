@@ -8,6 +8,13 @@
     <view class="stat-item"><view class="stat-value">{{stats.total}}</view><view class="stat-label">总数</view></view>
   </view>
 
+  <view class="card wo-entry" wx:if="{{canViewWorkOrder}}" bindtap="goWorkOrders">
+    <view class="flex-between wo-entry-inner">
+      <text class="wo-entry-label">工单管理</text>
+      <text class="arrow">›</text>
+    </view>
+  </view>
+
   <view class="card toolbar">
     <input placeholder="搜索告警内容" value="{{keyword}}" bindinput="onKeyword" />
     <view class="filter-row">
@@ -30,8 +37,8 @@
     <view class="alarm-actions" catchtap="stop">
       <text wx:if="{{item.acknowledged}}" class="tag tag-success">已确认</text>
       <button wx:if="{{!item.acknowledged && canAck}}" size="mini" catchtap="ackOne" data-id="{{item.id}}">确认</button>
-      <button wx:if="{{canWorkOrder && !item.hasWorkOrder}}" size="mini" type="primary" catchtap="createWorkOrder" data-id="{{item.id}}">转工单</button>
-      <text wx:if="{{item.hasWorkOrder}}" class="tag tag-info" catchtap="goWorkOrders">已转工单</text>
+      <button wx:if="{{canCreateWorkOrder && !item.hasWorkOrder}}" size="mini" type="primary" catchtap="createWorkOrder" data-id="{{item.id}}">转工单</button>
+      <text wx:if="{{item.hasWorkOrder && canViewWorkOrder}}" class="tag tag-info" catchtap="goWorkOrders">{{item.workOrderLabel}}</text>
     </view>
   </view>
   <view wx:if="{{!filtered.length}}" class="empty-hint">暂无告警</view>

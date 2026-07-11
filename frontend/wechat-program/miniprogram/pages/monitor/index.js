@@ -1,4 +1,5 @@
 const api = require('../../services/index')
+const { ROBOT_STATUS_LABELS } = require('../../utils/constants')
 
 Page({
   data: {
@@ -22,14 +23,15 @@ Page({
   },
 
   async load() {
-    const [robots, tasks, routes, sites] = await Promise.all([
+    const [robotsRaw, tasks, routes, sites] = await Promise.all([
       api.getRobots(), api.getTasks(), api.getRoutes(), api.getSites(),
     ])
+    const robots = robotsRaw.slice(0, 1)
     const activeTask = tasks.find((t) => ['RUNNING', 'PAUSED', 'DISPATCHED', 'MANUAL_TAKEOVER'].includes(t.status))
     const list = robots.map((r) => ({
       ...r,
       statusType: r.status === 'ONLINE' ? 'success' : r.status === 'BUSY' ? 'warning' : 'info',
-      statusLabel: { ONLINE: '在线', BUSY: '忙碌', CHARGING: '充电中', OFFLINE: '离线' }[r.status] || r.status,
+      statusLabel: ROBOT_STATUS_LABELS[r.status] || r.status,
       currentTaskName: r.currentTaskId ? (tasks.find((t) => t.id === r.currentTaskId)?.name || '-') : '-',
     }))
     let selected = list.find((r) => r.id === this.data.selectedId) || list[0] || null
