@@ -2,9 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { Alarm } from '@/types'
-import type { WorkOrder, WorkOrderPriority, WorkOrderStatus } from '@/types/workOrder'
-import { useNotificationStore } from '@/stores/notification'
-import { uid } from '@/utils/storage'
+import type { WorkOrder, WorkOrderStatus } from '@/types/workOrder'
 
 export const useWorkOrderStore = defineStore('workOrder', () => {
   const orders = ref<WorkOrder[]>([])
@@ -28,36 +26,15 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
     return orders.value.find((o) => o.alarmId === alarmId)
   }
 
-  function createFromAlarm(
+  async function createFromAlarm(
     alarm: Alarm,
-    creator: { id: string; name: string },
     assigneeName?: string,
   ) {
     if (getByAlarmId(alarm.id)) {
       throw new Error('该告警已有关联工单')
     }
-    const priority: WorkOrderPriority =
-      alarm.severity === 'CRITICAL' ? 'URGENT' : alarm.severity === 'HIGH' ? 'HIGH' : 'MEDIUM'
-
-    const now = new Date().toISOString()
-    const order: WorkOrder = {
-      id: uid('wo'),
-      title: `告警处置：${alarm.message.slice(0, 24)}`,
-      description: alarm.message,
-      alarmId: alarm.id,
-      status: 'PENDING',
-      priority,
-      assigneeName: assigneeName || creator.name,
-      createdById: creator.id,
-      createdByName: creator.name,
-      createdAt: now,
-      updatedAt: now,
-    }
-    orders.value.unshift(order)
-    void resourcesApi.createWorkOrderFromAlarm(alarm.id, assigneeName).then(updateLocalOrder)
-
-    const ntf = useNotificationStore()
-    ntf.push(creator.id, 'WORKORDER', '工单已创建', order.title, '/workorders')
+    const order = await resourcesApi.createWorkOrderFromAlarm(alarm.id, assigneeName)
+    updateLocalOrder(order)
     return order
   }
 
@@ -82,6 +59,7 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
   function updateLocalOrder(order: WorkOrder) {
     const idx = orders.value.findIndex((o) => o.id === order.id)
     if (idx >= 0) orders.value[idx] = order
+    else orders.value.unshift(order)
   }
 
   return {

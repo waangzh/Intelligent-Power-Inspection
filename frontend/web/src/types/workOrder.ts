@@ -22,6 +22,7 @@ export interface WorkOrder {
   title: string
   description: string
   alarmId?: string
+  source?: 'AUTO' | 'MANUAL' | 'AGENT'
   status: WorkOrderStatus
   priority: WorkOrderPriority
   assigneeId?: string

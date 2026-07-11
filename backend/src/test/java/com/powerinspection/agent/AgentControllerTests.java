@@ -145,7 +145,9 @@ class AgentControllerTests {
 
   private void saveUser(String id, String username, String password, UserRole role) {
     UserEntity user = userRepository.findByUsername(username).orElseGet(UserEntity::new);
-    user.setId(id);
+    if (user.getId() == null) {
+      user.setId(id);
+    }
     user.setUsername(username);
     user.setPasswordHash(passwordEncoder.encode(password));
     user.setDisplayName(username);

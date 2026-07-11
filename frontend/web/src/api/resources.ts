@@ -1,6 +1,7 @@
 import { http } from '@/api/http'
 import type {
   Alarm,
+  AlarmWorkOrderPolicy,
   Area,
   Checkpoint,
   DetectionTemplate,
@@ -70,6 +71,10 @@ export const resourcesApi = {
   listAlarms: () => http.get<Alarm[]>('/alarms'),
   acknowledgeAlarm: (id: string) => http.post<Alarm>(`/alarms/${id}/ack`),
   acknowledgeAllAlarms: () => http.post<Alarm[]>('/alarms/ack-all'),
+  getAlarmWorkOrderPolicy: () => http.get<AlarmWorkOrderPolicy>('/alarms/work-order-policy'),
+  updateAlarmWorkOrderPolicy: (policy: Pick<AlarmWorkOrderPolicy, 'rules'>) =>
+    http.put<AlarmWorkOrderPolicy>('/alarms/work-order-policy', policy),
+  retryAlarmWorkOrder: (id: string) => http.post<Alarm>(`/alarms/${id}/retry-work-order`),
 
   listWorkOrders: () => http.get<WorkOrder[]>('/work-orders'),
   createWorkOrderFromAlarm: (alarmId: string, assigneeName?: string) =>
