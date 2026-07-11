@@ -2,111 +2,169 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import { subscribeTopic } from '@/api/realtime'
-import type { AgentAction, AgentRealtimeEvent, AgentSession, CreateAgentSessionRequest } from '@/types/agent'
+import type {
+  AgentActionDecisionRequest,
+  AgentCaseDetail,
+  AgentCaseSummary,
+  AgentRunDetail,
+  AuditedAgentAction,
+  AuditedAgentRealtimeEvent,
+  CreateAgentCaseRequest,
+} from '@/types/agent'
 
 export const useAgentStore = defineStore('agent', () => {
-  const sessions = ref<AgentSession[]>([])
-  const activeSession = ref<AgentSession | null>(null)
-  const realtimeEvents = ref<AgentRealtimeEvent[]>([])
+  const cases = ref<AgentCaseSummary[]>([])
+  const activeCase = ref<AgentCaseDetail | null>(null)
+  const activeRun = ref<AgentRunDetail | null>(null)
+  const realtimeEvents = ref<AuditedAgentRealtimeEvent[]>([])
   const loading = ref(false)
+  const seenEventKeys = new Set<string>()
+  const MAX_EVENT_KEYS = 500
   let unsubscribe: (() => void) | null = null
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
-  const pendingActions = computed(() => activeSession.value?.actions?.filter((item) => item.status === 'PENDING') ?? [])
-  const latestSteps = computed(() => activeSession.value?.latestRun?.steps ?? [])
+  const activeCaseSummary = computed(() => activeCase.value?.item ?? null)
+  const activeRunId = computed(() => activeRun.value?.run.id ?? '')
+  const pendingActions = computed(() => activeRun.value?.actions.filter((item) => item.status === 'PROPOSED') ?? [])
 
-  async function loadSessions() {
-    sessions.value = await resourcesApi.listAgentSessions()
+  async function loadCases() {
+    cases.value = await resourcesApi.listAgentCases()
   }
 
-  async function loadSession(id: string, subscribe = true) {
-    activeSession.value = await resourcesApi.getAgentSession(id)
-    upsertSession(activeSession.value)
-    if (subscribe) {
-      subscribeSession(id)
+  async function loadCase(caseId: string, runId?: string, subscribe = true) {
+    const detail = await resourcesApi.getAgentCase(caseId)
+    activeCase.value = detail
+    upsertCase(detail.item)
+    const selectedRunId = runId || activeRun.value?.run.id || detail.item.latestRun?.id || detail.runs[0]?.id
+    if (selectedRunId) {
+      await loadRun(selectedRunId, false)
+    } else {
+      activeRun.value = null
     }
-    return activeSession.value
+    if (subscribe) subscribeCase(caseId)
+    return detail
   }
 
-  async function createSession(body: CreateAgentSessionRequest) {
+  async function loadRun(runId: string, refreshCase = true) {
+    activeRun.value = await resourcesApi.getAgentRun(runId)
+    if (refreshCase && activeCase.value) {
+      const detail = await resourcesApi.getAgentCase(activeCase.value.item.id)
+      activeCase.value = detail
+      upsertCase(detail.item)
+    }
+    return activeRun.value
+  }
+
+  async function selectRun(runId: string) {
+    await loadRun(runId)
+  }
+
+  async function createCaseAndRun(request: CreateAgentCaseRequest) {
     loading.value = true
     try {
-      const session = await resourcesApi.createAgentSession(body)
-      activeSession.value = session
-      upsertSession(session)
-      subscribeSession(session.id)
-      return session
+      const item = await resourcesApi.createAgentCase(request)
+      upsertCase(item)
+      const run = await resourcesApi.startAgentRun(item.id, { reason: 'INITIAL_ANALYSIS' })
+      await loadCase(item.id, run.id)
+      return item
     } finally {
       loading.value = false
     }
   }
 
-  async function rerunActive() {
-    if (!activeSession.value) return null
+  async function startActiveRun(reason = 'MANUAL_REANALYSIS') {
+    if (!activeCase.value) return null
     loading.value = true
     try {
-      const session = await resourcesApi.rerunAgentSession(activeSession.value.id)
-      activeSession.value = session
-      upsertSession(session)
-      subscribeSession(session.id)
-      return session
+      const run = await resourcesApi.startAgentRun(activeCase.value.item.id, { reason })
+      await loadCase(activeCase.value.item.id, run.id)
+      return run
     } finally {
       loading.value = false
     }
   }
 
-  async function confirmAction(action: AgentAction) {
-    const saved = await resourcesApi.confirmAgentAction(action.id)
-    await refreshActionSession(saved)
+  async function approveAction(action: AuditedAgentAction, comment = '批准执行') {
+    const request: AgentActionDecisionRequest = { version: action.version, comment }
+    const saved = await resourcesApi.approveAuditedAgentAction(action.id, request)
+    await refreshAfterAction(saved)
     return saved
   }
 
-  async function rejectAction(action: AgentAction) {
-    const saved = await resourcesApi.rejectAgentAction(action.id)
-    await refreshActionSession(saved)
+  async function rejectAction(action: AuditedAgentAction, comment = '拒绝执行') {
+    const request: AgentActionDecisionRequest = { version: action.version, comment }
+    const saved = await resourcesApi.rejectAuditedAgentAction(action.id, request)
+    await refreshAfterAction(saved)
     return saved
   }
 
-  function subscribeSession(sessionId: string) {
+  function subscribeCase(caseId: string) {
     unsubscribe?.()
     realtimeEvents.value = []
-    unsubscribe = subscribeTopic<AgentRealtimeEvent>(`/topic/agents/${sessionId}`, (event) => {
-      realtimeEvents.value.unshift(event)
-      void loadSession(sessionId, false)
+    seenEventKeys.clear()
+    unsubscribe = subscribeTopic<AuditedAgentRealtimeEvent>(`/topic/agent-cases/${caseId}`, (event) => {
+      const key = `${event.runId}:${event.sequenceNo}`
+      if (seenEventKeys.has(key)) return
+      if (seenEventKeys.size >= MAX_EVENT_KEYS) {
+        const oldest = seenEventKeys.values().next().value
+        if (oldest) seenEventKeys.delete(oldest)
+      }
+      seenEventKeys.add(key)
+      realtimeEvents.value = [...realtimeEvents.value, event].sort((left, right) => left.sequenceNo - right.sequenceNo)
+      scheduleRealtimeRefresh(event)
     })
+  }
+
+  function scheduleRealtimeRefresh(event: AuditedAgentRealtimeEvent) {
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null
+      if (activeRun.value?.run.id === event.runId) {
+        void loadRun(event.runId, true)
+      } else if (activeCase.value?.item.id === event.caseId) {
+        void loadCase(event.caseId, activeRun.value?.run.id, false)
+      }
+    }, 400)
   }
 
   function stopRealtime() {
     unsubscribe?.()
     unsubscribe = null
+    if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null }
     realtimeEvents.value = []
+    seenEventKeys.clear()
   }
 
-  async function refreshActionSession(action: AgentAction) {
-    if (activeSession.value?.id === action.sessionId) {
-      await loadSession(action.sessionId)
+  async function refreshAfterAction(action: AuditedAgentAction) {
+    if (activeRun.value?.actions.some((item) => item.id === action.id)) {
+      await loadRun(activeRun.value.run.id)
     }
   }
 
-  function upsertSession(session: AgentSession) {
-    const idx = sessions.value.findIndex((item) => item.id === session.id)
-    if (idx >= 0) sessions.value[idx] = { ...sessions.value[idx], ...session }
-    else sessions.value.unshift(session)
+  function upsertCase(item: AgentCaseSummary) {
+    const index = cases.value.findIndex((current) => current.id === item.id)
+    if (index >= 0) cases.value[index] = item
+    else cases.value.unshift(item)
   }
 
   return {
-    sessions,
-    activeSession,
+    cases,
+    activeCase,
+    activeCaseSummary,
+    activeRun,
+    activeRunId,
     realtimeEvents,
     loading,
     pendingActions,
-    latestSteps,
-    loadSessions,
-    loadSession,
-    createSession,
-    rerunActive,
-    confirmAction,
+    loadCases,
+    loadCase,
+    loadRun,
+    selectRun,
+    createCaseAndRun,
+    startActiveRun,
+    approveAction,
     rejectAction,
-    subscribeSession,
+    subscribeCase,
     stopRealtime,
   }
 })
