@@ -2,13 +2,13 @@ package com.powerinspection.task;
 
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
+import com.powerinspection.alarm.AlarmService;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.model.LocateAnythingFinding;
 import com.powerinspection.model.LocateAnythingGateway;
 import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.ModelServiceException;
-import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotProgressSnapshot;
 import com.powerinspection.route.RouteExecutorSupport;
@@ -49,15 +49,15 @@ public class TaskService {
   );
 
   private final DataStoreService dataStore;
-  private final NotificationService notificationService;
+  private final AlarmService alarmService;
   private final SimpMessagingTemplate messagingTemplate;
   private final RobotGateway robotGateway;
   private final LocateAnythingGateway locateAnythingGateway;
   private final Random random = new Random();
 
-  public TaskService(DataStoreService dataStore, NotificationService notificationService, SimpMessagingTemplate messagingTemplate, RobotGateway robotGateway, LocateAnythingGateway locateAnythingGateway) {
+  public TaskService(DataStoreService dataStore, AlarmService alarmService, SimpMessagingTemplate messagingTemplate, RobotGateway robotGateway, LocateAnythingGateway locateAnythingGateway) {
     this.dataStore = dataStore;
-    this.notificationService = notificationService;
+    this.alarmService = alarmService;
     this.messagingTemplate = messagingTemplate;
     this.robotGateway = robotGateway;
     this.locateAnythingGateway = locateAnythingGateway;
@@ -351,9 +351,7 @@ public class TaskService {
     if (finding != null) {
       alarm.put("finding", finding);
     }
-    dataStore.upsert(DataCategory.ALARM, alarm);
-    notificationService.pushToAll("ALARM", "新告警", message, "/alarms");
-    messagingTemplate.convertAndSend("/topic/alarms", alarm);
+    alarmService.create(alarm);
   }
 
   @SuppressWarnings("unchecked")

@@ -9,6 +9,7 @@ import { useWorkOrderStore } from '@/stores/workOrder'
 import { connectRealtime, disconnectRealtime, subscribeTopic } from '@/api/realtime'
 import type { Alarm, InspectionTask, Robot, TaskEvent } from '@/types'
 import type { AppNotification } from '@/types/notification'
+import type { UserRole } from '@/types/auth'
 
 const SESSION_KEY = 'pi_session'
 let realtimeStarted = false
@@ -55,6 +56,9 @@ export function startRealtime() {
     subscribeTopic<Alarm>('/topic/alarms', (alarm) => {
       useAlarmStore().applyRemoteAlarm(alarm)
       void useNotificationStore().load()
+      if (['ADMIN', 'DISPATCHER'].includes(currentUserRole() ?? '')) {
+        void useWorkOrderStore().load()
+      }
     }),
     subscribeTopic<AppNotification>('/topic/notifications', (notification) => {
       useNotificationStore().applyRemoteNotification(notification)
@@ -82,6 +86,17 @@ function currentUserId() {
     if (!raw) return null
     const session = JSON.parse(raw) as { user?: { id?: string } }
     return session.user?.id ?? null
+  } catch {
+    return null
+  }
+}
+
+function currentUserRole(): UserRole | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const session = JSON.parse(raw) as { user?: { role?: UserRole } }
+    return session.user?.role ?? null
   } catch {
     return null
   }

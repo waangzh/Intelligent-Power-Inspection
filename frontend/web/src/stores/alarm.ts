@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
-import type { Alarm, AlarmSeverity, Checkpoint, DetectionType, InspectionTask } from '@/types'
+import type { Alarm, AlarmSeverity, AlarmWorkOrderPolicy, Checkpoint, DetectionType, InspectionTask } from '@/types'
 import { DETECTION_LABELS } from '@/types'
 import { uid } from '@/utils/storage'
 
@@ -20,11 +20,31 @@ const SEVERITY_MAP: Record<DetectionType, AlarmSeverity> = {
 
 export const useAlarmStore = defineStore('alarm', () => {
   const alarms = ref<Alarm[]>([])
+  const workOrderPolicy = ref<AlarmWorkOrderPolicy>({
+    id: 'default',
+    rules: { LOW: 'MANUAL', MEDIUM: 'MANUAL', HIGH: 'MANUAL', CRITICAL: 'AUTO' },
+  })
 
   const unacknowledgedCount = computed(() => alarms.value.filter((a) => !a.acknowledged).length)
 
   async function load() {
-    alarms.value = await resourcesApi.listAlarms()
+    const [alarmItems, policy] = await Promise.all([
+      resourcesApi.listAlarms(),
+      resourcesApi.getAlarmWorkOrderPolicy(),
+    ])
+    alarms.value = alarmItems
+    workOrderPolicy.value = policy
+  }
+
+  async function saveWorkOrderPolicy(rules: AlarmWorkOrderPolicy['rules']) {
+    workOrderPolicy.value = await resourcesApi.updateAlarmWorkOrderPolicy({ rules })
+    return workOrderPolicy.value
+  }
+
+  async function retryWorkOrder(id: string) {
+    const alarm = await resourcesApi.retryAlarmWorkOrder(id)
+    updateLocalAlarm(alarm)
+    return alarm
   }
 
   function addAlarm(partial: Omit<Alarm, 'id' | 'createdAt' | 'acknowledged'>) {
@@ -104,8 +124,11 @@ export const useAlarmStore = defineStore('alarm', () => {
 
   return {
     alarms,
+    workOrderPolicy,
     unacknowledgedCount,
     load,
+    saveWorkOrderPolicy,
+    retryWorkOrder,
     addAlarm,
     acknowledge,
     acknowledgeAll,

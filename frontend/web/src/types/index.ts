@@ -52,6 +52,15 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 }
 
 export type AlarmSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+export type AlarmWorkOrderMode = 'AUTO' | 'MANUAL'
+export type WorkOrderConversionStatus = 'PROCESSING' | 'WAITING_MANUAL' | 'SUCCEEDED' | 'FAILED'
+
+export interface AlarmWorkOrderPolicy {
+  id: string
+  rules: Record<AlarmSeverity, AlarmWorkOrderMode>
+  updatedBy?: string
+  updatedAt?: string
+}
 
 export const ALARM_SEVERITY_LABELS: Record<AlarmSeverity, string> = {
   LOW: '低',
@@ -198,6 +207,12 @@ export interface Alarm {
   message: string
   imageUrl?: string
   acknowledged: boolean
+  workOrderModeApplied?: AlarmWorkOrderMode
+  workOrderConversionStatus?: WorkOrderConversionStatus
+  workOrderConversionSource?: 'AUTO' | 'MANUAL' | 'AGENT'
+  workOrderConversionError?: string
+  workOrderId?: string
+  convertedAt?: string
   createdAt: string
 }
 

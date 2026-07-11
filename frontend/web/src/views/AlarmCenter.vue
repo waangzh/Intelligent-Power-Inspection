@@ -2,6 +2,7 @@
   <div>
     <PageHeader title="告警中心" description="实时告警监控、确认与分级处理" :breadcrumbs="[{ label: '监控中心' }, { label: '告警中心' }]">
       <template #actions>
+        <el-button v-if="authStore.user?.role === 'ADMIN'" @click="openPolicyDialog">转工单规则</el-button>
         <el-button v-if="can('alarm:ack')" @click="alarmStore.acknowledgeAll()" :disabled="!alarmStore.unacknowledgedCount">全部确认</el-button>
       </template>
     </PageHeader>
@@ -47,22 +48,26 @@
             <el-table-column label="时间" width="150">
               <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
             </el-table-column>
-            <el-table-column label="状态" width="80">
+            <el-table-column label="状态" width="150">
               <template #default="{ row }">
-                <el-tag :type="row.acknowledged ? 'info' : 'danger'" size="small">{{ row.acknowledged ? '已确认' : '待处理' }}</el-tag>
+                <div class="status-tags">
+                  <el-tag :type="row.acknowledged ? 'info' : 'danger'" size="small">{{ row.acknowledged ? '已确认' : '待处理' }}</el-tag>
+                  <el-tag :type="conversionTagType(row)" size="small">{{ conversionLabel(row) }}</el-tag>
+                </div>
               </template>
             </el-table-column>
-            <el-table-column v-if="can('alarm:ack') || can('task:dispatch')" label="操作" width="210">
+            <el-table-column v-if="can('alarm:ack') || can('task:dispatch')" label="操作" width="250">
               <template #default="{ row }">
                 <el-button v-if="!row.acknowledged" text type="primary" size="small" @click.stop="alarmStore.acknowledge(row.id)">确认</el-button>
                 <el-button
-                  v-if="!workOrderStore.getByAlarmId(row.id)"
+                  v-if="can('task:dispatch') && shouldShowManualConversion(row)"
                   text
                   type="warning"
                   size="small"
                   @click.stop="createWorkOrder(row)"
-                >转工单</el-button>
-                <el-tag v-else size="small" type="info">已转工单</el-tag>
+                >人工转工单</el-button>
+                <el-button v-if="hasWorkOrder(row)" text type="warning" size="small" @click.stop="viewWorkOrder">查看工单</el-button>
+                <el-button v-if="can('task:dispatch') && row.workOrderConversionStatus === 'FAILED'" text type="danger" size="small" @click.stop="retryWorkOrder(row)">重试转单</el-button>
                 <el-button
                   v-if="can('task:dispatch')"
                   text
@@ -86,17 +91,20 @@
             <el-descriptions-item label="路线">{{ selected.routeName }}</el-descriptions-item>
             <el-descriptions-item label="检查点">{{ selected.checkpointName || '路线行进中' }}</el-descriptions-item>
             <el-descriptions-item label="描述">{{ selected.message }}</el-descriptions-item>
+            <el-descriptions-item label="工单转换">{{ conversionLabel(selected) }}</el-descriptions-item>
+            <el-descriptions-item v-if="selected.workOrderConversionError" label="转换错误">{{ selected.workOrderConversionError }}</el-descriptions-item>
           </el-descriptions>
           <img v-if="selected.imageUrl" :src="selected.imageUrl" class="alarm-img" alt="截图" />
-          <div v-if="can('alarm:ack') && selected" style="margin-top: 12px; display: flex; gap: 8px">
+          <div v-if="selected && (can('alarm:ack') || can('task:dispatch'))" style="margin-top: 12px; display: flex; gap: 8px">
             <el-button v-if="!selected.acknowledged" type="primary" size="small" @click="alarmStore.acknowledge(selected.id)">确认告警</el-button>
             <el-button
-              v-if="!workOrderStore.getByAlarmId(selected.id)"
+              v-if="can('task:dispatch') && shouldShowManualConversion(selected)"
               type="warning"
               size="small"
               @click="createWorkOrder(selected)"
-            >转为工单</el-button>
-            <el-button v-else size="small" @click="router.push('/workorders')">查看工单</el-button>
+            >人工转工单</el-button>
+            <el-button v-if="hasWorkOrder(selected)" size="small" @click="viewWorkOrder">查看工单</el-button>
+            <el-button v-if="can('task:dispatch') && selected.workOrderConversionStatus === 'FAILED'" type="danger" size="small" @click="retryWorkOrder(selected)">重试转单</el-button>
             <el-button v-if="can('task:dispatch')" type="success" size="small" @click="openAgentForAlarm(selected)">Agent 处置</el-button>
           </div>
         </el-card>
@@ -107,11 +115,36 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="policyDialogVisible" title="告警转工单规则" width="520px">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="规则保存后只对新产生的告警生效，历史告警仍按人工方式处理。"
+        style="margin-bottom: 16px"
+      />
+      <el-table :data="policyRows" size="small" border>
+        <el-table-column prop="label" label="告警级别" width="150" />
+        <el-table-column label="转单方式">
+          <template #default="{ row }">
+            <el-select v-model="row.mode" style="width: 100%">
+              <el-option label="自动转工单" value="AUTO" />
+              <el-option label="人工转工单" value="MANUAL" />
+            </el-select>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="policyDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="policySaving" @click="savePolicy">保存规则</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ChartCard from '@/components/ChartCard.vue'
@@ -120,7 +153,7 @@ import { usePermission } from '@/composables/usePermission'
 import { useAlarmStore } from '@/stores/alarm'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkOrderStore } from '@/stores/workOrder'
-import type { Alarm, AlarmSeverity } from '@/types'
+import type { Alarm, AlarmSeverity, AlarmWorkOrderMode } from '@/types'
 import { ALARM_SEVERITY_LABELS, DETECTION_LABELS } from '@/types'
 
 const router = useRouter()
@@ -132,6 +165,14 @@ const filter = ref<'all' | 'pending'>('all')
 const severityFilter = ref('')
 const keyword = ref('')
 const selected = ref<Alarm | null>(alarmStore.alarms[0] ?? null)
+const policyDialogVisible = ref(false)
+const policySaving = ref(false)
+const policyRows = reactive<Array<{ severity: AlarmSeverity; label: string; mode: AlarmWorkOrderMode }>>([
+  { severity: 'CRITICAL', label: '紧急 CRITICAL', mode: 'AUTO' },
+  { severity: 'HIGH', label: '高 HIGH', mode: 'MANUAL' },
+  { severity: 'MEDIUM', label: '中 MEDIUM', mode: 'MANUAL' },
+  { severity: 'LOW', label: '低 LOW', mode: 'MANUAL' },
+])
 
 const severityStats = computed(() => [
   { label: '紧急', value: alarmStore.alarms.filter((a) => a.severity === 'CRITICAL').length, color: '#f56c6c' },
@@ -168,16 +209,86 @@ function severityType(s: AlarmSeverity) {
   return { LOW: 'info', MEDIUM: 'warning', HIGH: 'warning', CRITICAL: 'danger' }[s] as 'info' | 'warning' | 'danger'
 }
 
-function createWorkOrder(alarm: Alarm) {
-  const user = authStore.user
-  if (!user) return
+async function createWorkOrder(alarm: Alarm) {
+  if (!authStore.user) return
   try {
-    const order = workOrderStore.createFromAlarm(alarm, { id: user.id, name: user.displayName })
-    if (!alarm.acknowledged) alarmStore.acknowledge(alarm.id)
+    const order = await workOrderStore.createFromAlarm(alarm)
+    alarm.workOrderModeApplied = 'MANUAL'
+    alarm.workOrderConversionSource = 'MANUAL'
+    alarm.workOrderConversionStatus = 'SUCCEEDED'
+    alarm.workOrderId = order.id
     ElMessage.success(`工单 ${order.id} 已创建`)
     router.push('/workorders')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '创建失败')
+  }
+}
+
+function hasWorkOrder(alarm: Alarm) {
+  return Boolean(alarm.workOrderId || workOrderStore.getByAlarmId(alarm.id))
+}
+
+function shouldShowManualConversion(alarm: Alarm) {
+  if (hasWorkOrder(alarm) || alarm.workOrderConversionStatus === 'FAILED') return false
+  return !alarm.workOrderModeApplied || alarm.workOrderModeApplied === 'MANUAL'
+}
+
+function conversionLabel(alarm: Alarm) {
+  if (hasWorkOrder(alarm)) {
+    const source = alarm.workOrderConversionSource || workOrderStore.getByAlarmId(alarm.id)?.source
+    return source === 'AUTO' ? '已自动转工单' : source === 'AGENT' ? '已由 Agent 转工单' : '已人工转工单'
+  }
+  if (alarm.workOrderConversionStatus === 'FAILED') return '自动转单失败'
+  if (alarm.workOrderConversionStatus === 'PROCESSING') return '自动转单中'
+  if (alarm.workOrderModeApplied === 'AUTO') return '等待自动转单'
+  return '等待人工转单'
+}
+
+function conversionTagType(alarm: Alarm) {
+  if (alarm.workOrderConversionStatus === 'FAILED') return 'danger'
+  if (hasWorkOrder(alarm)) return 'success'
+  if (alarm.workOrderModeApplied === 'AUTO') return 'warning'
+  return 'info'
+}
+
+async function retryWorkOrder(alarm: Alarm) {
+  try {
+    const updated = await alarmStore.retryWorkOrder(alarm.id)
+    selected.value = selected.value?.id === updated.id ? updated : selected.value
+    if (updated.workOrderConversionStatus === 'SUCCEEDED') {
+      await workOrderStore.load()
+      ElMessage.success('自动转工单成功')
+    } else {
+      ElMessage.error(updated.workOrderConversionError || '自动转工单失败')
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '重试失败')
+  }
+}
+
+async function viewWorkOrder() {
+  await workOrderStore.load().catch(() => {})
+  router.push('/workorders')
+}
+
+function openPolicyDialog() {
+  policyRows.forEach((row) => {
+    row.mode = alarmStore.workOrderPolicy.rules[row.severity]
+  })
+  policyDialogVisible.value = true
+}
+
+async function savePolicy() {
+  policySaving.value = true
+  try {
+    const rules = Object.fromEntries(policyRows.map((row) => [row.severity, row.mode])) as Record<AlarmSeverity, AlarmWorkOrderMode>
+    await alarmStore.saveWorkOrderPolicy(rules)
+    policyDialogVisible.value = false
+    ElMessage.success('转工单规则已保存')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '保存失败')
+  } finally {
+    policySaving.value = false
   }
 }
 
@@ -207,5 +318,12 @@ function openAgentForAlarm(alarm: Alarm) {
   width: 100%;
   margin-top: 12px;
   border-radius: 6px;
+}
+
+.status-tags {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 </style>
