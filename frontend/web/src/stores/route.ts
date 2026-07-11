@@ -117,19 +117,21 @@ export const useRouteStore = defineStore('route', () => {
       }))
   }
 
-  async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument) {
+  async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument, mapId?: string) {
     const route = routes.value.find((r) => r.id === routeId)
     const platformName = route?.name?.trim() || doc.routes[0]?.name || doc.active_route_id
     const executorJson = withPlatformRouteName(doc, platformName)
     const checkpoints = checkpointsFromExecutor(routeId, executorJson)
     const path = checkpoints.map((cp) => cp.position)
-    return updateRoute(routeId, {
+    const patch: Partial<Route> = {
       name: platformName,
       executorJson,
       checkpoints,
       path,
       mapMode: '2d',
-    })
+    }
+    if (mapId) patch.mapId = mapId
+    return updateRoute(routeId, patch)
   }
 
   function getRouteById(id: string) {

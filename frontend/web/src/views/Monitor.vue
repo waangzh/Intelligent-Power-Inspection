@@ -108,7 +108,7 @@ const displayRoute = computed(() => {
   const siteId = selectedRobot.value?.siteId
   if (siteId) {
     const siteRoutes = routeStore.getRoutesBySite(siteId)
-    return siteRoutes.find((r) => r.executorJson?.map_snapshot) ?? siteRoutes[0] ?? null
+    return siteRoutes.find((r) => r.mapId || r.executorJson?.map_snapshot) ?? siteRoutes[0] ?? null
   }
   return null
 })

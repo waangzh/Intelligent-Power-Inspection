@@ -27,7 +27,8 @@
           @wheel="onWheel"
           @contextmenu.prevent
         />
-        <div v-if="!mapLoaded" class="map-empty">拖入或点击上方按钮加载 YAML + PGM 地图</div>
+        <div v-if="mapLoading" class="map-empty">正在加载平台地图…</div>
+        <div v-else-if="!mapLoaded" class="map-empty">拖入或点击上方按钮加载 YAML + PGM 地图</div>
       </div>
 
       <div class="hud">
@@ -152,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, toRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRosMapRouteEditor } from '@/composables/useRosMapRouteEditor'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
@@ -160,6 +161,7 @@ import { downloadRouteJson } from '@/utils/routeExecutorJson'
 
 const props = defineProps<{
   initialJson?: RouteExecutorDocument | null
+  mapId?: string | null
   defaultRouteId?: string
   defaultRouteName?: string
 }>()
@@ -176,7 +178,8 @@ const jsonInputRef = ref<HTMLInputElement | null>(null)
 const activeTab = ref('targets')
 
 const editor = useRosMapRouteEditor(canvasRef, wrapRef, {
-  initialJson: props.initialJson,
+  initialJson: toRef(props, 'initialJson'),
+  mapId: toRef(props, 'mapId'),
   defaultRouteId: props.defaultRouteId,
   defaultRouteName: props.defaultRouteName,
   onChange: (doc) => emit('change', doc),
@@ -210,6 +213,10 @@ const {
   handleDroppedFiles,
   onMouseDown,
   onWheel,
+  needsMapUpload,
+  getMapUploadPayload,
+  markMapSynced,
+  mapLoading,
 } = editor
 
 const mapLoaded = computed(() => mapInfo.value.includes('px'))
@@ -276,7 +283,7 @@ function downloadJson() {
   downloadRouteJson(exportDocument())
 }
 
-defineExpose({ exportDocument })
+defineExpose({ exportDocument, needsMapUpload, getMapUploadPayload, markMapSynced })
 </script>
 
 <style scoped>

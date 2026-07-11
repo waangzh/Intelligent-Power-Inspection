@@ -291,7 +291,7 @@ interface Site {
 | `load()` | 从后端加载路线列表 |
 | `createRoute(siteId, name, description?)` | 创建空路线 |
 | `updateRoute(id, patch)` | 更新路线（含 `executorJson`、`checkpoints`、`path` 等） |
-| `saveExecutorRoute(routeId, doc)` | **推荐**：保存 ROS 标注结果；写入 `executorJson`，并同步 `name`、`checkpoints`、`path` |
+| `saveExecutorRoute(routeId, doc, mapId?)` | **推荐**：保存 ROS 标注结果；写入 `executorJson`、`mapId`（可选），并同步 `name`、`checkpoints`、`path` |
 | `removeRoute(id)` | 删除路线 |
 | `addCheckpoint` / `updateCheckpoint` / `removeCheckpoint` | 检查点 CRUD（Store 仍保留；`/routes` 页面不再直接调用） |
 | `getRouteById(id)` | 查询路线 |
@@ -359,7 +359,7 @@ y = origin_y + (image_height - pixel_y) * resolution
 1. 选择站点 → 新建/选择路线  
 2. 上传 `.yaml` + `.pgm`（支持拖拽），可选导入已有 `.json`  
 3. 模式：**起点** / **巡检点** / **方向** / **拖动**  
-4. 点击 **保存到平台** → 调用 `saveExecutorRoute` → `PATCH /routes/{id}`  
+4. 点击 **保存到平台** → 若本地加载了新 YAML/PGM，先 `POST /map-assets` 上传地图资产，再 `PATCH /routes/{id}`（含 `mapId` 与 `executorJson`）  
 5. 可 **复制 JSON** 或 **下载 route.json** 供机器人执行器加载  
 
 **Checkpoint 兼容字段**（`saveExecutorRoute` 自动生成）：
@@ -374,7 +374,7 @@ y = origin_y + (image_height - pixel_y) * resolution
 | `pan` | `yaw` 转角度 |
 | `dwellSeconds` | `task_duration_sec` |
 
-> ⚠️ 监控/任务页的 `Map2D` 仍使用 Leaflet 地理坐标，**不会**显示 PGM 底图；ROS 地图标注仅在 `/routes` 页使用。YAML/PGM 文件由用户本地上传，**不**通过后端 API 存储。
+> ⚠️ 监控页 `RosSlamMonitorMap` 优先通过路线 `mapId` 拉取 `/map-assets/{id}/yaml|pgm` 显示底图；若无 `mapId` 则回退到 `executorJson.map_snapshot`。保存时仍会在 `executorJson` 内嵌 `map_snapshot` 以兼容旧数据。
 
 **相关前端文件**：
 
@@ -628,7 +628,8 @@ Content-Type: application/json
 | 用户 | GET/PUT | `/users/me/preferences` | 偏好设置 |
 | 站点 | CRUD | `/sites`, `/sites/{id}/areas` | `useSiteStore` |
 | 路线 | CRUD | `/routes`, `/routes/{id}/checkpoints` | `useRouteStore` |
-| 路线 | PATCH | `/routes/{id}`（body 含 `executorJson`） | `saveExecutorRoute` |
+| 路线 | PATCH | `/routes/{id}`（body 含 `executorJson`、`mapId`） | `saveExecutorRoute` |
+| 地图资产 | POST/GET/DELETE | `/map-assets`, `/map-assets/{id}/yaml`, `/map-assets/{id}/pgm` | `resourcesApi.uploadMapAsset` 等 |
 | 任务 | CRUD | `/tasks` | `useTaskStore` |
 | 任务 | POST | `/tasks/{id}/dispatch` | `dispatch` |
 | 任务 | POST | `/tasks/{id}/pause` | `pause` |
@@ -657,6 +658,7 @@ Content-Type: application/json
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
+| `mapId` | string | 关联的 ROS 地图资产 ID（`POST /map-assets` 返回） |
 | `executorJson` | object | ROS 执行器 route.json v2，结构见 §5.5 `RouteExecutorDocument` |
 
 **示例**（节选）：
@@ -678,7 +680,7 @@ Content-Type: application/json
 }
 ```
 
-`GET /routes`、`GET /routes/{id}` 返回体中若曾保存过标注，会包含 `executorJson`；`/routes` 页面加载时将其传给 `RosMapRouteEditor` 的 `initial-json`。
+`GET /routes`、`GET /routes/{id}` 返回体中若曾保存过标注，会包含 `executorJson` 与可选 `mapId`；`/routes` 页面加载时优先按 `mapId` 拉取地图，并将 `executorJson` 传给 `RosMapRouteEditor`。
 
 ### 9.4 实时通道（WebSocket/STOMP）
 
@@ -704,6 +706,6 @@ Content-Type: application/json
 | 有没有 HTTP API？ | **有**，`/api/v1` |
 | 三维建图真实吗？ | **否**，后端 `simulate` 模拟 |
 | 任务执行真实吗？ | **半真实**，后端调度器模拟进度、事件、机器人位置和记录 |
-| 路线规划真实吗？ | **半真实**，`/routes` 为 ROS map 标注 + route.json v2；PGM/YAML 本地上传，平台持久化 `executorJson` |
+| 路线规划真实吗？ | **半真实**，`/routes` 为 ROS map 标注 + route.json v2；YAML/PGM 上传至 `/map-assets` 并关联 `mapId`，同时持久化 `executorJson` |
 | 检测/告警真实吗？ | **否**，后端随机模拟 + picsum 占位图 |
 | 接口在哪？ | 前端 `src/api/*`，后端 `backend/src/main/java/com/powerinspection/*` |

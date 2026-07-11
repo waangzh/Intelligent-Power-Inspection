@@ -17,6 +17,7 @@ import type { AppNotification, NotificationType } from '@/types/notification'
 import type { AgentAction, AgentSession, CreateAgentSessionRequest } from '@/types/agent'
 import type { WorkOrder, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
+import type { MapAsset, MapAssetUploadInput } from '@/types/mapAsset'
 
 export const resourcesApi = {
   listSites: () => http.get<Site[]>('/sites'),
@@ -31,6 +32,18 @@ export const resourcesApi = {
   createRoute: (route: Route) => http.post<Route>('/routes', route),
   updateRoute: (id: string, patch: Partial<Route>) => http.patch<Route>(`/routes/${id}`, patch),
   removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
+
+  getMapAsset: (id: string) => http.get<MapAsset>(`/map-assets/${id}`),
+  uploadMapAsset: (siteId: string, input: MapAssetUploadInput) => {
+    const form = new FormData()
+    form.append('siteId', siteId)
+    form.append('yaml', new File([input.yamlText], input.yamlName, { type: 'application/yaml' }))
+    form.append('pgm', new File([input.pgmBuffer], input.pgmName, { type: 'image/x-portable-graymap' }))
+    return http.postForm<MapAsset>('/map-assets', form)
+  },
+  getMapAssetYaml: (id: string) => http.get<Blob>(`/map-assets/${id}/yaml`),
+  getMapAssetPgm: (id: string) => http.get<Blob>(`/map-assets/${id}/pgm`),
+  removeMapAsset: (id: string) => http.delete<void>(`/map-assets/${id}`),
   addCheckpoint: (routeId: string, checkpoint: Checkpoint) =>
     http.post<Checkpoint>(`/routes/${routeId}/checkpoints`, checkpoint),
   updateCheckpoint: (routeId: string, checkpointId: string, patch: Partial<Checkpoint>) =>

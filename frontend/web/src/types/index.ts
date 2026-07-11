@@ -115,6 +115,8 @@ export interface Route {
   routeDetections: DetectionItem[]
   checkpoints: Checkpoint[]
   mapMode: '2d' | '3d'
+  /** 关联的 ROS 地图资产 ID（/api/v1/map-assets） */
+  mapId?: string
   /** ROS map route executor JSON (version 2). */
   executorJson?: import('@/types/routeExecutor').RouteExecutorDocument | null
   createdAt: string

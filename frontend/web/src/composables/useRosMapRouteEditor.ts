@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, reactive, ref, watch, type Ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue'
 import type { EditorMode, RouteExecutorDocument, RouteExecutorTarget, RosMapState } from '@/types/routeExecutor'
 import {
   createDefaultMapState,
@@ -18,6 +18,7 @@ import {
   loadRouteJson,
   type RouteFormState,
 } from '@/utils/routeExecutorJson'
+import { fetchMapAssetFiles } from '@/utils/mapAsset'
 
 type YawTarget = { kind: 'start'; id: null } | { kind: 'target'; id: string }
 type PointHit = { kind: 'start' } | { kind: 'target'; id: string }
@@ -31,7 +32,8 @@ export function useRosMapRouteEditor(
   canvasRef: Ref<HTMLCanvasElement | null>,
   wrapRef: Ref<HTMLElement | null>,
   options?: {
-    initialJson?: RouteExecutorDocument | null
+    initialJson?: MaybeRefOrGetter<RouteExecutorDocument | null | undefined>
+    mapId?: MaybeRefOrGetter<string | null | undefined>
     defaultRouteId?: string
     defaultRouteName?: string
     onChange?: (doc: RouteExecutorDocument) => void
@@ -52,6 +54,11 @@ export function useRosMapRouteEditor(
   const activeRouteIdSynced = ref(true)
   const cursorInfo = ref('map: -, -')
   const mapInfo = ref('等待加载地图')
+  const pendingYamlText = ref<string | null>(null)
+  const pendingPgmBuffer = ref<ArrayBuffer | null>(null)
+  const mapDirty = ref(false)
+  const loadedMapId = ref<string | null>(null)
+  const mapLoading = ref(false)
 
   const mapBitmapCanvas = document.createElement('canvas')
   let mapBitmapCtx = mapBitmapCanvas.getContext('2d')
@@ -384,9 +391,14 @@ export function useRosMapRouteEditor(
     addTargetFromPixel(px, py)
   }
 
-  function applyYamlText(text: string, fileName?: string) {
+  function applyYamlText(text: string, fileName?: string, trackUpload = true) {
     if (fileName) map.yamlName = fileName
     Object.assign(map, parseYaml(text))
+    if (trackUpload) {
+      pendingYamlText.value = text
+      mapDirty.value = true
+      loadedMapId.value = null
+    }
     if (map.pixels) {
       mapBitmapCtx = mapBitmapCanvas.getContext('2d')
       rebuildMapBitmap(map, mapBitmapCanvas)
@@ -395,20 +407,25 @@ export function useRosMapRouteEditor(
     draw()
   }
 
-  function applyPgmBuffer(buffer: ArrayBuffer, fileName?: string) {
+  function applyPgmBuffer(buffer: ArrayBuffer, fileName?: string, trackUpload = true) {
     if (fileName) map.pgmName = fileName
     const parsed = parsePgm(buffer)
     map.width = parsed.width
     map.height = parsed.height
     map.pixels = parsed.pixels
+    if (trackUpload) {
+      pendingPgmBuffer.value = buffer
+      mapDirty.value = true
+      loadedMapId.value = null
+    }
     mapBitmapCtx = mapBitmapCanvas.getContext('2d')
     rebuildMapBitmap(map, mapBitmapCanvas)
     fitToScreen()
     emitChange()
   }
 
-  function importRouteJson(doc: RouteExecutorDocument) {
-    if (doc.map_snapshot) {
+  function importRouteJson(doc: RouteExecutorDocument, includeMap = true) {
+    if (includeMap && doc.map_snapshot) {
       Object.assign(map, createDefaultMapState(), decodeMapSnapshot(doc.map_snapshot))
       mapBitmapCtx = mapBitmapCanvas.getContext('2d')
       rebuildMapBitmap(map, mapBitmapCanvas)
@@ -424,6 +441,41 @@ export function useRosMapRouteEditor(
     activeRouteIdSynced.value = true
     emitChange()
     draw()
+  }
+
+  async function loadFromMapAsset(mapId: string) {
+    if (loadedMapId.value === mapId && map.width) return
+    mapLoading.value = true
+    try {
+      const files = await fetchMapAssetFiles(mapId)
+      pendingYamlText.value = files.yamlText
+      pendingPgmBuffer.value = files.pgmBuffer
+      applyYamlText(files.yamlText, files.yamlName, false)
+      applyPgmBuffer(files.pgmBuffer, files.pgmName, false)
+      mapDirty.value = false
+      loadedMapId.value = mapId
+    } finally {
+      mapLoading.value = false
+    }
+  }
+
+  function needsMapUpload() {
+    return mapDirty.value && Boolean(pendingYamlText.value && pendingPgmBuffer.value && map.width)
+  }
+
+  function getMapUploadPayload() {
+    if (!needsMapUpload() || !pendingYamlText.value || !pendingPgmBuffer.value) return null
+    return {
+      yamlText: pendingYamlText.value,
+      yamlName: map.yamlName || 'map.yaml',
+      pgmBuffer: pendingPgmBuffer.value,
+      pgmName: map.pgmName || map.image || 'map.pgm',
+    }
+  }
+
+  function markMapSynced(mapId: string) {
+    mapDirty.value = false
+    loadedMapId.value = mapId
   }
 
   function exportDocument(): RouteExecutorDocument {
@@ -606,9 +658,20 @@ export function useRosMapRouteEditor(
   }
 
   watch(
-    () => options?.initialJson,
-    (doc) => {
-      if (doc) importRouteJson(doc)
+    () => [toValue(options?.mapId), toValue(options?.initialJson)] as const,
+    async ([mapId, doc]) => {
+      if (mapId) {
+        try {
+          await loadFromMapAsset(mapId)
+        } catch {
+          if (doc) importRouteJson(doc)
+          return
+        }
+        if (doc) importRouteJson(doc, false)
+      } else if (doc) {
+        loadedMapId.value = null
+        importRouteJson(doc)
+      }
       if (options?.defaultRouteName?.trim()) {
         form.routeName = options.defaultRouteName.trim()
         emitChange()
@@ -661,5 +724,11 @@ export function useRosMapRouteEditor(
     onWheel,
     resizeCanvas,
     draw,
+    loadFromMapAsset,
+    needsMapUpload,
+    getMapUploadPayload,
+    markMapSynced,
+    mapLoading,
+    mapDirty,
   }
 }

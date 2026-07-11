@@ -4,7 +4,10 @@
     <div v-if="show3dOverlay" class="overlay-3d">
       <Map3D :route="route" :robot-position="robotLatLng" />
     </div>
-    <div v-if="!mapReady" class="map-empty">
+    <div v-if="mapLoading" class="map-empty">
+      <span>正在加载地图…</span>
+    </div>
+    <div v-else-if="!mapReady" class="map-empty">
       <span>暂无 2D 建图数据</span>
       <small>请先在「巡检规划」中加载 YAML/PGM 地图、标注路线并保存到平台</small>
     </div>
@@ -25,9 +28,12 @@ import {
   createDefaultMapState,
   decodeMapSnapshot,
   mapToPixel,
+  parsePgm,
+  parseYaml,
   rebuildMapBitmap,
   rosCoordFromLatLng,
 } from '@/utils/rosMap'
+import { fetchMapAssetFiles } from '@/utils/mapAsset'
 
 const props = defineProps<{
   route?: Route | null
@@ -45,6 +51,7 @@ let resizeObserver: ResizeObserver | null = null
 
 const mapReady = computed(() => Boolean(map.width && map.height && map.pixels))
 const show3dOverlay = computed(() => mapReady.value && (props.route?.checkpoints.length ?? 0) > 0)
+const mapLoading = ref(false)
 
 const robotLatLng = computed(() => props.robotPosition ?? null)
 
@@ -62,13 +69,47 @@ function fitToScreen() {
   view.offsetY = (rect.height - map.height * view.scale) / 2
 }
 
-function loadMapFromDoc(doc: RouteExecutorDocument | null | undefined) {
-  Object.assign(map, createDefaultMapState())
-  if (!doc?.map_snapshot) return
-  Object.assign(map, decodeMapSnapshot(doc.map_snapshot))
+function applyMapState(patch: Partial<typeof map>) {
+  Object.assign(map, createDefaultMapState(), patch)
   mapBitmapCtx = mapBitmapCanvas.getContext('2d')
   rebuildMapBitmap(map, mapBitmapCanvas)
   fitToScreen()
+}
+
+function loadMapFromDoc(doc: RouteExecutorDocument | null | undefined) {
+  if (!doc?.map_snapshot) {
+    Object.assign(map, createDefaultMapState())
+    return
+  }
+  applyMapState(decodeMapSnapshot(doc.map_snapshot))
+}
+
+async function loadMapFromRoute(route: Route | null | undefined) {
+  if (!route) {
+    Object.assign(map, createDefaultMapState())
+    return
+  }
+  if (route.mapId) {
+    mapLoading.value = true
+    try {
+      const files = await fetchMapAssetFiles(route.mapId)
+      const parsed = parsePgm(files.pgmBuffer)
+      applyMapState({
+        ...parseYaml(files.yamlText),
+        width: parsed.width,
+        height: parsed.height,
+        pixels: parsed.pixels,
+        yamlName: files.yamlName,
+        pgmName: files.pgmName,
+      })
+      return
+    } catch {
+      // fall back to embedded snapshot
+    } finally {
+      mapLoading.value = false
+    }
+  }
+  loadMapFromDoc(route.executorJson)
 }
 
 function drawArrow(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: number, color: string, scale: number) {
@@ -209,11 +250,11 @@ function resizeCanvas() {
   draw()
 }
 
-watch(() => props.route?.executorJson, loadMapFromDoc, { immediate: true, deep: true })
+watch(() => props.route, (route) => void loadMapFromRoute(route), { immediate: true, deep: true })
 watch(() => props.robotPosition, () => draw(), { deep: true })
 
 onMounted(() => {
-  loadMapFromDoc(executorDoc.value)
+  void loadMapFromRoute(props.route)
   resizeObserver = new ResizeObserver(() => resizeCanvas())
   if (wrapRef.value) resizeObserver.observe(wrapRef.value)
   resizeCanvas()

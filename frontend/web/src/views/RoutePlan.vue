@@ -48,6 +48,7 @@
           v-if="currentRoute"
           ref="editorRef"
           :key="currentRoute.id"
+          :map-id="currentRoute.mapId"
           :initial-json="currentRoute.executorJson ?? undefined"
           :default-route-id="currentRoute.id"
           :default-route-name="currentRoute.name"
@@ -69,6 +70,8 @@ import RosMapRouteEditor from '@/components/RosMapRouteEditor.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
+import { ApiError } from '@/api/http'
+import { uploadMapAsset } from '@/utils/mapAsset'
 import type { Route } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
 
@@ -142,8 +145,33 @@ async function saveToPlatform() {
     return
   }
   try {
-    await routeStore.saveExecutorRoute(currentRoute.value.id, pendingDoc.value)
-    ElMessage.success('路线已保存到平台')
+    let mapId = currentRoute.value.mapId
+    let mapUploadSkipped = false
+    const editor = editorRef.value
+    if (editor?.needsMapUpload()) {
+      const payload = editor.getMapUploadPayload()
+      if (!payload) {
+        ElMessage.warning('请先加载完整的 YAML 与 PGM 地图文件')
+        return
+      }
+      try {
+        const asset = await uploadMapAsset(selectedSiteId.value, payload)
+        mapId = asset.id
+        editor.markMapSynced(mapId)
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 404 || e.status === 405)) {
+          mapUploadSkipped = true
+        } else {
+          throw e
+        }
+      }
+    }
+    await routeStore.saveExecutorRoute(currentRoute.value.id, pendingDoc.value, mapId)
+    if (mapUploadSkipped) {
+      ElMessage.warning('当前后端未提供地图资产接口，路线已保存（地图仅写入 map_snapshot）')
+    } else {
+      ElMessage.success('路线已保存到平台')
+    }
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '保存失败，请检查路线数据或网络连接')
   }
