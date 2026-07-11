@@ -12,6 +12,10 @@ export type Permission =
   | 'detection:manage'
   | 'user:manage'
   | 'record:export'
+  | 'agent:view'
+  | 'agent:run'
+  | 'agent:approve'
+  | 'agent:admin'
 
 export interface AccessRule {
   permission?: Permission
@@ -31,6 +35,10 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'detection:manage',
     'user:manage',
     'record:export',
+    'agent:view',
+    'agent:run',
+    'agent:approve',
+    'agent:admin',
   ],
   DISPATCHER: [
     'task:view',
@@ -41,6 +49,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'route:edit',
     'alarm:ack',
     'record:export',
+    'agent:view',
+    'agent:run',
+    'agent:approve',
   ],
   VIEWER: ['task:view'],
 }

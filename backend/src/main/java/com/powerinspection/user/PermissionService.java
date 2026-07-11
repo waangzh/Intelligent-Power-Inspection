@@ -21,7 +21,10 @@ public class PermissionService {
       Permission.SITE_EDIT,
       Permission.ROUTE_EDIT,
       Permission.ALARM_ACK,
-      Permission.RECORD_EXPORT
+      Permission.RECORD_EXPORT,
+      Permission.AGENT_VIEW,
+      Permission.AGENT_RUN,
+      Permission.AGENT_APPROVE
     ));
     ROLE_PERMISSIONS.put(UserRole.VIEWER, EnumSet.of(Permission.TASK_VIEW));
   }

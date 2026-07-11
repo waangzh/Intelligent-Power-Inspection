@@ -365,7 +365,7 @@ public class AgentService {
       "defectLevel", analysis.defectLevel(),
       "cause", analysis.cause(),
       "recommendedActions", analysis.recommendedActions(),
-      "citations", analysis.citations(),
+      "citations", analysis.evidenceIds(),
       "confidence", analysis.confidence()
     );
   }

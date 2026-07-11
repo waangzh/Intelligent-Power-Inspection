@@ -11,7 +11,11 @@ public enum Permission {
   ROBOT_MANAGE("robot:manage"),
   DETECTION_MANAGE("detection:manage"),
   USER_MANAGE("user:manage"),
-  RECORD_EXPORT("record:export");
+  RECORD_EXPORT("record:export"),
+  AGENT_VIEW("agent:view"),
+  AGENT_RUN("agent:run"),
+  AGENT_APPROVE("agent:approve"),
+  AGENT_ADMIN("agent:admin");
 
   private final String value;
 

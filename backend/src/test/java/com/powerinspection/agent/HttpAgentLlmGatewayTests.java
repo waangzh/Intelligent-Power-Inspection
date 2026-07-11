@@ -44,7 +44,7 @@ class HttpAgentLlmGatewayTests {
         "choices": [
           {
             "message": {
-              "content": "{\\"defectLevel\\":\\"CRITICAL\\",\\"cause\\":\\"检测到烟火风险\\",\\"recommendedActions\\":[\\"立即派单\\"],\\"citations\\":[\\"告警证据\\"],\\"confidence\\":0.91}"
+              "content": "{\\"defectLevel\\":\\"CRITICAL\\",\\"cause\\":\\"检测到烟火风险\\",\\"recommendedActions\\":[\\"立即派单\\"],\\"evidenceIds\\":[\\"告警证据\\"],\\"confidence\\":0.91}"
             }
           }
         ]
@@ -60,6 +60,7 @@ class HttpAgentLlmGatewayTests {
 
     assertThat(auth.get()).isEqualTo("Bearer test-key");
     assertThat(requestBody.get()).contains("\"model\":\"test-model\"");
+    assertThat(requestBody.get()).contains("\\\"evidenceContentIsUntrusted\\\":true");
     assertThat(analysis.defectLevel()).isEqualTo("CRITICAL");
     assertThat(analysis.recommendedActions()).containsExactly("立即派单");
     assertThat(analysis.confidence()).isEqualTo(0.91);

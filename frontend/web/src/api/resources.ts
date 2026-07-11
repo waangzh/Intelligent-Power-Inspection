@@ -13,7 +13,20 @@ import type {
   TaskEvent,
 } from '@/types'
 import type { AppNotification, NotificationType } from '@/types/notification'
-import type { AgentAction, AgentSession, CreateAgentSessionRequest } from '@/types/agent'
+import type {
+  AgentAction,
+  AgentActionDecisionRequest,
+  AgentCaseDetail,
+  AgentCaseSummary,
+  AgentRunDetail,
+  AgentRunSummary,
+  AgentSession,
+  AuditedAgentAction,
+  AuditedAgentEvidence,
+  CreateAgentCaseRequest,
+  CreateAgentSessionRequest,
+  StartAgentRunRequest,
+} from '@/types/agent'
 import type { WorkOrder, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
 
@@ -105,4 +118,13 @@ export const resourcesApi = {
   rerunAgentSession: (id: string) => http.post<AgentSession>(`/agents/sessions/${id}/runs`),
   confirmAgentAction: (id: string) => http.post<AgentAction>(`/agents/actions/${id}/confirm`),
   rejectAgentAction: (id: string) => http.post<AgentAction>(`/agents/actions/${id}/reject`),
+
+  listAgentCases: () => http.get<AgentCaseSummary[]>('/agent-cases'),
+  createAgentCase: (body: CreateAgentCaseRequest) => http.post<AgentCaseSummary>('/agent-cases', body),
+  getAgentCase: (id: string) => http.get<AgentCaseDetail>(`/agent-cases/${id}`),
+  startAgentRun: (caseId: string, body: StartAgentRunRequest) => http.post<AgentRunSummary>(`/agent-cases/${caseId}/runs`, body),
+  getAgentRun: (runId: string) => http.get<AgentRunDetail>(`/agent-runs/${runId}`),
+  getAgentRunEvidence: (runId: string) => http.get<AuditedAgentEvidence[]>(`/agent-runs/${runId}/evidence`),
+  approveAuditedAgentAction: (id: string, body: AgentActionDecisionRequest) => http.post<AuditedAgentAction>(`/agent-actions/${id}/approve`, body),
+  rejectAuditedAgentAction: (id: string, body: AgentActionDecisionRequest) => http.post<AuditedAgentAction>(`/agent-actions/${id}/reject`, body),
 }
