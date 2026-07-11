@@ -1,0 +1,30 @@
+---
+description: Git 协作规范 — 开发者 lzm 使用个人分支，不直接推 main
+alwaysApply: true
+---
+
+# Git 分支规范（lzm）
+
+本仓库协作者 **lzm** 的默认工作分支为 **`lzm`**，远程已存在 `origin/lzm`。
+
+## 提交与推送
+
+- **禁止**直接推送到 `main`（除非用户明确要求合并到 main）。
+- 推送前确认当前分支：`git branch --show-current` 应为 `lzm`。
+- 若不在 `lzm` 上：`git checkout lzm`（不存在则 `git checkout -b lzm origin/lzm` 或从 `main` 创建）。
+- 只 add/commit 本次改动的文件，不要无关文件。
+- 推送：`git push -u origin lzm`（首次）或 `git push`。
+
+## 与 main 同步
+
+拉取远程更新时优先同步个人分支：
+
+```bash
+git fetch origin
+git checkout lzm
+git merge origin/main   # 或 git rebase origin/main
+```
+
+## 合并到 main
+
+由用户在 GitHub 上发起 Pull Request（`lzm` → `main`），不要本地 force push main。
