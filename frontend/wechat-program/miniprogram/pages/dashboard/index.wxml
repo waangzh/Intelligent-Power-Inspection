@@ -7,10 +7,6 @@
         <text class="bio">{{user.bio || '欢迎使用电力智能巡检平台'}}</text>
       </view>
     </view>
-    <view class="quick-actions">
-      <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/tasks/index">任务</button>
-      <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/alarms/index">告警{{unack ? '('+unack+')' : ''}}</button>
-    </view>
   </view>
 
   <page-header title="运行总览" description="电力巡检平台运行态势一屏掌握" />
@@ -44,16 +40,6 @@
 
   <view class="card">
     <view class="card-title flex-between">
-      <text>实时地图 · {{activeSite.name || '站点'}}</text>
-      <picker wx:if="{{sites.length}}" mode="selector" range="{{sites}}" range-key="name" value="{{siteIndex}}" bindchange="onSiteChange">
-        <text class="link">切换 ▾</text>
-      </picker>
-    </view>
-    <map-view wx:if="{{activeSite}}" center="{{activeSite.center}}" route="{{displayRoute}}" robotPosition="{{robotPosition}}" />
-  </view>
-
-  <view class="card">
-    <view class="card-title flex-between">
       <text>最新告警</text>
       <text class="link" bindtap="go" data-url="/pages/alarms/index">全部</text>
     </view>
@@ -83,14 +69,5 @@
       </view>
     </view>
     <view wx:if="{{!activeTasks.length}}" class="empty-hint">暂无进行中任务</view>
-  </view>
-
-  <view class="card">
-    <view class="card-title">机器人状态</view>
-    <view wx:for="{{robots}}" wx:key="id" class="robot-row">
-      <text>{{item.name}}</text>
-      <text class="tag tag-{{item.statusType}}">{{item.status}}</text>
-      <progress percent="{{item.battery}}" stroke-width="4" style="flex:1;margin-left:16rpx;" />
-    </view>
   </view>
 </view>

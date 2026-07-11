@@ -1,4 +1,6 @@
 const api = require('../../../services/index')
+const { hasPermission } = require('../../../utils/permission')
+const alarmPolicy = require('../../../utils/alarm-policy')
 
 Page({
   data: {
@@ -12,11 +14,21 @@ Page({
     sites: [],
     siteIndex: 0,
     siteLabel: '未设置',
+    canManagePolicy: false,
+    policyRows: [],
   },
 
   onShow() {
-    if (!getApp().requireAuth('/pages/profile/settings/index')) return
+    const app = getApp()
+    if (!app.requireAuth('/pages/profile/settings/index')) return
+    const user = app.globalData.user
+    this.setData({ canManagePolicy: hasPermission(user.role, 'alarm:policy') })
+    this.refreshPolicyRows()
     this.load()
+  },
+
+  refreshPolicyRows() {
+    this.setData({ policyRows: alarmPolicy.getPolicyRows() })
   },
 
   async load() {
@@ -64,5 +76,12 @@ Page({
     const prefs = { ...this.data.prefs, defaultSiteId: '' }
     this.setData({ prefs, siteLabel: '未设置' })
     api.savePreferences(prefs)
+  },
+
+  setPolicyMode(e) {
+    const { severity, mode } = e.currentTarget.dataset
+    alarmPolicy.setMode(severity, mode)
+    this.refreshPolicyRows()
+    wx.showToast({ title: '策略已更新', icon: 'success' })
   },
 })

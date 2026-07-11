@@ -1,3 +1,19 @@
+.wo-entry {
+  margin-top: 8rpx;
+  padding: 0;
+}
+
+.wo-entry-inner {
+  padding: 28rpx 24rpx;
+}
+
+.wo-entry-label {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #1a2b3c;
+}
+
+.arrow { color: #c0c4cc; font-size: 32rpx; }
 .toolbar input { border: 1rpx solid #e4e9f0; border-radius: 8rpx; padding: 16rpx; margin-bottom: 12rpx; }
 .filter-row { display: flex; flex-wrap: wrap; gap: 12rpx; align-items: center; }
 .filter-chip { padding: 8rpx 20rpx; background: #f0f4f8; border-radius: 8rpx; font-size: 24rpx; }

@@ -1,5 +1,6 @@
 const api = require('../../services/index')
 const { hasPermission } = require('../../utils/permission')
+const workOrderPerm = require('../../utils/work-order-permission')
 const { ALARM_SEVERITY_LABELS, DETECTION_LABELS } = require('../../utils/constants')
 
 const SEVERITY_OPTIONS = [
@@ -23,7 +24,8 @@ Page({
     stats: { total: 0, unack: 0, critical: 0, high: 0, medium: 0 },
     severityChart: [],
     canAck: false,
-    canWorkOrder: false,
+    canCreateWorkOrder: false,
+    canViewWorkOrder: false,
     workOrderAlarmIds: {},
   },
 
@@ -33,7 +35,8 @@ Page({
     const user = app.globalData.user
     this.setData({
       canAck: hasPermission(user.role, 'alarm:ack'),
-      canWorkOrder: hasPermission(user.role, 'task:dispatch'),
+      canCreateWorkOrder: workOrderPerm.canCreateWorkOrder(user),
+      canViewWorkOrder: hasPermission(user.role, 'workorder:view'),
     })
     this.load()
     app.refreshBadges()
@@ -41,16 +44,25 @@ Page({
 
   async load() {
     try {
+      const user = getApp().globalData.user
+      const alarmsBefore = await api.getAlarms()
+      await api.tryAutoConvertPendingAlarms(alarmsBefore, user)
       const [alarms, orders] = await Promise.all([api.getAlarms(), api.getWorkOrders()])
+      const workOrderByAlarm = {}
       const workOrderAlarmIds = {}
-      orders.forEach((o) => { if (o.alarmId) workOrderAlarmIds[o.alarmId] = true })
+      orders.forEach((o) => {
+        if (!o.alarmId) return
+        workOrderByAlarm[o.alarmId] = o
+        workOrderAlarmIds[o.alarmId] = true
+      })
       const enriched = alarms.map((a) => ({
         ...a,
         severityLabel: ALARM_SEVERITY_LABELS[a.severity],
         typeLabel: DETECTION_LABELS[a.type] || a.type,
         sevType: a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info',
         time: a.createdAt ? a.createdAt.slice(0, 16).replace('T', ' ') : '',
-        hasWorkOrder: !!workOrderAlarmIds[a.id],
+        hasWorkOrder: !!workOrderByAlarm[a.id],
+        workOrderLabel: workOrderByAlarm[a.id]?.autoConverted ? '已自动转工单' : '已转工单',
       }))
       const stats = {
         total: enriched.length,

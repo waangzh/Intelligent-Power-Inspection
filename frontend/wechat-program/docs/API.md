@@ -114,15 +114,13 @@ Content-Type: application/json
 type UserRole = 'ADMIN' | 'DISPATCHER' | 'VIEWER'
 
 type Permission =
-  | 'task:view' | 'task:create' | 'task:dispatch' | 'task:control' | 'task:estop'
+  | 'task:view' | 'task:create' | 'task:dispatch' | 'task:control'
   | 'site:edit' | 'route:edit' | 'alarm:ack'
   | 'robot:manage' | 'detection:manage'
   | 'user:manage' | 'record:export'
-  | 'workorder:view' | 'workorder:create' | 'workorder:process' | 'workorder:review'
-  | 'alarm:policy'
+  | 'workorder:view' | 'workorder:create' | 'workorder:assign'
+  | 'workorder:process' | 'workorder:review'
 ```
-
-**角色定位**：管理员=系统治理；调度员=值班运维；观察员=只读查阅。
 
 页面守卫：`app.requireAuth()` + `app.requirePermission(permission, roles?)`
 
@@ -179,9 +177,8 @@ type Permission =
 | 方法 | HTTP | 说明 |
 |------|------|------|
 | `getWorkOrders()` | `GET /work-orders` | 工单列表 |
-| `createWorkOrderFromAlarm(alarm, creator)` | `POST /work-orders/from-alarm/{alarmId}` | 从告警创建（待接单） |
-| `claimWorkOrder(id)` | `POST /work-orders/{id}/claim` | 调度员抢单 |
-| `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}/status` | 状态流转 |
+| `createWorkOrderFromAlarm(alarm, creator)` | `POST /work-orders` | 从告警创建 |
+| `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}` | 状态流转 |
 
 状态：`PENDING → PROCESSING → REVIEW → CLOSED`
 
@@ -230,18 +227,10 @@ type Permission =
 | `pages/alarms/index` | `/alarms` | 登录 |
 | `pages/workorders/index` | `/workorders` | `workorder:view` |
 | `pages/notifications/index` | `/notifications` | 登录 |
-| `pages/sites/index` | `/sites` | `site:edit` |
-| `pages/routes/index` | `/routes` | `route:edit` |
 | `pages/tasks/index` | `/tasks` | `task:view` |
 | `pages/tasks/detail/index` | `/tasks/:id` | `task:view` |
-| `pages/robots/index` | `/robots` | `robot:manage` |
-| `pages/detection/index` | `/detection` | `detection:manage` |
-| `pages/records/index` | `/records` | 登录 |
-| `pages/statistics/index` | `/statistics` | 登录 |
-| `pages/users/index` | `/users` | ADMIN + `user:manage` |
 | `pages/profile/*/index` | `/profile/*` | 登录 |
 | `pages/forbidden/index` | `/403` | 登录 |
-| `pages/more/index` | — | 功能中心入口 |
 
 ### 通知 link 映射（`config/menu.js` → `mapNotificationLink`）
 
@@ -283,6 +272,7 @@ type Permission =
 | API | 状态 |
 |-----|------|
 | `toggleUserEnabled` | 占位，web 端亦未实现 |
+| `workOrder.assign` | Store 有方法，UI 未暴露 |
 
 ---
 

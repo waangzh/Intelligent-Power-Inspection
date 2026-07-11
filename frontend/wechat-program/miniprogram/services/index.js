@@ -4,6 +4,21 @@ const mock = require('./mock/store')
 const { uid, loadFromStorage } = require('../utils/storage')
 const { ROUTE_DETECTIONS, CHECKPOINT_DETECTIONS } = require('../utils/constants')
 const { createEmptyRosRoute } = require('../utils/ros-route')
+const { buildLocationFromAlarm, resolutionSummary } = require('../utils/work-order')
+const workOrderPerm = require('../utils/work-order-permission')
+
+function currentUser() {
+  const session = getSession()
+  if (!session?.user) throw new Error('未登录')
+  return session.user
+}
+
+async function getWorkOrderById(id) {
+  const orders = await getWorkOrders()
+  const order = orders.find((o) => o.id === id)
+  if (!order) throw new Error('工单不存在')
+  return order
+}
 
 function useMock() {
   return apiConfig.useMock
@@ -377,7 +392,13 @@ async function getWorkOrders() {
   return http.get('/work-orders')
 }
 
-async function createWorkOrderFromAlarm(alarm, creator) {
+async function createWorkOrderFromAlarm(alarm, creator, options = {}) {
+  const sessionUser = currentUser()
+  if (creator?.id && creator.id !== sessionUser.id) throw new Error('用户身份不一致')
+  workOrderPerm.assertCanCreateWorkOrder(sessionUser)
+  const creatorName = sessionUser.displayName || sessionUser.name || '系统'
+  const sites = useMock() ? mock.getState().sites : await getSites()
+  const location = buildLocationFromAlarm(alarm, sites[0])
   if (useMock()) {
     const orders = mock.getState().workOrders
     if (orders.some((o) => o.alarmId === alarm.id)) throw new Error('该告警已有关联工单')
@@ -390,49 +411,45 @@ async function createWorkOrderFromAlarm(alarm, creator) {
       alarmId: alarm.id,
       status: 'PENDING',
       priority,
-      createdById: creator.id,
-      createdByName: creator.name,
+      assigneeName: creatorName,
+      createdById: sessionUser.id,
+      createdByName: creatorName,
+      location,
+      autoConverted: !!options.autoConverted,
       createdAt: now,
       updatedAt: now,
     }
     orders.unshift(order)
     mock.save(mock.KEYS.workOrders, orders)
-    const dispatchers = mock.getState().users.filter((u) => u.role === 'DISPATCHER' && u.enabled !== false)
-    dispatchers.forEach((d) => {
-      mock.pushNotification(d.id, 'WORKORDER', '新工单待接单', order.title, '/pages/workorders/index')
-    })
+    mock.pushNotification(sessionUser.id, 'WORKORDER', '工单已创建', order.title, '/pages/workorders/index')
     return order
   }
-  return http.post(`/work-orders/from-alarm/${alarm.id}`, {})
+  return http.post('/work-orders', { alarmId: alarm.id, autoConverted: !!options.autoConverted, location })
 }
 
-async function claimWorkOrder(id) {
-  if (useMock()) {
-    const orders = mock.getState().workOrders
-    const idx = orders.findIndex((o) => o.id === id)
-    if (idx < 0) throw new Error('工单不存在')
-    const order = orders[idx]
-    if (order.status !== 'PENDING') throw new Error('仅待处理工单可接单')
-    if (order.assigneeId || (order.assigneeName && order.assigneeName !== order.createdByName)) {
-      throw new Error('工单已被其他调度员接单')
+async function tryAutoConvertPendingAlarms(alarms, creator) {
+  const alarmPolicy = require('../utils/alarm-policy')
+  if (!creator || !workOrderPerm.canCreateWorkOrder(creator)) return
+  const policy = alarmPolicy.loadPolicy()
+  let orders = await getWorkOrders()
+  const linked = new Set(orders.filter((o) => o.alarmId).map((o) => o.alarmId))
+  for (const alarm of alarms) {
+    if (linked.has(alarm.id)) continue
+    if (!alarmPolicy.shouldAutoConvert(alarm.severity, policy)) continue
+    try {
+      await createWorkOrderFromAlarm(alarm, creator, { autoConverted: true })
+      linked.add(alarm.id)
+      if (!alarm.acknowledged) await acknowledgeAlarm(alarm.id)
+    } catch (e) {
+      // 已转工单或创建失败时跳过
     }
-    const app = getApp()
-    const me = app.globalData.user
-    orders[idx] = {
-      ...order,
-      assigneeId: me.id,
-      assigneeName: me.displayName,
-      status: 'PROCESSING',
-      claimedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-    mock.save(mock.KEYS.workOrders, orders)
-    return orders[idx]
   }
-  return http.post(`/work-orders/${id}/claim`)
 }
 
 async function updateWorkOrderStatus(id, status, extra = {}) {
+  const user = currentUser()
+  const order = await getWorkOrderById(id)
+  workOrderPerm.assertStatusTransition(order, status, user)
   if (useMock()) {
     const orders = mock.getState().workOrders
     const idx = orders.findIndex((o) => o.id === id)
@@ -442,7 +459,33 @@ async function updateWorkOrderStatus(id, status, extra = {}) {
     mock.save(mock.KEYS.workOrders, orders)
     return orders[idx]
   }
-  return http.patch(`/work-orders/${id}/status`, { status, ...extra })
+  return http.patch(`/work-orders/${id}`, { status, ...extra })
+}
+
+async function submitWorkOrderResolution(id, form) {
+  const user = currentUser()
+  const submitter = user.displayName || user.name || '调度员'
+  const fullForm = {
+    ...form,
+    submittedAt: new Date().toISOString(),
+    submittedBy: submitter,
+  }
+  return updateWorkOrderStatus(id, 'REVIEW', {
+    resolution: resolutionSummary(fullForm),
+    resolutionForm: fullForm,
+  })
+}
+
+async function submitWorkOrderReview(id, form) {
+  const user = currentUser()
+  const reviewer = user.displayName || user.name || '管理员'
+  const fullForm = {
+    ...form,
+    reviewedAt: new Date().toISOString(),
+    reviewedBy: reviewer,
+  }
+  const status = form.result === 'PASS' ? 'CLOSED' : 'PROCESSING'
+  return updateWorkOrderStatus(id, status, { reviewForm: fullForm })
 }
 
 // ==================== Robots ====================
@@ -594,8 +637,10 @@ module.exports = {
   acknowledgeAllAlarms,
   getWorkOrders,
   createWorkOrderFromAlarm,
-  claimWorkOrder,
+  tryAutoConvertPendingAlarms,
   updateWorkOrderStatus,
+  submitWorkOrderResolution,
+  submitWorkOrderReview,
   getRobots,
   addRobot,
   removeRobot,

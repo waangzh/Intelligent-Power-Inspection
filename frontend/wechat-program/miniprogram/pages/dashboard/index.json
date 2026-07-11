@@ -4,7 +4,6 @@
     "page-header": "/components/page-header/index",
     "user-avatar": "/components/user-avatar/index",
     "task-status-tag": "/components/task-status-tag/index",
-    "map-view": "/components/map-view/index",
     "simple-chart": "/components/simple-chart/index"
   }
 }

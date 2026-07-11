@@ -1,31 +1,21 @@
 const api = require('../../services/index')
 const { hasPermission } = require('../../utils/permission')
+const workOrderPerm = require('../../utils/work-order-permission')
 const { WORK_ORDER_STATUS_LABELS, WORK_ORDER_PRIORITY_LABELS } = require('../../utils/constants')
+const {
+  FAULT_TYPE_OPTIONS,
+  HANDLING_METHOD_OPTIONS,
+  enrichWorkOrder,
+} = require('../../utils/work-order')
 
-const REVIEW_CONCLUSION_OPTIONS = [
-  { value: 'RESOLVED', label: '已消缺' },
-  { value: 'PARTIALLY_RESOLVED', label: '部分消缺' },
-  { value: 'UNRESOLVED', label: '未消缺' },
-  { value: 'FALSE_ALARM', label: '误报' },
-]
-
-function createReviewForm() {
-  return { conclusion: 'RESOLVED', conclusionLabel: '已消缺', onsiteFinding: '', handlingMeasures: '', followUpPlan: '' }
-}
-
-function decorateOrder(order) {
-  const review = order.review && {
-    ...order.review,
-    conclusionLabel: REVIEW_CONCLUSION_OPTIONS.find((item) => item.value === order.review.conclusion)?.label || order.review.conclusion,
-    submittedLabel: order.review.submittedAt ? order.review.submittedAt.slice(0, 16).replace('T', ' ') : '',
-  }
-  return {
-    ...order,
-    review,
-    statusLabel: WORK_ORDER_STATUS_LABELS[order.status],
-    priorityLabel: WORK_ORDER_PRIORITY_LABELS[order.priority],
-    createdLabel: order.createdAt ? order.createdAt.slice(0, 16).replace('T', ' ') : '',
-  }
+const EMPTY_RESOLVE_FORM = {
+  faultType: '',
+  faultTypeIndex: -1,
+  handlingMethod: '',
+  handlingMethodIndex: -1,
+  replacedParts: '',
+  testResult: '',
+  remarks: '',
 }
 
 Page({
@@ -37,22 +27,55 @@ Page({
     detail: null,
     showDetail: false,
     showResolve: false,
-    reviewConclusionOptions: REVIEW_CONCLUSION_OPTIONS,
-    reviewConclusionIndex: 0,
-    reviewForm: createReviewForm(),
-    requiresFollowUp: false,
+    showReview: false,
     resolvingId: '',
+    reviewingId: '',
+    resolveForm: { ...EMPTY_RESOLVE_FORM },
+    reviewForm: { result: 'PASS', comment: '' },
+    faultTypeOptions: FAULT_TYPE_OPTIONS,
+    handlingMethodOptions: HANDLING_METHOD_OPTIONS,
+    canCreate: false,
+    canAssign: false,
+    canProcess: false,
+    canReview: false,
+    user: null,
   },
 
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/workorders/index')) return
     if (!app.requirePermission('workorder:view')) return
+    const user = app.globalData.user
+    this.setData({
+      user,
+      canCreate: hasPermission(user.role, 'workorder:create'),
+      canAssign: hasPermission(user.role, 'workorder:assign'),
+      canProcess: hasPermission(user.role, 'workorder:process'),
+      canReview: hasPermission(user.role, 'workorder:review'),
+    })
     this.load()
   },
 
   async load() {
-    const orders = (await api.getWorkOrders()).map(decorateOrder)
+    const user = this.data.user || getApp().globalData.user
+    let orders = await api.getWorkOrders()
+    if (user.role === 'DISPATCHER') {
+      orders = orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, user))
+    }
+    orders = orders.map((o) => {
+      const enriched = enrichWorkOrder({
+        ...o,
+        statusLabel: WORK_ORDER_STATUS_LABELS[o.status],
+        priorityLabel: WORK_ORDER_PRIORITY_LABELS[o.priority],
+        createdLabel: o.createdAt ? o.createdAt.slice(0, 16).replace('T', ' ') : '',
+      })
+      return {
+        ...enriched,
+        canAccept: workOrderPerm.canAcceptOrder(o, user),
+        canSubmitReview: workOrderPerm.canSubmitReview(o, user),
+        canConfirmReview: workOrderPerm.canConfirmReview(o, user),
+      }
+    })
     const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0, CLOSED: 0 }
     orders.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status]++ })
     const statusCards = [
@@ -78,79 +101,132 @@ Page({
   },
 
   openDetail(e) {
-    const detail = this.data.orders.find((o) => o.id === e.currentTarget.dataset.id)
-    this.setData({ detail, showDetail: true })
+    const order = this.data.orders.find((o) => o.id === e.currentTarget.dataset.id)
+    this.setData({ detail: order, showDetail: true })
   },
 
   closeDetail() { this.setData({ showDetail: false }) },
 
-  accept(e) {
-    this.claim(e.currentTarget.dataset.id)
-  },
-
-  async claim(id) {
+  async accept(e) {
+    const id = e.currentTarget.dataset.id
+    const order = this.data.orders.find((o) => o.id === id)
+    if (!workOrderPerm.canAcceptOrder(order, this.data.user)) {
+      wx.showToast({ title: '无接单权限', icon: 'none' })
+      return
+    }
     try {
-      await api.claimWorkOrder(id)
-      wx.showToast({ title: '接单成功' })
+      await api.updateWorkOrderStatus(id, 'PROCESSING')
+      wx.showToast({ title: '状态已更新' })
       this.load()
     } catch (err) {
-      wx.showToast({ title: err.message || '接单失败', icon: 'none' })
+      wx.showToast({ title: err.message || '操作失败', icon: 'none' })
     }
   },
 
   openResolve(e) {
-    this.setData({ resolvingId: e.currentTarget.dataset.id, reviewConclusionIndex: 0, reviewForm: createReviewForm(), requiresFollowUp: false, showResolve: true })
+    const id = e.currentTarget.dataset.id
+    const order = this.data.orders.find((o) => o.id === id)
+    if (!workOrderPerm.canSubmitReview(order, this.data.user)) {
+      wx.showToast({ title: '仅指派调度员可提交复核', icon: 'none' })
+      return
+    }
+    this.setData({
+      resolvingId: id,
+      resolveForm: { ...EMPTY_RESOLVE_FORM },
+      showResolve: true,
+    })
   },
 
   closeResolve() { this.setData({ showResolve: false }) },
 
-  onReviewConclusionChange(e) {
-    const reviewConclusionIndex = Number(e.detail.value)
-    const option = REVIEW_CONCLUSION_OPTIONS[reviewConclusionIndex]
+  onFaultTypeChange(e) {
+    const index = Number(e.detail.value)
     this.setData({
-      reviewConclusionIndex,
-      'reviewForm.conclusion': option.value,
-      'reviewForm.conclusionLabel': option.label,
-      requiresFollowUp: ['PARTIALLY_RESOLVED', 'UNRESOLVED'].includes(option.value),
+      'resolveForm.faultTypeIndex': index,
+      'resolveForm.faultType': FAULT_TYPE_OPTIONS[index],
     })
   },
 
-  onReviewFieldInput(e) {
-    this.setData({ [`reviewForm.${e.currentTarget.dataset.field}`]: e.detail.value })
+  onHandlingMethodChange(e) {
+    const index = Number(e.detail.value)
+    this.setData({
+      'resolveForm.handlingMethodIndex': index,
+      'resolveForm.handlingMethod': HANDLING_METHOD_OPTIONS[index],
+    })
+  },
+
+  onResolveFieldInput(e) {
+    const field = e.currentTarget.dataset.field
+    this.setData({ [`resolveForm.${field}`]: e.detail.value })
+  },
+
+  openReview(e) {
+    const id = e.currentTarget.dataset.id
+    const order = this.data.orders.find((o) => o.id === id)
+    if (!workOrderPerm.canConfirmReview(order, this.data.user)) {
+      wx.showToast({ title: '仅管理员可确认复核', icon: 'none' })
+      return
+    }
+    this.setData({
+      reviewingId: id,
+      reviewForm: { result: 'PASS', comment: '' },
+      showReview: true,
+    })
+  },
+
+  closeReview() { this.setData({ showReview: false }) },
+
+  setReviewResult(e) {
+    this.setData({ 'reviewForm.result': e.currentTarget.dataset.v })
+  },
+
+  onReviewCommentInput(e) {
+    this.setData({ 'reviewForm.comment': e.detail.value })
   },
 
   stop() {},
 
   async submitResolve() {
-    const { conclusion, onsiteFinding, handlingMeasures, followUpPlan } = this.data.reviewForm
-    const review = {
-      conclusion,
-      onsiteFinding: onsiteFinding.trim(),
-      handlingMeasures: handlingMeasures.trim(),
-      followUpPlan: followUpPlan.trim(),
-    }
-    if (review.onsiteFinding.length < 10 || review.handlingMeasures.length < 10) {
-      wx.showToast({ title: '现场检查情况和处理措施至少填写 10 个字符', icon: 'none' })
+    const { resolveForm, resolvingId } = this.data
+    if (!resolveForm.faultType || !resolveForm.handlingMethod || !resolveForm.testResult.trim()) {
+      wx.showToast({ title: '请填写故障类型、处理方式、试验结果', icon: 'none' })
       return
     }
-    if (this.data.requiresFollowUp && !review.followUpPlan) {
-      wx.showToast({ title: '请填写遗留风险与后续计划', icon: 'none' })
+    try {
+      await api.submitWorkOrderResolution(resolvingId, {
+        faultType: resolveForm.faultType,
+        handlingMethod: resolveForm.handlingMethod,
+        replacedParts: resolveForm.replacedParts.trim() || undefined,
+        testResult: resolveForm.testResult.trim(),
+        remarks: resolveForm.remarks.trim() || undefined,
+      })
+      this.setData({ showResolve: false })
+      wx.showToast({ title: '已提交复核' })
+      this.load()
+    } catch (err) {
+      wx.showToast({ title: err.message || '提交失败', icon: 'none' })
+    }
+  },
+
+  async submitReview() {
+    const { reviewForm, reviewingId } = this.data
+    if (!reviewForm.comment.trim()) {
+      wx.showToast({ title: '请填写复核意见', icon: 'none' })
       return
     }
-    await api.updateWorkOrderStatus(this.data.resolvingId, 'REVIEW', { review })
-    this.setData({ showResolve: false })
-    wx.showToast({ title: '已提交复核' })
-    this.load()
-  },
-
-  closeOrder(e) {
-    this.updateStatus(e.currentTarget.dataset.id, 'CLOSED')
-  },
-
-  async updateStatus(id, status, extra) {
-    await api.updateWorkOrderStatus(id, status, extra)
-    wx.showToast({ title: '状态已更新' })
-    this.load()
+    try {
+      await api.submitWorkOrderReview(reviewingId, {
+        result: reviewForm.result,
+        comment: reviewForm.comment.trim(),
+      })
+      this.setData({ showReview: false })
+      wx.showToast({
+        title: reviewForm.result === 'PASS' ? '复核通过，工单已关闭' : '已退回，等待重新处理',
+      })
+      this.load()
+    } catch (err) {
+      wx.showToast({ title: err.message || '复核失败', icon: 'none' })
+    }
   },
 
   goAlarms() {

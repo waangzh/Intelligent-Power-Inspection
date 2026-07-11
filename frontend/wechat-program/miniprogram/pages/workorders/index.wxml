@@ -1,6 +1,6 @@
 <view class="container">
-  <page-header title="工单管理" description="调度员在接单大厅抢单，管理员复核关闭">
-    <view slot="actions"><button size="mini" bindtap="goAlarms">从告警创建</button></view>
+  <page-header title="工单管理" description="管理员指派/改派与复核，调度员现场处置并提交复核">
+    <view slot="actions"><button wx:if="{{canCreate}}" size="mini" bindtap="goAlarms">从告警创建</button></view>
   </page-header>
 
   <view class="stat-grid">
@@ -16,65 +16,108 @@
       <text class="tag tag-primary">{{item.statusLabel}}</text>
     </view>
     <view class="muted">工单号 {{item.id}}</view>
+    <view class="muted">地点 {{item.locationLabel}}</view>
     <view class="muted">优先级 {{item.priorityLabel}} · {{item.assigneeName || item.createdByName}} · {{item.createdLabel}}</view>
     <view class="wo-desc">{{item.description}}</view>
     <view class="wo-actions" catchtap="stop">
-      <button wx:if="{{item.status==='PENDING'}}" size="mini" catchtap="accept" data-id="{{item.id}}">接单</button>
-      <button wx:if="{{item.status==='PROCESSING'}}" size="mini" type="primary" catchtap="openResolve" data-id="{{item.id}}">提交复核</button>
-      <button wx:if="{{item.status==='REVIEW'}}" size="mini" catchtap="closeOrder" data-id="{{item.id}}">关闭</button>
+      <button wx:if="{{item.canAccept}}" size="mini" catchtap="accept" data-id="{{item.id}}">接单</button>
+      <button wx:if="{{item.canSubmitReview}}" size="mini" type="primary" catchtap="openResolve" data-id="{{item.id}}">提交复核</button>
+      <button wx:if="{{item.canConfirmReview}}" size="mini" type="primary" catchtap="openReview" data-id="{{item.id}}">确认复核</button>
     </view>
   </view>
   <view wx:if="{{!filtered.length}}" class="empty-hint">暂无工单</view>
 
   <view class="modal-mask" wx:if="{{showDetail}}" bindtap="closeDetail">
-    <view class="modal-panel" catchtap="">
+    <view class="modal-panel detail-panel" catchtap="">
       <view class="card-title">工单详情</view>
       <view class="detail-row"><text class="muted">工单号</text><text>{{detail.id}}</text></view>
       <view class="detail-row"><text class="muted">标题</text><text>{{detail.title}}</text></view>
-      <view class="detail-row detail-row-block"><text class="muted">具体地点</text><text class="location-value">{{detail.locationDescription || '-'}}</text></view>
+      <view class="detail-row"><text class="muted">描述</text><text class="detail-desc-inline">{{detail.description}}</text></view>
       <view class="detail-row"><text class="muted">优先级</text><text>{{detail.priorityLabel}}</text></view>
       <view class="detail-row"><text class="muted">状态</text><text>{{detail.statusLabel}}</text></view>
       <view class="detail-row"><text class="muted">创建人</text><text>{{detail.createdByName || '-'}}</text></view>
       <view class="detail-row"><text class="muted">创建时间</text><text>{{detail.createdLabel}}</text></view>
       <view class="detail-row"><text class="muted">处理人</text><text>{{detail.assigneeName || '-'}}</text></view>
-      <view wx:if="{{detail.resolution && !detail.review}}" class="detail-row detail-row-block"><text class="muted">处理说明</text><text>{{detail.resolution}}</text></view>
-      <view wx:if="{{detail.review}}" class="review-record">
-        <view class="review-record-title"><text>复核记录</text><text class="review-conclusion">{{detail.review.conclusionLabel}}</text></view>
-        <view class="review-meta">{{detail.review.submittedByName}} · {{detail.review.submittedLabel}}</view>
-        <view class="review-field"><text>现场检查情况</text><view>{{detail.review.onsiteFinding}}</view></view>
-        <view class="review-field"><text>处理措施与验证结果</text><view>{{detail.review.handlingMeasures}}</view></view>
-        <view wx:if="{{detail.review.followUpPlan}}" class="review-field"><text>遗留风险与后续计划</text><view>{{detail.review.followUpPlan}}</view></view>
-      </view>
-      <view class="detail-desc">{{detail.description}}</view>
+      <view class="detail-row" wx:if="{{detail.autoConverted}}"><text class="muted">来源</text><text>告警自动转工单</text></view>
+
+      <view class="section-title">具体地点</view>
+      <view class="detail-row"><text class="muted">站点</text><text>{{detail.locationSite}}</text></view>
+      <view class="detail-row"><text class="muted">区域/路线</text><text>{{detail.locationArea}}</text></view>
+      <view class="detail-row"><text class="muted">检查点</text><text>{{detail.locationCheckpoint}}</text></view>
+      <view class="detail-row"><text class="muted">地址</text><text>{{detail.locationAddress}}</text></view>
+
+      <block wx:if="{{detail.resolutionForm}}">
+        <view class="section-title">现场处理记录</view>
+        <view class="detail-row"><text class="muted">故障类型</text><text>{{detail.resolutionForm.faultType}}</text></view>
+        <view class="detail-row"><text class="muted">处理方式</text><text>{{detail.resolutionForm.handlingMethod}}</text></view>
+        <view class="detail-row"><text class="muted">更换部件</text><text>{{detail.resolutionForm.replacedParts || '-'}}</text></view>
+        <view class="detail-row"><text class="muted">试验结果</text><text class="detail-desc-inline">{{detail.resolutionForm.testResult}}</text></view>
+        <view class="detail-row"><text class="muted">补充说明</text><text class="detail-desc-inline">{{detail.resolutionForm.remarks || '-'}}</text></view>
+        <view class="detail-row"><text class="muted">提交人</text><text>{{detail.resolutionSubmittedLabel}}</text></view>
+      </block>
+
+      <block wx:if="{{detail.reviewForm}}">
+        <view class="section-title">管理员复核</view>
+        <view class="detail-row"><text class="muted">复核结果</text><text class="tag {{detail.reviewForm.result==='PASS'?'tag-success':'tag-danger'}}">{{detail.reviewResultLabel}}</text></view>
+        <view class="detail-row"><text class="muted">复核意见</text><text class="detail-desc-inline">{{detail.reviewForm.comment}}</text></view>
+        <view class="detail-row"><text class="muted">复核人</text><text>{{detail.reviewSubmittedLabel}}</text></view>
+      </block>
+
       <button size="mini" bindtap="closeDetail">关闭</button>
     </view>
   </view>
 
   <view class="modal-mask" wx:if="{{showResolve}}" bindtap="closeResolve">
-    <view class="modal-panel" catchtap="">
-      <view class="card-title">提交复核</view>
-      <view class="review-form-intro">请完整记录现场核查、处置验证和遗留风险，提交后将进入待复核状态。</view>
-      <view class="form-field">
-        <view class="field-label">复核结论 <text class="required">*</text></view>
-        <picker mode="selector" range="{{reviewConclusionOptions}}" range-key="label" value="{{reviewConclusionIndex}}" bindchange="onReviewConclusionChange">
-          <view class="picker-value">{{reviewForm.conclusionLabel}}</view>
+    <view class="modal-panel form-panel" catchtap="">
+      <view class="card-title">提交现场处理结果</view>
+      <view class="form-item required">
+        <text class="form-label">故障类型</text>
+        <picker mode="selector" range="{{faultTypeOptions}}" value="{{resolveForm.faultTypeIndex}}" bindchange="onFaultTypeChange">
+          <view class="form-picker">{{resolveForm.faultType || '请选择故障类型'}}</view>
         </picker>
       </view>
-      <view class="form-field">
-        <view class="field-label">现场检查情况 <text class="required">*</text></view>
-        <textarea class="review-textarea" data-field="onsiteFinding" value="{{reviewForm.onsiteFinding}}" maxlength="500" placeholder="检查范围、发现情况和关键读数（至少 10 个字符）" bindinput="onReviewFieldInput" />
+      <view class="form-item required">
+        <text class="form-label">处理方式</text>
+        <picker mode="selector" range="{{handlingMethodOptions}}" value="{{resolveForm.handlingMethodIndex}}" bindchange="onHandlingMethodChange">
+          <view class="form-picker">{{resolveForm.handlingMethod || '请选择处理方式'}}</view>
+        </picker>
       </view>
-      <view class="form-field">
-        <view class="field-label">处理措施与验证结果 <text class="required">*</text></view>
-        <textarea class="review-textarea" data-field="handlingMeasures" value="{{reviewForm.handlingMeasures}}" maxlength="500" placeholder="处置措施、验证方式与验证结果（至少 10 个字符）" bindinput="onReviewFieldInput" />
+      <view class="form-item">
+        <text class="form-label">更换部件</text>
+        <input class="form-input" placeholder="如有更换请填写部件名称/型号" value="{{resolveForm.replacedParts}}" data-field="replacedParts" bindinput="onResolveFieldInput" />
       </view>
-      <view class="form-field">
-        <view class="field-label">遗留风险与后续计划 <text wx:if="{{requiresFollowUp}}" class="required">*</text></view>
-        <textarea class="review-textarea" data-field="followUpPlan" value="{{reviewForm.followUpPlan}}" maxlength="500" placeholder="未完全消缺时，请说明风险和后续计划" bindinput="onReviewFieldInput" />
+      <view class="form-item required">
+        <text class="form-label">试验结果</text>
+        <textarea class="form-textarea" placeholder="如：复测正常、绝缘合格等" value="{{resolveForm.testResult}}" data-field="testResult" bindinput="onResolveFieldInput" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">补充说明</text>
+        <textarea class="form-textarea" placeholder="其他现场情况" value="{{resolveForm.remarks}}" data-field="remarks" bindinput="onResolveFieldInput" />
       </view>
       <view class="form-actions">
         <button size="mini" bindtap="closeResolve">取消</button>
         <button size="mini" type="primary" bindtap="submitResolve">提交复核</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="modal-mask" wx:if="{{showReview}}" bindtap="closeReview">
+    <view class="modal-panel form-panel" catchtap="">
+      <view class="card-title">管理员复核确认</view>
+      <view class="form-item required">
+        <text class="form-label">复核结果</text>
+        <view class="review-modes">
+          <text class="mode-chip {{reviewForm.result==='PASS'?'on':''}}" bindtap="setReviewResult" data-v="PASS">通过并关闭</text>
+          <text class="mode-chip {{reviewForm.result==='REJECT'?'on':''}}" bindtap="setReviewResult" data-v="REJECT">退回重做</text>
+        </view>
+      </view>
+      <view class="form-item required">
+        <text class="form-label">复核意见</text>
+        <textarea class="form-textarea" placeholder="请填写复核结论与依据" value="{{reviewForm.comment}}" bindinput="onReviewCommentInput" />
+      </view>
+      <view class="form-actions">
+        <button size="mini" bindtap="closeReview">取消</button>
+        <button size="mini" type="primary" bindtap="submitReview">确认复核</button>
       </view>
     </view>
   </view>
