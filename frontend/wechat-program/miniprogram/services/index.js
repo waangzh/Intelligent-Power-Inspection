@@ -387,6 +387,7 @@ async function createWorkOrderFromAlarm(alarm, creator) {
       id: uid('wo'),
       title: `告警处置：${alarm.message.slice(0, 24)}`,
       description: alarm.message,
+      locationDescription: [alarm.routeName, alarm.checkpointName].filter(Boolean).join(' / '),
       alarmId: alarm.id,
       status: 'PENDING',
       priority,
@@ -401,7 +402,7 @@ async function createWorkOrderFromAlarm(alarm, creator) {
     mock.pushNotification(creator.id, 'WORKORDER', '工单已创建', order.title, '/pages/workorders/index')
     return order
   }
-  return http.post('/work-orders', { alarmId: alarm.id })
+  return http.post(`/work-orders/from-alarm/${alarm.id}`, { assigneeName: creator.displayName || creator.name })
 }
 
 async function updateWorkOrderStatus(id, status, extra = {}) {
@@ -414,7 +415,7 @@ async function updateWorkOrderStatus(id, status, extra = {}) {
     mock.save(mock.KEYS.workOrders, orders)
     return orders[idx]
   }
-  return http.patch(`/work-orders/${id}`, { status, ...extra })
+  return http.patch(`/work-orders/${id}/status`, { status, ...extra })
 }
 
 // ==================== Robots ====================

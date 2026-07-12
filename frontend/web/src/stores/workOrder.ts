@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { Alarm } from '@/types'
-import type { WorkOrder, WorkOrderStatus } from '@/types/workOrder'
+import type { WorkOrder, WorkOrderReviewInput, WorkOrderStatus } from '@/types/workOrder'
 
 export const useWorkOrderStore = defineStore('workOrder', () => {
   const orders = ref<WorkOrder[]>([])
@@ -38,14 +38,10 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
     return order
   }
 
-  function updateStatus(id: string, status: WorkOrderStatus, extra?: { resolution?: string }) {
-    const order = orders.value.find((o) => o.id === id)
-    if (!order) return
-    order.status = status
-    order.updatedAt = new Date().toISOString()
-    if (extra?.resolution) order.resolution = extra.resolution
-    if (status === 'CLOSED') order.closedAt = order.updatedAt
-    void resourcesApi.updateWorkOrderStatus(id, status, extra).then(updateLocalOrder)
+  async function updateStatus(id: string, status: WorkOrderStatus, extra?: { review?: WorkOrderReviewInput }) {
+    const order = await resourcesApi.updateWorkOrderStatus(id, status, extra)
+    updateLocalOrder(order)
+    return order
   }
 
   function assign(id: string, assigneeName: string) {

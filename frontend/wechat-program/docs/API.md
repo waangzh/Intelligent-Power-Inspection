@@ -175,10 +175,12 @@ type Permission =
 | 方法 | HTTP | 说明 |
 |------|------|------|
 | `getWorkOrders()` | `GET /work-orders` | 工单列表 |
-| `createWorkOrderFromAlarm(alarm, creator)` | `POST /work-orders` | 从告警创建 |
-| `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}` | 状态流转 |
+| `createWorkOrderFromAlarm(alarm, creator)` | `POST /work-orders/from-alarm/{alarmId}` | 从告警创建 |
+| `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}/status` | 状态流转 |
 
 状态：`PENDING → PROCESSING → REVIEW → CLOSED`
+
+提交复核时，`extra.review` 包含复核结论、现场检查情况、处理措施与验证结果，以及可选的遗留风险与后续计划；部分消缺或未消缺时后续计划必填。
 
 ### 5.6 机器人 / 检测 / 通知
 

@@ -37,6 +37,7 @@ public class WorkOrderService {
     String message = text(alarm.get("message"));
     String title = firstText(values.get("title"), "告警处置：" + abbreviate(message, 24));
     String description = firstText(values.get("description"), message);
+    String locationDescription = firstText(values.get("locationDescription"), locationFromAlarm(alarm));
     String priority = firstText(values.get("priority"), priorityFor(text(alarm.get("severity"))));
     boolean automatic = "AUTO".equals(source);
 
@@ -44,6 +45,9 @@ public class WorkOrderService {
     order.put("id", "wo_alarm_" + alarmId);
     order.put("title", title);
     order.put("description", description);
+    if (!locationDescription.isBlank()) {
+      order.put("locationDescription", locationDescription);
+    }
     order.put("alarmId", alarmId);
     order.put("source", source);
     order.put("status", "PENDING");
@@ -100,6 +104,15 @@ public class WorkOrderService {
       case "LOW" -> "LOW";
       default -> "MEDIUM";
     };
+  }
+
+  private String locationFromAlarm(Map<String, Object> alarm) {
+    String routeName = text(alarm.get("routeName"));
+    String checkpointName = text(alarm.get("checkpointName"));
+    if (routeName == null || routeName.isBlank()) {
+      return checkpointName == null ? "" : checkpointName;
+    }
+    return checkpointName == null || checkpointName.isBlank() ? routeName : routeName + " / " + checkpointName;
   }
 
   private String abbreviate(String value, int max) {

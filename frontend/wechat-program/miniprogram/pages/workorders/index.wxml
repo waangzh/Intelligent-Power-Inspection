@@ -31,12 +31,20 @@
       <view class="card-title">工单详情</view>
       <view class="detail-row"><text class="muted">工单号</text><text>{{detail.id}}</text></view>
       <view class="detail-row"><text class="muted">标题</text><text>{{detail.title}}</text></view>
+      <view class="detail-row detail-row-block"><text class="muted">具体地点</text><text class="location-value">{{detail.locationDescription || '-'}}</text></view>
       <view class="detail-row"><text class="muted">优先级</text><text>{{detail.priorityLabel}}</text></view>
       <view class="detail-row"><text class="muted">状态</text><text>{{detail.statusLabel}}</text></view>
       <view class="detail-row"><text class="muted">创建人</text><text>{{detail.createdByName || '-'}}</text></view>
       <view class="detail-row"><text class="muted">创建时间</text><text>{{detail.createdLabel}}</text></view>
       <view class="detail-row"><text class="muted">处理人</text><text>{{detail.assigneeName || '-'}}</text></view>
-      <view class="detail-row"><text class="muted">处理说明</text><text>{{detail.resolution || '-'}}</text></view>
+      <view wx:if="{{detail.resolution && !detail.review}}" class="detail-row detail-row-block"><text class="muted">处理说明</text><text>{{detail.resolution}}</text></view>
+      <view wx:if="{{detail.review}}" class="review-record">
+        <view class="review-record-title"><text>复核记录</text><text class="review-conclusion">{{detail.review.conclusionLabel}}</text></view>
+        <view class="review-meta">{{detail.review.submittedByName}} · {{detail.review.submittedLabel}}</view>
+        <view class="review-field"><text>现场检查情况</text><view>{{detail.review.onsiteFinding}}</view></view>
+        <view class="review-field"><text>处理措施与验证结果</text><view>{{detail.review.handlingMeasures}}</view></view>
+        <view wx:if="{{detail.review.followUpPlan}}" class="review-field"><text>遗留风险与后续计划</text><view>{{detail.review.followUpPlan}}</view></view>
+      </view>
       <view class="detail-desc">{{detail.description}}</view>
       <button size="mini" bindtap="closeDetail">关闭</button>
     </view>
@@ -44,8 +52,26 @@
 
   <view class="modal-mask" wx:if="{{showResolve}}" bindtap="closeResolve">
     <view class="modal-panel" catchtap="">
-      <view class="card-title">提交处理结果</view>
-      <textarea placeholder="请填写现场处理情况" value="{{resolveText}}" bindinput="onResolveInput" />
+      <view class="card-title">提交复核</view>
+      <view class="review-form-intro">请完整记录现场核查、处置验证和遗留风险，提交后将进入待复核状态。</view>
+      <view class="form-field">
+        <view class="field-label">复核结论 <text class="required">*</text></view>
+        <picker mode="selector" range="{{reviewConclusionOptions}}" range-key="label" value="{{reviewConclusionIndex}}" bindchange="onReviewConclusionChange">
+          <view class="picker-value">{{reviewForm.conclusionLabel}}</view>
+        </picker>
+      </view>
+      <view class="form-field">
+        <view class="field-label">现场检查情况 <text class="required">*</text></view>
+        <textarea class="review-textarea" data-field="onsiteFinding" value="{{reviewForm.onsiteFinding}}" maxlength="500" placeholder="检查范围、发现情况和关键读数（至少 10 个字符）" bindinput="onReviewFieldInput" />
+      </view>
+      <view class="form-field">
+        <view class="field-label">处理措施与验证结果 <text class="required">*</text></view>
+        <textarea class="review-textarea" data-field="handlingMeasures" value="{{reviewForm.handlingMeasures}}" maxlength="500" placeholder="处置措施、验证方式与验证结果（至少 10 个字符）" bindinput="onReviewFieldInput" />
+      </view>
+      <view class="form-field">
+        <view class="field-label">遗留风险与后续计划 <text wx:if="{{requiresFollowUp}}" class="required">*</text></view>
+        <textarea class="review-textarea" data-field="followUpPlan" value="{{reviewForm.followUpPlan}}" maxlength="500" placeholder="未完全消缺时，请说明风险和后续计划" bindinput="onReviewFieldInput" />
+      </view>
       <view class="form-actions">
         <button size="mini" bindtap="closeResolve">取消</button>
         <button size="mini" type="primary" bindtap="submitResolve">提交复核</button>

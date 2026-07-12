@@ -378,7 +378,8 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.alarmId").value("alarm_seed_003"));
+      .andExpect(jsonPath("$.data.alarmId").value("alarm_seed_003"))
+      .andExpect(jsonPath("$.data.locationDescription").value("电容器组巡检"));
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId)
         .header("Authorization", bearer(dispatcherToken))
@@ -397,7 +398,42 @@ class PowerInspectionApplicationTests {
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
         .header("Authorization", bearer(dispatcherToken))
         .contentType(MediaType.APPLICATION_JSON)
-        .content(json("status", "CLOSED", "resolution", "已复核")))
+        .content(json("status", "PROCESSING")))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.status").value("PROCESSING"));
+
+    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
+        .header("Authorization", bearer(dispatcherToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json(
+          "status", "REVIEW",
+          "review", Map.of(
+            "conclusion", "PARTIALLY_RESOLVED",
+            "onsiteFinding", "现场检查主变底部和密封件，未见新增渗油痕迹。",
+            "handlingMeasures", "已完成油迹清洁和油位复测，读数保持正常。"
+          )
+        )))
+      .andExpect(status().isBadRequest());
+
+    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
+        .header("Authorization", bearer(dispatcherToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json(
+          "status", "REVIEW",
+          "review", Map.of(
+            "conclusion", "RESOLVED",
+            "onsiteFinding", "现场检查主变底部和密封件，未见新增渗油痕迹。",
+            "handlingMeasures", "已完成油迹清洁和油位复测，读数保持正常。"
+          )
+        )))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.review.conclusion").value("RESOLVED"))
+      .andExpect(jsonPath("$.data.review.submittedByName").value("张调度"));
+
+    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
+        .header("Authorization", bearer(dispatcherToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("status", "CLOSED")))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.closedAt", not(blankOrNullString())));
 

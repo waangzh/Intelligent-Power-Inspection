@@ -464,6 +464,10 @@ interface Alarm {
 **WorkOrderStatus**：`PENDING → PROCESSING → REVIEW → CLOSED`（或 `CANCELLED`）  
 **WorkOrderPriority**：`LOW | MEDIUM | HIGH | URGENT`
 
+**具体地点**：`locationDescription`，格式为“站点 / 区域 / 设备或检查点 / 补充位置”；告警转工单时由路线和检查点自动生成初始值。
+
+**提交复核**：仅允许 `PROCESSING → REVIEW`，请求体的 `review` 必须包含 `conclusion`（`RESOLVED | PARTIALLY_RESOLVED | UNRESOLVED | FALSE_ALARM`）、`onsiteFinding`、`handlingMeasures` 和可选的 `followUpPlan`。前两项长度为 10–500 字；部分消缺和未消缺时必须填写后续计划。服务端自动记录提交人和提交时间。
+
 ---
 
 ### 5.9 机器人 — `useRobotStore`

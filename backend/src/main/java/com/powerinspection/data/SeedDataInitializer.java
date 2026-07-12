@@ -293,22 +293,22 @@ public class SeedDataInitializer implements ApplicationRunner {
 
   private void seedDemoWorkOrders() {
     insertIfMissing(DataCategory.WORK_ORDER, map(
-      "id", "wo_demo_001", "alarmId", "alarm_demo_002", "title", "主变 A 相过热热点紧急复核", "description", "立即安排现场人员复核红外热点及温升数据。",
+      "id", "wo_demo_001", "alarmId", "alarm_demo_002", "title", "主变 A 相过热热点紧急复核", "description", "立即安排现场人员复核红外热点及温升数据。", "locationDescription", "城南 500kV 变电站 / 户外主变区 / 1# 主变 A 相 / 接线区域",
       "status", "PROCESSING", "priority", "URGENT", "assigneeId", "user_dispatcher", "assigneeName", "张调度",
       "createdById", "user_admin", "createdByName", "系统管理员", "createdAt", minutesAgo(14), "updatedAt", minutesAgo(6)
     ));
     insertIfMissing(DataCategory.WORK_ORDER, map(
-      "id", "wo_demo_002", "alarmId", "alarm_demo_003", "title", "主变渗油痕迹现场检查", "description", "检查主变底部油位、密封件与地面油迹。",
+      "id", "wo_demo_002", "alarmId", "alarm_demo_003", "title", "主变渗油痕迹现场检查", "description", "检查主变底部油位、密封件与地面油迹。", "locationDescription", "城南 500kV 变电站 / 户外主变区 / 1# 主变 A 相 / 本体底部",
       "status", "REVIEW", "priority", "HIGH", "assigneeName", "王运维", "createdById", "user_dispatcher", "createdByName", "张调度",
-      "resolution", "现场未发现持续渗漏，已清洁油迹并安排 24 小时复测。", "createdAt", hoursAgo(5), "updatedAt", hoursAgo(2)
+      "resolution", "现场未发现持续渗漏，已清洁油迹并安排 24 小时复测。", "review", map("conclusion", "PARTIALLY_RESOLVED", "onsiteFinding", "复核主变本体底部、油位计和密封件，未发现持续渗漏。", "handlingMeasures", "已清洁历史油迹并完成油位复测，当前读数正常。", "followUpPlan", "安排 24 小时后复测油位与地面油迹。", "submittedById", "user_dispatcher", "submittedByName", "王运维", "submittedAt", hoursAgo(2)), "createdAt", hoursAgo(5), "updatedAt", hoursAgo(2)
     ));
     insertIfMissing(DataCategory.WORK_ORDER, map(
-      "id", "wo_demo_003", "alarmId", "alarm_demo_005", "title", "GIS 刀闸状态核验", "description", "核对调度指令、刀闸位置与二次信号。",
+      "id", "wo_demo_003", "alarmId", "alarm_demo_005", "title", "GIS 刀闸状态核验", "description", "核对调度指令、刀闸位置与二次信号。", "locationDescription", "城东 GIS 设备区 / GIS 刀闸 / 二次端子箱",
       "status", "CLOSED", "priority", "HIGH", "assigneeName", "陈检修", "createdById", "user_dispatcher", "createdByName", "张调度",
       "resolution", "二次辅助接点误报，已完成更换并验证。", "createdAt", daysAgo(2), "updatedAt", daysAgo(1), "closedAt", daysAgo(1)
     ));
     insertIfMissing(DataCategory.WORK_ORDER, map(
-      "id", "wo_demo_004", "alarmId", "alarm_demo_007", "title", "绝缘子异物清理", "description", "安排现场人员清理绝缘子附近悬挂异物。",
+      "id", "wo_demo_004", "alarmId", "alarm_demo_007", "title", "绝缘子异物清理", "description", "安排现场人员清理绝缘子附近悬挂异物。", "locationDescription", "城西 110kV 变电站 / 开关室 / 母线桥接区 / 绝缘子附近",
       "status", "PENDING", "priority", "MEDIUM", "assigneeName", "李运维", "createdById", "user_dispatcher", "createdByName", "张调度",
       "createdAt", daysAgo(4), "updatedAt", daysAgo(4)
     ));
