@@ -113,11 +113,13 @@ export type AgentRunStatus =
 
 export type AgentStepType =
   | 'RUN_STARTED'
+  | 'PLAN_CREATED'
   | 'TOOL_CALL_REQUESTED'
   | 'TOOL_CALL_STARTED'
   | 'TOOL_CALL_SUCCEEDED'
   | 'TOOL_CALL_FAILED'
   | 'EVIDENCE_ADDED'
+  | 'HUMAN_INPUT_REQUESTED'
   | 'LLM_ANALYZED'
   | 'ACTION_PROPOSED'
   | 'ACTION_APPROVED'
@@ -131,7 +133,7 @@ export type AgentStepType =
 export type AuditedAgentActionStatus = 'PROPOSED' | 'APPROVED' | 'REJECTED' | 'EXECUTING' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED' | 'CANCELLED'
 export type AgentRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 export type AgentActionType = 'CREATE_WORK_ORDER_DRAFT' | 'PUSH_NOTIFICATION' | 'ACKNOWLEDGE_ALARM' | 'REQUEST_TASK_PAUSE' | 'CANCEL_TASK' | 'ROBOT_MANUAL_CONTROL'
-export type AgentEvidenceSourceType = 'TASK' | 'ALARM' | 'WORK_ORDER' | 'VISION_RESULT' | 'OPERATOR_INPUT' | 'LLM_FALLBACK'
+export type AgentEvidenceSourceType = 'TASK' | 'TASK_EVENT' | 'ALARM' | 'WORK_ORDER' | 'ROBOT' | 'ROUTE' | 'VISION_RESULT' | 'OPERATOR_INPUT' | 'LLM_FALLBACK'
 export type AgentPolicyDecision = 'AUTO_EXECUTE' | 'REQUIRE_APPROVAL' | 'DENY'
 
 export interface AgentRunSummary {
@@ -144,6 +146,9 @@ export interface AgentRunSummary {
   errorCode?: string
   errorMessage?: string
   version: number
+  plannerType?: string
+  degraded?: boolean
+  degradationReason?: string
 }
 
 export interface AgentCaseSummary {
@@ -201,6 +206,8 @@ export interface AuditedAgentToolCall {
   resultSummary?: string
   errorCode?: string
   errorMessage?: string
+  sequenceNo?: number
+  argumentsHash?: string
 }
 
 export interface AuditedAgentEvidence {
@@ -251,6 +258,12 @@ export interface AgentRunDetail {
   toolCalls: AuditedAgentToolCall[]
   evidence: AuditedAgentEvidence[]
   actions: AuditedAgentAction[]
+  question?: {
+    runId: string
+    question?: { type: string; prompt: string; options?: string[] }
+    degraded: boolean
+    degradationReason?: string
+  }
 }
 
 export interface CreateAgentCaseRequest {

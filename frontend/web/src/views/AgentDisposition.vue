@@ -84,6 +84,16 @@
             <div class="step-row"><span>{{ step.summary }}</span><code>#{{ step.sequenceNo }} · {{ step.type }}</code></div>
           </el-timeline-item>
         </el-timeline>
+        <el-alert v-if="agentStore.activeRun?.question?.question" class="human-question" type="warning" :closable="false" show-icon :title="agentStore.activeRun.question.question.prompt" />
+
+        <template v-if="agentStore.activeRun?.toolCalls.length">
+        <div class="panel-title action-title">工具调用</div>
+        <el-table :data="agentStore.activeRun.toolCalls" size="small">
+          <el-table-column label="工具" prop="toolName" min-width="130" />
+          <el-table-column label="状态" prop="status" width="96" />
+          <el-table-column label="耗时" width="78"><template #default="{ row }: { row: AuditedAgentToolCall }"><span>{{ row.durationMs == null ? '-' : `${row.durationMs}ms` }}</span></template></el-table-column>
+        </el-table>
+        </template>
 
         <div class="panel-title action-title">本次运行的动作</div>
         <el-table :data="agentStore.activeRun?.actions ?? []" size="small" empty-text="本次运行暂无动作">
@@ -125,7 +135,7 @@ import { useTaskStore } from '@/stores/task'
 import { usePermission } from '@/composables/usePermission'
 import { ALARM_SEVERITY_LABELS, TASK_STATUS_LABELS } from '@/types'
 import type { Alarm, AlarmSeverity, InspectionTask, TaskStatus } from '@/types'
-import type { AgentCaseStatus, AgentRiskLevel, AgentRunStatus, AgentStepType, AuditedAgentAction, AuditedAgentActionStatus, AuditedAgentConclusion, AuditedAgentEvidence } from '@/types/agent'
+import type { AgentCaseStatus, AgentRiskLevel, AgentRunStatus, AgentStepType, AuditedAgentAction, AuditedAgentActionStatus, AuditedAgentConclusion, AuditedAgentEvidence, AuditedAgentToolCall } from '@/types/agent'
 
 const pageRoute = useRoute()
 const agentStore = useAgentStore()
@@ -347,6 +357,10 @@ function scrollToEvidence(evidenceId: string) {
 .step-timeline {
   margin-top: 16px;
   min-height: 220px;
+}
+
+.human-question {
+  margin: 12px 0;
 }
 
 .step-row {

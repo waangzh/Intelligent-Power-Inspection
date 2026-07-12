@@ -65,6 +65,37 @@ public class AgentToolService {
       .toList();
   }
 
+  public Map<String, Object> queryAlarm(String alarmId) {
+    return findEntity(DataCategory.ALARM, alarmId, "alarmId");
+  }
+
+  public List<Map<String, Object>> queryTaskEvents(String taskId) {
+    if (!hasText(taskId)) {
+      return List.of();
+    }
+    return dataStore.list(DataCategory.EVENT).stream().filter(item -> taskId.equals(text(item.get("taskId")))).toList();
+  }
+
+  public Map<String, Object> queryRobot(String robotId) {
+    return findEntity(DataCategory.ROBOT, robotId, "robotId");
+  }
+
+  public Map<String, Object> queryRoute(String routeId) {
+    return findEntity(DataCategory.ROUTE, routeId, "routeId");
+  }
+
+  public List<Map<String, Object>> inspectAlarmImage(String alarmId, String taskId) {
+    if (!hasText(taskId)) {
+      return List.of(map(
+        "title", "视觉复核受限完成",
+        "content", "告警未关联任务上下文，未向外部视觉服务发送图像。",
+        "sourceId", alarmId,
+        "payload", map("reason", "missing_task_context")
+      ));
+    }
+    return locateAnythingEvidence(queryTask(taskId), queryAlarms(alarmId, taskId));
+  }
+
   public List<Map<String, Object>> queryWorkOrders(String alarmId, String taskId) {
     return dataStore.list(DataCategory.WORK_ORDER).stream()
       .filter(order -> matchesWorkOrder(order, alarmId, taskId))
@@ -209,6 +240,14 @@ public class AgentToolService {
     Map<String, Object> item = new LinkedHashMap<>();
     raw.forEach((key, value) -> item.put(String.valueOf(key), value));
     return item;
+  }
+
+  private Map<String, Object> findEntity(String category, String id, String idField) {
+    if (!hasText(id)) {
+      return null;
+    }
+    Map<String, Object> entity = dataStore.find(category, id);
+    return entity == null ? map("missing", true, idField, id) : entity;
   }
 
   private boolean hasText(String value) {
