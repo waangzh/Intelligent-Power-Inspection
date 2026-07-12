@@ -16,6 +16,9 @@
         <el-button v-if="can('route:edit') && currentRoute" type="success" :loading="savingRoute" @click="saveToPlatform">
           保存到平台
         </el-button>
+        <el-button v-if="can('route:edit') && currentRoute" type="warning" plain :loading="creatingRevision" @click="createRevision">
+          创建路线修订
+        </el-button>
         <el-button v-if="can('route:edit') && currentRoute" type="danger" plain :loading="deletingRoute" @click="deleteRoute">
           删除路线
         </el-button>
@@ -85,6 +88,7 @@ const editorRef = ref<InstanceType<typeof RosMapRouteEditor> | null>(null)
 const creatingRoute = ref(false)
 const savingRoute = ref(false)
 const deletingRoute = ref(false)
+const creatingRevision = ref(false)
 const pendingMapFiles = ref<MapAssetFiles | null>(null)
 
 const siteRoutes = computed(() => routeStore.getRoutesBySite(selectedSiteId.value))
@@ -213,6 +217,23 @@ async function deleteRoute() {
     ElMessage.error(errorMessage(error, '路线删除失败'))
   } finally {
     deletingRoute.value = false
+  }
+}
+
+async function createRevision() {
+  if (!currentRoute.value || creatingRevision.value) return
+  if (!currentRoute.value.mapId || !currentRoute.value.executorJson) {
+    ElMessage.warning('请先保存已绑定地图的路线草稿')
+    return
+  }
+  creatingRevision.value = true
+  try {
+    const revision = await resourcesApi.createRouteRevision(currentRoute.value.id)
+    ElMessage.success(`已创建路线修订 r${revision.revisionNo}`)
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '创建路线修订失败'))
+  } finally {
+    creatingRevision.value = false
   }
 }
 </script>

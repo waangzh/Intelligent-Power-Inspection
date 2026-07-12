@@ -11,6 +11,7 @@ import type {
   MapAsset,
   Robot,
   Route,
+  RouteRevision,
   TaskEvent,
 } from '@/types'
 import type { AppNotification, NotificationType } from '@/types/notification'
@@ -45,6 +46,9 @@ export const resourcesApi = {
   createRoute: (route: Route) => http.post<Route>('/routes', route),
   updateRoute: (id: string, patch: Partial<Route>) => http.patch<Route>(`/routes/${id}`, patch),
   removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
+  listRouteRevisions: (routeId: string) => http.get<RouteRevision[]>(`/routes/${routeId}/revisions`),
+  createRouteRevision: (routeId: string) => http.post<RouteRevision>(`/routes/${routeId}/revisions`),
+  getRouteRevision: (revisionId: string) => http.get<RouteRevision>(`/route-revisions/${revisionId}`),
   addCheckpoint: (routeId: string, checkpoint: Checkpoint) =>
     http.post<Checkpoint>(`/routes/${routeId}/checkpoints`, checkpoint),
   updateCheckpoint: (routeId: string, checkpointId: string, patch: Partial<Checkpoint>) =>
