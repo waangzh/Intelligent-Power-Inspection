@@ -43,13 +43,15 @@ public final class AgentDtos {
 
   public record RunSummary(
     String id, int runNumber, AgentEnums.RunStatus status, String reanalysisReason,
-    Instant startedAt, Instant completedAt, String errorCode, String errorMessage, long version
+    Instant startedAt, Instant completedAt, String errorCode, String errorMessage, long version,
+    String plannerType, boolean degraded, String degradationReason
   ) {
   }
 
   public record RunDetail(
     RunSummary run, AgentConclusion conclusion, List<StepResponse> steps,
-    List<ToolCallResponse> toolCalls, List<EvidenceResponse> evidence, List<ActionResponse> actions
+    List<ToolCallResponse> toolCalls, List<EvidenceResponse> evidence, List<ActionResponse> actions,
+    RunQuestionResponse question
   ) {
   }
 
@@ -61,7 +63,7 @@ public final class AgentDtos {
   public record ToolCallResponse(
     String id, int stepNo, String toolName, JsonNode arguments, AgentEnums.ToolCallStatus status,
     String reason, Instant startedAt, Instant completedAt, Long durationMs, String resultSummary,
-    String errorCode, String errorMessage
+    String errorCode, String errorMessage, Integer sequenceNo, String argumentsHash
   ) {
   }
 
@@ -74,6 +76,9 @@ public final class AgentDtos {
   public record EvidenceReference(
     String evidenceId, String role, @Size(max = 500) String statement
   ) {
+  }
+
+  public record RunQuestionResponse(String runId, JsonNode question, boolean degraded, String degradationReason) {
   }
 
   public record AgentConclusion(

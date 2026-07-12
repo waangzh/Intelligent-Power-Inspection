@@ -72,6 +72,7 @@ public class AuditedAgentService {
   private final UserRepository userRepository;
   private final ObjectMapper objectMapper;
   private final SimpMessagingTemplate messagingTemplate;
+  private final AgentOrchestrator orchestrator;
   private final ConcurrentHashMap<String, ReentrantLock> stepLocks = new ConcurrentHashMap<>();
   private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
     Thread thread = new Thread(runnable, "audited-agent-run-worker");
@@ -94,7 +95,8 @@ public class AuditedAgentService {
     DataStoreService dataStore,
     UserRepository userRepository,
     ObjectMapper objectMapper,
-    SimpMessagingTemplate messagingTemplate
+    SimpMessagingTemplate messagingTemplate,
+    AgentOrchestrator orchestrator
   ) {
     this.caseRepository = caseRepository;
     this.runRepository = runRepository;
@@ -111,6 +113,7 @@ public class AuditedAgentService {
     this.userRepository = userRepository;
     this.objectMapper = objectMapper;
     this.messagingTemplate = messagingTemplate;
+    this.orchestrator = orchestrator;
   }
 
   @Transactional
@@ -157,9 +160,10 @@ public class AuditedAgentService {
     run.setStatus(AgentEnums.RunStatus.RUNNING);
     run.setGoalSnapshot(agentCase.getGoal());
     run.setInputSnapshotJson(json(input));
-    run.setPlannerType("FIXED_WORKFLOW");
+    run.setPlannerType("LLM_CONSTRAINED");
+    run.setDegraded(false);
     run.setModelName("configured-agent-llm");
-    run.setPromptVersion("phase1-v1");
+    run.setPromptVersion("phase2-v1");
     run.setReanalysisReason(request.reason());
     run.setStartedAt(now);
     run.setCreatedById(user.getId());
@@ -193,13 +197,30 @@ public class AuditedAgentService {
     List<AgentDtos.ToolCallResponse> toolCalls = toolCallRepository.findByRunIdOrderByCreatedAtAsc(runId).stream().map(this::toolCallResponse).toList();
     List<AgentDtos.EvidenceResponse> evidence = evidenceRepository.findByRunIdOrderByCreatedAtAsc(runId).stream().map(this::evidenceResponse).toList();
     List<AgentDtos.ActionResponse> actions = actionRepository.findByRunIdOrderByCreatedAtAsc(runId).stream().map(this::actionResponse).toList();
-    return new AgentDtos.RunDetail(runSummary(run), conclusion(run.getConclusionJson()), steps, toolCalls, evidence, actions);
+    return new AgentDtos.RunDetail(runSummary(run), conclusion(run.getConclusionJson()), steps, toolCalls, evidence, actions, questionResponse(run));
   }
 
   @Transactional
   public List<AgentDtos.EvidenceResponse> evidence(String runId) {
     getRun(runId);
     return evidenceRepository.findByRunIdOrderByCreatedAtAsc(runId).stream().map(this::evidenceResponse).toList();
+  }
+
+  @Transactional
+  public List<AgentDtos.ToolCallResponse> toolCalls(String runId) {
+    getRun(runId);
+    return toolCallRepository.findByRunIdOrderByCreatedAtAsc(runId).stream().map(this::toolCallResponse).toList();
+  }
+
+  @Transactional
+  public AgentDtos.RunQuestionResponse question(String runId) {
+    return questionResponse(getRun(runId));
+  }
+
+  @Transactional
+  public AgentDtos.RunSummary cancelRun(String runId) {
+    orchestrator.cancel(runId);
+    return runSummary(getRun(runId));
   }
 
   @Transactional
@@ -315,7 +336,7 @@ public class AuditedAgentService {
     return legacyAction(rejectAction(actionId, new AgentDtos.ActionDecisionRequest(action.getVersion(), "通过旧接口拒绝"), user));
   }
 
-  private void executeFixedRun(String runId, String userId) {
+  private void executeLegacyFixedRun(String runId, String userId) {
     AgentRunEntity run = awaitPersistedRun(runId);
     if (run == null) {
       return;
@@ -350,6 +371,57 @@ public class AuditedAgentService {
       }
       recordStep(run, AgentEnums.StepType.RUN_FAILED, "固定研判流程失败", Map.of("errorCode", "FIXED_WORKFLOW_FAILED"));
     }
+  }
+
+  private void executeFixedRun(String runId, String userId) {
+    AgentRunEntity run = awaitPersistedRun(runId);
+    if (run == null) {
+      return;
+    }
+    try {
+      AgentEnums.RunStatus status = orchestrator.execute(runId);
+      if (status != AgentEnums.RunStatus.SUCCEEDED) {
+        return;
+      }
+      run = getRun(runId);
+      run.setStatus(AgentEnums.RunStatus.RUNNING);
+      run = runRepository.save(run);
+      AgentCaseEntity agentCase = getCase(run.getCaseId());
+      UserEntity user = userRepository.findById(userId).orElseThrow(() -> ApiException.notFound("运行用户不存在"));
+      AgentDtos.AgentConclusion conclusion = conclusion(run.getConclusionJson());
+      if (conclusion == null) {
+        return;
+      }
+      List<AgentEvidenceEntity> evidence = evidenceRepository.findByRunIdOrderByCreatedAtAsc(runId);
+      List<AgentActionEntity> actions = proposeActions(agentCase, run, evidence, conclusion, user);
+      if (!actions.isEmpty()) {
+        agentCase.setStatus(actions.stream().anyMatch(AgentActionEntity::isRequiresApproval)
+          ? AgentEnums.CaseStatus.WAITING_APPROVAL : AgentEnums.CaseStatus.RESOLVED);
+        agentCase.setUpdatedAt(Instant.now());
+        caseRepository.save(agentCase);
+      }
+      run.setStatus(AgentEnums.RunStatus.SUCCEEDED);
+      run.setCompletedAt(Instant.now());
+      runRepository.save(run);
+    } catch (Exception ex) {
+      // The orchestrator records its own terminal state. This guard only covers compatibility finalization.
+      AgentRunEntity latest = runRepository.findById(runId).orElse(run);
+      if (latest.getStatus() == AgentEnums.RunStatus.CANCELLED || latest.getStatus() == AgentEnums.RunStatus.FAILED || latest.getStatus() == AgentEnums.RunStatus.TIMED_OUT || latest.getStatus() == AgentEnums.RunStatus.STEP_LIMIT_REACHED) {
+        return;
+      }
+      latest.setStatus(AgentEnums.RunStatus.FAILED);
+      latest.setErrorCode("LEGACY_FINALIZATION_FAILED");
+      latest.setErrorMessage(abbreviate(firstText(ex.getMessage(), "兼容动作整理失败"), 1000));
+      latest.setCompletedAt(Instant.now());
+      runRepository.save(latest);
+      recordStep(latest, AgentEnums.StepType.RUN_FAILED, "兼容动作整理失败", Map.of("errorCode", "LEGACY_FINALIZATION_FAILED"));
+    }
+  }
+
+  private boolean containsWorkOrder(AgentEvidenceEntity item) {
+    Map<String, Object> p = payload(item.getPayloadJson());
+    Object items = p.get("items");
+    return items instanceof List<?> list ? !list.isEmpty() : !Boolean.TRUE.equals(p.get("missing"));
   }
 
   private List<AgentEvidenceEntity> collectEvidence(AgentCaseEntity agentCase, AgentRunEntity run) {
@@ -396,7 +468,7 @@ public class AuditedAgentService {
   private List<AgentActionEntity> proposeActions(AgentCaseEntity agentCase, AgentRunEntity run, List<AgentEvidenceEntity> evidence, AgentDtos.AgentConclusion conclusion, UserEntity user) {
     List<AgentActionEntity> actions = new ArrayList<>();
     Map<String, Object> alarm = evidence.stream().filter(item -> item.getSourceType() == AgentEnums.EvidenceSourceType.ALARM).findFirst().map(item -> payload(item.getPayloadJson())).orElse(null);
-    boolean hasWorkOrder = evidence.stream().anyMatch(item -> item.getSourceType() == AgentEnums.EvidenceSourceType.WORK_ORDER);
+    boolean hasWorkOrder = evidence.stream().filter(item -> item.getSourceType() == AgentEnums.EvidenceSourceType.WORK_ORDER).anyMatch(this::containsWorkOrder);
     if (alarm != null && !Boolean.TRUE.equals(alarm.get("missing")) && !hasWorkOrder) {
       Map<String, Object> payload = map(
         "alarmId", alarm.get("id"),
@@ -658,7 +730,11 @@ public class AuditedAgentService {
   }
 
   private AgentDtos.RunSummary runSummary(AgentRunEntity item) {
-    return new AgentDtos.RunSummary(item.getId(), item.getRunNumber(), item.getStatus(), item.getReanalysisReason(), item.getStartedAt(), item.getCompletedAt(), item.getErrorCode(), item.getErrorMessage(), item.getVersion());
+    return new AgentDtos.RunSummary(item.getId(), item.getRunNumber(), item.getStatus(), item.getReanalysisReason(), item.getStartedAt(), item.getCompletedAt(), item.getErrorCode(), item.getErrorMessage(), item.getVersion(), item.getPlannerType(), item.isDegraded(), item.getDegradationReason());
+  }
+
+  private AgentDtos.RunQuestionResponse questionResponse(AgentRunEntity item) {
+    return new AgentDtos.RunQuestionResponse(item.getId(), node(item.getPendingQuestionJson()), item.isDegraded(), item.getDegradationReason());
   }
 
   private AgentDtos.StepResponse stepResponse(AgentStepEntity item) {
@@ -666,7 +742,7 @@ public class AuditedAgentService {
   }
 
   private AgentDtos.ToolCallResponse toolCallResponse(AgentToolCallEntity item) {
-    return new AgentDtos.ToolCallResponse(item.getId(), item.getStepNo(), item.getToolName(), node(item.getArgumentsJson()), item.getStatus(), item.getReason(), item.getStartedAt(), item.getCompletedAt(), item.getDurationMs(), item.getResultSummary(), item.getErrorCode(), item.getErrorMessage());
+    return new AgentDtos.ToolCallResponse(item.getId(), item.getStepNo(), item.getToolName(), node(item.getArgumentsJson()), item.getStatus(), item.getReason(), item.getStartedAt(), item.getCompletedAt(), item.getDurationMs(), item.getResultSummary(), item.getErrorCode(), item.getErrorMessage(), item.getSequenceNo(), item.getArgumentsHash());
   }
 
   private AgentDtos.EvidenceResponse evidenceResponse(AgentEvidenceEntity item) {

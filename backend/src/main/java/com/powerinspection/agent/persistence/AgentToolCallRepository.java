@@ -6,4 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AgentToolCallRepository extends JpaRepository<AgentToolCallEntity, String> {
   List<AgentToolCallEntity> findByRunIdOrderByCreatedAtAsc(String runId);
+
+  boolean existsByRunIdAndToolNameAndArgumentsHashAndStatus(String runId, String toolName, String argumentsHash, com.powerinspection.agent.domain.AgentEnums.ToolCallStatus status);
 }

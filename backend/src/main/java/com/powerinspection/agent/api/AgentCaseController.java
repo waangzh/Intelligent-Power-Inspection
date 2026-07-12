@@ -68,4 +68,28 @@ public class AgentCaseController {
     permissionService.require(currentUser.get(), Permission.AGENT_VIEW);
     return ApiResponse.ok(agentService.evidence(runId));
   }
+
+  @GetMapping("/agent-runs/{runId}/trace")
+  public ApiResponse<AgentDtos.RunDetail> trace(@PathVariable String runId) {
+    permissionService.require(currentUser.get(), Permission.AGENT_VIEW);
+    return ApiResponse.ok(agentService.runDetail(runId));
+  }
+
+  @GetMapping("/agent-runs/{runId}/tool-calls")
+  public ApiResponse<List<AgentDtos.ToolCallResponse>> toolCalls(@PathVariable String runId) {
+    permissionService.require(currentUser.get(), Permission.AGENT_VIEW);
+    return ApiResponse.ok(agentService.toolCalls(runId));
+  }
+
+  @GetMapping("/agent-runs/{runId}/question")
+  public ApiResponse<AgentDtos.RunQuestionResponse> question(@PathVariable String runId) {
+    permissionService.require(currentUser.get(), Permission.AGENT_VIEW);
+    return ApiResponse.ok(agentService.question(runId));
+  }
+
+  @PostMapping("/agent-runs/{runId}/cancel")
+  public ApiResponse<AgentDtos.RunSummary> cancel(@PathVariable String runId) {
+    permissionService.require(currentUser.get(), Permission.AGENT_RUN);
+    return ApiResponse.ok(agentService.cancelRun(runId));
+  }
 }

@@ -84,12 +84,22 @@
             <div class="step-row"><span>{{ step.summary }}</span><code>#{{ step.sequenceNo }} · {{ step.type }}</code></div>
           </el-timeline-item>
         </el-timeline>
+        <el-alert v-if="agentStore.activeRun?.question?.question" class="human-question" type="warning" :closable="false" show-icon :title="agentStore.activeRun.question.question.prompt" />
+
+        <template v-if="agentStore.activeRun?.toolCalls.length">
+        <div class="panel-title action-title">工具调用</div>
+        <el-table :data="agentStore.activeRun.toolCalls" size="small">
+          <el-table-column label="工具" prop="toolName" min-width="130" />
+          <el-table-column label="状态" prop="status" width="96" />
+          <el-table-column label="耗时" width="78"><template #default="{ row }: { row: AuditedAgentToolCall }"><span>{{ row.durationMs == null ? '-' : `${row.durationMs}ms` }}</span></template></el-table-column>
+        </el-table>
+        </template>
 
         <div class="panel-title action-title">本次运行的动作</div>
         <el-table :data="agentStore.activeRun?.actions ?? []" size="small" empty-text="本次运行暂无动作">
           <el-table-column label="动作" min-width="140"><template #default="{ row }: { row: AuditedAgentAction }"><div class="action-name">{{ row.title }}</div><div class="muted">{{ row.reason }}</div></template></el-table-column>
           <el-table-column label="风险" width="72"><template #default="{ row }: { row: AuditedAgentAction }"><el-tag size="small" :type="riskLevelType(row.riskLevel)">{{ riskLevelLabel(row.riskLevel) }}</el-tag></template></el-table-column>
-          <el-table-column label="置信度" width="72"><template #default="{ row }: { row: AuditedAgentAction }"><span>{{ analysis ? Math.round(analysis.confidence * 100) : '-' }}%</span></template></el-table-column>
+          <el-table-column label="置信度" width="72"><template #default><span>{{ analysis ? Math.round(analysis.confidence * 100) : '-' }}%</span></template></el-table-column>
           <el-table-column label="状态" width="82"><template #default="{ row }: { row: AuditedAgentAction }"><el-tag size="small" :type="actionStatusType(row.status)">{{ actionStatusLabel(row.status) }}</el-tag></template></el-table-column>
           <el-table-column v-if="can('agent:approve')" label="操作" width="142"><template #default="{ row }: { row: AuditedAgentAction }"><el-button v-if="row.status === 'PROPOSED'" text type="primary" size="small" @click="confirm(row)">批准</el-button><el-button v-if="row.status === 'PROPOSED'" text type="danger" size="small" @click="reject(row)">拒绝</el-button><span v-else class="muted">{{ row.policyCode }}</span></template></el-table-column>
         </el-table>
@@ -125,7 +135,7 @@ import { useTaskStore } from '@/stores/task'
 import { usePermission } from '@/composables/usePermission'
 import { ALARM_SEVERITY_LABELS, TASK_STATUS_LABELS } from '@/types'
 import type { Alarm, AlarmSeverity, InspectionTask, TaskStatus } from '@/types'
-import type { AgentCaseStatus, AgentRiskLevel, AgentRunStatus, AgentStepType, AuditedAgentAction, AuditedAgentActionStatus, AuditedAgentConclusion, AuditedAgentEvidence } from '@/types/agent'
+import type { AgentCaseStatus, AgentRiskLevel, AgentRunStatus, AgentStepType, AuditedAgentAction, AuditedAgentActionStatus, AuditedAgentConclusion, AuditedAgentEvidence, AuditedAgentToolCall } from '@/types/agent'
 
 const pageRoute = useRoute()
 const agentStore = useAgentStore()
@@ -347,6 +357,10 @@ function scrollToEvidence(evidenceId: string) {
 .step-timeline {
   margin-top: 16px;
   min-height: 220px;
+}
+
+.human-question {
+  margin: 12px 0;
 }
 
 .step-row {

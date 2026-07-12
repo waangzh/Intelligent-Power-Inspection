@@ -1,8 +1,11 @@
 package com.powerinspection.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.agent.planner.AgentPlanningContext;
+import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.model.ModelProperties;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -64,6 +67,18 @@ class HttpAgentLlmGatewayTests {
     assertThat(analysis.defectLevel()).isEqualTo("CRITICAL");
     assertThat(analysis.recommendedActions()).containsExactly("立即派单");
     assertThat(analysis.confidence()).isEqualTo(0.91);
+  }
+
+  @Test
+  void rejectsMalformedPlannerJson() {
+    server.createContext("/v1/chat/completions", exchange -> writeJson(exchange, """
+      {"choices":[{"message":{"content":"not-json"}}]}
+      """));
+    HttpAgentLlmGateway gateway = new HttpAgentLlmGateway(properties(), new ObjectMapper());
+
+    assertThatThrownBy(() -> gateway.decide(new AgentPlanningContext(
+      "case_1", "run_1", "user_1", "review", Map.of("alarmId", "alarm_1"), List.of(), List.of(), java.time.Instant.now()
+    ))).isInstanceOf(ModelServiceException.class);
   }
 
   private ModelProperties properties() {

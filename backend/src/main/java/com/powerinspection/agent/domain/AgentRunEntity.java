@@ -20,6 +20,9 @@ public class AgentRunEntity {
   @Column(name = "input_snapshot_json", nullable = false, columnDefinition = "LONGTEXT") private String inputSnapshotJson;
   @Column(name = "conclusion_json", columnDefinition = "LONGTEXT") private String conclusionJson;
   @Column(name = "planner_type", nullable = false) private String plannerType;
+  @Column(name = "degraded", nullable = false) private boolean degraded;
+  @Column(name = "degradation_reason") private String degradationReason;
+  @Column(name = "pending_question_json", columnDefinition = "LONGTEXT") private String pendingQuestionJson;
   @Column(name = "model_name") private String modelName;
   @Column(name = "prompt_version") private String promptVersion;
   @Column(name = "reanalysis_reason") private String reanalysisReason;
@@ -38,6 +41,9 @@ public class AgentRunEntity {
   public String getInputSnapshotJson() { return inputSnapshotJson; } public void setInputSnapshotJson(String value) { inputSnapshotJson = value; }
   public String getConclusionJson() { return conclusionJson; } public void setConclusionJson(String value) { conclusionJson = value; }
   public String getPlannerType() { return plannerType; } public void setPlannerType(String value) { plannerType = value; }
+  public boolean isDegraded() { return degraded; } public void setDegraded(boolean value) { degraded = value; }
+  public String getDegradationReason() { return degradationReason; } public void setDegradationReason(String value) { degradationReason = value; }
+  public String getPendingQuestionJson() { return pendingQuestionJson; } public void setPendingQuestionJson(String value) { pendingQuestionJson = value; }
   public String getModelName() { return modelName; } public void setModelName(String value) { modelName = value; }
   public String getPromptVersion() { return promptVersion; } public void setPromptVersion(String value) { promptVersion = value; }
   public String getReanalysisReason() { return reanalysisReason; } public void setReanalysisReason(String value) { reanalysisReason = value; }
