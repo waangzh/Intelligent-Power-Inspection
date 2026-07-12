@@ -1,15 +1,12 @@
 package com.powerinspection.workorder;
 
-import com.powerinspection.common.ApiException;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.common.Ids;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
-import com.powerinspection.notification.NotificationService;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
-import com.powerinspection.user.UserEntity;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -28,13 +25,13 @@ public class WorkOrderController {
   private final DataStoreService dataStore;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
-  private final NotificationService notificationService;
+  private final WorkOrderService workOrderService;
 
-  public WorkOrderController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, NotificationService notificationService) {
+  public WorkOrderController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, WorkOrderService workOrderService) {
     this.dataStore = dataStore;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
-    this.notificationService = notificationService;
+    this.workOrderService = workOrderService;
   }
 
   @GetMapping
@@ -62,32 +59,8 @@ public class WorkOrderController {
   @PostMapping("/from-alarm/{alarmId}")
   public ApiResponse<Map<String, Object>> createFromAlarm(@PathVariable String alarmId, @RequestBody(required = false) Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
-    dataStore.list(DataCategory.WORK_ORDER).stream()
-      .filter(order -> alarmId.equals(String.valueOf(order.get("alarmId"))))
-      .findFirst()
-      .ifPresent(order -> {
-        throw ApiException.badRequest("该告警已有关联工单");
-      });
-    Map<String, Object> alarm = dataStore.get(DataCategory.ALARM, alarmId);
-    UserEntity user = currentUser.get();
-    String severity = String.valueOf(alarm.get("severity"));
-    String priority = "CRITICAL".equals(severity) ? "URGENT" : "HIGH".equals(severity) ? "HIGH" : "MEDIUM";
-    String now = Instant.now().toString();
-    Map<String, Object> order = new java.util.LinkedHashMap<>();
-    order.put("id", Ids.next("wo"));
-    order.put("title", "告警处置：" + String.valueOf(alarm.get("message")).substring(0, Math.min(24, String.valueOf(alarm.get("message")).length())));
-    order.put("description", alarm.get("message"));
-    order.put("alarmId", alarmId);
-    order.put("status", "PENDING");
-    order.put("priority", priority);
-    order.put("assigneeName", body != null && body.get("assigneeName") != null ? body.get("assigneeName") : user.getDisplayName());
-    order.put("createdById", user.getId());
-    order.put("createdByName", user.getDisplayName());
-    order.put("createdAt", now);
-    order.put("updatedAt", now);
-    Map<String, Object> saved = dataStore.upsert(DataCategory.WORK_ORDER, order);
-    notificationService.push(user.getId(), "WORKORDER", "工单已创建", String.valueOf(order.get("title")), "/workorders");
-    return ApiResponse.ok(saved);
+    String assigneeName = body == null || body.get("assigneeName") == null ? null : body.get("assigneeName").toString();
+    return ApiResponse.ok(workOrderService.createFromAlarm(alarmId, "MANUAL", currentUser.get(), assigneeName, null));
   }
 
   @PatchMapping("/{id}")

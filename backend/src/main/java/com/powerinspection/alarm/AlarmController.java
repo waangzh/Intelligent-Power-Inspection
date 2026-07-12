@@ -11,6 +11,8 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,11 +22,20 @@ public class AlarmController {
   private final DataStoreService dataStore;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
+  private final AlarmWorkOrderPolicyService policyService;
+  private final AlarmService alarmService;
 
-  public AlarmController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser) {
+  public AlarmController(
+      DataStoreService dataStore,
+      PermissionService permissionService,
+      CurrentUser currentUser,
+      AlarmWorkOrderPolicyService policyService,
+      AlarmService alarmService) {
     this.dataStore = dataStore;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
+    this.policyService = policyService;
+    this.alarmService = alarmService;
   }
 
   @GetMapping
@@ -44,5 +55,23 @@ public class AlarmController {
     permissionService.require(currentUser.get(), Permission.ALARM_ACK);
     dataStore.list(DataCategory.ALARM).forEach(alarm -> dataStore.patch(DataCategory.ALARM, String.valueOf(alarm.get("id")), Map.of("acknowledged", true)));
     return ApiResponse.ok(dataStore.list(DataCategory.ALARM));
+  }
+
+  @GetMapping("/work-order-policy")
+  public ApiResponse<Map<String, Object>> workOrderPolicy() {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(policyService.policy());
+  }
+
+  @PutMapping("/work-order-policy")
+  public ApiResponse<Map<String, Object>> updateWorkOrderPolicy(@RequestBody Map<String, Object> body) {
+    permissionService.require(currentUser.get(), Permission.USER_MANAGE);
+    return ApiResponse.ok(policyService.update(body, currentUser.get()));
+  }
+
+  @PostMapping("/{id}/retry-work-order")
+  public ApiResponse<Map<String, Object>> retryWorkOrder(@PathVariable String id) {
+    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    return ApiResponse.ok(alarmService.retryAutoConversion(id));
   }
 }

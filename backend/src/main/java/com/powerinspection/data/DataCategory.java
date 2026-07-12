@@ -11,6 +11,7 @@ public final class DataCategory {
   public static final String RECORD = "records";
   public static final String EVENT = "events";
   public static final String ALARM = "alarms";
+  public static final String ALARM_WORK_ORDER_POLICY = "alarmWorkOrderPolicies";
   public static final String WORK_ORDER = "workOrders";
   public static final String DETECTION_TEMPLATE = "detectionTemplates";
   public static final String NOTIFICATION = "notifications";

@@ -1,7 +1,6 @@
 package com.powerinspection.agent;
 
 import com.powerinspection.common.ApiException;
-import com.powerinspection.common.Ids;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.model.LocateAnythingFinding;
@@ -10,7 +9,7 @@ import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.notification.NotificationService;
 import com.powerinspection.user.UserEntity;
-import java.time.Instant;
+import com.powerinspection.workorder.WorkOrderService;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,11 +21,13 @@ public class AgentToolService {
   private final DataStoreService dataStore;
   private final LocateAnythingGateway locateAnythingGateway;
   private final NotificationService notificationService;
+  private final WorkOrderService workOrderService;
 
-  public AgentToolService(DataStoreService dataStore, LocateAnythingGateway locateAnythingGateway, NotificationService notificationService) {
+  public AgentToolService(DataStoreService dataStore, LocateAnythingGateway locateAnythingGateway, NotificationService notificationService, WorkOrderService workOrderService) {
     this.dataStore = dataStore;
     this.locateAnythingGateway = locateAnythingGateway;
     this.notificationService = notificationService;
+    this.workOrderService = workOrderService;
   }
 
   public Map<String, Object> queryTask(String taskId) {
@@ -165,40 +166,27 @@ public class AgentToolService {
 
   public Map<String, Object> createWorkOrderDraft(Map<String, Object> payload, UserEntity user) {
     String alarmId = text(payload.get("alarmId"));
-    if (hasText(alarmId)) {
-      dataStore.list(DataCategory.WORK_ORDER).stream()
-        .filter(order -> alarmId.equals(text(order.get("alarmId"))))
-        .findFirst()
-        .ifPresent(order -> {
-          throw ApiException.badRequest("该告警已有关联工单");
-        });
+    if (!hasText(alarmId)) {
+      throw ApiException.badRequest("Agent 工单缺少关联告警");
     }
-    String now = Instant.now().toString();
-    Map<String, Object> order = new LinkedHashMap<>();
-    order.put("id", Ids.next("wo"));
-    order.put("title", firstText(payload.get("title"), "Agent 工单草稿"));
-    order.put("description", firstText(payload.get("description"), "由巡检处置 Agent 生成"));
-    if (hasText(alarmId)) {
-      order.put("alarmId", alarmId);
-    }
-    String taskId = text(payload.get("taskId"));
-    if (hasText(taskId)) {
-      order.put("taskId", taskId);
-    }
+    Map<String, Object> overrides = new LinkedHashMap<>();
+    String title = text(payload.get("title"));
+    String description = text(payload.get("description"));
+    String priority = text(payload.get("priority"));
+    if (hasText(title)) overrides.put("title", title);
+    if (hasText(description)) overrides.put("description", description);
+    if (hasText(priority)) overrides.put("priority", priority);
+    Map<String, Object> result = workOrderService.createFromAlarm(alarmId, "AGENT", user, text(payload.get("assigneeName")), overrides);
     if (hasText(text(payload.get("agentActionId")))) {
-      order.put("agentActionId", text(payload.get("agentActionId")));
+      result.put("agentActionId", text(payload.get("agentActionId")));
     }
     if (hasText(text(payload.get("agentIdempotencyKey")))) {
-      order.put("agentIdempotencyKey", text(payload.get("agentIdempotencyKey")));
+      result.put("agentIdempotencyKey", text(payload.get("agentIdempotencyKey")));
     }
-    order.put("status", "PENDING");
-    order.put("priority", firstText(payload.get("priority"), "MEDIUM"));
-    order.put("assigneeName", firstText(payload.get("assigneeName"), user.getDisplayName()));
-    order.put("createdById", user.getId());
-    order.put("createdByName", user.getDisplayName());
-    order.put("createdAt", now);
-    order.put("updatedAt", now);
-    return dataStore.upsert(DataCategory.WORK_ORDER, order);
+    if (hasText(text(payload.get("taskId")))) {
+      result.put("taskId", text(payload.get("taskId")));
+    }
+    return result;
   }
 
   public Map<String, Object> pushNotification(Map<String, Object> payload) {
