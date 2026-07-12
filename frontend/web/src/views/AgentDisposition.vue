@@ -84,7 +84,19 @@
             <div class="step-row"><span>{{ step.summary }}</span><code>#{{ step.sequenceNo }} · {{ step.type }}</code></div>
           </el-timeline-item>
         </el-timeline>
-        <el-alert v-if="agentStore.activeRun?.question?.question" class="human-question" type="warning" :closable="false" show-icon :title="agentStore.activeRun.question.question.prompt" />
+        <div v-if="agentStore.activeRun?.question?.question" class="human-question">
+          <div class="question-title">需要人工补充</div>
+          <p>{{ agentStore.activeRun.question.question.prompt }}</p>
+          <template v-if="can('agent:run') && agentStore.activeRun.run.status === 'WAITING_HUMAN'">
+            <el-input v-model="humanAnswer" type="textarea" :rows="3" maxlength="2000" show-word-limit placeholder="输入现场确认信息；内容将作为不可信业务证据供 Agent 读取" />
+            <div class="question-actions">
+              <el-button type="primary" size="small" @click="submitAnswer">提交回答</el-button>
+              <el-button size="small" @click="continueWithEvidence">基于现有证据继续</el-button>
+              <el-button type="danger" plain size="small" @click="cancelRun">取消 Run</el-button>
+            </div>
+          </template>
+          <el-alert v-else type="info" :closable="false" title="当前账号没有回答该问题的权限，或 Run 已不再等待人工输入。" />
+        </div>
 
         <template v-if="agentStore.activeRun?.toolCalls.length">
         <div class="panel-title action-title">工具调用</div>
@@ -99,9 +111,10 @@
         <el-table :data="agentStore.activeRun?.actions ?? []" size="small" empty-text="本次运行暂无动作">
           <el-table-column label="动作" min-width="140"><template #default="{ row }: { row: AuditedAgentAction }"><div class="action-name">{{ row.title }}</div><div class="muted">{{ row.reason }}</div></template></el-table-column>
           <el-table-column label="风险" width="72"><template #default="{ row }: { row: AuditedAgentAction }"><el-tag size="small" :type="riskLevelType(row.riskLevel)">{{ riskLevelLabel(row.riskLevel) }}</el-tag></template></el-table-column>
-          <el-table-column label="置信度" width="72"><template #default><span>{{ analysis ? Math.round(analysis.confidence * 100) : '-' }}%</span></template></el-table-column>
+          <el-table-column label="置信度" width="72"><template #default="{ row }: { row: AuditedAgentAction }"><span>{{ Math.round(row.confidence * 100) }}%</span></template></el-table-column>
           <el-table-column label="状态" width="82"><template #default="{ row }: { row: AuditedAgentAction }"><el-tag size="small" :type="actionStatusType(row.status)">{{ actionStatusLabel(row.status) }}</el-tag></template></el-table-column>
-          <el-table-column v-if="can('agent:approve')" label="操作" width="142"><template #default="{ row }: { row: AuditedAgentAction }"><el-button v-if="row.status === 'PROPOSED'" text type="primary" size="small" @click="confirm(row)">批准</el-button><el-button v-if="row.status === 'PROPOSED'" text type="danger" size="small" @click="reject(row)">拒绝</el-button><span v-else class="muted">{{ row.policyCode }}</span></template></el-table-column>
+          <el-table-column label="策略" min-width="140"><template #default="{ row }: { row: AuditedAgentAction }"><div>{{ row.policyDecision }}</div><div class="muted">{{ row.policyReason }}</div></template></el-table-column>
+          <el-table-column v-if="can('agent:approve')" label="操作" width="142"><template #default="{ row }: { row: AuditedAgentAction }"><el-button v-if="row.status === 'PROPOSED'" text type="primary" size="small" @click="confirm(row)">批准</el-button><el-button v-if="row.status === 'PROPOSED'" text type="danger" size="small" @click="reject(row)">拒绝</el-button><el-button v-if="row.status === 'FAILED'" text type="warning" size="small" @click="retry(row)">重试</el-button><span v-else class="muted">{{ row.policyCode }}</span></template></el-table-column>
         </el-table>
       </section>
 
@@ -145,6 +158,7 @@ const { can } = usePermission()
 const form = reactive({ taskId: '', alarmId: '', goal: '', operatorNote: '' })
 const caseFilter = ref('')
 const highlightEvidenceId = ref('')
+const humanAnswer = ref('')
 
 const analysis = computed<AuditedAgentConclusion | undefined>(() => agentStore.activeRun?.conclusion)
 const selectedAlarm = computed(() => alarmStore.alarms.find((item) => item.id === form.alarmId))
@@ -202,10 +216,19 @@ function alarmSeverityType(severity: AlarmSeverity) { return { LOW: 'info', MEDI
 function taskStatusLabel(status: TaskStatus) { return TASK_STATUS_LABELS[status] }
 async function confirm(action: AuditedAgentAction) { await agentStore.approveAction(action); ElMessage.success('动作已批准') }
 async function reject(action: AuditedAgentAction) { await agentStore.rejectAction(action); ElMessage.success('动作已拒绝') }
+async function retry(action: AuditedAgentAction) { await agentStore.retryAction(action); ElMessage.success('已提交动作重试') }
+async function submitAnswer() {
+  if (!humanAnswer.value.trim()) { ElMessage.warning('请输入回答内容'); return }
+  await agentStore.submitHumanInput('ANSWER', humanAnswer.value)
+  humanAnswer.value = ''
+  ElMessage.success('人工回答已保存，Agent 将继续执行')
+}
+async function continueWithEvidence() { await agentStore.submitHumanInput('CONTINUE_WITH_CURRENT_EVIDENCE'); ElMessage.success('已请求基于现有证据继续') }
+async function cancelRun() { await agentStore.cancelActiveRun(); ElMessage.success('Run 已取消') }
 function fmt(iso?: string) { return iso ? new Date(iso).toLocaleString('zh-CN') : '-' }
 function caseStatusLabel(status: AgentCaseStatus) { return { OPEN: '待分析', ANALYZING: '分析中', WAITING_HUMAN: '待补充', WAITING_APPROVAL: '待审批', ACTION_EXECUTING: '执行中', RESOLVED: '已解决', FAILED: '失败', CLOSED: '已关闭' }[status] }
 function caseStatusType(status: AgentCaseStatus) { return { OPEN: 'info', ANALYZING: 'warning', WAITING_HUMAN: 'warning', WAITING_APPROVAL: 'warning', ACTION_EXECUTING: 'warning', RESOLVED: 'success', FAILED: 'danger', CLOSED: 'info' }[status] as 'info' | 'warning' | 'success' | 'danger' }
-function runStatusLabel(status: AgentRunStatus) { return { QUEUED: '排队中', RUNNING: '运行中', WAITING_TOOL: '等待工具', WAITING_HUMAN: '等待人工', WAITING_APPROVAL: '等待审批', SUCCEEDED: '已完成', FAILED: '失败', CANCELLED: '已取消', TIMED_OUT: '超时', STEP_LIMIT_REACHED: '达到上限' }[status] }
+function runStatusLabel(status: AgentRunStatus) { return { QUEUED: '排队中', RUNNING: '运行中', WAITING_TOOL: '等待工具', WAITING_HUMAN: '等待人工', WAITING_APPROVAL: '等待审批', ACTION_EXECUTING: '动作执行中', SUCCEEDED: '已完成', FAILED: '失败', CANCELLED: '已取消', TIMED_OUT: '超时', STEP_LIMIT_REACHED: '达到上限' }[status] }
 function runStatusType(status: AgentRunStatus) { return status === 'SUCCEEDED' ? 'success' : status === 'FAILED' || status === 'TIMED_OUT' ? 'danger' : 'warning' }
 function stepType(type: AgentStepType) { return type.includes('FAILED') ? 'danger' : type.includes('SUCCEEDED') || type === 'RUN_FINISHED' ? 'success' : type.includes('ACTION') ? 'warning' : 'primary' }
 function actionStatusLabel(status: AuditedAgentActionStatus) { return { PROPOSED: '待审批', APPROVED: '已批准', REJECTED: '已拒绝', EXECUTING: '执行中', SUCCEEDED: '已完成', FAILED: '失败', EXPIRED: '已过期', CANCELLED: '已取消' }[status] }
@@ -361,6 +384,28 @@ function scrollToEvidence(evidenceId: string) {
 
 .human-question {
   margin: 12px 0;
+  border: 1px solid #f0c36d;
+  border-radius: 8px;
+  background: #fff9ed;
+  padding: 12px;
+}
+
+.human-question p {
+  margin: 8px 0 12px;
+  color: #5e4a20;
+  line-height: 1.55;
+}
+
+.question-title {
+  color: #8b5a00;
+  font-weight: 700;
+}
+
+.question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .step-row {

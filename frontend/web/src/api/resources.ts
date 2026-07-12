@@ -17,6 +17,7 @@ import type { AppNotification, NotificationType } from '@/types/notification'
 import type {
   AgentAction,
   AgentActionDecisionRequest,
+  AgentHumanInputRequest,
   AgentCaseDetail,
   AgentCaseSummary,
   AgentRunDetail,
@@ -130,6 +131,9 @@ export const resourcesApi = {
   startAgentRun: (caseId: string, body: StartAgentRunRequest) => http.post<AgentRunSummary>(`/agent-cases/${caseId}/runs`, body),
   getAgentRun: (runId: string) => http.get<AgentRunDetail>(`/agent-runs/${runId}`),
   getAgentRunEvidence: (runId: string) => http.get<AuditedAgentEvidence[]>(`/agent-runs/${runId}/evidence`),
+  submitAgentHumanInput: (runId: string, body: AgentHumanInputRequest) => http.post(`/agent-runs/${runId}/human-inputs`, body),
+  cancelAuditedAgentRun: (runId: string) => http.post<AgentRunSummary>(`/agent-runs/${runId}/cancel`),
   approveAuditedAgentAction: (id: string, body: AgentActionDecisionRequest) => http.post<AuditedAgentAction>(`/agent-actions/${id}/approve`, body),
   rejectAuditedAgentAction: (id: string, body: AgentActionDecisionRequest) => http.post<AuditedAgentAction>(`/agent-actions/${id}/reject`, body),
+  retryAuditedAgentAction: (id: string, body: AgentActionDecisionRequest) => http.post<AuditedAgentAction>(`/agent-actions/${id}/retry`, body),
 }

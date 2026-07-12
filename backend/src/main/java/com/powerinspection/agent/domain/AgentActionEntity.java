@@ -21,8 +21,12 @@ public class AgentActionEntity {
   @Enumerated(EnumType.STRING) @Column(name = "risk_level", nullable = false) private AgentEnums.RiskLevel riskLevel;
   @Enumerated(EnumType.STRING) @Column(nullable = false) private AgentEnums.ActionStatus status;
   @Column(name = "payload_json", nullable = false, columnDefinition = "LONGTEXT") private String payloadJson;
+  @Column(nullable = false) private double confidence;
+  @Column(name = "evidence_ids_json", nullable = false, columnDefinition = "LONGTEXT") private String evidenceIdsJson;
+  @Column(name = "payload_audit_json", columnDefinition = "LONGTEXT") private String payloadAuditJson;
   @Enumerated(EnumType.STRING) @Column(name = "policy_decision", nullable = false) private AgentEnums.PolicyDecisionType policyDecision;
   @Column(name = "policy_code", nullable = false) private String policyCode;
+  @Column(name = "policy_reason", nullable = false, columnDefinition = "LONGTEXT") private String policyReason;
   @Column(name = "requires_approval", nullable = false) private boolean requiresApproval;
   @Column(name = "idempotency_key", nullable = false) private String idempotencyKey;
   @Column(name = "approved_by_id") private String approvedById;
@@ -48,8 +52,12 @@ public class AgentActionEntity {
   public AgentEnums.RiskLevel getRiskLevel() { return riskLevel; } public void setRiskLevel(AgentEnums.RiskLevel value) { riskLevel = value; }
   public AgentEnums.ActionStatus getStatus() { return status; } public void setStatus(AgentEnums.ActionStatus value) { status = value; }
   public String getPayloadJson() { return payloadJson; } public void setPayloadJson(String value) { payloadJson = value; }
+  public double getConfidence() { return confidence; } public void setConfidence(double value) { confidence = value; }
+  public String getEvidenceIdsJson() { return evidenceIdsJson; } public void setEvidenceIdsJson(String value) { evidenceIdsJson = value; }
+  public String getPayloadAuditJson() { return payloadAuditJson; } public void setPayloadAuditJson(String value) { payloadAuditJson = value; }
   public AgentEnums.PolicyDecisionType getPolicyDecision() { return policyDecision; } public void setPolicyDecision(AgentEnums.PolicyDecisionType value) { policyDecision = value; }
   public String getPolicyCode() { return policyCode; } public void setPolicyCode(String value) { policyCode = value; }
+  public String getPolicyReason() { return policyReason; } public void setPolicyReason(String value) { policyReason = value; }
   public boolean isRequiresApproval() { return requiresApproval; } public void setRequiresApproval(boolean value) { requiresApproval = value; }
   public String getIdempotencyKey() { return idempotencyKey; } public void setIdempotencyKey(String value) { idempotencyKey = value; }
   public String getApprovedById() { return approvedById; } public void setApprovedById(String value) { approvedById = value; }

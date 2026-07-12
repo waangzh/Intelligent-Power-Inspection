@@ -12,6 +12,8 @@ public class AgentOrchestratorProperties {
   private int maxVisionCalls = 2;
   private Duration runTimeout = Duration.ofMinutes(10);
 
+  private boolean autoExecutionEnabled = false;
+
   public int getMaxSteps() { return maxSteps; }
   public void setMaxSteps(int maxSteps) { this.maxSteps = maxSteps; }
   public int getMaxToolCalls() { return maxToolCalls; }
@@ -20,4 +22,6 @@ public class AgentOrchestratorProperties {
   public void setMaxVisionCalls(int maxVisionCalls) { this.maxVisionCalls = maxVisionCalls; }
   public Duration getRunTimeout() { return runTimeout; }
   public void setRunTimeout(Duration runTimeout) { this.runTimeout = runTimeout; }
+  public boolean isAutoExecutionEnabled() { return autoExecutionEnabled; }
+  public void setAutoExecutionEnabled(boolean autoExecutionEnabled) { this.autoExecutionEnabled = autoExecutionEnabled; }
 }

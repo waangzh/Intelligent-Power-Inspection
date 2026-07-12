@@ -105,6 +105,7 @@ export type AgentRunStatus =
   | 'WAITING_TOOL'
   | 'WAITING_HUMAN'
   | 'WAITING_APPROVAL'
+  | 'ACTION_EXECUTING'
   | 'SUCCEEDED'
   | 'FAILED'
   | 'CANCELLED'
@@ -120,6 +121,7 @@ export type AgentStepType =
   | 'TOOL_CALL_FAILED'
   | 'EVIDENCE_ADDED'
   | 'HUMAN_INPUT_REQUESTED'
+  | 'HUMAN_INPUT_RECEIVED'
   | 'LLM_ANALYZED'
   | 'ACTION_PROPOSED'
   | 'ACTION_APPROVED'
@@ -132,7 +134,7 @@ export type AgentStepType =
 
 export type AuditedAgentActionStatus = 'PROPOSED' | 'APPROVED' | 'REJECTED' | 'EXECUTING' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED' | 'CANCELLED'
 export type AgentRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
-export type AgentActionType = 'CREATE_WORK_ORDER_DRAFT' | 'PUSH_NOTIFICATION' | 'ACKNOWLEDGE_ALARM' | 'REQUEST_TASK_PAUSE' | 'CANCEL_TASK' | 'ROBOT_MANUAL_CONTROL'
+export type AgentActionType = 'PUSH_NOTIFICATION_TO_SELF' | 'CREATE_WORK_ORDER_DRAFT' | 'ACKNOWLEDGE_ALARM' | 'REQUEST_TASK_PAUSE' | 'ROBOT_MANUAL_CONTROL' | 'CANCEL_TASK' | 'MODIFY_USER_PERMISSION' | 'MODIFY_MODEL_CONFIGURATION' | 'EXECUTE_ARBITRARY_HTTP_REQUEST' | 'EXECUTE_COMMAND' | 'READ_LOCAL_FILE' | 'PUSH_NOTIFICATION'
 export type AgentEvidenceSourceType = 'TASK' | 'TASK_EVENT' | 'ALARM' | 'WORK_ORDER' | 'ROBOT' | 'ROUTE' | 'VISION_RESULT' | 'OPERATOR_INPUT' | 'LLM_FALLBACK'
 export type AgentPolicyDecision = 'AUTO_EXECUTE' | 'REQUIRE_APPROVAL' | 'DENY'
 
@@ -229,10 +231,14 @@ export interface AuditedAgentAction {
   title: string
   reason: string
   riskLevel: AgentRiskLevel
+  confidence: number
   status: AuditedAgentActionStatus
   payload: Record<string, unknown>
+  evidenceIds: string[]
+  payloadAudit?: Record<string, unknown>
   policyDecision: AgentPolicyDecision
   policyCode: string
+  policyReason: string
   requiresApproval: boolean
   idempotencyKey: string
   approvedById?: string
@@ -260,7 +266,7 @@ export interface AgentRunDetail {
   actions: AuditedAgentAction[]
   question?: {
     runId: string
-    question?: { type: string; prompt: string; options?: string[] }
+    question?: { questionId: string; type: string; prompt: string; options?: string[] }
     degraded: boolean
     degradationReason?: string
   }
@@ -279,8 +285,18 @@ export interface StartAgentRunRequest {
 }
 
 export interface AgentActionDecisionRequest {
-  version: number
+  expectedVersion: number
   comment: string
+  payload?: Record<string, unknown>
+}
+
+export type AgentHumanInputMode = 'ANSWER' | 'CONTINUE_WITH_CURRENT_EVIDENCE' | 'CANCEL_RUN'
+
+export interface AgentHumanInputRequest {
+  questionId: string
+  mode: AgentHumanInputMode
+  text?: string
+  attachmentIds?: string[]
 }
 
 export interface AuditedAgentRealtimeEvent {

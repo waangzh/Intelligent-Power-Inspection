@@ -20,6 +20,17 @@ public class NotificationService {
   }
 
   public Map<String, Object> push(String userId, String type, String title, String content, String link) {
+    return push(userId, type, title, content, link, Map.of());
+  }
+
+  public Map<String, Object> pushForAgentAction(String userId, String type, String title, String content, String link, String actionId) {
+    return dataStore.list(DataCategory.NOTIFICATION).stream()
+      .filter(item -> actionId.equals(String.valueOf(item.get("agentActionId"))))
+      .findFirst()
+      .orElseGet(() -> push(userId, type, title, content, link, Map.of("agentActionId", actionId)));
+  }
+
+  private Map<String, Object> push(String userId, String type, String title, String content, String link, Map<String, Object> extras) {
     Map<String, Object> item = new LinkedHashMap<>();
     item.put("id", Ids.next("ntf"));
     item.put("userId", userId);
@@ -30,6 +41,7 @@ public class NotificationService {
     if (link != null) {
       item.put("link", link);
     }
+    item.putAll(extras);
     item.put("createdAt", Instant.now().toString());
     Map<String, Object> saved = dataStore.upsert(DataCategory.NOTIFICATION, item);
     if ("*".equals(userId)) {

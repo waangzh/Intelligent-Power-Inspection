@@ -1,17 +1,26 @@
 package com.powerinspection.agent.planner;
 
 import com.powerinspection.agent.tool.AgentToolRegistry;
+import com.powerinspection.agent.action.AgentActionPayloadValidator;
 import java.util.HashSet;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Server-side validation; prompts and model output never authorize execution by themselves. */
 @Component
 public class PlannerDecisionValidator {
   private final AgentToolRegistry toolRegistry;
+  private final AgentActionPayloadValidator actionPayloadValidator;
+
+  @Autowired
+  public PlannerDecisionValidator(AgentToolRegistry toolRegistry, AgentActionPayloadValidator actionPayloadValidator) {
+    this.toolRegistry = toolRegistry;
+    this.actionPayloadValidator = actionPayloadValidator;
+  }
 
   public PlannerDecisionValidator(AgentToolRegistry toolRegistry) {
-    this.toolRegistry = toolRegistry;
+    this(toolRegistry, new AgentActionPayloadValidator());
   }
 
   public void validate(PlannerDecision decision, AgentPlanningContext context) {
@@ -39,9 +48,21 @@ public class PlannerDecisionValidator {
         if (decision.conclusion() == null || decision.conclusion().defectLevel() == null || blank(decision.conclusion().cause()) || decision.evidenceIds().isEmpty()) {
           fail("INVALID_CONCLUSION", "FINISH 必须提供结论和当前 Run 的证据引用");
         }
+        if (decision.actionProposal() != null) validateProposal(decision);
       }
-      case PROPOSE_ACTION -> fail("UNSUPPORTED_PLANNER_DECISION", "当前阶段不允许 Planner 创建或执行动作");
+      case PROPOSE_ACTION -> validateProposal(decision);
     }
+  }
+
+  private void validateProposal(PlannerDecision decision) {
+    ActionProposal proposal = decision.actionProposal();
+    if (proposal == null || blank(proposal.actionType()) || blank(proposal.title()) || blank(proposal.reason()) || proposal.title().length() > 255 || proposal.reason().length() > 500) {
+      fail("INVALID_ACTION_PROPOSAL", "PROPOSE_ACTION 必须提供受限的结构化动作提案");
+    }
+    if (!Double.isFinite(proposal.confidence()) || proposal.confidence() < 0 || proposal.confidence() > 1 || proposal.evidenceIds().isEmpty() || !proposal.evidenceIds().equals(decision.evidenceIds())) {
+      fail("INVALID_ACTION_PROPOSAL", "动作提案的置信度或证据引用不合法");
+    }
+    actionPayloadValidator.actionType(proposal.actionType());
   }
 
   private void validateTool(PlannerDecision decision) {

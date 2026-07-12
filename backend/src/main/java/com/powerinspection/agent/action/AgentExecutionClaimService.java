@@ -20,6 +20,13 @@ public class AgentExecutionClaimService {
   public synchronized ClaimResult claim(String idempotencyKey, String actionId) {
     Optional<AgentActionExecutionClaimEntity> existing = repository.findByIdempotencyKey(idempotencyKey);
     if (existing.isPresent()) {
+      if (existing.get().getStatus() == AgentEnums.ExecutionClaimStatus.FAILED) {
+        existing.get().setActionId(actionId);
+        existing.get().setStatus(AgentEnums.ExecutionClaimStatus.EXECUTING);
+        existing.get().setResultJson(null);
+        existing.get().setUpdatedAt(Instant.now());
+        return new ClaimResult(true, repository.saveAndFlush(existing.get()));
+      }
       return new ClaimResult(false, existing.get());
     }
     Instant now = Instant.now();

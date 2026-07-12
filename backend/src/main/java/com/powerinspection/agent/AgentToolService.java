@@ -169,7 +169,24 @@ public class AgentToolService {
     if (!hasText(alarmId)) {
       throw ApiException.badRequest("Agent 工单缺少关联告警");
     }
-    return workOrderService.createFromAlarm(alarmId, "AGENT", user, text(payload.get("assigneeName")), payload);
+    Map<String, Object> overrides = new LinkedHashMap<>();
+    String title = text(payload.get("title"));
+    String description = text(payload.get("description"));
+    String priority = text(payload.get("priority"));
+    if (hasText(title)) overrides.put("title", title);
+    if (hasText(description)) overrides.put("description", description);
+    if (hasText(priority)) overrides.put("priority", priority);
+    Map<String, Object> result = workOrderService.createFromAlarm(alarmId, "AGENT", user, text(payload.get("assigneeName")), overrides);
+    if (hasText(text(payload.get("agentActionId")))) {
+      result.put("agentActionId", text(payload.get("agentActionId")));
+    }
+    if (hasText(text(payload.get("agentIdempotencyKey")))) {
+      result.put("agentIdempotencyKey", text(payload.get("agentIdempotencyKey")));
+    }
+    if (hasText(text(payload.get("taskId")))) {
+      result.put("taskId", text(payload.get("taskId")));
+    }
+    return result;
   }
 
   public Map<String, Object> pushNotification(Map<String, Object> payload) {

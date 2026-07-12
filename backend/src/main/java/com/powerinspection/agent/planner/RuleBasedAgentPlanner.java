@@ -28,7 +28,19 @@ public class RuleBasedAgentPlanner implements AgentPlanner {
     if (!context.hasEvidence(AgentEnums.EvidenceSourceType.WORK_ORDER)) {
       return PlannerDecision.callTool("核对是否已有关联工单", "list_related_work_orders", args(alarmId, taskId), context.evidenceIds());
     }
-    return PlannerDecision.finish("证据已完成受限采集", new PlannerConclusion(risk(alarm), "已基于当前运行内的告警、视觉和工单证据完成研判。", List.of("建议由值班人员结合证据决定后续处置。")), context.evidenceIds(), 0.72);
+    PlanningEvidence workOrders = context.firstEvidence(AgentEnums.EvidenceSourceType.WORK_ORDER);
+    PlannerConclusion conclusion = new PlannerConclusion(risk(alarm), "已基于当前运行内的告警、视觉和工单证据完成研判。", List.of("建议由值班人员结合证据决定后续处置。"));
+    if (!hasExistingWorkOrder(workOrders)) {
+      Map<String, Object> payload = new java.util.LinkedHashMap<>();
+      payload.put("alarmId", alarmId);
+      if (hasText(taskId)) payload.put("taskId", taskId);
+      payload.put("title", "Agent 建议处置：" + abbreviate(text(alarm.payload().get("message")), 24));
+      payload.put("description", conclusion.cause());
+      payload.put("priority", priority(risk(alarm)));
+      ActionProposal proposal = new ActionProposal("CREATE_WORK_ORDER_DRAFT", "创建工单草稿", "当前 Run 未发现关联工单，建议建立可人工审批的处置草稿。", payload, context.evidenceIds(), 0.72);
+      return PlannerDecision.finishWithProposal("证据已完成受限采集，并提出受控工单草稿", conclusion, proposal, context.evidenceIds(), 0.72);
+    }
+    return PlannerDecision.finish("证据已完成受限采集", conclusion, context.evidenceIds(), 0.72);
   }
 
   private Map<String, Object> args(String alarmId, String taskId) {
@@ -44,6 +56,11 @@ public class RuleBasedAgentPlanner implements AgentPlanner {
     try { return value == null ? AgentEnums.RiskLevel.MEDIUM : AgentEnums.RiskLevel.valueOf(value); }
     catch (IllegalArgumentException ex) { return AgentEnums.RiskLevel.MEDIUM; }
   }
+
+  private boolean hasExistingWorkOrder(PlanningEvidence evidence) { return evidence != null && evidence.payload().get("items") instanceof List<?> items && !items.isEmpty(); }
+  private String priority(AgentEnums.RiskLevel level) { return switch (level) { case CRITICAL -> "URGENT"; case HIGH -> "HIGH"; case MEDIUM -> "MEDIUM"; case LOW -> "LOW"; }; }
+  private String abbreviate(String value, int max) { if (!hasText(value)) return "巡检异常"; return value.length() <= max ? value : value.substring(0, max); }
+
 
   private boolean hasText(String value) { return value != null && !value.isBlank(); }
   private String text(Object value) { return value == null ? null : value.toString(); }
