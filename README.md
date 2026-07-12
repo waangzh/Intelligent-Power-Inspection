@@ -1,66 +1,81 @@
 # Intelligent-Power-Inspection
 
-电力智能巡检平台软件端仓库。当前仓库包含 Java 后端、Vue Web 管理端和微信小程序端，用于演示变电站巡检业务中的登录鉴权、站点管理、**ROS 地图路线标注**、任务调度、机器人管理、告警处置、工单流转、检测模板、通知中心和巡检记录等能力。
+电力智能巡检平台——软件端仓库。面向变电站巡检场景，提供 Web 管理端、微信小程序端、Java 后端和 AI 模型服务的一体化演示系统。
 
-当前项目定位为课程/演示级可运行系统。真实机器人和生产级部署链路尚未完整接入；LocateAnything 已接入 Python 真实模型服务，Spring Boot 默认通过 HTTP 模型网关调用该服务。
+> 硬件端（机器人控制、传感器采集、边缘推理）位于 [electric-power-inspection-robot](https://github.com/liaojingwu20041031/electric-power-inspection-robot)，本仓库聚焦软件层：业务系统 + AI 检测 + 路线规划 + 巡检处置 Agent。
 
-## 当前状态
+[![Java](https://img.shields.io/badge/Java-17%2B-orange)](https://adoptium.net/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.6-brightgreen)](https://spring.io/projects/spring-boot)
+[![Vue](https://img.shields.io/badge/Vue-3.x-4fc08d)](https://vuejs.org/)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-- `backend/`：Spring Boot 3.3.6 / Java 17 / Maven 后端。
-- `frontend/web/`：Vue 3 / Vite / TypeScript / Pinia Web 管理端。
-- `frontend/wechat-program/`：微信小程序端，已有页面、组件、mock 服务和后端 API 切换配置。
-- `ai-services/`：Python FastAPI 模型服务骨架，包含 LocateAnything 检测服务。
-- Web 端通过 Vite 代理访问后端 `/api/v1` 和 `/ws`。
-- Web 端 **巡检规划**（`/routes`）已切换为 **ROS 建图路线标注**：本地上传 `.yaml` + `.pgm`，标注起点/巡检点/方向，保存 `route.json` v2（`executorJson`）到后端，并可下载供机器人执行器加载。
-- 小程序端默认使用本地 mock；需要接真实后端时修改 `frontend/wechat-program/miniprogram/config/api.js`。
-- 后端默认使用 MySQL，测试/演示可使用 H2。
-- 后端模型网关支持 `mock` 和 `http` 两种模式；`http` 模式调用 `ai-services/` 中的 Python 服务。
-- 数据库结构由 Flyway 管理，迁移脚本位于 `backend/src/main/resources/db/migration/`。
+## 目录
+
+- [项目定位](#项目定位)
+- [仓库关系](#仓库关系)
+- [功能概览](#功能概览)
+- [技术栈](#技术栈)
+- [目录结构](#目录结构)
+- [环境要求](#环境要求)
+- [快速启动](#快速启动)
+- [默认演示账号](#默认演示账号)
+- [巡检路线规划](#巡检路线规划)
+- [巡检处置 Agent](#巡检处置-agent)
+- [模型接入架构](#模型接入架构)
+- [数据库与 Flyway](#数据库与-flyway)
+- [权限点](#权限点)
+- [API 与实时推送](#api-与实时推送)
+- [前端数据流](#前端数据流)
+- [常用命令](#常用命令)
+- [常见问题](#常见问题)
+- [当前限制](#当前限制)
+
+## 项目定位
+
+本项目是课程/演示级可运行系统，完整覆盖：
+
+```text
+机器人数据采集 → 告警生成 → AI 视觉检测 → Agent 智能研判
+    → 工单流转 → 人工处置 → 通知闭环
+```
+
+当前定位为 **软件平台**。真实机器人控制、传感器采集、边缘推理等硬件侧能力由 [electric-power-inspection-robot](https://github.com/liaojingwu20041031/electric-power-inspection-robot) 仓库负责。
+
+## 仓库关系
+
+| 仓库 | 定位 | 说明 |
+| --- | --- | --- |
+| [Intelligent-Power-Inspection](https://github.com/waangzh/Intelligent-Power-Inspection) | **软件端（本仓库）** | Java 后端 + Vue Web + 微信小程序 + Python AI 服务 |
+| [electric-power-inspection-robot](https://github.com/liaojingwu20041031/electric-power-inspection-robot) | **硬件端** | 机器人运动控制、传感器数据采集、边缘端 AI 推理、与软件平台的通信协议 |
+
+两个仓库通过 REST API 和 WebSocket 协作：软件平台下发任务指令，硬件端上报机器人状态、遥测数据和检测结果。
+
+## 功能概览
+
+| 模块 | 能力 |
+| --- | --- |
+| 站点管理 | 站点创建、GIS 区域划分、地图资产管理 |
+| 机器人管理 | 机器人注册、状态监控、遥测数据、模拟网关 |
+| 巡检路线 | ROS map 坐标系标注、起点/巡检点/方向、executorJson v2 持久化 |
+| 任务调度 | 巡检任务创建、下发、暂停/恢复、接管/取消、执行事件流 |
+| 告警处置 | 多级告警生成、确认、转工单，支持自动/人工转换 |
+| 巡检处置 Agent | Plan-Act-Observe 编排、只读工具调用、人工提问闭环、Policy 引擎、受控 Action 执行 |
+| 工单流转 | 从告警创建、指派、状态跟踪 |
+| AI 检测 | LocateAnything 视觉检测服务、手动上传异步检测 |
+| 通知中心 | 实时推送、已读管理、Agent 处置通知 |
+| 记录导出 | 巡检记录查询与 Excel 导出 |
+| 权限控制 | 管理员 / 调度员 / 查看者三级角色 + 细粒度权限点 |
 
 ## 技术栈
 
-### 后端
-
-- Java 17+
-- Spring Boot 3.3.6
-- Maven
-- Spring Web
-- Spring Security
-- Bean Validation
-- Spring Data JPA
-- Spring WebSocket / STOMP
-- Flyway
-- MySQL Driver
-- H2 测试数据库
-- JUnit 5 / MockMvc
-
-### Web 前端
-
-- Vue 3
-- TypeScript
-- Vite
-- Pinia
-- Vue Router
-- Element Plus
-- ECharts
-- Leaflet
-- Three.js
-
-### 微信小程序
-
-- 原生微信小程序工程
-- WXML / WXSS / JavaScript
-- 本地 mock store
-- 可切换后端 REST API
-
-### Python 模型服务
-
-- Python 3.11+ / 3.13 已验证基础服务测试
-- FastAPI
-- Uvicorn
-- Pydantic
-- Pytest
-- LocateAnything 服务骨架
+| 层 | 技术 |
+| --- | --- |
+| **后端** | Java 17、Spring Boot 3.3.6、Spring Security、Spring Data JPA、Spring WebSocket/STOMP、Flyway、MySQL、H2 |
+| **Web 前端** | Vue 3、TypeScript、Vite、Pinia、Vue Router、Element Plus、ECharts、Leaflet、Three.js |
+| **微信小程序** | 原生框架、WXML/WXSS/JavaScript、本地 mock store、可切换后端 API |
+| **AI 服务** | Python 3.11+、FastAPI、Uvicorn、Pydantic、Pytest、LocateAnything |
+| **硬件端** | 参见 [electric-power-inspection-robot](https://github.com/liaojingwu20041031/electric-power-inspection-robot) |
 
 ## 目录结构
 
@@ -71,13 +86,16 @@ Intelligent-Power-Inspection/
 │  └─ src/
 │     ├─ main/
 │     │  ├─ java/com/powerinspection/
+│     │  │  ├─ agent/           # 巡检处置 Agent（编排/Planner/Policy/Action/HumanInput）
 │     │  │  ├─ alarm/           # 告警
 │     │  │  ├─ auth/            # 登录、注册、会话
 │     │  │  ├─ business/        # 通用 CRUD 支撑
 │     │  │  ├─ common/          # 统一响应、异常、JSON/ID 工具
-│     │  │  ├─ config/          # Security、CORS、JWT、WebSocket 配置
+│     │  │  ├─ config/          # Security、CORS、JWT、WebSocket
 │     │  │  ├─ data/            # 通用 JSON 数据仓库与种子数据
 │     │  │  ├─ detection/       # 检测模板
+│     │  │  ├─ mapasset/        # 地图资产管理
+│     │  │  ├─ model/           # AI 模型 HTTP 网关
 │     │  │  ├─ notification/    # 通知
 │     │  │  ├─ record/          # 巡检记录导出
 │     │  │  ├─ robot/           # 机器人与模拟网关
@@ -89,115 +107,71 @@ Intelligent-Power-Inspection/
 │     │  │  └─ workorder/       # 工单
 │     │  └─ resources/
 │     │     ├─ application.yml
-│     │     └─ db/migration/    # Flyway 迁移脚本
+│     │     └─ db/migration/    # Flyway 迁移（V1-V5）
 │     └─ test/
-│        ├─ java/               # MockMvc 集成测试
+│        ├─ java/               # MockMvc 集成测试（44 项）
 │        └─ resources/          # H2 测试配置
 ├─ frontend/
 │  ├─ web/
 │  │  ├─ src/
-│  │  │  ├─ api/                # HTTP 与实时通信封装
+│  │  │  ├─ api/                # HTTP 与 WebSocket 封装
 │  │  │  ├─ components/         # 业务组件（含 RosMapRouteEditor）
-│  │  │  ├─ composables/        # 组合式逻辑（含 useRosMapRouteEditor）
+│  │  │  ├─ composables/        # 组合式逻辑
 │  │  │  ├─ config/             # 菜单等配置
 │  │  │  ├─ layouts/            # 页面布局
 │  │  │  ├─ router/             # 路由与权限守卫
 │  │  │  ├─ stores/             # Pinia 状态
-│  │  │  ├─ types/              # TypeScript 类型（含 routeExecutor）
-│  │  │  ├─ utils/              # 工具函数（含 rosMap、routeExecutorJson）
-│  │  │  └─ views/              # 页面视图（RoutePlan 为 ROS 地图标注）
+│  │  │  ├─ types/              # TypeScript 类型
+│  │  │  ├─ utils/              # 工具函数
+│  │  │  └─ views/              # 页面视图
 │  │  ├─ docs/API.md
 │  │  ├─ package.json
 │  │  └─ vite.config.ts
 │  └─ wechat-program/
-│     ├─ project.config.json
-│     ├─ project.private.config.json
-│     └─ miniprogram/
-│        ├─ app.js
-│        ├─ app.json
-│        ├─ components/
-│        ├─ config/
-│        ├─ pages/
-│        ├─ services/
-│        └─ utils/
+│     └─ miniprogram/           # 原生微信小程序
 ├─ ai-services/
-│  ├─ README.md
-│  ├─ common/                  # Python 服务共享 schema、错误、存储和日志工具
-│  ├─ locate-anything-service/  # 检查点图像检测服务，默认端口 9001
-│  │  ├─ app.py
-│  │  ├─ model_runner.py        # LocateAnything 真实模型 runner
-│  │  ├─ parser.py              # 解析 <box>/<point>/none 输出
-│  │  └─ tests/
-
+│  ├─ common/                   # Python 共享工具
+│  └─ locate-anything-service/  # 视觉检测服务（端口 9001）
 ├─ .gitignore
 └─ README.md
 ```
 
 ## 环境要求
 
-- JDK 17 或更高版本。
-- Maven 3.9.x 或兼容版本。
-- Node.js 18 或更高版本。
-- npm。
-- Python 3.11 或更高版本，用于运行 `ai-services/`。
-- MySQL 8.x，用于正常开发/运行。
-- H2 用于自动化测试和快速演示，不需要单独安装。
-- 微信开发者工具，用于运行小程序端。
-
-如果 Windows PowerShell 中 `java -version` 仍显示 JDK 8，先确认本机已安装 JDK 17+，再临时切换：
-
-```powershell
-$env:JAVA_HOME="<你的 JDK 17+ 安装目录>"
-$env:Path="$env:JAVA_HOME\bin;$env:Path"
-java -version
-mvn -version
-```
-
-如果 PowerShell 拦截 `npm.ps1`，可使用 `npm.cmd`：
-
-```powershell
-npm.cmd install
-npm.cmd run dev
-```
+| 组件 | 版本 | 用途 |
+| --- | --- | --- |
+| JDK | 17+ | 后端编译与运行 |
+| Maven | 3.9+ | 后端构建 |
+| Node.js | 18+ | Web 前端 |
+| npm | — | Web 前端依赖 |
+| Python | 3.11+ | AI 模型服务 |
+| MySQL | 8.x | 开发/运行数据库 |
+| H2 | 内嵌 | 测试与快速演示 |
+| 微信开发者工具 | — | 小程序端 |
 
 ## 快速启动
 
-### 方式一：H2 演示启动
-
-这种方式不依赖本机 MySQL，适合快速查看前后端联调效果。
-
-启动后端：
+### 方式一：H2 演示（无需 MySQL）
 
 ```powershell
+# 后端
 cd backend
 $env:SPRING_PROFILES_ACTIVE="test"
 mvn spring-boot:test-run
-```
 
-启动 Web 前端：
-
-```powershell
+# Web 前端（新终端）
 cd frontend/web
 npm install
 npm run dev
 ```
 
-访问：
+访问 http://localhost:5173/
 
-```text
-http://localhost:5173/
-http://127.0.0.1:5173/
-```
-
-### 方式二：MySQL 开发启动
-
-先创建空数据库。开发环境建议使用空库，让 Flyway 自动初始化表结构：
+### 方式二：MySQL 开发
 
 ```sql
 CREATE DATABASE power_inspection CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
-
-通过环境变量配置数据库并启动后端：
 
 ```powershell
 cd backend
@@ -208,406 +182,181 @@ $env:JWT_SECRET="dev-secret-change-me"
 mvn spring-boot:run
 ```
 
-启动 Web 前端：
+### 方式三：微信小程序
+
+用微信开发者工具打开 `frontend/wechat-program/`，默认使用 mock 数据。接入真实后端时修改 `miniprogram/config/api.js` 设置 `useMock: false`。
+
+### 方式四：Python AI 服务联调
 
 ```powershell
-cd frontend/web
-npm install
-npm run dev
-```
-
-Web 前端开发服务器会把 `/api` 和 `/ws` 代理到 `http://localhost:8080`。
-
-### 方式三：微信小程序端
-
-用微信开发者工具打开：
-
-```text
-frontend/wechat-program/
-```
-
-小程序 API 配置位于：
-
-```text
-frontend/wechat-program/miniprogram/config/api.js
-```
-
-默认配置为 `useMock: true`。如需接入真实后端，设置 `useMock: false` 并确认 `baseUrl` 指向后端 `/api/v1`。
-
-### 方式四：Python 模型服务联调
-
-LocateAnything 服务已接入真实模型 runner。启动 Spring Boot 前请先启动 Python 服务，后端默认通过 HTTP 网关调用 `http://127.0.0.1:9001`。
-
-使用 conda 环境安装 Python 依赖：
-
-```powershell
+# 安装依赖
 conda env create -f ai-services/locate-anything-service/environment.yml
 conda activate ipi-locate-anything
-```
 
-如果需要运行真实 LocateAnything 模型，还需安装 PyTorch CUDA wheel：
-
-```powershell
+# 如需真实模型推理
 conda run -n ipi-locate-anything python -m pip install -r ai-services/locate-anything-service/requirements-torch-cu126.txt
-```
 
-启动 LocateAnything 服务：
-
-```powershell
-conda activate ipi-locate-anything
+# 启动服务
 cd ai-services\locate-anything-service
 uvicorn app:app --host 0.0.0.0 --port 9001
 ```
 
-后端默认已经使用 HTTP 模型网关，IDEA 直接启动 Spring Boot 即可连接本机 Python 服务：
-
-```powershell
-cd backend
-mvn spring-boot:test-run
-```
-
-> 注意：LocateAnything 当前已使用真实模型 runner，默认 `generation-mode: fast`、超时 `900s`。
-
-## 模型接入架构
-
-后端不会直接加载 PyTorch/CUDA 模型，而是通过模型网关调用 Python 服务。
-
-```text
-Web / 小程序
-  -> Spring Boot 后端
-    -> LocateAnythingGateway
-      -> Python FastAPI 模型服务
-        -> 模型 runner / artifact 存储
-```
-
-后端模型配置绑定在 `app.model`：
-
-```yaml
-app:
-  model:
-    mode: http
-    service-token: ${APP_MODEL_SERVICE_TOKEN:}
-    locate-anything:
-      base-url: http://127.0.0.1:9001
-      timeout-seconds: 900
-      generation-mode: fast
-
-```
-
-如需临时覆盖 LocateAnything 参数，可通过 `APP_MODEL_LOCATE_ANYTHING_BASE_URL`、`APP_MODEL_LOCATE_ANYTHING_TIMEOUT_SECONDS`、`APP_MODEL_LOCATE_ANYTHING_GENERATION_MODE` 环境变量调整，或直接修改 `backend/src/main/resources/application.yml`。
-
-模式说明：
-
-| 模式 | 行为 |
-| --- | --- |
-| `mock` | 使用 Java 内置 mock 网关，测试环境默认使用，适合无 Python 服务时演示 |
-| `http` | 使用 HTTP 网关调用 `ai-services/` 的 FastAPI 服务，默认运行模式 |
-
-### 手动上传检测接口
-
-手动检测使用异步任务接口，避免 LocateAnything 长时间推理导致 Apifox 或浏览器请求超时。
-
-1. `POST /api/v1/detections/manual` 使用 `multipart/form-data` 上传图片和检测项，立即返回 `requestId` 与 `status: RUNNING`。
-2. `GET /api/v1/detections/manual/{requestId}` 查询任务状态，状态可能为 `RUNNING`、`SUCCEEDED`、`FAILED`。
-3. 完成后响应包含 `inputImageUrl`、`resultImageUrl`、`findings`、`warnings`；前端检测策略页会自动轮询该查询接口。
-
-Apifox 测试时先调用 POST 拿到 `requestId`，再每隔几秒调用 GET 查询结果，不需要把单个请求超时时间拉到模型完整推理时长。
-
-LocateAnything 服务接口：
-
-```text
-GET  /health
-GET  /ready
-POST /v1/locate/checkpoint
-```
-
-模型产物约定：
-
-- `runtime-storage/`、模型权重、点云、mesh 等大文件不提交到 Git。
-- `ai-services/model/` 与 `ai-services/.cache/` 是本地模型和依赖缓存目录，已加入 `.gitignore`，不要手动暂存。
-
-## 数据库与 Flyway
-
-Flyway 是数据库迁移工具，不是数据库。项目启动时会读取：
-
-```text
-backend/src/main/resources/db/migration/V1__schema.sql
-```
-
-并自动创建基础表：
-
-- `app_users`
-- `user_preferences`
-- `user_activities`
-- `data_records`
-
-Flyway 还会创建自己的迁移记录表：
-
-```text
-flyway_schema_history
-```
-
-如果连接到一个已经有表但没有 `flyway_schema_history` 的数据库，启动会失败并出现类似错误：
-
-```text
-Found non-empty schema(s) but no schema history table.
-Use baseline() or set baselineOnMigrate to true
-```
-
-开发环境推荐处理方式：
-
-1. 使用空数据库重新启动，让 Flyway 从头初始化。
-2. 如果已有库确实要由 Flyway 接管，再考虑 `baseline-on-migrate: true`；该做法不建议直接用于生产库。
+后端默认通过 HTTP 模型网关调用 `http://127.0.0.1:9001`。
 
 ## 默认演示账号
 
-后端启动时会初始化默认账号和演示业务数据。
-
 | 用户名 | 密码 | 角色 | 说明 |
 | --- | --- | --- | --- |
-| `admin` | `Admin@123` | `ADMIN` | 管理员，拥有全部权限 |
-| `dispatcher` | `Disp@123` | `DISPATCHER` | 调度员，可调度任务、维护站点路线、处理告警和导出记录 |
-| `viewer` | `View@123` | `VIEWER` | 查看者，主要用于只读查看任务和监控数据 |
+| `admin` | `Admin@123` | `ADMIN` | 全部权限 |
+| `dispatcher` | `Disp@123` | `DISPATCHER` | 调度、路线、告警、导出 |
+| `viewer` | `View@123` | `VIEWER` | 只读查看 |
 
-## 巡检路线规划（Web `/routes`）
+## 巡检路线规划
 
-Web 管理端「巡检业务 → 巡检规划」页面基于 ROS `map` 坐标系，用于在 **建图后的 PGM/YAML** 上标注机器人导航路线。
+Web 端「巡检业务 → 巡检规划」基于 ROS `map` 坐标系，在 PGM/YAML 地图上标注机器人导航路线。
 
 ### 使用流程
 
-1. 选择站点，新建或选择一条路线。
-2. 上传 `.yaml`（地图配置）和 `.pgm`（地图图像），支持拖拽；也可导入已有 `.json` 继续编辑。
-3. 切换标注模式：**起点** / **巡检点** / **方向** / **拖动**。
-4. 在右侧调整起点、路线参数与巡检点顺序（`↑` / `↓` 改变 `target_ids` 导航顺序）。
-5. 点击 **保存到平台**，通过 `PATCH /api/v1/routes/{id}` 持久化 `executorJson`。
-6. 可 **复制 JSON** 或 **下载 route.json**，供巡检执行器直接加载。
+1. 选择站点 → 新建/选择路线
+2. 上传 `.yaml` + `.pgm`（支持拖拽），也可导入已有 `.json`
+3. 切换标注模式：**起点** / **巡检点** / **方向** / **拖动**
+4. 右侧面板调整参数和巡检点顺序
+5. 点击 **保存到平台**，通过 `PATCH /api/v1/routes/{id}` 持久化 `executorJson`
+6. **复制 JSON** 或 **下载 route.json** 供机器人执行器加载
 
 ### 数据格式
 
-- 主数据：`Route.executorJson`，即 **route.json version 2**，`frame_id: "map"`。
-- 坐标为 ROS map 米制坐标；方向 `yaw` 为弧度。
-- 坐标换算与 map_server 一致：
+- 主数据：`Route.executorJson`，route.json v2，`frame_id: "map"`
+- 坐标换算与 ROS map_server 一致：`x = origin_x + pixel_x * resolution`，`y = origin_y + (height - pixel_y) * resolution`
+- 保存时同步生成兼容字段供监控/任务页展示
+
+## 巡检处置 Agent
+
+阶段 3 引入受约束、可审计的巡检处置 Agent，架构如下：
 
 ```text
-x = origin_x + pixel_x * resolution
-y = origin_y + (image_height - pixel_y) * resolution
+AgentCase（处置案件）
+  └─ AgentRun（分析运行，可多次）
+       ├─ AgentStep（执行步骤，有序可回放）
+       ├─ AgentEvidence（不可变证据，按 Run 隔离）
+       ├─ AgentToolCall（只读工具调用，参数白名单 + 脱敏）
+       └─ AgentAction（受控写动作，Policy + 审批 + 幂等）
 ```
 
-保存时会同步生成兼容字段 `checkpoints` 与 `path`，供任务调度、监控等页面继续显示巡检点数量与 Leaflet 折线（**不含 PGM 底图**）。
+### 核心能力
 
-后端保存 `executorJson` 时会校验 route.json v2 的基础结构，包括 `active_route_id`、`start_pose.pose`、`targets[].pose`、`routes[].target_ids` 引用关系、重复 target id、超时/重试/停留参数和失败策略；PGM 空闲区、越界点等地图像素级校验仍由前端在本地上传 YAML/PGM 后完成。
+- **Plan-Act-Observe 循环**：LLM 规划 → 只读工具 → 观察结果 → 重新规划
+- **WAITING_HUMAN 闭环**：Agent 提问 → 人工回答 → OPERATOR_INPUT Evidence → 继续编排
+- **Policy Engine**：AUTO_EXECUTE / REQUIRE_APPROVAL / DENY 三级决策
+- **Action 状态机**：PROPOSED → APPROVED → EXECUTING → SUCCEEDED/FAILED，乐观锁 + 幂等键
+- **Action Handler**：通知本人、创建工单草稿
 
-### 相关代码
+### 安全边界
 
-| 路径 | 说明 |
+- Agent 只能调用注册表中的只读工具
+- 所有写操作必须经过 Policy 引擎
+- LLM 输出不直接执行，须经 PlannerDecisionValidator 校验
+- 人工回答标记为 `untrusted`，作为 Evidence 而非系统指令
+
+## 模型接入架构
+
+```text
+Web / 小程序
+  → Spring Boot 后端
+    → LocateAnythingGateway（mock / http）
+      → Python FastAPI 模型服务（:9001）
+        → 模型 runner / artifact 存储
+```
+
+| 模式 | 行为 |
 | --- | --- |
-| `frontend/web/src/views/RoutePlan.vue` | 路线列表 + 标注页 |
-| `frontend/web/src/components/RosMapRouteEditor.vue` | 标注 UI |
-| `frontend/web/src/stores/route.ts` | `saveExecutorRoute()` 保存标注结果 |
-| `frontend/web/src/types/routeExecutor.ts` | route.json v2 类型 |
-| `frontend/web/docs/API.md` §5.5 | 前端 Store 与 API 说明 |
+| `mock` | Java 内置 mock 网关，测试环境默认 |
+| `http` | HTTP 调用 `ai-services/` FastAPI 服务 |
 
-> YAML/PGM 由用户本地上传，当前**不**通过后端 API 存储地图文件；换地图后若点位越界，页面会提示重新标定。
+手动检测使用异步接口：`POST /api/v1/detections/manual` 提交任务 → `GET /api/v1/detections/manual/{requestId}` 轮询结果。
+
+## 数据库与 Flyway
+
+迁移脚本位于 `backend/src/main/resources/db/migration/`：
+
+| 版本 | 内容 |
+| --- | --- |
+| V1 | 基础表（users, preferences, activities, data_records） |
+| V2 | Agent 领域模型（cases, runs, steps, evidence, tool_calls, actions, execution_claims） |
+| V3 | 编排器扩展（degraded, pending_question, arguments_hash） |
+| V4 | 人工问答 + Policy 审计字段 |
+| V5 | idempotency_key 唯一约束 |
 
 ## 权限点
 
-后端当前保留 12 个权限点：
-
-- `task:view`
-- `task:create`
-- `task:dispatch`
-- `task:control`
-- `site:edit`
-- `route:edit`
-- `alarm:ack`
-- `robot:manage`
-- `detection:manage`
-- `user:manage`
-- `record:export`
-
-角色权限大致如下：
+```text
+agent:view  agent:run  agent:approve  agent:admin
+task:view  task:create  task:dispatch  task:control
+site:edit  route:edit  alarm:ack  robot:manage
+detection:manage  user:manage  record:export
+```
 
 | 角色 | 权限范围 |
 | --- | --- |
-| `ADMIN` | 全部权限 |
-| `DISPATCHER` | 任务查看、创建、下发、控制，站点/路线维护，告警确认，记录导出 |
-| `VIEWER` | 基础任务查看 |
+| `ADMIN` | 全部 |
+| `DISPATCHER` | Agent 查看/运行/审批，任务/站点/路线/告警/记录 |
+| `VIEWER` | 基础查看 |
 
 ## API 与实时推送
 
-REST API 统一前缀：
+REST API 统一前缀 `http://localhost:8080/api/v1`，统一响应 `{ code, message, data }`。
+
+WebSocket/STOMP 端点 `ws://localhost:8080/ws`，主要 topic：
 
 ```text
-http://localhost:8080/api/v1
+/topic/tasks/{taskId}   /topic/robots/{robotId}   /topic/notifications/{userId}
+/topic/alarms           /topic/agent-cases/{caseId}
 ```
 
-统一响应格式：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {}
-}
-```
-
-认证请求头：
-
-```text
-Authorization: Bearer <token>
-```
-
-主要接口模块：
-
-| 模块 | 路径 |
-| --- | --- |
-| 认证 | `/auth/login`、`/auth/register`、`/auth/logout`、`/auth/me`、`/auth/password` |
-| 用户 | `/users`、`/users/{id}/role`、`/users/{id}/enabled`、`/users/me`、`/users/me/activities`、`/users/me/preferences` |
-| 站点区域 | `/sites`、`/sites/{id}`、`/sites/{id}/areas` |
-| 路线检查点 | `/routes`、`/routes/{id}`、`/routes/{id}/checkpoints`；`PATCH /routes/{id}` 可写入 `executorJson`（ROS route.json v2） |
-| 任务 | `/tasks`、`/tasks/{id}`、`/tasks/{id}/dispatch`、`/tasks/{id}/pause`、`/tasks/{id}/resume`、`/tasks/{id}/takeover`、`/tasks/{id}/cancel`、`/tasks/{id}/events` |
-| 告警 | `/alarms`、`/alarms/{id}/ack`、`/alarms/ack-all` |
-| 工单 | `/work-orders`、`/work-orders/{id}`、`/work-orders/from-alarm/{alarmId}` |
-| 机器人 | `/robots`、`/robots/{id}`、`/robots/{id}/telemetry` |
-| 检测模板 | `/detection-templates`、`/detection-templates/{id}` |
-| 记录 | `/records`、`/records/export` |
-| 通知 | `/notifications`、`/notifications/{id}/read`、`/notifications/read-all` |
-
-WebSocket/STOMP 端点：
-
-```text
-ws://localhost:8080/ws
-```
-
-主要 topic：
-
-```text
-/topic/tasks/{taskId}
-/topic/tasks
-/topic/task-events
-/topic/robots/{robotId}
-/topic/robots
-/topic/alarms
-/topic/notifications
-/topic/notifications/{userId}
-```
-
-更完整的接口说明见 `frontend/web/docs/API.md`。
+完整接口说明见 `frontend/web/docs/API.md`。
 
 ## 前端数据流
 
-Web 端核心业务数据已通过后端接口加载：
+核心业务数据以后端为准。WebSocket 实时刷新任务、机器人、告警、通知；首次进入通过 REST API 加载快照。
 
-- HTTP 客户端：`frontend/web/src/api/http.ts`
-- WebSocket 客户端：`frontend/web/src/api/realtime.ts`
-- 业务接口封装：`frontend/web/src/api/resources.ts`
-- 登录相关接口：`frontend/web/src/api/auth.ts`
-- 个人中心接口：`frontend/web/src/api/profile.ts`
-- Pinia Store：`frontend/web/src/stores/*`
-
-浏览器本地仍会保存：
-
-- `pi_session`：JWT token 和当前用户会话。
-- 少量 UI 偏好，例如侧边栏折叠状态。
-
-站点、路线、任务、告警、工单、机器人、检测模板、通知、记录等核心业务数据以后端为准。任务、机器人、告警和通知会通过 WebSocket/STOMP 实时刷新；页面首次进入时仍会通过 REST API 加载快照数据。
-
-**路线规划**：`/routes` 以 `executorJson` 为主数据；监控/任务页的 Leaflet 地图仅作兼容展示，不加载 ROS PGM 底图。
+浏览器本地仅保存 `pi_session`（JWT）和少量 UI 偏好。
 
 ## 常用命令
 
-### 后端
-
-在 `backend/` 目录执行：
-
-| 命令 | 说明 |
+| 场景 | 命令 |
 | --- | --- |
-| `mvn test` | 使用 H2 和 MockMvc 执行后端测试 |
-| `mvn spring-boot:test-run` | 使用测试 classpath 启动后端，适合 H2 演示 |
-| `mvn spring-boot:run` | 使用默认 MySQL 配置启动后端 |
-
-### Web 前端
-
-在 `frontend/web/` 目录执行：
-
-| 命令 | 说明 |
-| --- | --- |
-| `npm install` | 安装前端依赖 |
-| `npm run dev` | 启动 Vite 开发服务器 |
-| `npm run build` | TypeScript 类型检查并构建生产产物 |
-| `npm run preview` | 本地预览构建产物 |
-
-### Python 模型服务
-
-在对应服务目录执行：
-
-| 命令 | 说明 |
-| --- | --- |
-| `python -m pytest tests` | 运行当前模型服务测试 |
-| `python -m uvicorn app:app --host 0.0.0.0 --port 9001` | 启动 LocateAnything 服务 |
-
-当前验证过的命令：
-
-```powershell
-$env:JAVA_HOME="D:\JAVA\jdk17"
-$env:Path="$env:JAVA_HOME\bin;$env:Path"
-cd backend
-mvn test
-
-conda activate ipi-locate-anything
-cd ai-services\locate-anything-service
-python -m pytest tests
-```
+| 后端测试 | `cd backend && mvn test` |
+| H2 演示启动 | `$env:SPRING_PROFILES_ACTIVE="test"; mvn spring-boot:test-run` |
+| MySQL 启动 | `mvn spring-boot:run` |
+| 前端开发 | `cd frontend/web && npm install && npm run dev` |
+| 前端构建 | `npm run build` |
+| Python 测试 | `python -m pytest tests` |
+| 启动 AI 服务 | `uvicorn app:app --host 0.0.0.0 --port 9001` |
 
 ## 常见问题
 
-### 1. 后端提示 Java 版本不正确
+### 后端提示 Java 版本不正确
+Spring Boot 3 需要 JDK 17+。先检查 `java -version`，必要时切换 `JAVA_HOME`。
 
-Spring Boot 3 必须使用 JDK 17 或更高版本。若 `java -version` 显示 `1.8`，需要先切换 `JAVA_HOME` 和 `PATH`。
+### 连接 MySQL 失败
+确认 MySQL 已启动、数据库已创建，且 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` 正确。快速演示可用 H2。
 
-### 2. `mvn spring-boot:run` 连接 MySQL 失败
+### Flyway 报 non-empty schema
+当前数据库有表但无 `flyway_schema_history`。开发环境建议使用空库重新启动。
 
-默认运行配置使用 MySQL。请确认 MySQL 已启动、数据库已创建，并且 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 正确。
+### 前端登录失败
+需要同时启动后端和前端。登录和业务页面依赖 `/api/v1`。
 
-如果只想快速演示，可以使用 H2：
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE="test"
-mvn spring-boot:test-run
-```
-
-### 3. Flyway 报 `non-empty schema` 错误
-
-说明当前数据库不是空库，但没有 Flyway 的 `flyway_schema_history` 记录表。开发环境建议使用空库重新启动，或清空测试库后再启动。
-
-### 4. 只启动前端后登录失败
-
-Web 前端登录和主要业务页面依赖后端 `/api/v1`。需要同时启动后端和 Web 前端。
-
-### 5. 重开页面后仍保持登录
-
-Web 端会把登录会话保存在浏览器 `localStorage` 的 `pi_session` 中。清理站点本地存储后会退出登录状态。
-
-### 6. `127.0.0.1:5173` 和 `localhost:5173` 都能用吗
-
-可以。后端默认 CORS 允许：
-
-```text
-http://localhost:5173
-http://127.0.0.1:5173
-```
-
-### 7. 巡检规划页如何加载地图
-
-在 `/routes` 页面本地上传 `.yaml` 和 `.pgm` 即可。地图文件不会上传到服务器；标注结果通过 **保存到平台** 写入路线的 `executorJson` 字段。
+### 巡检规划如何加载地图
+在 `/routes` 页面上传 `.yaml` + `.pgm` 即可。地图不上传服务器，标注结果保存到 `executorJson`。
 
 ## 当前限制
 
-- 当前是演示/课程级后端，不是生产部署方案。
-- 真实机器人控制尚未接入；`RobotGateway` 默认仍是模拟任务执行和机器人位置。
-- **巡检规划**为 ROS map 标注 + route.json v2 持久化；监控/任务页 Leaflet 地图与 PGM 标注页未统一，且 YAML/PGM 需每次本地上传。
-- 后端只校验 route.json v2 的结构与引用关系，不保存 YAML/PGM，也不复算地图 free/unknown/occupied 像素。
-- LocateAnything 已接入真实 Python 模型服务并由 Spring Boot HTTP 网关调用。
-- LocateAnything Python 服务默认使用真实模型 runner。
-- 生产级日志、审计、监控、部署流水线和权限审计细节仍需进一步完善。
-- `backend/target/`、`frontend/web/dist/`、`frontend/web/node_modules/`、`runtime-storage/`、模型权重和点云/mesh 等产物不应提交。
+- 课程/演示级系统，非生产部署方案
+- 真实机器人控制未接入；`RobotGateway` 默认模拟执行
+- YAML/PGM 需每次本地上传，未实现服务端地图存储
+- 巡检规划 Leaflet 地图与 ROS PGM 标注页未统一
+- LocateAnything 已接入真实模型，但未做生产级性能优化
+- 生产级日志、审计、监控、CI/CD 需进一步完善
+- MySQL 兼容性仅通过 H2 测试验证
+- 硬件端协作参见 [electric-power-inspection-robot](https://github.com/liaojingwu20041031/electric-power-inspection-robot)
