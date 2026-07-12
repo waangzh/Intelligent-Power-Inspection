@@ -181,6 +181,16 @@ public class AgentToolService {
     if (hasText(alarmId)) {
       order.put("alarmId", alarmId);
     }
+    String taskId = text(payload.get("taskId"));
+    if (hasText(taskId)) {
+      order.put("taskId", taskId);
+    }
+    if (hasText(text(payload.get("agentActionId")))) {
+      order.put("agentActionId", text(payload.get("agentActionId")));
+    }
+    if (hasText(text(payload.get("agentIdempotencyKey")))) {
+      order.put("agentIdempotencyKey", text(payload.get("agentIdempotencyKey")));
+    }
     order.put("status", "PENDING");
     order.put("priority", firstText(payload.get("priority"), "MEDIUM"));
     order.put("assigneeName", firstText(payload.get("assigneeName"), user.getDisplayName()));

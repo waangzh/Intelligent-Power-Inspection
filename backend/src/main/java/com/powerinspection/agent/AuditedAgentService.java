@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.agent.action.AgentActionExecutor;
 import com.powerinspection.agent.action.AgentExecutionClaimService;
+import com.powerinspection.agent.action.AgentActionWorkflowService;
 import com.powerinspection.agent.api.AgentDtos;
 import com.powerinspection.agent.domain.AgentActionEntity;
 import com.powerinspection.agent.domain.AgentCaseEntity;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -73,6 +75,8 @@ public class AuditedAgentService {
   private final ObjectMapper objectMapper;
   private final SimpMessagingTemplate messagingTemplate;
   private final AgentOrchestrator orchestrator;
+  private final AgentHumanInputService humanInputService;
+  private final AgentActionWorkflowService actionWorkflowService;
   private final ConcurrentHashMap<String, ReentrantLock> stepLocks = new ConcurrentHashMap<>();
   private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
     Thread thread = new Thread(runnable, "audited-agent-run-worker");
@@ -96,7 +100,9 @@ public class AuditedAgentService {
     UserRepository userRepository,
     ObjectMapper objectMapper,
     SimpMessagingTemplate messagingTemplate,
-    AgentOrchestrator orchestrator
+    AgentOrchestrator orchestrator,
+    AgentHumanInputService humanInputService,
+    AgentActionWorkflowService actionWorkflowService
   ) {
     this.caseRepository = caseRepository;
     this.runRepository = runRepository;
@@ -114,6 +120,8 @@ public class AuditedAgentService {
     this.objectMapper = objectMapper;
     this.messagingTemplate = messagingTemplate;
     this.orchestrator = orchestrator;
+    this.humanInputService = humanInputService;
+    this.actionWorkflowService = actionWorkflowService;
   }
 
   @Transactional
@@ -224,48 +232,25 @@ public class AuditedAgentService {
   }
 
   @Transactional
+  public AgentDtos.HumanInputResponse submitHumanInput(String runId, AgentDtos.HumanInputRequest request, UserEntity user) {
+    AgentHumanInputService.Submission submission = humanInputService.submit(runId, request, user);
+    if (submission.runIdToResume() != null) scheduleRun(submission.runIdToResume(), user.getId());
+    return submission.response();
+  }
+
+  @Transactional
   public AgentDtos.ActionResponse approveAction(String actionId, AgentDtos.ActionDecisionRequest request, UserEntity user) {
-    AgentActionEntity action = actionRepository.findById(actionId).orElseThrow(() -> ApiException.notFound("Agent 动作不存在"));
-    if (action.getVersion() != request.version() || action.getStatus() != AgentEnums.ActionStatus.PROPOSED) {
-      throw ApiException.conflict("动作已被其他请求处理，请刷新后重试");
-    }
-    if (action.getPolicyDecision() != AgentEnums.PolicyDecisionType.REQUIRE_APPROVAL) {
-      throw ApiException.forbidden("该动作不允许人工批准执行");
-    }
-    Instant now = Instant.now();
-    action.setStatus(AgentEnums.ActionStatus.APPROVED);
-    action.setApprovedById(user.getId());
-    action.setApprovedAt(now);
-    action.setApprovalComment(request.comment().trim());
-    action.setUpdatedAt(now);
-    try {
-      action = actionRepository.saveAndFlush(action);
-    } catch (OptimisticLockingFailureException ex) {
-      throw ApiException.conflict("动作已被其他请求处理，请刷新后重试");
-    }
-    recordStep(getRun(action.getRunId()), AgentEnums.StepType.ACTION_APPROVED, "动作已获人工批准", Map.of("actionId", action.getId()));
-    return executeApprovedAction(action, user);
+    return actionResponse(actionWorkflowService.approve(actionId, request, user));
   }
 
   @Transactional
   public AgentDtos.ActionResponse rejectAction(String actionId, AgentDtos.ActionDecisionRequest request, UserEntity user) {
-    AgentActionEntity action = actionRepository.findById(actionId).orElseThrow(() -> ApiException.notFound("Agent 动作不存在"));
-    if (action.getVersion() != request.version() || action.getStatus() != AgentEnums.ActionStatus.PROPOSED) {
-      throw ApiException.conflict("动作已被其他请求处理，请刷新后重试");
-    }
-    Instant now = Instant.now();
-    action.setStatus(AgentEnums.ActionStatus.REJECTED);
-    action.setRejectedById(user.getId());
-    action.setRejectedAt(now);
-    action.setRejectionComment(request.comment().trim());
-    action.setUpdatedAt(now);
-    try {
-      action = actionRepository.saveAndFlush(action);
-    } catch (OptimisticLockingFailureException ex) {
-      throw ApiException.conflict("动作已被其他请求处理，请刷新后重试");
-    }
-    recordStep(getRun(action.getRunId()), AgentEnums.StepType.ACTION_REJECTED, "动作已被人工拒绝", Map.of("actionId", action.getId()));
-    return actionResponse(action);
+    return actionResponse(actionWorkflowService.reject(actionId, request, user));
+  }
+
+  @Transactional
+  public AgentDtos.ActionResponse retryAction(String actionId, AgentDtos.ActionDecisionRequest request, UserEntity user) {
+    return actionResponse(actionWorkflowService.retry(actionId, request, user));
   }
 
   @Transactional
@@ -327,13 +312,13 @@ public class AuditedAgentService {
   @Transactional
   public Map<String, Object> confirmLegacyAction(String actionId, UserEntity user) {
     AgentActionEntity action = actionRepository.findById(actionId).orElseThrow(() -> ApiException.notFound("Agent 动作不存在"));
-    return legacyAction(approveAction(actionId, new AgentDtos.ActionDecisionRequest(action.getVersion(), "通过旧接口确认"), user));
+    return legacyAction(approveAction(actionId, new AgentDtos.ActionDecisionRequest(action.getVersion(), "通过旧接口确认", null), user));
   }
 
   @Transactional
   public Map<String, Object> rejectLegacyAction(String actionId, UserEntity user) {
     AgentActionEntity action = actionRepository.findById(actionId).orElseThrow(() -> ApiException.notFound("Agent 动作不存在"));
-    return legacyAction(rejectAction(actionId, new AgentDtos.ActionDecisionRequest(action.getVersion(), "通过旧接口拒绝"), user));
+    return legacyAction(rejectAction(actionId, new AgentDtos.ActionDecisionRequest(action.getVersion(), "通过旧接口拒绝", null), user));
   }
 
   private void executeLegacyFixedRun(String runId, String userId) {
@@ -375,46 +360,20 @@ public class AuditedAgentService {
 
   private void executeFixedRun(String runId, String userId) {
     AgentRunEntity run = awaitPersistedRun(runId);
-    if (run == null) {
-      return;
-    }
+    if (run == null) return;
     try {
-      AgentEnums.RunStatus status = orchestrator.execute(runId);
-      if (status != AgentEnums.RunStatus.SUCCEEDED) {
-        return;
-      }
-      run = getRun(runId);
-      run.setStatus(AgentEnums.RunStatus.RUNNING);
-      run = runRepository.save(run);
-      AgentCaseEntity agentCase = getCase(run.getCaseId());
-      UserEntity user = userRepository.findById(userId).orElseThrow(() -> ApiException.notFound("运行用户不存在"));
-      AgentDtos.AgentConclusion conclusion = conclusion(run.getConclusionJson());
-      if (conclusion == null) {
-        return;
-      }
-      List<AgentEvidenceEntity> evidence = evidenceRepository.findByRunIdOrderByCreatedAtAsc(runId);
-      List<AgentActionEntity> actions = proposeActions(agentCase, run, evidence, conclusion, user);
-      if (!actions.isEmpty()) {
-        agentCase.setStatus(actions.stream().anyMatch(AgentActionEntity::isRequiresApproval)
-          ? AgentEnums.CaseStatus.WAITING_APPROVAL : AgentEnums.CaseStatus.RESOLVED);
-        agentCase.setUpdatedAt(Instant.now());
-        caseRepository.save(agentCase);
-      }
-      run.setStatus(AgentEnums.RunStatus.SUCCEEDED);
-      run.setCompletedAt(Instant.now());
-      runRepository.save(run);
+      orchestrator.execute(runId);
     } catch (Exception ex) {
-      // The orchestrator records its own terminal state. This guard only covers compatibility finalization.
       AgentRunEntity latest = runRepository.findById(runId).orElse(run);
       if (latest.getStatus() == AgentEnums.RunStatus.CANCELLED || latest.getStatus() == AgentEnums.RunStatus.FAILED || latest.getStatus() == AgentEnums.RunStatus.TIMED_OUT || latest.getStatus() == AgentEnums.RunStatus.STEP_LIMIT_REACHED) {
         return;
       }
       latest.setStatus(AgentEnums.RunStatus.FAILED);
-      latest.setErrorCode("LEGACY_FINALIZATION_FAILED");
-      latest.setErrorMessage(abbreviate(firstText(ex.getMessage(), "兼容动作整理失败"), 1000));
+      latest.setErrorCode("ORCHESTRATOR_EXECUTION_FAILED");
+      latest.setErrorMessage(abbreviate(firstText(ex.getMessage(), "编排执行失败"), 1000));
       latest.setCompletedAt(Instant.now());
       runRepository.save(latest);
-      recordStep(latest, AgentEnums.StepType.RUN_FAILED, "兼容动作整理失败", Map.of("errorCode", "LEGACY_FINALIZATION_FAILED"));
+      recordStep(latest, AgentEnums.StepType.RUN_FAILED, "编排执行失败", Map.of("errorCode", "ORCHESTRATOR_EXECUTION_FAILED"));
     }
   }
 
@@ -474,8 +433,7 @@ public class AuditedAgentService {
         "alarmId", alarm.get("id"),
         "title", "Agent 建议处置：" + abbreviate(firstText(alarm.get("message"), "巡检异常"), 24),
         "description", conclusion.cause(),
-        "priority", priority(conclusion.defectLevel()),
-        "assigneeName", user.getDisplayName()
+        "priority", priority(conclusion.defectLevel())
       );
       actions.add(saveAction(agentCase, run, AgentEnums.ActionType.CREATE_WORK_ORDER_DRAFT, "创建工单草稿", "固定规则：告警未有关联工单，需人工确认后建单。", alarm.get("id"), payload, user));
     }
@@ -506,13 +464,22 @@ public class AuditedAgentService {
     item.setRiskLevel(policy.riskLevel());
     item.setStatus(AgentEnums.ActionStatus.PROPOSED);
     item.setPayloadJson(json(payload));
+    item.setConfidence(0.7);
+    item.setEvidenceIdsJson(json(evidenceRepository.findByRunIdOrderByCreatedAtAsc(run.getId()).stream().map(AgentEvidenceEntity::getId).toList()));
     item.setPolicyDecision(policy.decision());
     item.setPolicyCode(policy.policyCode());
+    item.setPolicyReason(policy.reason());
     item.setRequiresApproval(policy.decision() == AgentEnums.PolicyDecisionType.REQUIRE_APPROVAL);
     item.setIdempotencyKey(idempotencyKey(type, businessId, payload));
     item.setCreatedAt(now);
     item.setUpdatedAt(now);
-    item = actionRepository.save(item);
+    try {
+      item = actionRepository.saveAndFlush(item);
+    } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+      String dupKey = item.getIdempotencyKey();
+      return actionRepository.findByIdempotencyKeyOrderByCreatedAtAsc(dupKey).stream()
+        .findFirst().orElseThrow(() -> ex);
+    }
     recordStep(run, AgentEnums.StepType.ACTION_PROPOSED, title, Map.of("actionId", item.getId(), "policy", policy.decision().name()));
     return item;
   }
@@ -750,8 +717,10 @@ public class AuditedAgentService {
   }
 
   private AgentDtos.ActionResponse actionResponse(AgentActionEntity item) {
-    return new AgentDtos.ActionResponse(item.getId(), item.getType(), item.getTitle(), item.getReason(), item.getRiskLevel(), item.getStatus(), node(item.getPayloadJson()), item.getPolicyDecision(), item.getPolicyCode(), item.isRequiresApproval(), item.getIdempotencyKey(), item.getApprovedById(), item.getApprovedAt(), item.getApprovalComment(), item.getRejectedById(), item.getRejectedAt(), item.getRejectionComment(), item.getExecutionStartedAt(), item.getExecutionCompletedAt(), node(item.getResultJson()), item.getErrorCode(), item.getErrorMessage(), item.getCreatedAt(), item.getUpdatedAt(), item.getVersion());
+    return new AgentDtos.ActionResponse(item.getId(), item.getType(), item.getTitle(), item.getReason(), item.getRiskLevel(), item.getConfidence(), item.getStatus(), node(item.getPayloadJson()), actionEvidenceIds(item), node(item.getPayloadAuditJson()), item.getPolicyDecision(), item.getPolicyCode(), item.getPolicyReason(), item.isRequiresApproval(), item.getIdempotencyKey(), item.getApprovedById(), item.getApprovedAt(), item.getApprovalComment(), item.getRejectedById(), item.getRejectedAt(), item.getRejectionComment(), item.getExecutionStartedAt(), item.getExecutionCompletedAt(), node(item.getResultJson()), item.getErrorCode(), item.getErrorMessage(), item.getCreatedAt(), item.getUpdatedAt(), item.getVersion());
   }
+
+  private List<String> actionEvidenceIds(AgentActionEntity item) { try { return objectMapper.readValue(item.getEvidenceIdsJson(), new TypeReference<List<String>>() { }); } catch (Exception ex) { return List.of(); } }
 
   private AgentDtos.AgentConclusion conclusion(String json) {
     if (!hasText(json)) {
@@ -871,7 +840,7 @@ public class AuditedAgentService {
   }
 
   private String idempotencyKey(AgentEnums.ActionType type, Object businessId, Map<String, Object> payload) {
-    return type.name() + ":" + firstText(businessId, "case") + ":" + sha256(json(payload));
+    return type.name() + ":" + firstText(businessId, "case") + ":" + sha256(json(new TreeMap<>(payload)));
   }
 
   private String sha256(String value) {

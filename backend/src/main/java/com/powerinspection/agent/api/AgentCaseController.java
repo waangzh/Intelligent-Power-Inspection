@@ -87,6 +87,12 @@ public class AgentCaseController {
     return ApiResponse.ok(agentService.question(runId));
   }
 
+  @PostMapping("/agent-runs/{runId}/human-inputs")
+  public ApiResponse<AgentDtos.HumanInputResponse> submitHumanInput(@PathVariable String runId, @Valid @RequestBody AgentDtos.HumanInputRequest request) {
+    permissionService.require(currentUser.get(), Permission.AGENT_RUN);
+    return ApiResponse.ok(agentService.submitHumanInput(runId, request, currentUser.get()));
+  }
+
   @PostMapping("/agent-runs/{runId}/cancel")
   public ApiResponse<AgentDtos.RunSummary> cancel(@PathVariable String runId) {
     permissionService.require(currentUser.get(), Permission.AGENT_RUN);

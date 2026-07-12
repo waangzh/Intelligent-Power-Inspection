@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.agent.api.AgentDtos;
+import com.powerinspection.agent.action.AgentActionProposalService;
+import com.powerinspection.agent.action.AgentActionWorkflowService;
+import com.powerinspection.agent.domain.AgentActionEntity;
 import com.powerinspection.agent.domain.AgentCaseEntity;
 import com.powerinspection.agent.domain.AgentEnums;
 import com.powerinspection.agent.domain.AgentEvidenceEntity;
@@ -11,6 +14,7 @@ import com.powerinspection.agent.domain.AgentRunEntity;
 import com.powerinspection.agent.domain.AgentStepEntity;
 import com.powerinspection.agent.domain.AgentToolCallEntity;
 import com.powerinspection.agent.persistence.AgentCaseRepository;
+import com.powerinspection.agent.persistence.AgentActionRepository;
 import com.powerinspection.agent.persistence.AgentEvidenceRepository;
 import com.powerinspection.agent.persistence.AgentRunRepository;
 import com.powerinspection.agent.persistence.AgentStepRepository;
@@ -43,32 +47,39 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 /** Durable, bounded Plan-Act-Observe loop. It never executes external write actions. */
 @Service
 public class AgentOrchestrator {
+  private static final Logger log = LoggerFactory.getLogger(AgentOrchestrator.class);
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() { };
   private final AgentCaseRepository caseRepository;
   private final AgentRunRepository runRepository;
   private final AgentStepRepository stepRepository;
   private final AgentToolCallRepository toolCallRepository;
   private final AgentEvidenceRepository evidenceRepository;
+  private final AgentActionRepository actionRepository;
   private final UserRepository userRepository;
   private final LlmAgentPlanner llmPlanner;
   private final RuleBasedAgentPlanner rulePlanner;
   private final PlannerDecisionValidator decisionValidator;
   private final AgentToolRegistry toolRegistry;
   private final AgentToolExecutor toolExecutor;
+  private final AgentHumanInputService humanInputService;
+  private final AgentActionProposalService actionProposalService;
+  private final AgentActionWorkflowService actionWorkflowService;
   private final ObjectMapper objectMapper;
   private final SimpMessagingTemplate messagingTemplate;
   private final AgentOrchestratorProperties limits;
   private final ConcurrentHashMap<String, ReentrantLock> stepLocks = new ConcurrentHashMap<>();
 
-  public AgentOrchestrator(AgentCaseRepository caseRepository, AgentRunRepository runRepository, AgentStepRepository stepRepository, AgentToolCallRepository toolCallRepository, AgentEvidenceRepository evidenceRepository, UserRepository userRepository, LlmAgentPlanner llmPlanner, RuleBasedAgentPlanner rulePlanner, PlannerDecisionValidator decisionValidator, AgentToolRegistry toolRegistry, AgentToolExecutor toolExecutor, ObjectMapper objectMapper, SimpMessagingTemplate messagingTemplate, AgentOrchestratorProperties limits) {
-    this.caseRepository = caseRepository; this.runRepository = runRepository; this.stepRepository = stepRepository; this.toolCallRepository = toolCallRepository; this.evidenceRepository = evidenceRepository; this.userRepository = userRepository;
-    this.llmPlanner = llmPlanner; this.rulePlanner = rulePlanner; this.decisionValidator = decisionValidator; this.toolRegistry = toolRegistry; this.toolExecutor = toolExecutor; this.objectMapper = objectMapper; this.messagingTemplate = messagingTemplate; this.limits = limits;
+  public AgentOrchestrator(AgentCaseRepository caseRepository, AgentRunRepository runRepository, AgentStepRepository stepRepository, AgentToolCallRepository toolCallRepository, AgentEvidenceRepository evidenceRepository, AgentActionRepository actionRepository, UserRepository userRepository, LlmAgentPlanner llmPlanner, RuleBasedAgentPlanner rulePlanner, PlannerDecisionValidator decisionValidator, AgentToolRegistry toolRegistry, AgentToolExecutor toolExecutor, AgentHumanInputService humanInputService, AgentActionProposalService actionProposalService, AgentActionWorkflowService actionWorkflowService, ObjectMapper objectMapper, SimpMessagingTemplate messagingTemplate, AgentOrchestratorProperties limits) {
+    this.caseRepository = caseRepository; this.runRepository = runRepository; this.stepRepository = stepRepository; this.toolCallRepository = toolCallRepository; this.evidenceRepository = evidenceRepository; this.actionRepository = actionRepository; this.userRepository = userRepository;
+    this.llmPlanner = llmPlanner; this.rulePlanner = rulePlanner; this.decisionValidator = decisionValidator; this.toolRegistry = toolRegistry; this.toolExecutor = toolExecutor; this.humanInputService = humanInputService; this.actionProposalService = actionProposalService; this.actionWorkflowService = actionWorkflowService; this.objectMapper = objectMapper; this.messagingTemplate = messagingTemplate; this.limits = limits;
   }
 
   public AgentEnums.RunStatus execute(String runId) {
@@ -113,20 +124,52 @@ public class AgentOrchestrator {
         continue;
       }
       if (decision.type() == PlannerDecisionType.ASK_HUMAN) {
-        run.setPendingQuestionJson(json(decision.question())); run.setStatus(AgentEnums.RunStatus.WAITING_HUMAN); runRepository.save(run);
+        AgentHumanInputService.Question question = humanInputService.createQuestion(agentCase, run, decision.question());
+        run.setPendingQuestionJson(json(humanInputService.questionPayload(question))); run.setStatus(AgentEnums.RunStatus.WAITING_HUMAN); runRepository.save(run);
         agentCase.setStatus(AgentEnums.CaseStatus.WAITING_HUMAN); agentCase.setUpdatedAt(Instant.now()); caseRepository.save(agentCase);
-        recordStep(run, AgentEnums.StepType.HUMAN_INPUT_REQUESTED, decision.summary(), Map.of("questionType", decision.question().type()));
+        recordStep(run, AgentEnums.StepType.HUMAN_INPUT_REQUESTED, decision.summary(), Map.of("questionId", question.id(), "questionType", question.type()));
         return run.getStatus();
+      }
+      if (decision.type() == PlannerDecisionType.PROPOSE_ACTION) {
+        AgentActionProposalService.ProposalResult proposal = actionProposalService.propose(agentCase, run, decision.actionProposal(), user);
+        AgentActionEntity action = proposal.action();
+        if (proposal.created()) recordStep(run, action.getStatus() == AgentEnums.ActionStatus.REJECTED ? AgentEnums.StepType.ACTION_REJECTED : AgentEnums.StepType.ACTION_PROPOSED, action.getTitle(), Map.of("actionId", action.getId(), "policy", action.getPolicyDecision().name(), "policyCode", action.getPolicyCode()));
+        if (action.getStatus() == AgentEnums.ActionStatus.REJECTED) continue;
+        if (action.getPolicyDecision() == AgentEnums.PolicyDecisionType.AUTO_EXECUTE) {
+          action = actionWorkflowService.autoExecute(action, user);
+          if (action.getStatus() == AgentEnums.ActionStatus.FAILED) return AgentEnums.RunStatus.FAILED;
+          run = runRepository.findById(runId).orElse(run);
+          continue;
+        }
+        if (action.getPolicyDecision() == AgentEnums.PolicyDecisionType.REQUIRE_APPROVAL) {
+          run.setStatus(AgentEnums.RunStatus.WAITING_APPROVAL); runRepository.save(run);
+          agentCase.setStatus(AgentEnums.CaseStatus.WAITING_APPROVAL); agentCase.setUpdatedAt(Instant.now()); caseRepository.save(agentCase);
+          return run.getStatus();
+        }
       }
       if (decision.type() == PlannerDecisionType.FINISH) {
         List<AgentDtos.EvidenceReference> refs = decision.evidenceIds().stream().map(id -> new AgentDtos.EvidenceReference(id, "supporting", "规划结论引用" )).toList();
         run.setConclusionJson(json(new AgentDtos.AgentConclusion(decision.conclusion().defectLevel(), decision.conclusion().cause(), decision.conclusion().recommendedActions(), refs, decision.confidence())));
-        // The legacy adapter may still create audited action proposals from this conclusion.
-        // Keep the Run non-terminal until that compatibility finalization completes.
-        run.setPendingQuestionJson(null); run.setStatus(AgentEnums.RunStatus.RUNNING); runRepository.save(run);
-        agentCase.setStatus(AgentEnums.CaseStatus.RESOLVED); agentCase.setUpdatedAt(Instant.now()); caseRepository.save(agentCase);
+        run.setPendingQuestionJson(null);
+        if (decision.actionProposal() != null) {
+          AgentActionProposalService.ProposalResult proposal = actionProposalService.propose(agentCase, run, decision.actionProposal(), user);
+          AgentActionEntity action = proposal.action();
+          if (proposal.created()) recordStep(run, action.getStatus() == AgentEnums.ActionStatus.REJECTED ? AgentEnums.StepType.ACTION_REJECTED : AgentEnums.StepType.ACTION_PROPOSED, action.getTitle(), Map.of("actionId", action.getId(), "policy", action.getPolicyDecision().name(), "policyCode", action.getPolicyCode()));
+          if (action.getPolicyDecision() == AgentEnums.PolicyDecisionType.AUTO_EXECUTE && action.getStatus() != AgentEnums.ActionStatus.REJECTED) {
+            actionWorkflowService.autoExecute(action, user);
+          }
+        }
+        List<AgentActionEntity> actions = actionRepository.findByRunIdOrderByCreatedAtAsc(run.getId());
+        if (actions.stream().anyMatch(item -> item.getStatus() == AgentEnums.ActionStatus.PROPOSED && item.isRequiresApproval())) {
+          run.setStatus(AgentEnums.RunStatus.WAITING_APPROVAL); agentCase.setStatus(AgentEnums.CaseStatus.WAITING_APPROVAL);
+        } else if (actions.stream().anyMatch(item -> item.getStatus() == AgentEnums.ActionStatus.FAILED)) {
+          return fail(run, agentCase, "ACTION_FAILED", "动作执行失败，案件不能标记为成功", AgentEnums.RunStatus.FAILED);
+        } else {
+          run.setStatus(AgentEnums.RunStatus.SUCCEEDED); run.setCompletedAt(Instant.now()); agentCase.setStatus(AgentEnums.CaseStatus.RESOLVED); agentCase.setResolvedAt(Instant.now());
+        }
+        runRepository.save(run); agentCase.setUpdatedAt(Instant.now()); caseRepository.save(agentCase);
         recordStep(run, AgentEnums.StepType.RUN_FINISHED, decision.summary(), Map.of("evidenceCount", refs.size(), "plannerType", run.getPlannerType()));
-        return AgentEnums.RunStatus.SUCCEEDED;
+        return run.getStatus();
       }
       return fail(run, agentCase, "UNSUPPORTED_PLANNER_DECISION", "不支持的规划决策", AgentEnums.RunStatus.FAILED);
     }
@@ -201,7 +244,7 @@ public class AgentOrchestrator {
     ReentrantLock lock = stepLocks.computeIfAbsent(run.getId(), key -> new ReentrantLock()); lock.lock();
     try {
       AgentStepEntity step = new AgentStepEntity(); step.setId(Ids.next("agent_step")); step.setCaseId(run.getCaseId()); step.setRunId(run.getId()); step.setSequenceNo(stepRepository.findMaxSequenceNo(run.getId()) + 1); step.setType(type); step.setSummary(abbreviate(summary, 500)); step.setDetailJson(json(detail)); step.setCreatedAt(Instant.now()); step = stepRepository.save(step);
-      messagingTemplate.convertAndSend("/topic/agent-cases/" + run.getCaseId(), new AgentDtos.AgentEvent(step.getId(), run.getCaseId(), run.getId(), type, step.getSequenceNo(), step.getSummary(), step.getCreatedAt())); return step;
+      try { messagingTemplate.convertAndSend("/topic/agent-cases/" + run.getCaseId(), new AgentDtos.AgentEvent(step.getId(), run.getCaseId(), run.getId(), type, step.getSequenceNo(), step.getSummary(), step.getCreatedAt())); } catch (Exception ex) { log.warn("Failed to send agent WebSocket event for case={}", run.getCaseId(), ex); } return step;
     } finally { lock.unlock(); }
   }
 

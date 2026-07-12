@@ -4,6 +4,7 @@ import { resourcesApi } from '@/api/resources'
 import { subscribeTopic } from '@/api/realtime'
 import type {
   AgentActionDecisionRequest,
+  AgentHumanInputMode,
   AgentCaseDetail,
   AgentCaseSummary,
   AgentRunDetail,
@@ -85,17 +86,43 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   async function approveAction(action: AuditedAgentAction, comment = '批准执行') {
-    const request: AgentActionDecisionRequest = { version: action.version, comment }
+    const request: AgentActionDecisionRequest = { expectedVersion: action.version, comment }
     const saved = await resourcesApi.approveAuditedAgentAction(action.id, request)
     await refreshAfterAction(saved)
     return saved
   }
 
   async function rejectAction(action: AuditedAgentAction, comment = '拒绝执行') {
-    const request: AgentActionDecisionRequest = { version: action.version, comment }
+    const request: AgentActionDecisionRequest = { expectedVersion: action.version, comment }
     const saved = await resourcesApi.rejectAuditedAgentAction(action.id, request)
     await refreshAfterAction(saved)
     return saved
+  }
+
+  async function retryAction(action: AuditedAgentAction, comment = '重试失败动作') {
+    const request: AgentActionDecisionRequest = { expectedVersion: action.version, comment }
+    const saved = await resourcesApi.retryAuditedAgentAction(action.id, request)
+    await refreshAfterAction(saved)
+    return saved
+  }
+
+  async function submitHumanInput(mode: AgentHumanInputMode, text?: string) {
+    const run = activeRun.value
+    const question = run?.question?.question
+    if (!run || !question) throw new Error('当前没有待回答的问题')
+    await resourcesApi.submitAgentHumanInput(run.run.id, {
+      questionId: question.questionId,
+      mode,
+      text: mode === 'ANSWER' ? text?.trim() : undefined,
+      attachmentIds: [],
+    })
+    await loadRun(run.run.id)
+  }
+
+  async function cancelActiveRun() {
+    if (!activeRun.value) return
+    await resourcesApi.cancelAuditedAgentRun(activeRun.value.run.id)
+    await loadRun(activeRun.value.run.id)
   }
 
   function subscribeCase(caseId: string) {
@@ -164,6 +191,9 @@ export const useAgentStore = defineStore('agent', () => {
     startActiveRun,
     approveAction,
     rejectAction,
+    retryAction,
+    submitHumanInput,
+    cancelActiveRun,
     subscribeCase,
     stopRealtime,
   }

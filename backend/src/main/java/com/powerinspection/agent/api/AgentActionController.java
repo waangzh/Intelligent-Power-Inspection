@@ -47,9 +47,22 @@ public class AgentActionController {
     return ApiResponse.ok(agentService.rejectAction(actionId, request, currentUser.get()));
   }
 
+  @PostMapping("/{actionId}/retry")
+  public ApiResponse<AgentDtos.ActionResponse> retry(@PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
+    permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
+    requireBusinessPermission(agentService.action(actionId).type());
+    return ApiResponse.ok(agentService.retryAction(actionId, request, currentUser.get()));
+  }
+
   private void requireBusinessPermission(AgentEnums.ActionType type) {
     if (type == AgentEnums.ActionType.CREATE_WORK_ORDER_DRAFT) {
       permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    }
+    if (type == AgentEnums.ActionType.ACKNOWLEDGE_ALARM) {
+      permissionService.require(currentUser.get(), Permission.ALARM_ACK);
+    }
+    if (type == AgentEnums.ActionType.REQUEST_TASK_PAUSE) {
+      permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
     }
   }
 }

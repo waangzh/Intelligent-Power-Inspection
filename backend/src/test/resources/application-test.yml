@@ -20,3 +20,6 @@ app:
       - http://127.0.0.1:5173
   model:
     mode: mock
+  agent:
+    orchestration:
+      auto-execution-enabled: true

@@ -1,6 +1,8 @@
 package com.powerinspection.agent.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.powerinspection.agent.domain.AgentEnums;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -8,6 +10,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public final class AgentDtos {
   private AgentDtos() {
@@ -26,9 +29,24 @@ public final class AgentDtos {
   }
 
   public record ActionDecisionRequest(
-    @Min(value = 0, message = "动作版本不合法") long version,
-    @NotBlank(message = "审批意见不能为空") @Size(max = 1000) String comment
+    @JsonProperty("expectedVersion") @JsonAlias("version") @Min(value = 0, message = "动作版本不合法") long expectedVersion,
+    @NotBlank(message = "审批意见不能为空") @Size(max = 1000) String comment,
+    Map<String, Object> payload
   ) {
+    public ActionDecisionRequest(long expectedVersion, String comment) {
+      this(expectedVersion, comment, null);
+    }
+  }
+
+  public record HumanInputRequest(
+    @NotBlank(message = "问题编号不能为空") @Size(max = 64) String questionId,
+    AgentEnums.HumanInputMode mode,
+    @Size(max = 2000, message = "回答不能超过 2000 字") String text,
+    @Size(max = 10, message = "附件引用不能超过 10 个") List<@Size(max = 64) String> attachmentIds
+  ) {
+  }
+
+  public record HumanInputResponse(String answerId, String questionId, AgentEnums.HumanInputMode mode, boolean resumed) {
   }
 
   public record CaseSummary(
@@ -88,9 +106,9 @@ public final class AgentDtos {
   }
 
   public record ActionResponse(
-    String id, AgentEnums.ActionType type, String title, String reason, AgentEnums.RiskLevel riskLevel,
-    AgentEnums.ActionStatus status, JsonNode payload, AgentEnums.PolicyDecisionType policyDecision,
-    String policyCode, boolean requiresApproval, String idempotencyKey, String approvedById,
+    String id, AgentEnums.ActionType type, String title, String reason, AgentEnums.RiskLevel riskLevel, double confidence,
+    AgentEnums.ActionStatus status, JsonNode payload, List<String> evidenceIds, JsonNode payloadAudit,
+    AgentEnums.PolicyDecisionType policyDecision, String policyCode, String policyReason, boolean requiresApproval, String idempotencyKey, String approvedById,
     Instant approvedAt, String approvalComment, String rejectedById, Instant rejectedAt,
     String rejectionComment, Instant executionStartedAt, Instant executionCompletedAt,
     JsonNode result, String errorCode, String errorMessage, Instant createdAt, Instant updatedAt, long version

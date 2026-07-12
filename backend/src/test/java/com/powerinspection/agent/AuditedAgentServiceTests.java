@@ -68,13 +68,9 @@ class AuditedAgentServiceTests {
     dispatcher.setCreatedAt(Instant.now().toString());
     userRepository.save(dispatcher);
 
-    Map<String, Object> alarm = new LinkedHashMap<>();
-    alarm.put("id", "agent_test_alarm");
-    alarm.put("severity", "HIGH");
-    alarm.put("message", "测试安全帽告警");
-    alarm.put("imageUrl", "https://example.test/alarm.jpg");
-    alarm.put("createdAt", Instant.now().toString());
-    dataStore.upsert(DataCategory.ALARM, alarm);
+    seedAlarm("agent_test_alarm", "HIGH", "测试安全帽告警");
+    seedAlarm("agent_test_alarm_iso", "HIGH", "测试安全帽告警-隔离");
+    seedAlarm("agent_test_alarm_fallback", "HIGH", "测试安全帽告警-降级");
 
     when(agentLlmGateway.analyze(any(), any())).thenAnswer(invocation -> {
       @SuppressWarnings("unchecked")
@@ -92,10 +88,20 @@ class AuditedAgentServiceTests {
     );
   }
 
+  private void seedAlarm(String id, String severity, String message) {
+    Map<String, Object> alarm = new LinkedHashMap<>();
+    alarm.put("id", id);
+    alarm.put("severity", severity);
+    alarm.put("message", message);
+    alarm.put("imageUrl", "https://example.test/alarm.jpg");
+    alarm.put("createdAt", Instant.now().toString());
+    dataStore.upsert(DataCategory.ALARM, alarm);
+  }
+
   @Test
   void keepsEvidenceAndActionsIsolatedPerRunAndRejectsStaleApproval() throws Exception {
     AgentDtos.CaseSummary agentCase = agentService.createCase(
-      new AgentDtos.CreateCaseRequest("判断告警是否需要创建工单", null, "agent_test_alarm", "HIGH", "现场文字仅作为证据"),
+      new AgentDtos.CreateCaseRequest("判断告警是否需要创建工单", null, "agent_test_alarm_iso", "HIGH", "现场文字仅作为证据"),
       dispatcher
     );
     AgentDtos.RunSummary firstRun = agentService.startRun(agentCase.id(), new AgentDtos.StartRunRequest("INITIAL_ANALYSIS"), dispatcher);
@@ -134,7 +140,7 @@ class AuditedAgentServiceTests {
       "HIGH", "untrusted conclusion", List.of("create action"), List.of("evidence_from_another_run"), 0.8
     )).when(agentLlmGateway).analyze(any(), any());
     AgentDtos.CaseSummary agentCase = agentService.createCase(
-      new AgentDtos.CreateCaseRequest("verify evidence validation", null, "agent_test_alarm", "HIGH", null), dispatcher
+      new AgentDtos.CreateCaseRequest("verify evidence validation", null, "agent_test_alarm_fallback", "HIGH", null), dispatcher
     );
 
     AgentDtos.RunDetail run = awaitRun(agentService.startRun(
@@ -195,7 +201,7 @@ class AuditedAgentServiceTests {
   private AgentDtos.RunDetail awaitRun(String runId) throws Exception {
     for (int attempt = 0; attempt < 50; attempt += 1) {
       AgentDtos.RunDetail detail = agentService.runDetail(runId);
-      if (detail.run().status() == AgentEnums.RunStatus.SUCCEEDED) {
+      if (detail.run().status() == AgentEnums.RunStatus.SUCCEEDED || detail.run().status() == AgentEnums.RunStatus.WAITING_APPROVAL) {
         return detail;
       }
       if (detail.run().status() == AgentEnums.RunStatus.FAILED) {
