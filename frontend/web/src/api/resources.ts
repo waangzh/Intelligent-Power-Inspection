@@ -29,7 +29,7 @@ import type {
   CreateAgentSessionRequest,
   StartAgentRunRequest,
 } from '@/types/agent'
-import type { WorkOrder, WorkOrderStatus } from '@/types/workOrder'
+import type { WorkOrder, WorkOrderReviewInput, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
 
 export const resourcesApi = {
@@ -80,7 +80,7 @@ export const resourcesApi = {
   listWorkOrders: () => http.get<WorkOrder[]>('/work-orders'),
   createWorkOrderFromAlarm: (alarmId: string, assigneeName?: string) =>
     http.post<WorkOrder>(`/work-orders/from-alarm/${alarmId}`, { assigneeName }),
-  updateWorkOrderStatus: (id: string, status: WorkOrderStatus, extra?: { resolution?: string }) =>
+  updateWorkOrderStatus: (id: string, status: WorkOrderStatus, extra?: { review?: WorkOrderReviewInput }) =>
     http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
   assignWorkOrder: (id: string, assigneeName: string) =>
     http.patch<WorkOrder>(`/work-orders/${id}/assign`, { assigneeName }),

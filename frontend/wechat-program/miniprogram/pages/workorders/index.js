@@ -2,13 +2,31 @@ const api = require('../../services/index')
 const { hasPermission } = require('../../utils/permission')
 const { WORK_ORDER_STATUS_LABELS, WORK_ORDER_PRIORITY_LABELS } = require('../../utils/constants')
 
-const STATUS_OPTIONS = [
-  { value: '', label: '全部' },
-  { value: 'PENDING', label: '待处理' },
-  { value: 'PROCESSING', label: '处理中' },
-  { value: 'REVIEW', label: '待复核' },
-  { value: 'CLOSED', label: '已关闭' },
+const REVIEW_CONCLUSION_OPTIONS = [
+  { value: 'RESOLVED', label: '已消缺' },
+  { value: 'PARTIALLY_RESOLVED', label: '部分消缺' },
+  { value: 'UNRESOLVED', label: '未消缺' },
+  { value: 'FALSE_ALARM', label: '误报' },
 ]
+
+function createReviewForm() {
+  return { conclusion: 'RESOLVED', conclusionLabel: '已消缺', onsiteFinding: '', handlingMeasures: '', followUpPlan: '' }
+}
+
+function decorateOrder(order) {
+  const review = order.review && {
+    ...order.review,
+    conclusionLabel: REVIEW_CONCLUSION_OPTIONS.find((item) => item.value === order.review.conclusion)?.label || order.review.conclusion,
+    submittedLabel: order.review.submittedAt ? order.review.submittedAt.slice(0, 16).replace('T', ' ') : '',
+  }
+  return {
+    ...order,
+    review,
+    statusLabel: WORK_ORDER_STATUS_LABELS[order.status],
+    priorityLabel: WORK_ORDER_PRIORITY_LABELS[order.priority],
+    createdLabel: order.createdAt ? order.createdAt.slice(0, 16).replace('T', ' ') : '',
+  }
+}
 
 Page({
   data: {
@@ -19,7 +37,10 @@ Page({
     detail: null,
     showDetail: false,
     showResolve: false,
-    resolveText: '',
+    reviewConclusionOptions: REVIEW_CONCLUSION_OPTIONS,
+    reviewConclusionIndex: 0,
+    reviewForm: createReviewForm(),
+    requiresFollowUp: false,
     resolvingId: '',
   },
 
@@ -31,12 +52,7 @@ Page({
   },
 
   async load() {
-    const orders = (await api.getWorkOrders()).map((o) => ({
-      ...o,
-      statusLabel: WORK_ORDER_STATUS_LABELS[o.status],
-      priorityLabel: WORK_ORDER_PRIORITY_LABELS[o.priority],
-      createdLabel: o.createdAt ? o.createdAt.slice(0, 16).replace('T', ' ') : '',
-    }))
+    const orders = (await api.getWorkOrders()).map(decorateOrder)
     const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0, CLOSED: 0 }
     orders.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status]++ })
     const statusCards = [
@@ -73,21 +89,45 @@ Page({
   },
 
   openResolve(e) {
-    this.setData({ resolvingId: e.currentTarget.dataset.id, resolveText: '', showResolve: true })
+    this.setData({ resolvingId: e.currentTarget.dataset.id, reviewConclusionIndex: 0, reviewForm: createReviewForm(), requiresFollowUp: false, showResolve: true })
   },
 
   closeResolve() { this.setData({ showResolve: false }) },
 
-  onResolveInput(e) { this.setData({ resolveText: e.detail.value }) },
+  onReviewConclusionChange(e) {
+    const reviewConclusionIndex = Number(e.detail.value)
+    const option = REVIEW_CONCLUSION_OPTIONS[reviewConclusionIndex]
+    this.setData({
+      reviewConclusionIndex,
+      'reviewForm.conclusion': option.value,
+      'reviewForm.conclusionLabel': option.label,
+      requiresFollowUp: ['PARTIALLY_RESOLVED', 'UNRESOLVED'].includes(option.value),
+    })
+  },
+
+  onReviewFieldInput(e) {
+    this.setData({ [`reviewForm.${e.currentTarget.dataset.field}`]: e.detail.value })
+  },
 
   stop() {},
 
   async submitResolve() {
-    if (!this.data.resolveText.trim()) {
-      wx.showToast({ title: '请填写处理说明', icon: 'none' })
+    const { conclusion, onsiteFinding, handlingMeasures, followUpPlan } = this.data.reviewForm
+    const review = {
+      conclusion,
+      onsiteFinding: onsiteFinding.trim(),
+      handlingMeasures: handlingMeasures.trim(),
+      followUpPlan: followUpPlan.trim(),
+    }
+    if (review.onsiteFinding.length < 10 || review.handlingMeasures.length < 10) {
+      wx.showToast({ title: '现场检查情况和处理措施至少填写 10 个字符', icon: 'none' })
       return
     }
-    await api.updateWorkOrderStatus(this.data.resolvingId, 'REVIEW', { resolution: this.data.resolveText })
+    if (this.data.requiresFollowUp && !review.followUpPlan) {
+      wx.showToast({ title: '请填写遗留风险与后续计划', icon: 'none' })
+      return
+    }
+    await api.updateWorkOrderStatus(this.data.resolvingId, 'REVIEW', { review })
     this.setData({ showResolve: false })
     wx.showToast({ title: '已提交复核' })
     this.load()

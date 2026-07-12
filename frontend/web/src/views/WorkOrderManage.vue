@@ -49,18 +49,49 @@
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item label="工单号">{{ detail.id }}</el-descriptions-item>
           <el-descriptions-item label="标题">{{ detail.title }}</el-descriptions-item>
+          <el-descriptions-item label="具体地点">
+            <span class="location-value">{{ detail.locationDescription || '-' }}</span>
+          </el-descriptions-item>
           <el-descriptions-item label="描述">{{ detail.description }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusType(detail.status)" size="small">{{ WORK_ORDER_STATUS_LABELS[detail.status] }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="处理人">{{ detail.assigneeName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="处理说明">{{ detail.resolution || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.resolution && !detail.review" label="处理说明">{{ detail.resolution }}</el-descriptions-item>
         </el-descriptions>
+        <section v-if="detail.review" class="review-record">
+          <div class="review-record-title">
+            <span>复核记录</span>
+            <el-tag size="small" type="success">{{ WORK_ORDER_REVIEW_CONCLUSION_LABELS[detail.review.conclusion] }}</el-tag>
+          </div>
+          <div class="review-meta">{{ detail.review.submittedByName }} · {{ fmt(detail.review.submittedAt) }}</div>
+          <div class="review-grid">
+            <div class="review-field"><span>现场检查情况</span><p>{{ detail.review.onsiteFinding }}</p></div>
+            <div class="review-field"><span>处理措施与验证结果</span><p>{{ detail.review.handlingMeasures }}</p></div>
+            <div v-if="detail.review.followUpPlan" class="review-field"><span>遗留风险与后续计划</span><p>{{ detail.review.followUpPlan }}</p></div>
+          </div>
+        </section>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="resolveVisible" title="提交处理结果" width="480px">
-      <el-input v-model="resolveText" type="textarea" :rows="4" placeholder="请填写现场处理情况" />
+    <el-dialog v-model="resolveVisible" title="提交复核" width="560px" :close-on-click-modal="false">
+      <div class="review-form-intro">请如实记录现场核查和处置验证结果，提交后将进入待复核状态。</div>
+      <el-form label-position="top" class="review-form">
+        <el-form-item label="复核结论" required>
+          <el-select v-model="reviewForm.conclusion" placeholder="请选择复核结论" style="width: 100%">
+            <el-option v-for="item in reviewConclusionOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="现场检查情况" required>
+          <el-input v-model="reviewForm.onsiteFinding" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="说明现场检查范围、发现情况和关键读数（至少 10 个字符）" />
+        </el-form-item>
+        <el-form-item label="处理措施与验证结果" required>
+          <el-input v-model="reviewForm.handlingMeasures" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="说明已采取的措施及验证方式、验证结果（至少 10 个字符）" />
+        </el-form-item>
+        <el-form-item :label="requiresFollowUp ? '遗留风险与后续计划（必填）' : '遗留风险与后续计划'" :required="requiresFollowUp">
+          <el-input v-model="reviewForm.followUpPlan" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="未完全消缺时，请说明风险、责任人或计划完成时间" />
+        </el-form-item>
+      </el-form>
       <template #footer>
         <el-button @click="resolveVisible = false">取消</el-button>
         <el-button type="primary" @click="submitResolve">提交复核</el-button>
@@ -76,8 +107,8 @@ import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { usePermission } from '@/composables/usePermission'
-import type { WorkOrder, WorkOrderPriority, WorkOrderStatus } from '@/types/workOrder'
-import { WORK_ORDER_PRIORITY_LABELS, WORK_ORDER_STATUS_LABELS } from '@/types/workOrder'
+import type { WorkOrder, WorkOrderPriority, WorkOrderReviewInput, WorkOrderStatus } from '@/types/workOrder'
+import { WORK_ORDER_PRIORITY_LABELS, WORK_ORDER_REVIEW_CONCLUSION_LABELS, WORK_ORDER_STATUS_LABELS } from '@/types/workOrder'
 
 const router = useRouter()
 const workOrderStore = useWorkOrderStore()
@@ -86,8 +117,11 @@ const statusFilter = ref<string>('ALL')
 const detailVisible = ref(false)
 const detail = ref<WorkOrder | null>(null)
 const resolveVisible = ref(false)
-const resolveText = ref('')
 const resolvingId = ref('')
+const reviewConclusionOptions = Object.entries(WORK_ORDER_REVIEW_CONCLUSION_LABELS).map(([value, label]) => ({ value, label }))
+const reviewForm = ref<WorkOrderReviewInput>(emptyReviewForm())
+
+const requiresFollowUp = computed(() => ['PARTIALLY_RESOLVED', 'UNRESOLVED'].includes(reviewForm.value.conclusion))
 
 const statusCards = computed(() => {
   const c = workOrderStore.statusCounts
@@ -109,30 +143,49 @@ function openDetail(row: WorkOrder) {
   detailVisible.value = true
 }
 
-function advance(id: string, status: WorkOrderStatus) {
-  workOrderStore.updateStatus(id, status)
+async function advance(id: string, status: WorkOrderStatus) {
+  await workOrderStore.updateStatus(id, status)
   ElMessage.success('状态已更新')
 }
 
 function openResolve(row: WorkOrder) {
   resolvingId.value = row.id
-  resolveText.value = ''
+  reviewForm.value = emptyReviewForm()
   resolveVisible.value = true
 }
 
-function submitResolve() {
-  if (!resolveText.value.trim()) {
-    ElMessage.warning('请填写处理说明')
+async function submitResolve() {
+  const review: WorkOrderReviewInput = {
+    conclusion: reviewForm.value.conclusion,
+    onsiteFinding: reviewForm.value.onsiteFinding.trim(),
+    handlingMeasures: reviewForm.value.handlingMeasures.trim(),
+    followUpPlan: reviewForm.value.followUpPlan?.trim(),
+  }
+  if (review.onsiteFinding.length < 10 || review.handlingMeasures.length < 10) {
+    ElMessage.warning('现场检查情况和处理措施至少填写 10 个字符')
     return
   }
-  workOrderStore.updateStatus(resolvingId.value, 'REVIEW', { resolution: resolveText.value })
+  if (requiresFollowUp.value && !review.followUpPlan) {
+    ElMessage.warning('请填写遗留风险与后续计划')
+    return
+  }
+  await workOrderStore.updateStatus(resolvingId.value, 'REVIEW', { review })
   resolveVisible.value = false
   ElMessage.success('已提交复核')
 }
 
-function closeOrder(id: string) {
-  workOrderStore.updateStatus(id, 'CLOSED')
+async function closeOrder(id: string) {
+  await workOrderStore.updateStatus(id, 'CLOSED')
   ElMessage.success('工单已关闭')
+}
+
+function emptyReviewForm(): WorkOrderReviewInput {
+  return {
+    conclusion: 'RESOLVED',
+    onsiteFinding: '',
+    handlingMeasures: '',
+    followUpPlan: '',
+  }
 }
 
 function fmt(iso: string) {
@@ -169,5 +222,68 @@ function priorityType(p: WorkOrderPriority) {
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+}
+
+.location-value {
+  display: inline-block;
+  padding: 2px 8px;
+  color: #174f84;
+  background: #edf5fc;
+  border-radius: 3px;
+}
+
+.review-record {
+  margin-top: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f5f9fc, #fff);
+  border: 1px solid #dbe8f3;
+  border-left: 3px solid #1a5fb4;
+  border-radius: 4px;
+}
+
+.review-record-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  color: #1d2939;
+}
+
+.review-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #7a8795;
+}
+
+.review-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.review-field > span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.review-field p {
+  margin: 4px 0 0;
+  line-height: 1.7;
+  color: #344054;
+  white-space: pre-wrap;
+}
+
+.review-form-intro {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  color: #476072;
+  font-size: 13px;
+  line-height: 1.6;
+  background: #f4f8fb;
+  border-left: 3px solid #1a5fb4;
+}
+
+.review-form :deep(.el-form-item) {
+  margin-bottom: 16px;
 }
 </style>
