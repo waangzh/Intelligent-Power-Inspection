@@ -38,7 +38,12 @@ export function validateRouteDocument(document: RouteExecutorDocumentV3): RouteV
   if (!finite(loopWait) || loopWait < 0) issue(issues, 'INVALID_LOOP_WAIT', '/routes/0/loop/wait_sec', 'loop.wait_sec 必须为非负数')
   if (!Number.isInteger(loopCycles) || loopCycles === undefined || loopCycles < 0) issue(issues, 'INVALID_LOOP_CYCLES', '/routes/0/loop/max_cycles', 'loop.max_cycles 必须为非负整数')
   if (route?.failure_policy !== 'abort' && route?.failure_policy !== 'abort_and_return_home') issue(issues, 'INVALID_FAILURE_POLICY', '/routes/0/failure_policy', 'failure_policy 不合法')
-  document.keepout_zones?.forEach((zone, index) => validateKeepout(zone, index, map?.resolution, issues))
+  const keepoutIds = new Set<string>()
+  document.keepout_zones?.forEach((zone, index) => {
+    if (!zone.id || keepoutIds.has(zone.id)) issue(issues, 'DUPLICATE_KEEP_OUT_ID', `/keepout_zones/${index}/id`, '禁行区 id 必须非空且唯一')
+    keepoutIds.add(zone.id)
+    validateKeepout(zone, index, map?.resolution, issues)
+  })
   return { valid: issues.length === 0, issues }
 }
 

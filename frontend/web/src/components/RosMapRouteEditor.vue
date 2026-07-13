@@ -37,6 +37,7 @@
     </section>
 
     <aside class="sidebar">
+      <el-alert v-if="isLegacyDraft" type="warning" :closable="false" title="旧版草稿：保存后将转换为 v3，才能创建路线修订" />
       <el-tabs v-model="activeTab" class="config-tabs">
         <el-tab-pane label="巡检点" name="targets">
           <div class="tab-toolbar">
@@ -197,6 +198,7 @@ const {
   cursorInfo,
   mapInfo,
   jsonPreview,
+  isLegacyDraft,
   targetStatus,
   setMode,
   fitToScreen,
@@ -206,6 +208,7 @@ const {
   applyPgmBuffer,
   importRouteJson,
   exportDocument,
+  setMapAssetIdentity,
   onFormFieldChange,
   selectTarget,
   orientTarget,
@@ -249,6 +252,26 @@ function rememberMapFiles(files: FileList | File[]) {
   }
 }
 
+async function syncMapIdentity(imageSha256?: string) {
+  if (!map.yamlName || !map.width || !map.height) return
+  const source = pgmSourceFile.value
+  const hash = imageSha256 ?? (source ? await sha256(await source.arrayBuffer()) : '')
+  setMapAssetIdentity({
+    yaml: map.yamlName,
+    image: map.image,
+    resolution: map.resolution,
+    origin: [...map.origin] as [number, number, number],
+    width: map.width,
+    height: map.height,
+    image_sha256: hash,
+  })
+}
+
+async function sha256(buffer: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', buffer)
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('')
+}
+
 async function loadPersistedMap(mapId?: string | null) {
   const version = ++mapLoadVersion
   if (!mapId) return
@@ -264,6 +287,7 @@ async function loadPersistedMap(mapId?: string | null) {
     const pgmFile = new File([pgmBlob], asset.pgmName, { type: 'image/x-portable-graymap' })
     applyYamlText(await yamlFile.text(), yamlFile.name)
     applyPgmBuffer(await pgmFile.arrayBuffer(), pgmFile.name)
+    await syncMapIdentity(asset.pgmSha256)
     yamlSourceFile.value = yamlFile
     pgmSourceFile.value = pgmFile
   } catch (error) {
@@ -280,6 +304,7 @@ async function onMapFilesChange(event: Event) {
   try {
     await handleDroppedFiles(files)
     rememberMapFiles(files)
+    await syncMapIdentity()
     ElMessage.success(mapLoaded.value ? 'YAML/PGM 地图已导入' : `YAML 已导入，请继续选择 ${map.image}`)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error))
@@ -295,6 +320,7 @@ async function onPgmChange(event: Event) {
   try {
     applyPgmBuffer(await file.arrayBuffer(), file.name)
     rememberMapFiles([file])
+    await syncMapIdentity()
     ElMessage.success('PGM 地图已导入')
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error))
@@ -320,6 +346,7 @@ async function onDrop(event: DragEvent) {
       const files = Array.from(event.dataTransfer.files)
       await handleDroppedFiles(files)
       rememberMapFiles(files)
+      await syncMapIdentity()
       if (files.some((file) => /\.ya?ml$|\.pgm$/i.test(file.name))) {
         ElMessage.success(mapLoaded.value ? '地图文件已导入' : `YAML 已导入，请继续选择 ${map.image}`)
       } else if (files.some((file) => /\.json$/i.test(file.name))) {

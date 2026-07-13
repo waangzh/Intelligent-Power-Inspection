@@ -38,7 +38,14 @@ public class RouteDocumentValidator {
     validateRoute(route, ids, targets, issues);
     ArrayNode zones = array(document.path("keepout_zones"));
     if (zones == null) error(issues, "INVALID_KEEP_OUTS", "/keepout_zones", "keepout_zones 必须为数组");
-    else for (int i = 0; i < zones.size(); i++) validateZone(zones.get(i), i, document.path("map").path("resolution").asDouble(Double.NaN), issues);
+    else {
+      Set<String> zoneIds = new HashSet<>();
+      for (int i = 0; i < zones.size(); i++) {
+        String id = zones.get(i).path("id").asText();
+        if (id.isBlank() || !zoneIds.add(id)) error(issues, "DUPLICATE_KEEP_OUT_ID", "/keepout_zones/" + i + "/id", "禁行区 id 必须非空且唯一");
+        validateZone(zones.get(i), i, document.path("map").path("resolution").asDouble(Double.NaN), issues);
+      }
+    }
     return issues;
   }
 
@@ -92,6 +99,7 @@ public class RouteDocumentValidator {
     if (points == null || points.size() < 3) error(issues, "INVALID_POLYGON", base + "/polygon", "polygon 至少包含三个点");
     else {
       for (int i = 0; i < points.size(); i++) if (!finite(points.get(i).path("x")) || !finite(points.get(i).path("y"))) error(issues, "INVALID_POLYGON_POINT", base + "/polygon/" + i, "坐标必须为有限数");
+      if (selfIntersects(points)) error(issues, "SELF_INTERSECTING_POLYGON", base + "/polygon", "polygon 不得自交");
       if (Math.abs(area(points)) <= 1e-9) error(issues, "ZERO_AREA_POLYGON", base + "/polygon", "polygon 面积必须大于零");
     }
     double padding = zone.path("mask_padding_m").asDouble(Double.NaN); if (!Double.isFinite(padding) || padding < 0 || padding > resolution) error(issues, "INVALID_MASK_PADDING", base + "/mask_padding_m", "mask_padding_m 必须在 0 到 map.resolution 之间");
@@ -101,6 +109,18 @@ public class RouteDocumentValidator {
   private boolean finite(JsonNode node) { return node.isNumber() && Double.isFinite(node.asDouble()); }
   private boolean finitePositive(JsonNode node) { return finite(node) && node.asDouble() > 0; }
   private boolean nonNegativeInteger(JsonNode node) { return node.isIntegralNumber() && node.asLong() >= 0; }
+  private boolean selfIntersects(ArrayNode points) {
+    for (int i = 0; i < points.size(); i++) for (int j = i + 1; j < points.size(); j++) {
+      if (j == i + 1 || (i == 0 && j == points.size() - 1)) continue;
+      if (intersects(points.get(i), points.get((i + 1) % points.size()), points.get(j), points.get((j + 1) % points.size()))) return true;
+    }
+    return false;
+  }
+  private boolean intersects(JsonNode a, JsonNode b, JsonNode c, JsonNode d) {
+    double abC = cross(a, b, c), abD = cross(a, b, d), cdA = cross(c, d, a), cdB = cross(c, d, b);
+    return abC * abD < -1e-9 && cdA * cdB < -1e-9;
+  }
+  private double cross(JsonNode a, JsonNode b, JsonNode c) { return (b.path("x").asDouble() - a.path("x").asDouble()) * (c.path("y").asDouble() - a.path("y").asDouble()) - (b.path("y").asDouble() - a.path("y").asDouble()) * (c.path("x").asDouble() - a.path("x").asDouble()); }
   private double area(ArrayNode points) { double area = 0; for (int i = 0; i < points.size(); i++) { JsonNode a = points.get(i), b = points.get((i + 1) % points.size()); area += a.path("x").asDouble() * b.path("y").asDouble() - a.path("y").asDouble() * b.path("x").asDouble(); } return area / 2; }
   private void error(List<ValidationIssue> issues, String code, String pointer, String message) { issues.add(new ValidationIssue(code, pointer, message, "ERROR")); }
   public record ValidationIssue(String code, String jsonPointer, String message, String severity) { }
