@@ -40,7 +40,7 @@ function resolveAssigneeName(order) {
 }
 
 function workOrderAssigneeLabel(order) {
-  return resolveAssigneeName(order) || '待指派'
+  return resolveAssigneeName(order) || '待接单'
 }
 
 /** 处理中/待复核却没有真实处理人，属于历史脏数据 */

@@ -3,7 +3,7 @@ const ROLE_PERMISSIONS = {
     'task:view', 'task:create', 'task:dispatch', 'task:control',
     'site:edit', 'route:edit', 'alarm:ack', 'robot:manage',
     'detection:manage', 'user:manage', 'record:export',
-    'workorder:view', 'workorder:create', 'workorder:assign', 'workorder:review',
+    'workorder:view', 'workorder:create', 'workorder:review',
     'alarm:policy',
   ],
   DISPATCHER: [

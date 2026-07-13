@@ -93,7 +93,7 @@ const seedRecords = [
 
 const seedWorkOrders = [
   { id: 'wo_seed_1', title: '主变区漏油异常处置', description: '告警：检查点「主变 A 相」漏油检测异常，需现场复核', status: 'PROCESSING', priority: 'HIGH', assigneeId: 'user_dispatcher', assigneeName: '张调度', createdById: 'user_admin', createdByName: '系统管理员', location: { siteName: '城东 220kV 变电站', routeName: '主变区例行巡检', checkpointName: '主变 A 相', areaName: '主变区例行巡检 · 主变 A 相', address: '浙江省杭州市余杭区' }, createdAt: '2026-06-10T08:00:00Z', updatedAt: '2026-06-11T10:00:00Z' },
-  { id: 'wo_seed_2', title: 'GIS 区未佩戴安全帽', description: '路线行进中检测到作业人员未佩戴安全帽', status: 'PENDING', priority: 'URGENT', createdById: 'user_dispatcher', createdByName: '张调度', location: { siteName: '城东 220kV 变电站', routeName: '主变区例行巡检', areaName: '主变区例行巡检', address: '浙江省杭州市余杭区' }, createdAt: '2026-06-12T14:30:00Z', updatedAt: '2026-06-12T14:30:00Z' },
+  { id: 'wo_seed_2', title: 'GIS 区未佩戴安全帽', description: '路线行进中检测到作业人员未佩戴安全帽', status: 'PENDING', priority: 'URGENT', createdById: 'user_admin', createdByName: '系统管理员', location: { siteName: '城东 220kV 变电站', routeName: '主变区例行巡检', areaName: '主变区例行巡检', address: '浙江省杭州市余杭区' }, createdAt: '2026-06-12T14:30:00Z', updatedAt: '2026-06-12T14:30:00Z' },
 ]
 
 /** 云端地图库默认条目（yaml + png；site_002/003 演示复用 site_001 栅格） */

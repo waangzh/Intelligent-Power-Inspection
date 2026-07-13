@@ -6,7 +6,7 @@ const {
   FAULT_TYPE_OPTIONS,
   HANDLING_METHOD_OPTIONS,
   enrichWorkOrder,
-  assignActionLabel,
+  isWorkOrderUnassigned,
 } = require('../../utils/work-order')
 const { syncTabBar } = require('../../utils/tab-page')
 const { resolvePhotoSrc } = require('../../utils/work-order-photo')
@@ -37,24 +37,21 @@ Page({
     filtered: [],
     statusFilter: '',
     statusCards: [],
+    scopeFilter: 'ALL',
+    scopeCards: [],
+    isDispatcher: false,
     detail: null,
     showDetail: false,
     showResolve: false,
     showReview: false,
-    showAssign: false,
     resolvingId: '',
     reviewingId: '',
-    assigningId: '',
-    assignDialogTitle: '指派调度员',
-    dispatchers: [],
-    dispatcherLabels: [],
-    assignForm: { dispatcherIndex: 0 },
+    claimingId: '',
     resolveForm: { ...EMPTY_RESOLVE_FORM },
     reviewForm: { result: 'PASS', comment: '' },
     faultTypeOptions: FAULT_TYPE_OPTIONS,
     handlingMethodOptions: HANDLING_METHOD_OPTIONS,
     canCreate: false,
-    canAssign: false,
     canProcess: false,
     canReview: false,
     user: null,
@@ -69,32 +66,19 @@ Page({
     syncTabBar(this)
     const user = app.globalData.user
     const isAdmin = user.role === 'ADMIN'
+    const isDispatcher = user.role === 'DISPATCHER'
     this.setData({
       user,
+      isDispatcher,
       canCreate: hasPermission(user.role, 'workorder:create'),
-      canAssign: hasPermission(user.role, 'workorder:assign'),
       canProcess: hasPermission(user.role, 'workorder:process'),
       canReview: hasPermission(user.role, 'workorder:review'),
       pageDesc: isAdmin
-        ? '告警转工单、指派/改派与复核'
-        : '现场处置与提交复核',
+        ? '告警转工单与复核'
+        : '接单大厅抢单、现场处置与提交复核',
     })
-    this.loadDispatchers()
     this.load()
     app.refreshBadges()
-  },
-
-  async loadDispatchers() {
-    const user = this.data.user || getApp().globalData.user
-    if (!hasPermission(user?.role, 'workorder:assign')) return
-    try {
-      const users = await api.listUsers()
-      const dispatchers = users.filter((u) => u.role === 'DISPATCHER')
-      const dispatcherLabels = dispatchers.map((u) => `${u.displayName}（${u.username}）`)
-      this.setData({ dispatchers, dispatcherLabels })
-    } catch (e) {
-      console.warn('loadDispatchers', e)
-    }
   },
 
   async load() {
@@ -134,25 +118,41 @@ Page({
       })
       return {
         ...enriched,
-        canAssign: workOrderPerm.canAssignOrder(o, user),
-        assignLabel: assignActionLabel(o),
+        canClaim: workOrderPerm.canClaimOrder(o, user),
         canSubmitReview: workOrderPerm.canSubmitReview(o, user),
         canConfirmReview: workOrderPerm.canConfirmReview(o, user),
       }
     })
-    const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0, CLOSED: 0 }
-    orders.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status]++ })
+
     const isDispatcher = user.role === 'DISPATCHER'
+    let scopeCards = []
+    if (isDispatcher) {
+      const poolCount = orders.filter((o) => isWorkOrderUnassigned(o)).length
+      const mineCount = orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, user)).length
+      scopeCards = [
+        { key: 'ALL', label: '全部可见', value: orders.length },
+        { key: 'POOL', label: '接单大厅', value: poolCount },
+        { key: 'MINE', label: '我的工单', value: mineCount },
+      ]
+    }
+
+    const scoped = workOrderPerm.filterByScope(orders, user, this.data.scopeFilter)
+    const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0, CLOSED: 0 }
+    scoped.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status]++ })
     const statusCards = [
-      { key: '', label: '全部', value: orders.length },
-      ...(!isDispatcher ? [{ key: 'PENDING', label: '待处理', value: counts.PENDING }] : []),
+      { key: '', label: '全部', value: scoped.length },
+      { key: 'PENDING', label: '待处理', value: counts.PENDING },
       { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
       { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
     ]
-    let statusFilter = this.data.statusFilter
-    if (isDispatcher && statusFilter === 'PENDING') statusFilter = ''
-    this.setData({ orders, statusCards, pendingAlarms, statusFilter })
+
+    this.setData({ orders, statusCards, scopeCards, pendingAlarms })
     this.applyFilter()
+  },
+
+  filterByScope(e) {
+    this.setData({ scopeFilter: e.currentTarget.dataset.key })
+    this.load()
   },
 
   filterByCard(e) {
@@ -161,10 +161,10 @@ Page({
   },
 
   applyFilter() {
-    const { orders, statusFilter } = this.data
-    this.setData({
-      filtered: statusFilter ? orders.filter((o) => o.status === statusFilter) : orders,
-    })
+    const { orders, statusFilter, scopeFilter, user } = this.data
+    let list = workOrderPerm.filterByScope(orders, user, scopeFilter)
+    if (statusFilter) list = list.filter((o) => o.status === statusFilter)
+    this.setData({ filtered: list })
   },
 
   openDetail(e) {
@@ -174,64 +174,23 @@ Page({
 
   closeDetail() { this.setData({ showDetail: false }) },
 
-  openAssign(e) {
+  async claim(e) {
     const id = e.currentTarget.dataset.id
     const order = this.data.orders.find((o) => o.id === id)
-    if (!workOrderPerm.canAssignOrder(order, this.data.user)) {
-      wx.showToast({ title: '无指派权限', icon: 'none' })
+    if (!workOrderPerm.canClaimOrder(order, this.data.user)) {
+      wx.showToast({ title: '无法接单', icon: 'none' })
       return
     }
-    const { dispatchers } = this.data
-    if (!dispatchers.length) {
-      wx.showToast({ title: '暂无调度员账号', icon: 'none' })
-      return
-    }
-    let dispatcherIndex = 0
-    if (order.assigneeId) {
-      const idx = dispatchers.findIndex((u) => u.id === order.assigneeId)
-      if (idx >= 0) dispatcherIndex = idx
-    } else if (order.assigneeName) {
-      const idx = dispatchers.findIndex((u) => u.displayName === order.assigneeName)
-      if (idx >= 0) dispatcherIndex = idx
-    }
-    this.setData({
-      assigningId: id,
-      assignDialogTitle: assignActionLabel(order) === '改派' ? '改派调度员' : '指派调度员',
-      assignForm: { dispatcherIndex },
-      showAssign: true,
-    })
-  },
-
-  closeAssign() { this.setData({ showAssign: false }) },
-
-  onDispatcherChange(e) {
-    this.setData({ 'assignForm.dispatcherIndex': Number(e.detail.value) })
-  },
-
-  async submitAssign() {
-    const { assigningId, dispatchers, assignForm } = this.data
-    const dispatcher = dispatchers[assignForm.dispatcherIndex]
-    if (!dispatcher) {
-      wx.showToast({ title: '请选择调度员', icon: 'none' })
-      return
-    }
-    const order = this.data.orders.find((o) => o.id === assigningId)
-    const isReassign = order && assignActionLabel(order) === '改派'
+    this.setData({ claimingId: id })
     try {
-      await api.assignWorkOrder(assigningId, {
-        id: dispatcher.id,
-        name: dispatcher.displayName,
-      })
-      this.setData({ showAssign: false })
-      wx.showToast({
-        title: isReassign
-          ? `已改派给 ${dispatcher.displayName}`
-          : `已指派给 ${dispatcher.displayName}`,
-      })
+      await api.claimWorkOrder(id)
+      wx.showToast({ title: '接单成功，开始处置' })
       getApp().refreshBadges()
       this.load()
     } catch (err) {
-      wx.showToast({ title: err.message || '指派失败', icon: 'none' })
+      wx.showToast({ title: err.message || '接单失败', icon: 'none' })
+    } finally {
+      this.setData({ claimingId: '' })
     }
   },
 
@@ -239,7 +198,7 @@ Page({
     const id = e.currentTarget.dataset.id
     const order = this.data.orders.find((o) => o.id === id)
     if (!workOrderPerm.canSubmitReview(order, this.data.user)) {
-      wx.showToast({ title: '仅指派调度员可提交复核', icon: 'none' })
+      wx.showToast({ title: '仅接单调度员可提交复核', icon: 'none' })
       return
     }
     this.setData({

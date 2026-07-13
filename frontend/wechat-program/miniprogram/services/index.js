@@ -464,9 +464,13 @@ async function createWorkOrderFromAlarm(alarm, creator, options = {}) {
     }
     orders.unshift(order)
     mock.save(mock.KEYS.workOrders, orders)
+    await notifyWorkOrderByRole('DISPATCHER', '新工单待接单', order.title, sessionUser.id)
     return order
   }
-  return http.post('/work-orders', { alarmId: alarm.id, autoConverted: !!options.autoConverted, location })
+  const created = await http.post(`/work-orders/from-alarm/${alarm.id}`, {
+    autoConverted: !!options.autoConverted,
+  })
+  return created
 }
 
 async function tryAutoConvertPendingAlarms(alarms, creator) {
@@ -488,17 +492,18 @@ async function tryAutoConvertPendingAlarms(alarms, creator) {
   }
 }
 
-async function assignWorkOrder(id, assignee) {
+async function claimWorkOrder(id) {
   const user = currentUser()
   const order = await getWorkOrderById(id)
-  workOrderPerm.assertCanAssignOrder(order, user)
+  workOrderPerm.assertCanClaimOrder(order, user)
 
-  const nextStatus = 'PROCESSING'
   const now = new Date().toISOString()
+  const assigneeName = user.displayName || user.name || '调度员'
   const patch = {
-    assigneeId: assignee.id,
-    assigneeName: assignee.name,
-    status: nextStatus,
+    assigneeId: user.id,
+    assigneeName,
+    status: 'PROCESSING',
+    claimedAt: now,
     updatedAt: now,
   }
 
@@ -506,23 +511,15 @@ async function assignWorkOrder(id, assignee) {
     const orders = mock.getState().workOrders
     const idx = orders.findIndex((o) => o.id === id)
     if (idx < 0) throw new Error('工单不存在')
+    if (!workOrderPerm.canClaimOrder(orders[idx], user)) {
+      throw new Error('无法接单，可能已被他人抢走')
+    }
     orders[idx] = { ...orders[idx], ...patch }
     mock.save(mock.KEYS.workOrders, orders)
-    mock.pushNotification(
-      assignee.id,
-      'WORKORDER',
-      '有新的单子要接',
-      orders[idx].title,
-      '/pages/workorders/index',
-    )
     return orders[idx]
   }
 
-  await http.patch(`/work-orders/${id}/assign`, {
-    assigneeName: assignee.name,
-    assigneeId: assignee.id,
-  })
-  return patchWorkOrderQuiet(id, { status: nextStatus, assigneeId: assignee.id })
+  return http.post(`/work-orders/${id}/claim`)
 }
 
 async function updateWorkOrderStatus(id, status, extra = {}) {
@@ -732,7 +729,7 @@ module.exports = {
   getWorkOrders,
   createWorkOrderFromAlarm,
   tryAutoConvertPendingAlarms,
-  assignWorkOrder,
+  claimWorkOrder,
   uploadWorkOrderPhoto,
   updateWorkOrderStatus,
   submitWorkOrderResolution,

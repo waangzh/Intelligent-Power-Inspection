@@ -1,4 +1,5 @@
 .stat-item.sel { border: 2rpx solid #1a5fb4; }
+.scope-grid { margin-bottom: 12rpx; }
 .wo-title { font-weight: 600; }
 .wo-desc { margin: 8rpx 0; font-size: 26rpx; color: #606266; }
 .wo-actions { display: flex; gap: 12rpx; margin-top: 12rpx; }

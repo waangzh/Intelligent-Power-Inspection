@@ -19,6 +19,13 @@
     </view>
   </view>
 
+  <view class="stat-grid scope-grid" wx:if="{{isDispatcher && scopeCards.length}}">
+    <view class="stat-item {{scopeFilter===item.key?'sel':''}}" wx:for="{{scopeCards}}" wx:key="key" bindtap="filterByScope" data-key="{{item.key}}">
+      <view class="stat-value">{{item.value}}</view>
+      <view class="stat-label">{{item.label}}</view>
+    </view>
+  </view>
+
   <view class="stat-grid">
     <view class="stat-item {{statusFilter===item.key?'sel':''}}" wx:for="{{statusCards}}" wx:key="key" bindtap="filterByCard" data-key="{{item.key}}">
       <view class="stat-value">{{item.value}}</view>
@@ -36,7 +43,7 @@
     <view class="muted">优先级 {{item.priorityLabel}} · {{item.assigneeLabel}} · {{item.createdLabel}}</view>
     <view class="wo-desc">{{item.description}}</view>
     <view class="wo-actions" catchtap="stop">
-      <button wx:if="{{item.canAssign}}" size="mini" type="primary" catchtap="openAssign" data-id="{{item.id}}">{{item.assignLabel}}</button>
+      <button wx:if="{{item.canClaim}}" size="mini" type="warn" loading="{{claimingId===item.id}}" catchtap="claim" data-id="{{item.id}}">接单</button>
       <button wx:if="{{item.canSubmitReview}}" size="mini" type="primary" catchtap="openResolve" data-id="{{item.id}}">提交复核</button>
       <button wx:if="{{item.canConfirmReview}}" size="mini" type="primary" catchtap="openReview" data-id="{{item.id}}">确认复核</button>
     </view>
@@ -53,7 +60,7 @@
       <view class="detail-row"><text class="muted">状态</text><text>{{detail.statusLabel}}</text></view>
       <view class="detail-row"><text class="muted">创建人</text><text>{{detail.createdByName || '-'}}</text></view>
       <view class="detail-row"><text class="muted">创建时间</text><text>{{detail.createdLabel}}</text></view>
-      <view class="detail-row"><text class="muted">处理人</text><text>{{detail.assigneeLabel || detail.assigneeName || '待指派'}}</text></view>
+      <view class="detail-row"><text class="muted">处理人</text><text>{{detail.assigneeLabel || detail.assigneeName || '待接单'}}</text></view>
       <view class="detail-row" wx:if="{{detail.autoConverted}}"><text class="muted">来源</text><text>告警自动转工单</text></view>
 
       <view class="section-title">具体地点</view>
@@ -95,22 +102,6 @@
       </block>
 
       <button size="mini" bindtap="closeDetail">关闭</button>
-    </view>
-  </view>
-
-  <view class="modal-mask" wx:if="{{showAssign}}" bindtap="closeAssign">
-    <view class="modal-panel form-panel" catchtap="">
-      <view class="card-title">{{assignDialogTitle}}</view>
-      <view class="form-item required">
-        <text class="form-label">调度员</text>
-        <picker mode="selector" range="{{dispatcherLabels}}" value="{{assignForm.dispatcherIndex}}" bindchange="onDispatcherChange">
-          <view class="form-picker">{{dispatcherLabels[assignForm.dispatcherIndex] || '请选择调度员'}}</view>
-        </picker>
-      </view>
-      <view class="form-actions">
-        <button size="mini" bindtap="closeAssign">取消</button>
-        <button size="mini" type="primary" bindtap="submitAssign">确认指派</button>
-      </view>
     </view>
   </view>
 
