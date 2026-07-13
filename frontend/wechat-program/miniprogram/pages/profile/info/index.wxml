@@ -42,10 +42,6 @@
       <text>{{item.label}}</text>
       <text class="arrow">›</text>
     </view>
-    <view class="menu-link" bindtap="goMore">
-      <text>更多功能</text>
-      <text class="arrow">›</text>
-    </view>
   </view>
 
   <button class="logout-btn" bindtap="logout">退出登录</button>
