@@ -1,5 +1,5 @@
 import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
-import type { EditorMode, RouteExecutorDocument, RosMapState } from '@/types/routeExecutor'
+import type { EditableKeepoutZone, EditorMode, MapAssetIdentity, RouteExecutorDocument, RosMapState } from '@/types/routeExecutor'
 import {
   createDefaultMapState,
   isMapCoordinateInside,
@@ -41,12 +41,14 @@ export function useRosMapRouteEditor(
   const view = reactive({ scale: 1, offsetX: 0, offsetY: 0 })
   const mode = ref<EditorMode>('start')
   const targets = shallowRef<RouteExecutorTarget[]>([])
+  const keepoutZones = shallowRef<EditableKeepoutZone[]>([])
   const selectedTargetId = ref<string | null>(null)
   const yawTarget = ref<YawTarget>({ kind: 'start', id: null })
   const yawPreview = ref<{ x: number; y: number } | null>(null)
   const drag = ref<DragState | null>(null)
   const nextTargetNo = ref(1)
   const sourceTemplate = shallowRef<RouteExecutorDocument | null>(null)
+  const mapIdentity = shallowRef<MapAssetIdentity>({ yaml: '', image: '', resolution: 0, origin: [0, 0, 0], width: 0, height: 0, image_sha256: '' })
   const form = reactive<RouteFormState>(createDefaultRouteForm(options?.defaultRouteId))
   const activeRouteIdSynced = ref(true)
   const cursorInfo = ref('map: -, -')
@@ -56,6 +58,7 @@ export function useRosMapRouteEditor(
   let mapBitmapCtx = mapBitmapCanvas.getContext('2d')
 
   const jsonPreview = computed<string>(() => JSON.stringify(exportDocument() as unknown, null, 2))
+  const isLegacyDraft = computed(() => sourceTemplate.value?.version === 2)
 
   const outOfBounds = computed(() => {
     const items: string[] = []
@@ -438,6 +441,7 @@ export function useRosMapRouteEditor(
     const loaded = loadRouteJson(doc, form)
     sourceTemplate.value = doc
     targets.value = loaded.targets
+    keepoutZones.value = loaded.keepoutZones
     nextTargetNo.value = loaded.nextTargetNo
     selectedTargetId.value = targets.value[0]?.id ?? null
     yawTarget.value = selectedTargetId.value
@@ -449,7 +453,12 @@ export function useRosMapRouteEditor(
   }
 
   function exportDocument(): RouteExecutorDocument {
-    return buildRouteJson(form, targets.value, sourceTemplate.value)
+    return buildRouteJson(form, targets.value, keepoutZones.value, mapIdentity.value, sourceTemplate.value)
+  }
+
+  function setMapAssetIdentity(identity: MapAssetIdentity) {
+    mapIdentity.value = identity
+    emitChange()
   }
 
   function emitChange() {
@@ -657,10 +666,12 @@ export function useRosMapRouteEditor(
     form,
     mode,
     targets,
+    keepoutZones,
     selectedTargetId,
     cursorInfo,
     mapInfo,
     jsonPreview,
+    isLegacyDraft,
     targetStatus,
     setMode,
     fitToScreen,
@@ -670,6 +681,7 @@ export function useRosMapRouteEditor(
     applyPgmBuffer,
     importRouteJson,
     exportDocument,
+    setMapAssetIdentity,
     onFormFieldChange,
     selectTarget,
     orientTarget,

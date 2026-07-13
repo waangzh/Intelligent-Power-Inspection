@@ -1,4 +1,4 @@
-import type { EditableRouteDraft, EditableTarget, MapAssetIdentity, RouteExecutorDocument, RouteExecutorDocumentV3 } from '@/types/routeExecutor'
+import type { EditableKeepoutZone, EditableRouteDraft, EditableTarget, MapAssetIdentity, RouteExecutorDocument, RouteExecutorDocumentV3 } from '@/types/routeExecutor'
 import { createEditableRouteDraft, toEditableRouteDraft } from '@/utils/route/editableRoute'
 import { mergeManagedRouteFields } from '@/utils/route/templateMerge'
 
@@ -13,27 +13,38 @@ export function createDefaultRouteForm(routeId = 'route_patrol_001'): RouteFormS
   return formFromDraft(createEditableRouteDraft({ defaultRouteId: routeId }))
 }
 
-export function loadRouteJson(route: RouteExecutorDocument, form: RouteFormState): { targets: RouteExecutorTarget[]; nextTargetNo: number } {
+export function loadRouteJson(route: RouteExecutorDocument, form: RouteFormState): { targets: RouteExecutorTarget[]; keepoutZones: EditableKeepoutZone[]; nextTargetNo: number } {
   const draft = toEditableRouteDraft(route, { defaultRouteId: form.routeId })
   Object.assign(form, formFromDraft(draft))
   const maxNo = draft.targets.reduce((max, target) => Math.max(max, Number(target.id.match(/target_(\d+)/)?.[1] || 0)), draft.targets.length)
-  return { targets: draft.targets, nextTargetNo: maxNo + 1 }
+  return { targets: draft.targets, keepoutZones: draft.keepoutZones, nextTargetNo: maxNo + 1 }
 }
 
-export function draftFromForm(form: RouteFormState, targets: RouteExecutorTarget[], sourceTemplate: RouteExecutorDocument | null = null): EditableRouteDraft {
+export function draftFromForm(
+  form: RouteFormState,
+  targets: RouteExecutorTarget[],
+  keepoutZones: EditableKeepoutZone[],
+  sourceTemplate: RouteExecutorDocument | null = null,
+): EditableRouteDraft {
   return {
     sourceTemplate, requiresConversion: sourceTemplate?.version === 2,
     start: { name: form.startName, x: form.startX, y: form.startY, yaw: form.startYaw, publishInitialPose: form.publishInitialPose, covX: form.covX, covY: form.covY, covYaw: form.covYaw },
-    targets, keepoutZones: [],
+    targets, keepoutZones,
     route: { id: form.routeId, name: form.routeName, goalTimeout: form.goalTimeout, maxRetries: form.maxRetries, failurePolicy: form.failurePolicy, returnToStart: form.returnToStart, loopEnabled: form.loopEnabled, loopWait: form.loopWait, maxCycles: form.maxCycles },
   }
 }
 
-export function buildRouteJson(form: RouteFormState, targets: RouteExecutorTarget[], sourceTemplate: RouteExecutorDocument | null = null): RouteExecutorDocumentV3 {
-  const fallbackMap: MapAssetIdentity = sourceTemplate?.version === 3 ? sourceTemplate.map : {
+export function buildRouteJson(
+  form: RouteFormState,
+  targets: RouteExecutorTarget[],
+  keepoutZones: EditableKeepoutZone[],
+  mapAsset: MapAssetIdentity,
+  sourceTemplate: RouteExecutorDocument | null = null,
+): RouteExecutorDocumentV3 {
+  const resolvedMap: MapAssetIdentity = mapAsset.image_sha256 ? mapAsset : sourceTemplate?.version === 3 ? sourceTemplate.map : {
     yaml: '', image: '', resolution: 0, origin: [0, 0, 0], width: 0, height: 0, image_sha256: '0'.repeat(64),
   }
-  return mergeManagedRouteFields(sourceTemplate, draftFromForm(form, targets, sourceTemplate), fallbackMap)
+  return mergeManagedRouteFields(sourceTemplate, draftFromForm(form, targets, keepoutZones, sourceTemplate), resolvedMap)
 }
 
 export function downloadRouteJson(doc: RouteExecutorDocument, filename?: string) {
