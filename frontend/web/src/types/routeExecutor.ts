@@ -95,6 +95,11 @@ export interface PlatformRouteContext { defaultRouteId?: string }
 export interface MapAssetIdentity extends RouteMapIdentity {}
 export interface RouteValidationIssue { code: string; jsonPointer: string; message: string; severity: 'ERROR' | 'WARNING' }
 export interface RouteValidationResult { valid: boolean; issues: RouteValidationIssue[] }
+export interface RouteDraftValidationReport extends RouteValidationResult {
+  normalizedExecutorJson: RouteExecutorDocument
+  mapAssetId: string
+  mapImageSha256: string
+}
 
 /** 兼容地图画布的轻量状态，不属于执行 JSON。 */
 export type EditorMode = 'start' | 'target' | 'yaw' | 'pan'

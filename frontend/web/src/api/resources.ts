@@ -15,6 +15,7 @@ import type {
   TaskEvent,
 } from '@/types'
 import type { AppNotification, NotificationType } from '@/types/notification'
+import type { RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
 import type {
   AgentAction,
   AgentActionDecisionRequest,
@@ -48,6 +49,8 @@ export const resourcesApi = {
   removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
   listRouteRevisions: (routeId: string) => http.get<RouteRevision[]>(`/routes/${routeId}/revisions`),
   createRouteRevision: (routeId: string) => http.post<RouteRevision>(`/routes/${routeId}/revisions`),
+  validateRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, mapAssetId?: string) =>
+    http.post<RouteDraftValidationReport>(`/routes/${routeId}/draft:validate`, { executorJson, mapAssetId }),
   getRouteRevision: (revisionId: string) => http.get<RouteRevision>(`/route-revisions/${revisionId}`),
   addCheckpoint: (routeId: string, checkpoint: Checkpoint) =>
     http.post<Checkpoint>(`/routes/${routeId}/checkpoints`, checkpoint),

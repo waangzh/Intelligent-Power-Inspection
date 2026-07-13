@@ -1,5 +1,6 @@
 package com.powerinspection.route;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -35,6 +37,17 @@ public class RouteRevisionController {
   public ApiResponse<Map<String, Object>> create(@PathVariable String routeId) {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     return ApiResponse.ok(routeRevisionService.create(routeId, currentUser.get().getId()));
+  }
+
+  @PostMapping("/routes/{routeId}/draft:validate")
+  public ApiResponse<Map<String, Object>> validateDraft(@PathVariable String routeId, @RequestBody JsonNode body) {
+    permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
+    JsonNode executorJson = body == null ? null : body.get("executorJson");
+    if (executorJson == null) {
+      throw com.powerinspection.common.ApiException.badRequest("executorJson is required");
+    }
+    String mapAssetId = body.path("mapAssetId").isTextual() ? body.path("mapAssetId").asText() : null;
+    return ApiResponse.ok(routeRevisionService.validateDraft(routeId, executorJson, mapAssetId));
   }
 
   @GetMapping("/route-revisions/{revisionId}")

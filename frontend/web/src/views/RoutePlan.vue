@@ -57,6 +57,25 @@
           @change="onEditorChange"
           @map-files-change="onMapFilesChange"
         />
+        <el-card v-if="draftValidation" class="validation-panel" shadow="never">
+          <template #header>
+            <div class="validation-header">
+              <span>服务端草稿校验</span>
+              <el-tag :type="draftValidation.valid ? 'success' : 'danger'" effect="light">
+                {{ draftValidation.valid ? '可保存' : '存在错误' }}
+              </el-tag>
+            </div>
+          </template>
+          <el-empty v-if="!draftValidation.issues.length" description="未发现校验问题" :image-size="48" />
+          <ul v-else class="validation-issues">
+            <li v-for="issue in draftValidation.issues" :key="`${issue.severity}:${issue.code}:${issue.jsonPointer}`">
+              <el-tag size="small" :type="issue.severity === 'ERROR' ? 'danger' : 'warning'">{{ issue.severity }}</el-tag>
+              <code>{{ issue.code }}</code>
+              <code>{{ issue.jsonPointer || '/' }}</code>
+              <span>{{ issue.message }}</span>
+            </li>
+          </ul>
+        </el-card>
         <div v-else class="empty-panel">
           <div class="empty-hint">请选择或创建巡检路线</div>
         </div>
@@ -75,8 +94,8 @@ import { usePermission } from '@/composables/usePermission'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import type { MapAsset, MapAssetFiles, Route } from '@/types'
-import type { RouteExecutorDocument } from '@/types/routeExecutor'
-import { validateRouteDocument } from '@/utils/route/validation'
+import type { RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
+import { hasRouteDraftErrors } from '@/utils/route/draftValidation'
 
 const siteStore = useSiteStore()
 const routeStore = useRouteStore()
@@ -91,6 +110,7 @@ const savingRoute = ref(false)
 const deletingRoute = ref(false)
 const creatingRevision = ref(false)
 const pendingMapFiles = ref<MapAssetFiles | null>(null)
+const draftValidation = shallowRef<RouteDraftValidationReport | null>(null)
 
 const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
 const currentRoute = computed<Route | null>(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
@@ -127,12 +147,14 @@ function onSiteChange() {
   selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
   pendingDoc.value = currentRoute.value?.executorJson ?? null
   pendingMapFiles.value = null
+  draftValidation.value = null
 }
 
 function selectRoute(id: string) {
   selectedRouteId.value = id
   pendingDoc.value = routeStore.getRouteById(id)?.executorJson ?? null
   pendingMapFiles.value = null
+  draftValidation.value = null
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -156,6 +178,7 @@ async function createRoute() {
 
 function onEditorChange(doc: RouteExecutorDocument) {
   pendingDoc.value = doc
+  draftValidation.value = null
 }
 
 function onMapFilesChange(files: MapAssetFiles) {
@@ -171,13 +194,6 @@ async function saveToPlatform() {
     ElMessage.warning('请先导入完整的 YAML/PGM 地图')
     return
   }
-  if (currentRoute.value.mapId && pendingDoc.value.version === 3) {
-    const result = validateRouteDocument(pendingDoc.value)
-    if (!result.valid) {
-      ElMessage.error(result.issues[0].message)
-      return
-    }
-  }
   if (savingRoute.value) return
   savingRoute.value = true
   let uploadedAsset: MapAsset | null = null
@@ -191,7 +207,18 @@ async function saveToPlatform() {
     }
     const mapId = uploadedAsset?.id ?? currentRoute.value.mapId
     if (!mapId) throw new Error('地图资产上传失败')
-    await routeStore.saveExecutorRoute(currentRoute.value.id, pendingDoc.value, mapId)
+    const report = await resourcesApi.validateRouteDraft(currentRoute.value.id, pendingDoc.value, uploadedAsset?.id)
+    draftValidation.value = report
+    pendingDoc.value = report.normalizedExecutorJson
+    if (hasRouteDraftErrors(report)) {
+      if (uploadedAsset) {
+        await resourcesApi.removeMapAsset(uploadedAsset.id)
+        uploadedAsset = null
+      }
+      ElMessage.error('请先处理服务端校验报告中的 ERROR 项')
+      return
+    }
+    await routeStore.saveExecutorRoute(currentRoute.value.id, report.normalizedExecutorJson, mapId)
     pendingMapFiles.value = null
     ElMessage.success('路线已保存到平台')
   } catch (error) {
@@ -234,17 +261,14 @@ async function createRevision() {
     ElMessage.warning('请先保存已绑定地图的路线草稿')
     return
   }
-  if (currentRoute.value.executorJson.version !== 3) {
-    ElMessage.error('旧版草稿需要转换为 v3 后才能创建路线修订')
-    return
-  }
-  const result = validateRouteDocument(currentRoute.value.executorJson)
-  if (!result.valid) {
-    ElMessage.error(result.issues[0].message)
-    return
-  }
   creatingRevision.value = true
   try {
+    const report = await resourcesApi.validateRouteDraft(currentRoute.value.id, currentRoute.value.executorJson)
+    draftValidation.value = report
+    if (hasRouteDraftErrors(report)) {
+      ElMessage.error('请先处理服务端校验报告中的 ERROR 项')
+      return
+    }
     const revision = await resourcesApi.createRouteRevision(currentRoute.value.id)
     ElMessage.success(`已创建路线修订 r${revision.revisionNo}`)
   } catch (error) {
@@ -327,5 +351,38 @@ async function createRevision() {
   padding: 48px 16px;
   text-align: center;
   color: #909399;
+}
+
+.validation-panel {
+  margin-top: 16px;
+}
+
+.validation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.validation-issues {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.validation-issues li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #303133;
+}
+
+.validation-issues code {
+  color: #606266;
 }
 </style>
