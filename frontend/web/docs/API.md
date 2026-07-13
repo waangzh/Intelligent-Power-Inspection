@@ -77,8 +77,7 @@ type Permission =
   | 'record:export'      // 记录导出
   | 'workorder:view'     // 查看工单
   | 'workorder:create'   // 创建/转工单（管理员）
-  | 'workorder:assign'   // 指派改派（管理员）
-  | 'workorder:process'  // 现场处理（调度员）
+  | 'workorder:process'  // 接单与现场处理（调度员）
   | 'workorder:review'   // 复核关闭（管理员）
   | 'alarm:policy'       // 告警转工单策略（管理员，前端）
 ```
@@ -95,9 +94,9 @@ type Permission =
 | alarm:ack | ❌ | ✅ | ❌ |
 | record:export | ✅ | ✅ | ❌ |
 | robot / detection / user:manage | ✅ | ❌ | ❌ |
-| workorder:view | ✅ | ✅（仅自己的） | ❌ |
-| workorder:create / assign / review | ✅ | ❌ | ❌ |
-| workorder:process | ❌ | ✅ | ❌ |
+| workorder:view | ✅ | ✅（接单大厅 + 自己的） | ❌ |
+| workorder:create / review | ✅ | ❌ | ❌ |
+| workorder:process（含接单） | ❌ | ✅ | ❌ |
 | alarm:policy | ✅ | ❌ | ❌ |
 
 **路由守卫**：未登录 → `/login`；无权限 → `/403`  
@@ -470,9 +469,9 @@ interface Alarm {
 
 | 方法 | 说明 |
 |------|------|
-| `createFromAlarm(alarm, creator, assigneeName?)` | 从告警创建工单 |
+| `createFromAlarm(alarm, creator)` | 从告警创建工单（待接单，通知所有调度员） |
+| `claim(id)` | 调度员抢单接单 |
 | `updateStatus(id, status, extra?)` | 更新状态 |
-| `assign(id, assigneeName)` | 指派处理人 |
 | `getById(id)` / `getByAlarmId(alarmId)` | 查询 |
 
 **WorkOrderStatus**：`PENDING → PROCESSING → REVIEW → CLOSED`（或 `CANCELLED`）  
@@ -672,7 +671,7 @@ Content-Type: application/json
 | 告警 | GET | `/alarms` | `useAlarmStore.alarms` |
 | 告警 | POST | `/alarms/{id}/ack` | `acknowledge` |
 | 告警 | POST | `/alarms/ack-all` | `acknowledgeAll` |
-| 工单 | CRUD | `/work-orders` | `useWorkOrderStore` |
+| 工单 | CRUD + claim | `/work-orders`、`/work-orders/{id}/claim` | `useWorkOrderStore` |
 | 机器人 | CRUD | `/robots` | `useRobotStore` |
 | 机器人 | GET | `/robots/{id}/telemetry` | 查询当前遥测快照 |
 | 检测 | CRUD | `/detection-templates` | `useDetectionStore` |

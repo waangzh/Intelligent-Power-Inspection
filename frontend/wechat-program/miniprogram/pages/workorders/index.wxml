@@ -1,5 +1,5 @@
 <view class="container">
-  <page-header title="工单管理" description="告警转工单与闭环复核">
+  <page-header title="工单管理" description="调度员在接单大厅抢单，管理员复核关闭">
     <view slot="actions"><button size="mini" bindtap="goAlarms">从告警创建</button></view>
   </page-header>
 

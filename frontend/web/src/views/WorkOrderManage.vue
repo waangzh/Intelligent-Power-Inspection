@@ -2,13 +2,22 @@
   <div>
     <PageHeader
       title="工单管理"
-      description="管理员指派/改派与复核，调度员现场处置并提交复核"
+      description="管理员转工单与复核，调度员在接单大厅抢单并现场处置"
       :breadcrumbs="[{ label: '运维中心' }, { label: '工单管理' }]"
     >
       <template #actions>
         <el-button v-if="can('workorder:create')" @click="router.push('/alarms')">从告警创建</el-button>
       </template>
     </PageHeader>
+
+    <el-row v-if="role === 'DISPATCHER'" :gutter="12" style="margin-bottom: 12px">
+      <el-col :span="8" v-for="s in scopeCards" :key="s.key">
+        <el-card shadow="never" class="stat-card" :class="{ active: scopeFilter === s.key }" @click="scopeFilter = s.key">
+          <div class="stat-val">{{ s.value }}</div>
+          <div class="stat-lbl">{{ s.label }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
 
     <el-row :gutter="12" style="margin-bottom: 16px">
       <el-col :span="6" v-for="s in statusCards" :key="s.key">
@@ -46,15 +55,16 @@
         <el-table-column label="创建时间" width="160">
           <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="can('workorder:assign') || can('workorder:process') || can('workorder:review')" label="操作" width="240" fixed="right">
+        <el-table-column v-if="can('workorder:process') || can('workorder:review')" label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-if="can('workorder:assign') && canAssignOrder(row)"
+              v-if="canClaimOrder(row)"
               text
-              type="primary"
+              type="warning"
               size="small"
-              @click.stop="openAssign(row)"
-            >{{ assignActionLabel(row) }}</el-button>
+              :loading="claimingId === row.id"
+              @click.stop="submitClaim(row)"
+            >接单</el-button>
             <el-button
               v-if="canProcessOrder(row) && row.status === 'PROCESSING'"
               text
@@ -127,20 +137,6 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="assignVisible" :title="assignDialogTitle" width="420px">
-      <el-form label-width="88px" size="small">
-        <el-form-item label="调度员" required>
-          <el-select v-model="assignForm.userId" placeholder="选择处理人" style="width: 100%" filterable>
-            <el-option v-for="u in dispatchers" :key="u.id" :label="`${u.displayName}（${u.username}）`" :value="u.id" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="assignVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitAssign">确认指派</el-button>
-      </template>
-    </el-dialog>
-
     <el-dialog v-model="resolveVisible" title="提交现场处理结果" width="520px">
       <el-form :model="resolveForm" label-width="96px" size="small">
         <el-form-item label="故障类型" required>
@@ -195,7 +191,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import { useAuthStore } from '@/stores/auth'
-import { useUserStore } from '@/stores/user'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { usePermission } from '@/composables/usePermission'
 import type { WorkOrder, WorkOrderPriority, WorkOrderStatus } from '@/types/workOrder'
@@ -209,21 +204,18 @@ import { isWorkOrderUnassigned, workOrderAssigneeLabel } from '@/utils/workOrder
 
 const router = useRouter()
 const workOrderStore = useWorkOrderStore()
-const userStore = useUserStore()
 const authStore = useAuthStore()
 const { can, role } = usePermission()
 const statusFilter = ref<string>('ALL')
+const scopeFilter = ref<'ALL' | 'POOL' | 'MINE'>('ALL')
 const detailVisible = ref(false)
 const detail = ref<WorkOrder | null>(null)
 const resolveVisible = ref(false)
 const reviewVisible = ref(false)
-const assignVisible = ref(false)
 const resolvingId = ref('')
 const reviewingId = ref('')
-const assigningOrder = ref<WorkOrder | null>(null)
+const claimingId = ref('')
 const submitting = ref(false)
-
-const assignForm = reactive({ userId: '' })
 
 const resolveForm = reactive({
   faultType: '',
@@ -238,7 +230,27 @@ const reviewForm = reactive({
   comment: '',
 })
 
-const dispatchers = computed(() => userStore.users.filter((u) => u.role === 'DISPATCHER' && u.enabled !== false))
+function isMyOrder(order: WorkOrder) {
+  const me = authStore.user
+  if (!me) return false
+  return order.assigneeId === me.id || order.assigneeName === me.displayName
+}
+
+const dispatcherBaseOrders = computed(() => {
+  if (role.value !== 'DISPATCHER') return workOrderStore.orders
+  return workOrderStore.orders.filter((o) => isWorkOrderUnassigned(o) || isMyOrder(o))
+})
+
+const scopeCards = computed(() => {
+  const list = dispatcherBaseOrders.value
+  const pool = list.filter((o) => isWorkOrderUnassigned(o))
+  const mine = list.filter((o) => isMyOrder(o))
+  return [
+    { key: 'ALL' as const, label: '全部可见', value: list.length },
+    { key: 'POOL' as const, label: '接单大厅', value: pool.length },
+    { key: 'MINE' as const, label: '我的工单', value: mine.length },
+  ]
+})
 
 const statusCards = computed(() => {
   const orders = visibleOrders.value
@@ -252,34 +264,26 @@ const statusCards = computed(() => {
 })
 
 const visibleOrders = computed(() => {
-  let list = workOrderStore.orders
+  let list = role.value === 'DISPATCHER' ? dispatcherBaseOrders.value : workOrderStore.orders
   if (role.value === 'DISPATCHER') {
-    const me = authStore.user
-    if (!me) return []
-    list = list.filter((o) => o.assigneeId === me.id || o.assigneeName === me.displayName)
+    if (scopeFilter.value === 'POOL') {
+      list = list.filter((o) => isWorkOrderUnassigned(o))
+    } else if (scopeFilter.value === 'MINE') {
+      list = list.filter((o) => isMyOrder(o))
+    }
   }
   if (statusFilter.value === 'ALL') return list
   return list.filter((o) => o.status === statusFilter.value)
 })
 
-const assignDialogTitle = computed(() =>
-  assigningOrder.value && !isWorkOrderUnassigned(assigningOrder.value) ? '改派调度员' : '指派调度员',
-)
-
-function canAssignOrder(row: WorkOrder) {
-  return row.status === 'PENDING' || row.status === 'PROCESSING'
-}
-
-function assignActionLabel(row: WorkOrder) {
-  return row.status === 'PENDING' && isWorkOrderUnassigned(row) ? '指派' : '改派'
+function canClaimOrder(row: WorkOrder) {
+  return can('workorder:process') && row.status === 'PENDING' && isWorkOrderUnassigned(row)
 }
 
 function canProcessOrder(row: WorkOrder) {
   if (role.value !== 'DISPATCHER' || !can('workorder:process')) return false
   if (row.status !== 'PROCESSING') return false
-  const me = authStore.user
-  if (!me) return false
-  return row.assigneeId === me.id || row.assigneeName === me.displayName
+  return isMyOrder(row)
 }
 
 function locationLabel(row: WorkOrder) {
@@ -293,34 +297,15 @@ function openDetail(row: WorkOrder) {
   detailVisible.value = true
 }
 
-function openAssign(row: WorkOrder) {
-  assigningOrder.value = row
-  assignForm.userId = row.assigneeId || dispatchers.value.find((u) => u.displayName === row.assigneeName)?.id || ''
-  assignVisible.value = true
-}
-
-async function submitAssign() {
-  const dispatcher = dispatchers.value.find((u) => u.id === assignForm.userId)
-  if (!dispatcher) {
-    ElMessage.warning('请选择调度员')
-    return
-  }
-  const order = assigningOrder.value
-  if (!order) return
-  const isReassign = assignActionLabel(order) === '改派'
-  submitting.value = true
+async function submitClaim(row: WorkOrder) {
+  claimingId.value = row.id
   try {
-    await workOrderStore.assign(order.id, { id: dispatcher.id, name: dispatcher.displayName })
-    assignVisible.value = false
-    ElMessage.success(
-      isReassign
-        ? `已改派给 ${dispatcher.displayName}，工单保持处理中`
-        : `已指派给 ${dispatcher.displayName}，工单进入处理中`,
-    )
+    await workOrderStore.claim(row.id)
+    ElMessage.success('接单成功，工单已进入处理中')
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '指派失败')
+    ElMessage.error(e instanceof Error ? e.message : '接单失败，可能已被他人抢走')
   } finally {
-    submitting.value = false
+    claimingId.value = ''
   }
 }
 
@@ -404,9 +389,7 @@ function priorityType(p: WorkOrderPriority) {
 }
 
 onMounted(() => {
-  if (can('workorder:assign')) {
-    void userStore.loadUsers()
-  }
+  void workOrderStore.load()
 })
 </script>
 

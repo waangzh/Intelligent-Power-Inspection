@@ -23,7 +23,6 @@ public class PermissionService {
       Permission.RECORD_EXPORT,
       Permission.WORKORDER_VIEW,
       Permission.WORKORDER_CREATE,
-      Permission.WORKORDER_ASSIGN,
       Permission.WORKORDER_REVIEW
     ));
     ROLE_PERMISSIONS.put(UserRole.DISPATCHER, EnumSet.of(

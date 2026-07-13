@@ -15,7 +15,6 @@ export type Permission =
   | 'record:export'
   | 'workorder:view'
   | 'workorder:create'
-  | 'workorder:assign'
   | 'workorder:process'
   | 'workorder:review'
   | 'alarm:policy'
@@ -38,7 +37,6 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'record:export',
     'workorder:view',
     'workorder:create',
-    'workorder:assign',
     'workorder:review',
     'alarm:policy',
   ],
@@ -87,11 +85,11 @@ export function hasAnyPermission(role: UserRole | undefined, permissions: Permis
 export const ROLE_SUMMARIES: Record<UserRole, { title: string; scope: string }> = {
   ADMIN: {
     title: '系统治理者',
-    scope: '用户与策略配置、告警转工单、指派与复核；可应急急停，不执行日常巡检调度',
+    scope: '用户与策略配置、告警转工单与复核；可应急急停，不执行日常巡检调度',
   },
   DISPATCHER: {
     title: '值班运维者',
-    scope: '任务创建下发、告警确认处置、处理指派工单；不可改角色与复核关闭',
+    scope: '任务创建下发、告警确认处置、接单处理并提交复核；不可改角色与复核关闭',
   },
   VIEWER: {
     title: '监督查阅者',

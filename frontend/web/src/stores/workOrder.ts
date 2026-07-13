@@ -10,7 +10,6 @@ import type {
   WorkOrderReviewForm,
   WorkOrderStatus,
 } from '@/types/workOrder'
-import { useNotificationStore } from '@/stores/notification'
 import { useSiteStore } from '@/stores/site'
 import { uid } from '@/utils/storage'
 import { normalizeWorkOrder } from '@/utils/workOrder'
@@ -79,7 +78,7 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
   async function createFromAlarm(
     alarm: Alarm,
     creator: { id: string; name: string },
-    options?: { assigneeName?: string; assigneeId?: string; autoConverted?: boolean },
+    options?: { autoConverted?: boolean },
   ) {
     if (getByAlarmId(alarm.id)) {
       throw new Error('该告警已有关联工单')
@@ -96,8 +95,6 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
       alarmId: alarm.id,
       status: 'PENDING',
       priority,
-      assigneeName: options?.assigneeName,
-      assigneeId: options?.assigneeId,
       createdById: creator.id,
       createdByName: creator.name,
       location,
@@ -107,18 +104,27 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
     }
     orders.value.unshift(order)
 
-    const saved = await resourcesApi.createWorkOrderFromAlarm(alarm.id, options?.assigneeName)
+    const saved = await resourcesApi.createWorkOrderFromAlarm(alarm.id)
     const merged: WorkOrder = normalizeWorkOrder({
       ...saved,
-      assigneeName: options?.assigneeName,
-      assigneeId: options?.assigneeId,
       location,
       autoConverted: options?.autoConverted,
     })
     updateLocalOrder(merged)
+    return merged
+  }
 
-    const ntf = useNotificationStore()
-    ntf.push(creator.id, 'WORKORDER', '工单已创建', merged.title, '/workorders')
+  async function claim(id: string) {
+    const order = orders.value.find((o) => o.id === id)
+    if (!order) return
+    const saved = await resourcesApi.claimWorkOrder(id)
+    const merged = {
+      ...saved,
+      location: order.location,
+      resolutionForm: order.resolutionForm,
+      reviewForm: order.reviewForm,
+    }
+    updateLocalOrder(normalizeWorkOrder(merged))
     return merged
   }
 
@@ -165,29 +171,6 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
     })
   }
 
-  async function assign(id: string, assignee: { id: string; name: string }) {
-    const order = orders.value.find((o) => o.id === id)
-    if (!order) return
-    order.assigneeName = assignee.name
-    order.assigneeId = assignee.id
-    if (order.status === 'PENDING' || order.status === 'PROCESSING') {
-      order.status = 'PROCESSING'
-    }
-    order.updatedAt = new Date().toISOString()
-    const saved = await resourcesApi.assignWorkOrder(id, { name: assignee.name, id: assignee.id })
-    const merged = {
-      ...saved,
-      assigneeId: assignee.id,
-      assigneeName: assignee.name,
-      status: (saved.status as WorkOrderStatus) || order.status,
-      location: order.location,
-      resolutionForm: order.resolutionForm,
-      reviewForm: order.reviewForm,
-    }
-    updateLocalOrder(merged)
-    return merged
-  }
-
   function updateLocalOrder(order: WorkOrder) {
     const idx = orders.value.findIndex((o) => o.id === order.id)
     if (idx >= 0) orders.value[idx] = { ...orders.value[idx], ...order }
@@ -201,9 +184,9 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
     getById,
     getByAlarmId,
     createFromAlarm,
+    claim,
     updateStatus,
     submitResolution,
     submitReview,
-    assign,
   }
 })

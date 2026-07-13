@@ -152,7 +152,10 @@ public class AgentToolService {
     }
     order.put("status", "PENDING");
     order.put("priority", firstText(payload.get("priority"), "MEDIUM"));
-    order.put("assigneeName", firstText(payload.get("assigneeName"), user.getDisplayName()));
+    String assigneeName = text(payload.get("assigneeName"));
+    if (assigneeName != null && !assigneeName.isBlank()) {
+      order.put("assigneeName", assigneeName);
+    }
     order.put("createdById", user.getId());
     order.put("createdByName", user.getDisplayName());
     order.put("createdAt", now);

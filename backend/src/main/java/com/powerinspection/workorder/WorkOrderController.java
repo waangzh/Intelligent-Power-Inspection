@@ -10,7 +10,10 @@ import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
 import com.powerinspection.user.UserEntity;
+import com.powerinspection.user.UserRepository;
+import com.powerinspection.user.UserRole;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,12 +32,20 @@ public class WorkOrderController {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
   private final NotificationService notificationService;
+  private final UserRepository userRepository;
 
-  public WorkOrderController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, NotificationService notificationService) {
+  public WorkOrderController(
+    DataStoreService dataStore,
+    PermissionService permissionService,
+    CurrentUser currentUser,
+    NotificationService notificationService,
+    UserRepository userRepository
+  ) {
     this.dataStore = dataStore;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.notificationService = notificationService;
+    this.userRepository = userRepository;
   }
 
   @GetMapping
@@ -56,7 +67,9 @@ public class WorkOrderController {
     body.putIfAbsent("status", "PENDING");
     body.putIfAbsent("createdAt", Instant.now().toString());
     body.put("updatedAt", Instant.now().toString());
-    return ApiResponse.ok(dataStore.upsert(DataCategory.WORK_ORDER, body));
+    Map<String, Object> saved = dataStore.upsert(DataCategory.WORK_ORDER, body);
+    notifyDispatchersNewWorkOrder(saved);
+    return ApiResponse.ok(saved);
   }
 
   @PostMapping("/from-alarm/{alarmId}")
@@ -73,26 +86,45 @@ public class WorkOrderController {
     String severity = String.valueOf(alarm.get("severity"));
     String priority = "CRITICAL".equals(severity) ? "URGENT" : "HIGH".equals(severity) ? "HIGH" : "MEDIUM";
     String now = Instant.now().toString();
-    Map<String, Object> order = new java.util.LinkedHashMap<>();
+    Map<String, Object> order = new LinkedHashMap<>();
     order.put("id", Ids.next("wo"));
     order.put("title", "告警处置：" + String.valueOf(alarm.get("message")).substring(0, Math.min(24, String.valueOf(alarm.get("message")).length())));
     order.put("description", alarm.get("message"));
     order.put("alarmId", alarmId);
     order.put("status", "PENDING");
     order.put("priority", priority);
-    order.put("assigneeName", body != null && body.get("assigneeName") != null ? body.get("assigneeName") : user.getDisplayName());
     order.put("createdById", user.getId());
     order.put("createdByName", user.getDisplayName());
     order.put("createdAt", now);
     order.put("updatedAt", now);
     Map<String, Object> saved = dataStore.upsert(DataCategory.WORK_ORDER, order);
-    notificationService.push(user.getId(), "WORKORDER", "工单已创建", String.valueOf(order.get("title")), "/workorders");
+    notifyDispatchersNewWorkOrder(saved);
     return ApiResponse.ok(saved);
+  }
+
+  @PostMapping("/{id}/claim")
+  public ApiResponse<Map<String, Object>> claim(@PathVariable String id) {
+    permissionService.require(currentUser.get(), Permission.WORKORDER_PROCESS);
+    UserEntity user = currentUser.get();
+    Map<String, Object> order = dataStore.get(DataCategory.WORK_ORDER, id);
+    if (!"PENDING".equals(String.valueOf(order.get("status")))) {
+      throw ApiException.badRequest("仅待处理工单可接单");
+    }
+    if (!isUnassigned(order)) {
+      throw ApiException.badRequest("工单已被其他调度员接单");
+    }
+    Map<String, Object> patch = new LinkedHashMap<>();
+    patch.put("assigneeId", user.getId());
+    patch.put("assigneeName", user.getDisplayName());
+    patch.put("status", "PROCESSING");
+    patch.put("claimedAt", Instant.now().toString());
+    patch.put("updatedAt", Instant.now().toString());
+    return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, patch));
   }
 
   @PatchMapping("/{id}")
   public ApiResponse<Map<String, Object>> update(@PathVariable String id, @RequestBody Map<String, Object> body) {
-    permissionService.requireAny(currentUser.get(), Permission.WORKORDER_PROCESS, Permission.WORKORDER_ASSIGN);
+    permissionService.require(currentUser.get(), Permission.WORKORDER_PROCESS);
     body.put("updatedAt", Instant.now().toString());
     return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, body));
   }
@@ -112,7 +144,7 @@ public class WorkOrderController {
     } else {
       permissionService.require(currentUser.get(), Permission.WORKORDER_PROCESS);
     }
-    Map<String, Object> patch = new java.util.LinkedHashMap<>();
+    Map<String, Object> patch = new LinkedHashMap<>();
     patch.put("status", status);
     patch.put("updatedAt", Instant.now().toString());
     if (body.get("resolution") != null) {
@@ -124,9 +156,27 @@ public class WorkOrderController {
     return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, patch));
   }
 
-  @PatchMapping("/{id}/assign")
-  public ApiResponse<Map<String, Object>> assign(@PathVariable String id, @RequestBody Map<String, Object> body) {
-    permissionService.require(currentUser.get(), Permission.WORKORDER_ASSIGN);
-    return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, Map.of("assigneeName", body.get("assigneeName"), "updatedAt", Instant.now().toString())));
+  private void notifyDispatchersNewWorkOrder(Map<String, Object> order) {
+    String title = String.valueOf(order.get("title"));
+    userRepository.findByRoleAndEnabledTrue(UserRole.DISPATCHER)
+      .forEach(dispatcher -> notificationService.push(
+        dispatcher.getId(),
+        "WORKORDER",
+        "新工单待接单",
+        title,
+        "/workorders"
+      ));
+  }
+
+  private boolean isUnassigned(Map<String, Object> order) {
+    Object assigneeId = order.get("assigneeId");
+    if (assigneeId != null && !String.valueOf(assigneeId).isBlank()) {
+      return false;
+    }
+    String assigneeName = order.get("assigneeName") != null ? String.valueOf(order.get("assigneeName")).trim() : "";
+    if (assigneeName.isEmpty()) {
+      return true;
+    }
+    return assigneeName.equals(String.valueOf(order.get("createdByName")));
   }
 }

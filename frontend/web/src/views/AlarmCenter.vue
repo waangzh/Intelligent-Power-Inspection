@@ -176,7 +176,7 @@ async function createWorkOrder(alarm: Alarm) {
   try {
     const order = await workOrderStore.createFromAlarm(alarm, { id: user.id, name: user.displayName })
     if (!alarm.acknowledged) alarmStore.acknowledge(alarm.id)
-    ElMessage.success(`工单 ${order.id} 已创建，请前往工单管理指派调度员`)
+    ElMessage.success(`工单 ${order.id} 已创建，已通知调度员接单`)
     router.push('/workorders')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '创建失败')

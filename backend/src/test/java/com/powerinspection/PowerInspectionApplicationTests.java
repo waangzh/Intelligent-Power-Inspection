@@ -384,11 +384,20 @@ class PowerInspectionApplicationTests {
     mockMvc.perform(post("/api/v1/alarms/ack-all").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk());
 
-    String workOrderId = postAndReadId("/api/v1/work-orders/from-alarm/alarm_seed_003", adminToken, json("assigneeName", "张调度"));
+    String workOrderId = postAndReadId("/api/v1/work-orders/from-alarm/alarm_seed_003", adminToken, "{}");
 
     mockMvc.perform(get("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.alarmId").value("alarm_seed_003"));
+      .andExpect(jsonPath("$.data.alarmId").value("alarm_seed_003"))
+      .andExpect(jsonPath("$.data.status").value("PENDING"));
+
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.assigneeName").value("张调度"))
+      .andExpect(jsonPath("$.data.status").value("PROCESSING"));
+
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isBadRequest());
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId)
         .header("Authorization", bearer(dispatcherToken))
@@ -396,13 +405,6 @@ class PowerInspectionApplicationTests {
         .content(json("priority", "LOW")))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.priority").value("LOW"));
-
-    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/assign")
-        .header("Authorization", bearer(adminToken))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("assigneeName", "张调度")))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.assigneeName").value("张调度"));
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
         .header("Authorization", bearer(adminToken))
@@ -416,10 +418,7 @@ class PowerInspectionApplicationTests {
         .content("{}"))
       .andExpect(status().isForbidden());
 
-    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/assign")
-        .header("Authorization", bearer(dispatcherToken))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("assigneeName", "李观察")))
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(adminToken)))
       .andExpect(status().isForbidden());
 
     mockMvc.perform(get("/api/v1/notifications").header("Authorization", bearer(adminToken)))

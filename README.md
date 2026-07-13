@@ -13,7 +13,7 @@
 - Web 端通过 Vite 代理访问后端 `/api/v1` 和 `/ws`。
 - Web 端 **巡检规划**（`/routes`）已切换为 **ROS 建图路线标注**：本地上传 `.yaml` + `.pgm`，标注起点/巡检点/方向，保存 `route.json` v2（`executorJson`）到后端，并可下载供机器人执行器加载；**保存到平台**时保留左侧列表的平台路线名称，不会覆盖为默认的「本地巡逻路线」。
 - Web 端 **实时监控**（`/monitor`）复用路线中的 ROS 地图快照与机器人位置叠加展示（`RosSlamMonitorMap`），需先在巡检规划中保存带 `map_snapshot` 的路线。
-- Web 端 **工单管理**按角色分流：管理员转工单、指派/改派、复核；调度员处理工单并提交复核（详见下文「工单流转」）。
+- Web 端 **工单管理**按角色分流：管理员转工单与复核；调度员在接单大厅抢单并现场处置（详见下文「工单流转」）。
 - Web 端 **告警转工单策略**配置在「个人中心 → 偏好设置」，仅管理员可见；**消息中心**与**告警中心**入口在顶部栏图标，不在左侧导航重复出现。
 - 小程序端默认使用本地 mock；需要接真实后端时修改 `frontend/wechat-program/miniprogram/config/api.js`。
 - 后端默认使用 MySQL，测试/演示可使用 H2。
@@ -410,8 +410,8 @@ Use baseline() or set baselineOnMigrate to true
 
 | 用户名 | 密码 | 角色 | 说明 |
 | --- | --- | --- | --- |
-| `admin` | `Admin@123` | `ADMIN` | 管理员：用户/策略配置、告警转工单、指派/改派、复核关闭；可应急急停，不日常调度任务 |
-| `dispatcher` | `Disp@123` | `DISPATCHER` | 调度员：任务创建下发、告警确认、处理指派工单并提交复核 |
+| `admin` | `Admin@123` | `ADMIN` | 管理员：用户/策略配置、告警转工单、复核关闭；可应急急停，不日常调度任务 |
+| `dispatcher` | `Disp@123` | `DISPATCHER` | 调度员：任务创建下发、告警确认、接单处理工单并提交复核 |
 | `viewer` | `View@123` | `VIEWER` | 观察员：只读查看监控、告警、任务与记录 |
 
 ## Web 导航与入口
@@ -428,21 +428,19 @@ Use baseline() or set baselineOnMigrate to true
 Web 端在 `frontend/web/src/utils/permission.ts` 中细化了工单相关权限，流程如下：
 
 ```text
-告警转工单 → 待处理（待指派）
-    ↓ 管理员「指派」
-处理中（调度员开始处置）
+告警转工单 → 待处理（待接单，广播通知所有调度员）
+    ↓ 调度员「接单」（抢单）
+处理中（接单者现场处置）
     ↓ 调度员「提交复核」
 待复核
     ↓ 管理员「确认复核」
 已关闭 / 退回处理中
-
-处理中 → 管理员「改派」→ 仍为处理中（仅更换处理人）
 ```
 
 | 角色 | 可做 | 不可做 |
 | --- | --- | --- |
-| `ADMIN` | 告警转工单、指派/改派、复核关闭 | 接单、现场处理、提交复核 |
-| `DISPATCHER` | 处理指派给自己的工单、提交复核 | 转工单、指派/改派、复核 |
+| `ADMIN` | 告警转工单、复核关闭 | 接单、现场处理、提交复核 |
+| `DISPATCHER` | 接单大厅抢单、处理自己的工单、提交复核 | 转工单、复核关闭 |
 | `VIEWER` | — | 无工单操作权限 |
 
 | 角色 | 任务调度 | 告警确认 | 应急急停 |
@@ -453,8 +451,8 @@ Web 端在 `frontend/web/src/utils/permission.ts` 中细化了工单相关权限
 
 说明：
 
-- 管理员指派后工单**直接进入「处理中」**，无需调度员再点「接单」。
-- 新建工单时后端不再把创建人默认写成处理人；历史脏数据会在加载时归一化。
+- 新建工单后**通知所有调度员**，进入接单大厅；首个点击「接单」的调度员成为处理人。
+- 新建工单时后端不把创建人默认写成处理人；历史脏数据会在加载时归一化。
 - 工单支持结构化现场处理表单与管理员复核表单；地点信息来自关联告警/站点。
 - 告警转工单策略（按级别自动/人工）在 **个人中心 → 偏好设置**，仅 `ADMIN` 可配置。
 
@@ -535,16 +533,16 @@ y = origin_y + (image_height - pixel_y) * resolution
 
 Web 管理端在 `frontend/web/src/utils/permission.ts` 中额外定义了工单与告警策略相关权限，用于菜单与按钮级控制：
 
-- `workorder:view` / `workorder:create` / `workorder:assign` / `workorder:process` / `workorder:review`
+- `workorder:view` / `workorder:create` / `workorder:process` / `workorder:review`
 - `alarm:policy`
 
 | 角色 | Web 工单与策略 |
 | --- | --- |
-| `ADMIN` | 查看/创建/指派/改派/复核工单；配置告警转工单策略 |
-| `DISPATCHER` | 查看并处理指派给自己的工单 |
+| `ADMIN` | 查看/创建/复核工单；配置告警转工单策略 |
+| `DISPATCHER` | 查看接单大厅、抢单并处理自己的工单 |
 | `VIEWER` | 无工单相关权限 |
 
-> 说明：工单 API 目前仍复用后端的 `task:dispatch` 鉴权；Web 端通过前端权限与业务逻辑约束管理员/调度员分工，生产环境建议在 `WorkOrderController` 中补充后端级权限校验。
+> 说明：工单 API 已在 `WorkOrderController` 按 `workorder:*` 权限校验；Web/小程序前端同步约束角色可见范围与按钮。
 
 ## API 与实时推送
 
@@ -580,7 +578,7 @@ Authorization: Bearer <token>
 | 路线检查点 | `/routes`、`/routes/{id}`、`/routes/{id}/checkpoints`；`PATCH /routes/{id}` 可写入 `executorJson`（ROS route.json v2） |
 | 任务 | `/tasks`、`/tasks/{id}`、`/tasks/{id}/dispatch`、`/tasks/{id}/pause`、`/tasks/{id}/resume`、`/tasks/{id}/takeover`、`/tasks/{id}/cancel`、`/tasks/{id}/events` |
 | 告警 | `/alarms`、`/alarms/{id}/ack`、`/alarms/ack-all` |
-| 工单 | `/work-orders`、`/work-orders/{id}`、`/work-orders/from-alarm/{alarmId}` |
+| 工单 | `/work-orders`、`/work-orders/{id}`、`/work-orders/from-alarm/{alarmId}`、`/work-orders/{id}/claim` |
 | 机器人 | `/robots`、`/robots/{id}`、`/robots/{id}/telemetry` |
 | 检测模板 | `/detection-templates`、`/detection-templates/{id}` |
 | 记录 | `/records`、`/records/export` |
@@ -739,7 +737,7 @@ http://127.0.0.1:5173
 - 后端只校验 route.json v2 的结构与引用关系，不保存 YAML/PGM，也不复算地图 free/unknown/occupied 像素。
 - Web 端已移除 LingBot 建图页面；后端与 `ai-services/lingbot-map-service` 仍保留，供其他端或设备侧接入。
 - LocateAnything 已接入真实 Python 模型服务并由 Spring Boot HTTP 网关调用；LingBot-Map 默认 mock，已支持通过外部命令适配真实建图。
-- 工单角色分工目前以 Web 前端权限为主，后端工单 API 尚未按 `workorder:*` 细分鉴权。
-- 微信小程序端尚未同步 Web 端的工单流程与导航调整。
+- 工单流转已支持后端 `POST /work-orders/{id}/claim` 抢单与调度员广播通知；并发抢单场景下以后端校验为准。
+- 微信小程序端已同步接单 API，流程与 Web 端基本一致。
 - 生产级日志、审计、监控、部署流水线和权限审计细节仍需进一步完善。
 - `backend/target/`、`frontend/web/dist/`、`frontend/web/node_modules/`、`runtime-storage/`、模型权重和点云/mesh 等产物不应提交。

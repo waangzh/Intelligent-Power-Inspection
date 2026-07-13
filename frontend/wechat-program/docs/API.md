@@ -118,7 +118,7 @@ type Permission =
   | 'site:edit' | 'route:edit' | 'alarm:ack'
   | 'robot:manage' | 'detection:manage'
   | 'user:manage' | 'record:export'
-  | 'workorder:view' | 'workorder:create' | 'workorder:assign' | 'workorder:process' | 'workorder:review'
+  | 'workorder:view' | 'workorder:create' | 'workorder:process' | 'workorder:review'
   | 'alarm:policy'
 ```
 
@@ -179,8 +179,9 @@ type Permission =
 | 方法 | HTTP | 说明 |
 |------|------|------|
 | `getWorkOrders()` | `GET /work-orders` | 工单列表 |
-| `createWorkOrderFromAlarm(alarm, creator)` | `POST /work-orders` | 从告警创建 |
-| `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}` | 状态流转 |
+| `createWorkOrderFromAlarm(alarm, creator)` | `POST /work-orders/from-alarm/{alarmId}` | 从告警创建（待接单） |
+| `claimWorkOrder(id)` | `POST /work-orders/{id}/claim` | 调度员抢单 |
+| `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}/status` | 状态流转 |
 
 状态：`PENDING → PROCESSING → REVIEW → CLOSED`
 
@@ -282,7 +283,6 @@ type Permission =
 | API | 状态 |
 |-----|------|
 | `toggleUserEnabled` | 占位，web 端亦未实现 |
-| `workOrder.assign` | Store 有方法，UI 未暴露 |
 
 ---
 

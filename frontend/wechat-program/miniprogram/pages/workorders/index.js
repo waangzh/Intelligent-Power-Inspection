@@ -26,7 +26,7 @@ Page({
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/workorders/index')) return
-    if (!app.requirePermission('task:dispatch')) return
+    if (!app.requirePermission('workorder:view')) return
     this.load()
   },
 
@@ -69,7 +69,17 @@ Page({
   closeDetail() { this.setData({ showDetail: false }) },
 
   accept(e) {
-    this.updateStatus(e.currentTarget.dataset.id, 'PROCESSING')
+    this.claim(e.currentTarget.dataset.id)
+  },
+
+  async claim(id) {
+    try {
+      await api.claimWorkOrder(id)
+      wx.showToast({ title: '接单成功' })
+      this.load()
+    } catch (err) {
+      wx.showToast({ title: err.message || '接单失败', icon: 'none' })
+    }
   },
 
   openResolve(e) {

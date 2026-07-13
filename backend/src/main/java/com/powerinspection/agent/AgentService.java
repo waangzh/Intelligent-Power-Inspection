@@ -265,8 +265,7 @@ public class AgentService {
         "alarmId", alarm.get("id"),
         "title", "Agent 建议处置：" + abbreviate(firstText(alarm.get("message"), "巡检异常"), 24),
         "description", firstText(analysis.cause(), alarm.get("message")),
-        "priority", priority,
-        "assigneeName", user.getDisplayName()
+        "priority", priority
       );
       saveAction(session, run, "CREATE_WORK_ORDER_DRAFT", "创建工单草稿", "根据 Agent 研判创建 PENDING 工单，等待人工处理。", payload);
     }
