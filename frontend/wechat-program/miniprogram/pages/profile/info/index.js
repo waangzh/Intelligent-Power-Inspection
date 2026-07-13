@@ -70,10 +70,6 @@ Page({
     else wx.navigateTo({ url })
   },
 
-  goMore() {
-    wx.navigateTo({ url: '/pages/more/index' })
-  },
-
   goNotifications() {
     wx.navigateTo({ url: '/pages/notifications/index' })
   },

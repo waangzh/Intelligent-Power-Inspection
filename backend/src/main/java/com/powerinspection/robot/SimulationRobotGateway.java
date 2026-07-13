@@ -4,9 +4,11 @@ import com.powerinspection.common.ApiException;
 import com.powerinspection.route.RouteExecutorSupport;
 import java.util.List;
 import java.util.Map;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 @Service
+@ConditionalOnProperty(prefix = "app.robot", name = "mode", havingValue = "simulation", matchIfMissing = true)
 public class SimulationRobotGateway implements RobotGateway {
   @Override
   public void dispatchTask(Map<String, Object> robot, Map<String, Object> task, Map<String, Object> route) {
