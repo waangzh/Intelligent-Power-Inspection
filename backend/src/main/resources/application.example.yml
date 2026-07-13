@@ -43,10 +43,9 @@ app:
       model: ${APP_MODEL_LLM_MODEL:gpt-4o-mini}
       timeout-seconds: ${APP_MODEL_LLM_TIMEOUT_SECONDS:60}
   robot:
-    mode: ${APP_ROBOT_MODE:http}
+    mode: ${APP_ROBOT_MODE:simulation}
     bridge-base-url: ${APP_ROBOT_BRIDGE_URL:http://127.0.0.1:8000}
     robot-id: ${APP_ROBOT_ID:robot_001}
     poll-interval-ms: ${APP_ROBOT_POLL_MS:2000}
     timeout-seconds: ${APP_ROBOT_TIMEOUT_SECONDS:5}
     token: ${APP_ROBOT_BRIDGE_TOKEN:}
-    allow-registration: false

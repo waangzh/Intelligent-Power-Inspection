@@ -15,13 +15,14 @@ app:
     secret: test-secret-for-power-inspection
     ttl-seconds: 3600
   cors:
-    allowed-origin-patterns:
-      - http://localhost:*
-      - http://127.0.0.1:*
-      - http://192.168.*:*
-      - http://169.254.*:*
+    allowed-origins:
+      - http://localhost:5173
+      - http://127.0.0.1:5173
   model:
     mode: mock
+  agent:
+    orchestration:
+      auto-execution-enabled: true
   robot:
     mode: simulation
     allow-registration: false

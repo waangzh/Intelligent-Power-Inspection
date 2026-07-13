@@ -23,7 +23,11 @@ public class PermissionService {
       Permission.RECORD_EXPORT,
       Permission.WORKORDER_VIEW,
       Permission.WORKORDER_CREATE,
-      Permission.WORKORDER_REVIEW
+      Permission.WORKORDER_REVIEW,
+      Permission.AGENT_VIEW,
+      Permission.AGENT_RUN,
+      Permission.AGENT_APPROVE,
+      Permission.AGENT_ADMIN
     ));
     ROLE_PERMISSIONS.put(UserRole.DISPATCHER, EnumSet.of(
       Permission.TASK_VIEW,
@@ -35,7 +39,10 @@ public class PermissionService {
       Permission.ALARM_ACK,
       Permission.RECORD_EXPORT,
       Permission.WORKORDER_VIEW,
-      Permission.WORKORDER_PROCESS
+      Permission.WORKORDER_PROCESS,
+      Permission.AGENT_VIEW,
+      Permission.AGENT_RUN,
+      Permission.AGENT_APPROVE
     ));
     ROLE_PERMISSIONS.put(UserRole.VIEWER, EnumSet.of(Permission.TASK_VIEW));
   }

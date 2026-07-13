@@ -15,9 +15,12 @@ public enum Permission {
   RECORD_EXPORT("record:export"),
   WORKORDER_VIEW("workorder:view"),
   WORKORDER_CREATE("workorder:create"),
-  WORKORDER_ASSIGN("workorder:assign"),
   WORKORDER_PROCESS("workorder:process"),
-  WORKORDER_REVIEW("workorder:review");
+  WORKORDER_REVIEW("workorder:review"),
+  AGENT_VIEW("agent:view"),
+  AGENT_RUN("agent:run"),
+  AGENT_APPROVE("agent:approve"),
+  AGENT_ADMIN("agent:admin");
 
   private final String value;
 

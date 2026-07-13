@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "frame_id": "map",
+  "active_route_id": "route_001",
+  "start_pose": { "name": "start", "pose": { "x": 1, "y": 1, "yaw": 0 } },
+  "targets": [{ "id": "target_001", "name": "target 1", "pose": { "x": 2, "y": 2, "yaw": 0 }, "aliases": ["A"] }],
+  "routes": [{ "id": "route_001", "name": "route", "target_ids": ["target_001"], "loop": { "wait_sec": 0, "max_cycles": 0 }, "goal_timeout_sec": 120, "max_retries_per_checkpoint": 0, "failure_policy": "abort" }],
+  "schedules": []
+}

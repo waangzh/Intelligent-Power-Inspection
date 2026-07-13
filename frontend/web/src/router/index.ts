@@ -71,7 +71,7 @@ const router = createRouter({
           path: 'agents',
           name: 'Agents',
           component: () => import('@/views/AgentDisposition.vue'),
-          meta: { title: '巡检处置 Agent', requiresAuth: true, permission: 'task:dispatch', breadcrumbs: [{ label: '运维中心' }, { label: '巡检处置 Agent' }] },
+          meta: { title: '巡检处置 Agent', requiresAuth: true, permission: 'agent:view', breadcrumbs: [{ label: '运维中心' }, { label: '巡检处置 Agent' }] },
         },
         {
           path: 'sites',

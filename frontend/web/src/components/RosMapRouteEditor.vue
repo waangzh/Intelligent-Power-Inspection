@@ -2,11 +2,11 @@
   <div class="ros-route-editor" @dragenter.prevent @dragover.prevent @drop.prevent="onDrop">
     <section class="workspace">
       <div class="toolbar">
-        <input ref="yamlInputRef" type="file" accept=".yaml,.yml,text/yaml" hidden @change="onYamlChange" />
+        <input ref="yamlInputRef" type="file" accept=".yaml,.yml,.pgm,text/yaml,image/x-portable-graymap" multiple hidden @change="onMapFilesChange" />
         <input ref="pgmInputRef" type="file" accept=".pgm,image/x-portable-graymap" hidden @change="onPgmChange" />
         <input ref="jsonInputRef" type="file" accept=".json,application/json" hidden @change="onJsonChange" />
-        <el-button size="small" @click="yamlInputRef?.click()">YAML</el-button>
-        <el-button size="small" @click="pgmInputRef?.click()">PGM</el-button>
+        <el-button size="small" @click="yamlInputRef?.click()">YAML + PGM</el-button>
+        <el-button size="small" @click="pgmInputRef?.click()">仅 PGM</el-button>
         <el-button size="small" @click="jsonInputRef?.click()">导入 JSON</el-button>
         <el-divider direction="vertical" />
         <el-button size="small" @click="fitToScreen">适配</el-button>
@@ -27,8 +27,7 @@
           @wheel="onWheel"
           @contextmenu.prevent
         />
-        <div v-if="mapLoading" class="map-empty">正在加载平台地图…</div>
-        <div v-else-if="!mapLoaded" class="map-empty">拖入或点击上方按钮加载 YAML + PGM 地图</div>
+        <div v-if="!mapLoaded" class="map-empty">拖入或点击上方按钮加载 YAML + PGM 地图</div>
       </div>
 
       <div class="hud">
@@ -38,6 +37,7 @@
     </section>
 
     <aside class="sidebar">
+      <el-alert v-if="isLegacyDraft" type="warning" :closable="false" title="旧版草稿：保存后将转换为 v3，才能创建路线修订" />
       <el-tabs v-model="activeTab" class="config-tabs">
         <el-tab-pane label="巡检点" name="targets">
           <div class="tab-toolbar">
@@ -114,7 +114,7 @@
             <label>路线名称<el-input v-model="form.routeName" size="small" @change="syncForm" /></label>
             <div class="grid-2">
               <label>路线 ID<el-input v-model="form.routeId" size="small" @change="onRouteIdChange" /></label>
-              <label>默认路线<el-input v-model="form.activeRouteId" size="small" @change="syncForm" /></label>
+              <label>默认路线<el-input :model-value="form.routeId" size="small" disabled /></label>
             </div>
             <div class="grid-2">
               <label>超时(s)<el-input-number v-model="form.goalTimeout" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
@@ -153,21 +153,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { resourcesApi } from '@/api/resources'
 import { useRosMapRouteEditor } from '@/composables/useRosMapRouteEditor'
+import type { MapAssetFiles } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
 import { downloadRouteJson } from '@/utils/routeExecutorJson'
+import { rosMapImageFileName } from '@/utils/rosMap'
 
 const props = defineProps<{
   initialJson?: RouteExecutorDocument | null
-  mapId?: string | null
   defaultRouteId?: string
-  defaultRouteName?: string
+  mapId?: string | null
 }>()
 
 const emit = defineEmits<{
   change: [doc: RouteExecutorDocument]
+  mapFilesChange: [files: MapAssetFiles]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -176,16 +179,18 @@ const yamlInputRef = ref<HTMLInputElement | null>(null)
 const pgmInputRef = ref<HTMLInputElement | null>(null)
 const jsonInputRef = ref<HTMLInputElement | null>(null)
 const activeTab = ref('targets')
+const yamlSourceFile = ref<File | null>(null)
+const pgmSourceFile = ref<File | null>(null)
+let mapLoadVersion = 0
 
 const editor = useRosMapRouteEditor(canvasRef, wrapRef, {
-  initialJson: toRef(props, 'initialJson'),
-  mapId: toRef(props, 'mapId'),
+  initialJson: props.initialJson,
   defaultRouteId: props.defaultRouteId,
-  defaultRouteName: props.defaultRouteName,
   onChange: (doc) => emit('change', doc),
 })
 
 const {
+  map,
   form,
   mode,
   targets,
@@ -193,6 +198,7 @@ const {
   cursorInfo,
   mapInfo,
   jsonPreview,
+  isLegacyDraft,
   targetStatus,
   setMode,
   fitToScreen,
@@ -202,6 +208,7 @@ const {
   applyPgmBuffer,
   importRouteJson,
   exportDocument,
+  setMapAssetIdentity,
   onFormFieldChange,
   selectTarget,
   orientTarget,
@@ -213,13 +220,9 @@ const {
   handleDroppedFiles,
   onMouseDown,
   onWheel,
-  needsMapUpload,
-  getMapUploadPayload,
-  markMapSynced,
-  mapLoading,
 } = editor
 
-const mapLoaded = computed(() => mapInfo.value.includes('px'))
+const mapLoaded = computed(() => Boolean(map.pixels && map.width && map.height))
 
 const selectedTarget = computed(() =>
   targets.value.find((t) => t.id === selectedTargetId.value) ?? null,
@@ -234,19 +237,95 @@ function onRouteIdChange() {
   emit('change', exportDocument())
 }
 
-async function onYamlChange(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  applyYamlText(await file.text(), file.name)
+function rememberMapFiles(files: FileList | File[]) {
+  const selected = Array.from(files)
+  const yaml = selected.find((file) => /\.ya?ml$/i.test(file.name))
+  const pgm = selected.find((file) => /\.pgm$/i.test(file.name))
+  if (yaml) yamlSourceFile.value = yaml
+  if (pgm) pgmSourceFile.value = pgm
+  const expectedPgmName = rosMapImageFileName(map.image).toLowerCase()
+  if (pgmSourceFile.value && pgmSourceFile.value.name.toLowerCase() !== expectedPgmName) {
+    pgmSourceFile.value = null
+  }
+  if (yamlSourceFile.value && pgmSourceFile.value) {
+    emit('mapFilesChange', { yaml: yamlSourceFile.value, pgm: pgmSourceFile.value })
+  }
+}
+
+async function syncMapIdentity(imageSha256?: string) {
+  if (!map.yamlName || !map.width || !map.height) return
+  const source = pgmSourceFile.value
+  const hash = imageSha256 ?? (source ? await sha256(await source.arrayBuffer()) : '')
+  setMapAssetIdentity({
+    yaml: map.yamlName,
+    image: map.image,
+    resolution: map.resolution,
+    origin: [...map.origin] as [number, number, number],
+    width: map.width,
+    height: map.height,
+    image_sha256: hash,
+  })
+}
+
+async function sha256(buffer: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', buffer)
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('')
+}
+
+async function loadPersistedMap(mapId?: string | null) {
+  const version = ++mapLoadVersion
+  if (!mapId) return
+  mapInfo.value = '正在从平台加载地图...'
+  try {
+    const [asset, yamlBlob, pgmBlob] = await Promise.all([
+      resourcesApi.getMapAsset(mapId),
+      resourcesApi.getMapAssetYaml(mapId),
+      resourcesApi.getMapAssetPgm(mapId),
+    ])
+    if (version !== mapLoadVersion) return
+    const yamlFile = new File([yamlBlob], asset.yamlName, { type: 'application/yaml' })
+    const pgmFile = new File([pgmBlob], asset.pgmName, { type: 'image/x-portable-graymap' })
+    applyYamlText(await yamlFile.text(), yamlFile.name)
+    applyPgmBuffer(await pgmFile.arrayBuffer(), pgmFile.name)
+    await syncMapIdentity(asset.pgmSha256)
+    yamlSourceFile.value = yamlFile
+    pgmSourceFile.value = pgmFile
+  } catch (error) {
+    if (version !== mapLoadVersion) return
+    mapInfo.value = '平台地图加载失败'
+    ElMessage.error(error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function onMapFilesChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files
+  if (!files?.length) return
+  try {
+    await handleDroppedFiles(files)
+    rememberMapFiles(files)
+    await syncMapIdentity()
+    ElMessage.success(mapLoaded.value ? 'YAML/PGM 地图已导入' : `YAML 已导入，请继续选择 ${map.image}`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : String(error))
+  } finally {
+    input.value = ''
+  }
 }
 
 async function onPgmChange(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
   if (!file) return
   try {
     applyPgmBuffer(await file.arrayBuffer(), file.name)
+    rememberMapFiles([file])
+    await syncMapIdentity()
+    ElMessage.success('PGM 地图已导入')
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : String(error))
+  } finally {
+    input.value = ''
   }
 }
 
@@ -261,9 +340,21 @@ async function onJsonChange(event: Event) {
   }
 }
 
-function onDrop(event: DragEvent) {
+async function onDrop(event: DragEvent) {
   if (event.dataTransfer?.files?.length) {
-    void handleDroppedFiles(event.dataTransfer.files)
+    try {
+      const files = Array.from(event.dataTransfer.files)
+      await handleDroppedFiles(files)
+      rememberMapFiles(files)
+      await syncMapIdentity()
+      if (files.some((file) => /\.ya?ml$|\.pgm$/i.test(file.name))) {
+        ElMessage.success(mapLoaded.value ? '地图文件已导入' : `YAML 已导入，请继续选择 ${map.image}`)
+      } else if (files.some((file) => /\.json$/i.test(file.name))) {
+        ElMessage.success('路线 JSON 已导入')
+      }
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : String(error))
+    }
   }
 }
 
@@ -283,7 +374,9 @@ function downloadJson() {
   downloadRouteJson(exportDocument())
 }
 
-defineExpose({ exportDocument, needsMapUpload, getMapUploadPayload, markMapSynced })
+watch(() => props.mapId, (mapId) => void loadPersistedMap(mapId), { immediate: true })
+
+defineExpose({ exportDocument })
 </script>
 
 <style scoped>

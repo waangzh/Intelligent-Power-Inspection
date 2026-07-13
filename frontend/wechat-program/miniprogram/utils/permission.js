@@ -5,18 +5,20 @@ const ROLE_PERMISSIONS = {
     'user:manage', 'record:export',
     'workorder:view', 'workorder:create', 'workorder:review',
     'alarm:policy',
+    'agent:view', 'agent:run', 'agent:approve', 'agent:admin',
   ],
   DISPATCHER: [
     'task:view', 'task:create', 'task:dispatch', 'task:control',
     'site:edit', 'route:edit', 'alarm:ack', 'record:export',
     'workorder:view', 'workorder:process',
+    'agent:view', 'agent:run', 'agent:approve',
   ],
   VIEWER: ['task:view'],
 }
 
 const ROLE_SUMMARIES = {
-  ADMIN: { title: '系统治理者', scope: '用户与策略配置、告警转工单与复核；可应急急停' },
-  DISPATCHER: { title: '值班运维者', scope: '任务调度、告警处置、接单处理工单' },
+  ADMIN: { title: '系统治理者', scope: '用户与策略配置、告警转工单与复核、Agent 审批；可应急急停' },
+  DISPATCHER: { title: '值班运维者', scope: '任务调度、告警处置、接单处理工单、Agent 执行' },
   VIEWER: { title: '监督查阅者', scope: '只读查看监控与记录' },
 }
 

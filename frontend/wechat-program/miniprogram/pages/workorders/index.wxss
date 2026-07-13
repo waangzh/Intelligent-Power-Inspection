@@ -4,7 +4,21 @@
 .wo-actions { display: flex; gap: 12rpx; margin-top: 12rpx; }
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 99; }
 .modal-panel { width: 86%; background: #fff; border-radius: 20rpx; padding: 32rpx; max-height: 80vh; overflow-y: auto; }
-.detail-row { display: flex; justify-content: space-between; padding: 8rpx 0; }
+.detail-row { display: flex; justify-content: space-between; gap: 20rpx; padding: 8rpx 0; }
+.detail-row-block { display: block; }
+.detail-row-block .muted { display: block; margin-bottom: 6rpx; }
+.location-value { display: inline-block; padding: 4rpx 10rpx; color: #174f84; background: #edf5fc; border-radius: 6rpx; line-height: 1.5; }
 .detail-desc { margin: 16rpx 0; color: #606266; }
-textarea { width: 100%; border: 1rpx solid #e4e9f0; border-radius: 8rpx; padding: 16rpx; min-height: 160rpx; margin: 16rpx 0; box-sizing: border-box; }
+.review-record { margin: 20rpx 0; padding: 20rpx; background: #f5f9fc; border: 1rpx solid #dbe8f3; border-left: 6rpx solid #1a5fb4; border-radius: 8rpx; }
+.review-record-title { display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: #1d2939; }
+.review-conclusion { padding: 3rpx 12rpx; color: #237804; background: #f6ffed; border-radius: 20rpx; font-size: 24rpx; }
+.review-meta { margin-top: 8rpx; color: #7a8795; font-size: 24rpx; }
+.review-field { margin-top: 16rpx; color: #344054; font-size: 26rpx; line-height: 1.65; }
+.review-field > text { display: block; margin-bottom: 4rpx; color: #64748b; font-size: 24rpx; }
+.review-form-intro { margin: 16rpx 0; padding: 14rpx 16rpx; color: #476072; font-size: 25rpx; line-height: 1.6; background: #f4f8fb; border-left: 6rpx solid #1a5fb4; }
+.form-field { margin-top: 20rpx; }
+.field-label { margin-bottom: 10rpx; color: #344054; font-size: 27rpx; font-weight: 600; }
+.required { color: #d03050; }
+.picker-value { padding: 18rpx 16rpx; color: #303133; background: #fff; border: 1rpx solid #e4e9f0; border-radius: 8rpx; }
+.review-textarea { width: 100%; min-height: 150rpx; margin: 0; padding: 16rpx; border: 1rpx solid #e4e9f0; border-radius: 8rpx; box-sizing: border-box; }
 .form-actions { display: flex; gap: 16rpx; justify-content: flex-end; }

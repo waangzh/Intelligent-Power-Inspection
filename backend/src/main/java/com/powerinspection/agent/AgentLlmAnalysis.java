@@ -6,7 +6,7 @@ public record AgentLlmAnalysis(
   String defectLevel,
   String cause,
   List<String> recommendedActions,
-  List<String> citations,
+  List<String> evidenceIds,
   double confidence
 ) {
 }

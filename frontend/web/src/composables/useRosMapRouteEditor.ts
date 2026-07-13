@@ -1,24 +1,24 @@
-import { computed, onMounted, onUnmounted, reactive, ref, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue'
-import type { EditorMode, RouteExecutorDocument, RouteExecutorTarget, RosMapState } from '@/types/routeExecutor'
+import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
+import type { EditableKeepoutZone, EditorMode, MapAssetIdentity, RouteExecutorDocument, RosMapState } from '@/types/routeExecutor'
 import {
   createDefaultMapState,
-  decodeMapSnapshot,
-  encodeMapSnapshot,
   isMapCoordinateInside,
   mapToPixel,
   parsePgm,
   parseYaml,
   pixelToMap,
   rebuildMapBitmap,
+  rosMapImageFileName,
   round3,
 } from '@/utils/rosMap'
 import {
   buildRouteJson,
   createDefaultRouteForm,
   loadRouteJson,
+  type RouteExecutorTarget,
   type RouteFormState,
 } from '@/utils/routeExecutorJson'
-import { fetchMapAssetFiles } from '@/utils/mapAsset'
+import { parseRouteDocument } from '@/utils/route/parseRouteDocument'
 
 type YawTarget = { kind: 'start'; id: null } | { kind: 'target'; id: string }
 type PointHit = { kind: 'start' } | { kind: 'target'; id: string }
@@ -32,38 +32,33 @@ export function useRosMapRouteEditor(
   canvasRef: Ref<HTMLCanvasElement | null>,
   wrapRef: Ref<HTMLElement | null>,
   options?: {
-    initialJson?: MaybeRefOrGetter<RouteExecutorDocument | null | undefined>
-    mapId?: MaybeRefOrGetter<string | null | undefined>
+    initialJson?: RouteExecutorDocument | null
     defaultRouteId?: string
-    defaultRouteName?: string
     onChange?: (doc: RouteExecutorDocument) => void
   },
 ) {
   const map = reactive<RosMapState>(createDefaultMapState())
   const view = reactive({ scale: 1, offsetX: 0, offsetY: 0 })
   const mode = ref<EditorMode>('start')
-  const targets = ref<RouteExecutorTarget[]>([])
+  const targets = shallowRef<RouteExecutorTarget[]>([])
+  const keepoutZones = shallowRef<EditableKeepoutZone[]>([])
   const selectedTargetId = ref<string | null>(null)
   const yawTarget = ref<YawTarget>({ kind: 'start', id: null })
   const yawPreview = ref<{ x: number; y: number } | null>(null)
   const drag = ref<DragState | null>(null)
   const nextTargetNo = ref(1)
-  const form = reactive<RouteFormState>(
-    createDefaultRouteForm(options?.defaultRouteId, options?.defaultRouteName),
-  )
+  const sourceTemplate = shallowRef<RouteExecutorDocument | null>(null)
+  const mapIdentity = shallowRef<MapAssetIdentity>({ yaml: '', image: '', resolution: 0, origin: [0, 0, 0], width: 0, height: 0, image_sha256: '' })
+  const form = reactive<RouteFormState>(createDefaultRouteForm(options?.defaultRouteId))
   const activeRouteIdSynced = ref(true)
   const cursorInfo = ref('map: -, -')
   const mapInfo = ref('等待加载地图')
-  const pendingYamlText = ref<string | null>(null)
-  const pendingPgmBuffer = ref<ArrayBuffer | null>(null)
-  const mapDirty = ref(false)
-  const loadedMapId = ref<string | null>(null)
-  const mapLoading = ref(false)
 
   const mapBitmapCanvas = document.createElement('canvas')
   let mapBitmapCtx = mapBitmapCanvas.getContext('2d')
 
-  const jsonPreview = computed(() => JSON.stringify(buildRouteJson(form, targets.value), null, 2))
+  const jsonPreview = computed<string>(() => JSON.stringify(exportDocument() as unknown, null, 2))
+  const isLegacyDraft = computed(() => sourceTemplate.value?.version === 2)
 
   const outOfBounds = computed(() => {
     const items: string[] = []
@@ -116,14 +111,21 @@ export function useRosMapRouteEditor(
     return canvasRef.value?.getContext('2d') ?? null
   }
 
+  let mapInfoDirty = true
+
   function updateMapInfoText() {
+    if (!mapInfoDirty) return
+    mapInfoDirty = false
     if (!map.width) {
-      mapInfo.value = '请选择或拖入 .yaml 和 .pgm 地图文件'
+      mapInfo.value = map.yamlName
+        ? `${map.yamlName} 已加载（image: ${map.image}），请继续选择对应的 PGM 文件`
+        : '请选择或拖入 .yaml 和 .pgm 地图文件'
       return
     }
     const wMeters = (map.width * map.resolution).toFixed(2)
     const hMeters = (map.height * map.resolution).toFixed(2)
-    mapInfo.value = `${map.pgmName || map.image} | ${map.width}x${map.height}px | ${wMeters}m x ${hMeters}m | res=${map.resolution}`
+    const files = [map.yamlName, map.pgmName || map.image].filter(Boolean).join(' + ')
+    mapInfo.value = `${files} | ${map.width}x${map.height}px | ${wMeters}m x ${hMeters}m | res=${map.resolution}`
   }
 
   function drawArrow(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: number, color: string) {
@@ -391,14 +393,21 @@ export function useRosMapRouteEditor(
     addTargetFromPixel(px, py)
   }
 
-  function applyYamlText(text: string, fileName?: string, trackUpload = true) {
-    if (fileName) map.yamlName = fileName
-    Object.assign(map, parseYaml(text))
-    if (trackUpload) {
-      pendingYamlText.value = text
-      mapDirty.value = true
-      loadedMapId.value = null
+  function applyYamlText(text: string, fileName?: string) {
+    const patch = parseYaml(text)
+    const keepsExistingPgm =
+      map.pgmName &&
+      patch.image &&
+      rosMapImageFileName(patch.image).toLowerCase() === rosMapImageFileName(map.pgmName).toLowerCase()
+    if (!keepsExistingPgm) {
+      map.width = 0
+      map.height = 0
+      map.pixels = null
+      map.pgmName = ''
     }
+    Object.assign(map, patch)
+    if (fileName) map.yamlName = fileName
+    mapInfoDirty = true
     if (map.pixels) {
       mapBitmapCtx = mapBitmapCanvas.getContext('2d')
       rebuildMapBitmap(map, mapBitmapCanvas)
@@ -407,32 +416,32 @@ export function useRosMapRouteEditor(
     draw()
   }
 
-  function applyPgmBuffer(buffer: ArrayBuffer, fileName?: string, trackUpload = true) {
+  function applyPgmBuffer(buffer: ArrayBuffer, fileName?: string) {
+    if (
+      fileName &&
+      map.yamlName &&
+      rosMapImageFileName(map.image).toLowerCase() !== rosMapImageFileName(fileName).toLowerCase()
+    ) {
+      throw new Error(`YAML 引用 ${map.image}，请选择对应的 PGM 文件。`)
+    }
     if (fileName) map.pgmName = fileName
+    mapInfoDirty = true
     const parsed = parsePgm(buffer)
     map.width = parsed.width
     map.height = parsed.height
     map.pixels = parsed.pixels
-    if (trackUpload) {
-      pendingPgmBuffer.value = buffer
-      mapDirty.value = true
-      loadedMapId.value = null
-    }
     mapBitmapCtx = mapBitmapCanvas.getContext('2d')
     rebuildMapBitmap(map, mapBitmapCanvas)
     fitToScreen()
     emitChange()
   }
 
-  function importRouteJson(doc: RouteExecutorDocument, includeMap = true) {
-    if (includeMap && doc.map_snapshot) {
-      Object.assign(map, createDefaultMapState(), decodeMapSnapshot(doc.map_snapshot))
-      mapBitmapCtx = mapBitmapCanvas.getContext('2d')
-      rebuildMapBitmap(map, mapBitmapCanvas)
-      updateMapInfoText()
-    }
+  function importRouteJson(input: unknown) {
+    const doc = parseRouteDocument(input)
     const loaded = loadRouteJson(doc, form)
+    sourceTemplate.value = doc
     targets.value = loaded.targets
+    keepoutZones.value = loaded.keepoutZones
     nextTargetNo.value = loaded.nextTargetNo
     selectedTargetId.value = targets.value[0]?.id ?? null
     yawTarget.value = selectedTargetId.value
@@ -443,46 +452,13 @@ export function useRosMapRouteEditor(
     draw()
   }
 
-  async function loadFromMapAsset(mapId: string) {
-    if (loadedMapId.value === mapId && map.width) return
-    mapLoading.value = true
-    try {
-      const files = await fetchMapAssetFiles(mapId)
-      pendingYamlText.value = files.yamlText
-      pendingPgmBuffer.value = files.pgmBuffer
-      applyYamlText(files.yamlText, files.yamlName, false)
-      applyPgmBuffer(files.pgmBuffer, files.pgmName, false)
-      mapDirty.value = false
-      loadedMapId.value = mapId
-    } finally {
-      mapLoading.value = false
-    }
-  }
-
-  function needsMapUpload() {
-    return mapDirty.value && Boolean(pendingYamlText.value && pendingPgmBuffer.value && map.width)
-  }
-
-  function getMapUploadPayload() {
-    if (!needsMapUpload() || !pendingYamlText.value || !pendingPgmBuffer.value) return null
-    return {
-      yamlText: pendingYamlText.value,
-      yamlName: map.yamlName || 'map.yaml',
-      pgmBuffer: pendingPgmBuffer.value,
-      pgmName: map.pgmName || map.image || 'map.pgm',
-    }
-  }
-
-  function markMapSynced(mapId: string) {
-    mapDirty.value = false
-    loadedMapId.value = mapId
-  }
-
   function exportDocument(): RouteExecutorDocument {
-    const doc = buildRouteJson(form, targets.value)
-    const snapshot = encodeMapSnapshot(map)
-    if (snapshot) doc.map_snapshot = snapshot
-    return doc
+    return buildRouteJson(form, targets.value, keepoutZones.value, mapIdentity.value, sourceTemplate.value)
+  }
+
+  function setMapAssetIdentity(identity: MapAssetIdentity) {
+    mapIdentity.value = identity
+    emitChange()
   }
 
   function emitChange() {
@@ -638,44 +614,36 @@ export function useRosMapRouteEditor(
   }
 
   async function handleDroppedFiles(files: FileList | File[]) {
-    for (const file of files) {
-      if (/\.ya?ml$/i.test(file.name)) {
-        applyYamlText(await file.text(), file.name)
-      } else if (/\.pgm$/i.test(file.name)) {
-        try {
-          applyPgmBuffer(await file.arrayBuffer(), file.name)
-        } catch (error) {
-          alert(error instanceof Error ? error.message : String(error))
-        }
-      } else if (/\.json$/i.test(file.name)) {
-        try {
-          importRouteJson(JSON.parse(await file.text()))
-        } catch (error) {
-          alert(error instanceof Error ? error.message : String(error))
-        }
+    const selected = Array.from(files)
+    const yamlFiles = selected.filter((file) => /\.ya?ml$/i.test(file.name))
+    const pgmFiles = selected.filter((file) => /\.pgm$/i.test(file.name))
+    if (yamlFiles.length > 1) throw new Error('一次只能导入一个 YAML 地图配置。')
+    if (yamlFiles[0]) applyYamlText(await yamlFiles[0].text(), yamlFiles[0].name)
+
+    if (pgmFiles.length) {
+      const expectedName = rosMapImageFileName(map.image).toLowerCase()
+      const matches = map.yamlName
+        ? pgmFiles.filter((file) => rosMapImageFileName(file.name).toLowerCase() === expectedName)
+        : pgmFiles
+      if (matches.length !== 1) {
+        throw new Error(
+          map.yamlName
+            ? `请选择 YAML 中 image 指向的 ${map.image}。`
+            : '一次只能导入一个 PGM 地图图像。',
+        )
       }
+      applyPgmBuffer(await matches[0].arrayBuffer(), matches[0].name)
+    }
+
+    for (const file of selected.filter((item) => /\.json$/i.test(item.name))) {
+      importRouteJson(JSON.parse(await file.text()))
     }
   }
 
   watch(
-    () => [toValue(options?.mapId), toValue(options?.initialJson)] as const,
-    async ([mapId, doc]) => {
-      if (mapId) {
-        try {
-          await loadFromMapAsset(mapId)
-        } catch {
-          if (doc) importRouteJson(doc)
-          return
-        }
-        if (doc) importRouteJson(doc, false)
-      } else if (doc) {
-        loadedMapId.value = null
-        importRouteJson(doc)
-      }
-      if (options?.defaultRouteName?.trim()) {
-        form.routeName = options.defaultRouteName.trim()
-        emitChange()
-      }
+    () => options?.initialJson,
+    (doc) => {
+      if (doc) importRouteJson(doc)
     },
     { immediate: true },
   )
@@ -698,10 +666,12 @@ export function useRosMapRouteEditor(
     form,
     mode,
     targets,
+    keepoutZones,
     selectedTargetId,
     cursorInfo,
     mapInfo,
     jsonPreview,
+    isLegacyDraft,
     targetStatus,
     setMode,
     fitToScreen,
@@ -711,6 +681,7 @@ export function useRosMapRouteEditor(
     applyPgmBuffer,
     importRouteJson,
     exportDocument,
+    setMapAssetIdentity,
     onFormFieldChange,
     selectTarget,
     orientTarget,
@@ -724,11 +695,5 @@ export function useRosMapRouteEditor(
     onWheel,
     resizeCanvas,
     draw,
-    loadFromMapAsset,
-    needsMapUpload,
-    getMapUploadPayload,
-    markMapSynced,
-    mapLoading,
-    mapDirty,
   }
 }

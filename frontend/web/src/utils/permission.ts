@@ -18,6 +18,10 @@ export type Permission =
   | 'workorder:process'
   | 'workorder:review'
   | 'alarm:policy'
+  | 'agent:view'
+  | 'agent:run'
+  | 'agent:approve'
+  | 'agent:admin'
 
 export interface AccessRule {
   permission?: Permission
@@ -39,6 +43,10 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'workorder:create',
     'workorder:review',
     'alarm:policy',
+    'agent:view',
+    'agent:run',
+    'agent:approve',
+    'agent:admin',
   ],
   /** 调度员：值班运维，负责任务执行与告警现场处置 */
   DISPATCHER: [
@@ -52,6 +60,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'record:export',
     'workorder:view',
     'workorder:process',
+    'agent:view',
+    'agent:run',
+    'agent:approve',
   ],
   /** 观察员：只读监督，无写操作 */
   VIEWER: ['task:view'],
@@ -85,11 +96,11 @@ export function hasAnyPermission(role: UserRole | undefined, permissions: Permis
 export const ROLE_SUMMARIES: Record<UserRole, { title: string; scope: string }> = {
   ADMIN: {
     title: '系统治理者',
-    scope: '用户与策略配置、告警转工单与复核；可应急急停，不执行日常巡检调度',
+    scope: '用户与策略配置、告警转工单与复核、Agent 审批；可应急急停，不执行日常巡检调度',
   },
   DISPATCHER: {
     title: '值班运维者',
-    scope: '任务创建下发、告警确认处置、接单处理并提交复核；不可改角色与复核关闭',
+    scope: '任务创建下发、告警确认处置、接单处理并提交复核、Agent 执行；不可改角色与复核关闭',
   },
   VIEWER: {
     title: '监督查阅者',

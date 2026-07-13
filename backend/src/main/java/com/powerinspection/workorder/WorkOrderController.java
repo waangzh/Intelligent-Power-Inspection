@@ -63,6 +63,7 @@ public class WorkOrderController {
   @PostMapping
   public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.WORKORDER_CREATE);
+    normalizeLocationDescription(body);
     body.putIfAbsent("id", Ids.next("wo"));
     body.putIfAbsent("status", "PENDING");
     body.putIfAbsent("createdAt", Instant.now().toString());
@@ -86,10 +87,11 @@ public class WorkOrderController {
     String severity = String.valueOf(alarm.get("severity"));
     String priority = "CRITICAL".equals(severity) ? "URGENT" : "HIGH".equals(severity) ? "HIGH" : "MEDIUM";
     String now = Instant.now().toString();
+    String message = String.valueOf(alarm.get("message"));
     Map<String, Object> order = new LinkedHashMap<>();
     order.put("id", Ids.next("wo"));
-    order.put("title", "告警处置：" + String.valueOf(alarm.get("message")).substring(0, Math.min(24, String.valueOf(alarm.get("message")).length())));
-    order.put("description", alarm.get("message"));
+    order.put("title", "告警处置：" + message.substring(0, Math.min(24, message.length())));
+    order.put("description", message);
     order.put("alarmId", alarmId);
     order.put("status", "PENDING");
     order.put("priority", priority);
@@ -97,6 +99,10 @@ public class WorkOrderController {
     order.put("createdByName", user.getDisplayName());
     order.put("createdAt", now);
     order.put("updatedAt", now);
+    String locationDescription = locationFromAlarm(alarm);
+    if (!locationDescription.isBlank()) {
+      order.put("locationDescription", locationDescription);
+    }
     Map<String, Object> saved = dataStore.upsert(DataCategory.WORK_ORDER, order);
     notifyDispatchersNewWorkOrder(saved);
     return ApiResponse.ok(saved);
@@ -125,6 +131,10 @@ public class WorkOrderController {
   @PatchMapping("/{id}")
   public ApiResponse<Map<String, Object>> update(@PathVariable String id, @RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.WORKORDER_PROCESS);
+    if (body.containsKey("status") || body.containsKey("review")) {
+      throw ApiException.badRequest("工单状态和复核记录请通过状态接口提交");
+    }
+    normalizeLocationDescription(body);
     body.put("updatedAt", Instant.now().toString());
     return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, body));
   }
@@ -138,7 +148,14 @@ public class WorkOrderController {
 
   @PatchMapping("/{id}/status")
   public ApiResponse<Map<String, Object>> updateStatus(@PathVariable String id, @RequestBody Map<String, Object> body) {
-    String status = String.valueOf(body.get("status"));
+    Map<String, Object> order = dataStore.get(DataCategory.WORK_ORDER, id);
+    String status = text(body.get("status"));
+    if (!isSupportedStatus(status)) {
+      throw ApiException.badRequest("不支持的工单状态");
+    }
+    if (!isAllowedTransition(text(order.get("status")), status)) {
+      throw ApiException.badRequest("工单状态流转不合法");
+    }
     if ("CLOSED".equals(status) || "CANCELLED".equals(status)) {
       permissionService.require(currentUser.get(), Permission.WORKORDER_REVIEW);
     } else {
@@ -147,7 +164,11 @@ public class WorkOrderController {
     Map<String, Object> patch = new LinkedHashMap<>();
     patch.put("status", status);
     patch.put("updatedAt", Instant.now().toString());
-    if (body.get("resolution") != null) {
+    if ("REVIEW".equals(status)) {
+      Map<String, Object> review = normalizeReview(body.get("review"));
+      patch.put("review", review);
+      patch.put("resolution", review.get("handlingMeasures"));
+    } else if (body.get("resolution") != null) {
       patch.put("resolution", body.get("resolution"));
     }
     if ("CLOSED".equals(status)) {
@@ -178,5 +199,85 @@ public class WorkOrderController {
       return true;
     }
     return assigneeName.equals(String.valueOf(order.get("createdByName")));
+  }
+
+  private String locationFromAlarm(Map<String, Object> alarm) {
+    String routeName = text(alarm.get("routeName"));
+    String checkpointName = text(alarm.get("checkpointName"));
+    if (routeName == null || routeName.isBlank()) {
+      return checkpointName == null ? "" : checkpointName;
+    }
+    return checkpointName == null || checkpointName.isBlank() ? routeName : routeName + " / " + checkpointName;
+  }
+
+  private Map<String, Object> normalizeReview(Object rawReview) {
+    if (!(rawReview instanceof Map<?, ?> review)) {
+      throw ApiException.badRequest("提交复核时必须填写复核记录");
+    }
+    String conclusion = requiredText(review.get("conclusion"), "请选择复核结论", 32);
+    if (!("RESOLVED".equals(conclusion) || "PARTIALLY_RESOLVED".equals(conclusion)
+        || "UNRESOLVED".equals(conclusion) || "FALSE_ALARM".equals(conclusion))) {
+      throw ApiException.badRequest("复核结论不合法");
+    }
+    String onsiteFinding = requiredText(review.get("onsiteFinding"), "请填写现场检查情况", 500);
+    String handlingMeasures = requiredText(review.get("handlingMeasures"), "请填写处理措施与验证结果", 500);
+    if (onsiteFinding.length() < 10 || handlingMeasures.length() < 10) {
+      throw ApiException.badRequest("现场检查情况和处理措施至少填写 10 个字符");
+    }
+    String followUpPlan = optionalText(review.get("followUpPlan"), 500, "遗留风险与后续计划不能超过 500 个字符");
+    if (("PARTIALLY_RESOLVED".equals(conclusion) || "UNRESOLVED".equals(conclusion)) && followUpPlan.isBlank()) {
+      throw ApiException.badRequest("部分消缺或未消缺时必须填写遗留风险与后续计划");
+    }
+
+    Map<String, Object> normalized = new LinkedHashMap<>();
+    normalized.put("conclusion", conclusion);
+    normalized.put("onsiteFinding", onsiteFinding);
+    normalized.put("handlingMeasures", handlingMeasures);
+    if (!followUpPlan.isBlank()) {
+      normalized.put("followUpPlan", followUpPlan);
+    }
+    normalized.put("submittedById", currentUser.get().getId());
+    normalized.put("submittedByName", currentUser.get().getDisplayName());
+    normalized.put("submittedAt", Instant.now().toString());
+    return normalized;
+  }
+
+  private void normalizeLocationDescription(Map<String, Object> body) {
+    if (!body.containsKey("locationDescription")) {
+      return;
+    }
+    body.put("locationDescription", requiredText(body.get("locationDescription"), "具体地点不能为空", 200));
+  }
+
+  private boolean isSupportedStatus(String status) {
+    return "PENDING".equals(status) || "PROCESSING".equals(status) || "REVIEW".equals(status)
+      || "CLOSED".equals(status) || "CANCELLED".equals(status);
+  }
+
+  private boolean isAllowedTransition(String from, String to) {
+    return ("PENDING".equals(from) && "PROCESSING".equals(to))
+      || ("PROCESSING".equals(from) && "REVIEW".equals(to))
+      || ("REVIEW".equals(from) && "CLOSED".equals(to));
+  }
+
+  private String requiredText(Object value, String message, int maxLength) {
+    String normalized = optionalText(value, maxLength, message + "不能超过 " + maxLength + " 个字符");
+    if (normalized.isBlank()) {
+      throw ApiException.badRequest(message);
+    }
+    return normalized;
+  }
+
+  private String optionalText(Object value, int maxLength, String tooLongMessage) {
+    String valueText = text(value);
+    String normalized = valueText == null ? "" : valueText.trim();
+    if (normalized.length() > maxLength) {
+      throw ApiException.badRequest(tooLongMessage);
+    }
+    return normalized;
+  }
+
+  private String text(Object value) {
+    return value == null ? null : value.toString();
   }
 }

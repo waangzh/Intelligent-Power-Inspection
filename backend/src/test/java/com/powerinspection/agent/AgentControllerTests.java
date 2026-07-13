@@ -10,14 +10,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.data.DataCategory;
+import com.powerinspection.data.DataStoreService;
+import com.powerinspection.user.UserEntity;
+import com.powerinspection.user.UserRepository;
+import com.powerinspection.user.UserRole;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -25,14 +35,34 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 class AgentControllerTests {
+  private static final String HIGH_ALARM_ID = "agent_controller_alarm_high";
+  private static final String MEDIUM_ALARM_ID = "agent_controller_alarm_medium";
+
   @Autowired
   MockMvc mockMvc;
 
   @Autowired
   ObjectMapper objectMapper;
 
+  @Autowired
+  UserRepository userRepository;
+
+  @Autowired
+  PasswordEncoder passwordEncoder;
+
+  @Autowired
+  DataStoreService dataStore;
+
   @MockBean
   AgentLlmGateway agentLlmGateway;
+
+  @BeforeEach
+  void setUpData() {
+    saveUser("agent_controller_dispatcher", "dispatcher", "Disp@123", UserRole.DISPATCHER);
+    saveUser("agent_controller_viewer", "viewer", "View@123", UserRole.VIEWER);
+    saveAlarm(HIGH_ALARM_ID, "HIGH", "agent controller high alarm");
+    saveAlarm(MEDIUM_ALARM_ID, "MEDIUM", "agent controller medium alarm");
+  }
 
   @Test
   void dispatcherCreatesSessionAndConfirmsSafeWorkOrderAction() throws Exception {
@@ -48,7 +78,7 @@ class AgentControllerTests {
     String created = mockMvc.perform(post("/api/v1/agents/sessions")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"alarmId\":\"alarm_seed_001\",\"prompt\":\"请优先判断是否需要派单\"}"))
+        .content("{\"alarmId\":\"" + HIGH_ALARM_ID + "\",\"prompt\":\"请优先判断是否需要派单\"}"))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("RUNNING"))
       .andReturn()
@@ -73,7 +103,7 @@ class AgentControllerTests {
     mockMvc.perform(post("/api/v1/agents/sessions")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"alarmId\":\"alarm_seed_001\"}"))
+        .content("{\"alarmId\":\"" + HIGH_ALARM_ID + "\"}"))
       .andExpect(status().isForbidden());
   }
 
@@ -91,7 +121,7 @@ class AgentControllerTests {
     String created = mockMvc.perform(post("/api/v1/agents/sessions")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"alarmId\":\"alarm_seed_003\"}"))
+        .content("{\"alarmId\":\"" + MEDIUM_ALARM_ID + "\"}"))
       .andExpect(status().isOk())
       .andReturn()
       .getResponse()
@@ -114,6 +144,29 @@ class AgentControllerTests {
       }
     }
     throw new AssertionError("action not found: " + type);
+  }
+
+  private void saveUser(String id, String username, String password, UserRole role) {
+    UserEntity user = userRepository.findByUsername(username).orElseGet(UserEntity::new);
+    if (user.getId() == null) {
+      user.setId(id);
+    }
+    user.setUsername(username);
+    user.setPasswordHash(passwordEncoder.encode(password));
+    user.setDisplayName(username);
+    user.setRole(role);
+    user.setEnabled(true);
+    user.setCreatedAt(Instant.now().toString());
+    userRepository.save(user);
+  }
+
+  private void saveAlarm(String id, String severity, String message) {
+    Map<String, Object> alarm = new LinkedHashMap<>();
+    alarm.put("id", id);
+    alarm.put("severity", severity);
+    alarm.put("message", message);
+    alarm.put("createdAt", Instant.now().toString());
+    dataStore.upsert(DataCategory.ALARM, alarm);
   }
 
   private JsonNode awaitSession(String sessionId, String token, String status) throws Exception {

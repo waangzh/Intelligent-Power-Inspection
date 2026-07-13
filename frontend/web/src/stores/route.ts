@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { shallowRef } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { Checkpoint, DetectionItem, DetectionType, Route } from '@/types'
 import { CHECKPOINT_DETECTIONS, ROUTE_DETECTIONS } from '@/types'
@@ -24,7 +24,7 @@ function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
 }
 
 export const useRouteStore = defineStore('route', () => {
-  const routes = ref<Route[]>([])
+  const routes = shallowRef<Route[]>([])
 
   async function load() {
     routes.value = await resourcesApi.listRoutes()

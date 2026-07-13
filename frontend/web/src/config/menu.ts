@@ -20,14 +20,15 @@ export const menuGroups: MenuGroup[] = [
     items: [
       { path: '/dashboard', label: '运行总览', icon: 'Odometer' },
       { path: '/monitor', label: '实时监控', icon: 'Monitor' },
-      { path: '/bigscreen', label: '集控大屏', icon: 'FullScreen' },
+      { path: '/alarms', label: '告警中心', icon: 'Bell' },
     ],
   },
   {
     title: '运维中心',
     items: [
-      { path: '/workorders', label: '工单管理', icon: 'Tickets', permission: 'workorder:view' },
-      { path: '/agents', label: '巡检处置 Agent', icon: 'Connection', permission: 'task:dispatch' },
+      { path: '/workorders', label: '工单管理', icon: 'Tickets', permission: 'task:dispatch' },
+      { path: '/notifications', label: '消息中心', icon: 'Message' },
+      { path: '/agents', label: '巡检研判助手', icon: 'Connection', permission: 'agent:view' },
     ],
   },
   {

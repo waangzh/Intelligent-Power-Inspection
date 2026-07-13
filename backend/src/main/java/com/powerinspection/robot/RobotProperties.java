@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.robot")
 public class RobotProperties {
   /** simulation = 平台模拟；http = 对接 ylhb mobile bridge */
-  private String mode = "http";
+  private String mode = "simulation";
   private String bridgeBaseUrl = "http://127.0.0.1:8000";
   private String robotId = "robot_001";
   private int pollIntervalMs = 2000;
