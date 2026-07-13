@@ -89,6 +89,34 @@ public class RouteRevisionService {
     return toDto(repository.save(entity));
   }
 
+  /**
+   * 校验尚未持久化的路线草稿。仅将地图资产拥有的身份字段写入副本，不修改路线或修订记录。
+   */
+  public Map<String, Object> validateDraft(String routeId, JsonNode executorJson, String requestedMapAssetId) {
+    Map<String, Object> route = dataStore.get(DataCategory.ROUTE, routeId);
+    String mapId = requestedMapAssetId == null ? text(route.get("mapId")) : requestedMapAssetId;
+    if (mapId == null) {
+      throw ApiException.badRequest("路线未绑定地图资产");
+    }
+    if (requestedMapAssetId != null) {
+      mapAssetService.ensureAvailableForSite(mapId, requiredText(route.get("siteId"), "路线缺少站点"));
+    }
+    Map<String, Object> mapAsset = mapAssetService.get(mapId);
+    JsonNode normalized = executorJson == null ? objectMapper.nullNode() : executorJson.deepCopy();
+    if (normalized instanceof ObjectNode document) {
+      document.set("map", mergeMapIdentity(document.get("map"), mapIdentity(mapAsset)));
+    }
+
+    List<RouteDocumentValidator.ValidationIssue> issues = documentValidator.validate(normalized);
+    Map<String, Object> report = new LinkedHashMap<>();
+    report.put("valid", issues.stream().noneMatch(issue -> "ERROR".equals(issue.severity())));
+    report.put("issues", issues);
+    report.put("normalizedExecutorJson", normalized);
+    report.put("mapAssetId", requiredText(mapAsset.get("id"), "地图资产缺少 id"));
+    report.put("mapImageSha256", requiredText(mapAsset.get("pgmSha256"), "地图资产缺少 PGM SHA-256"));
+    return report;
+  }
+
   public List<Map<String, Object>> list(String routeId) {
     return repository.findByRouteIdOrderByRevisionNoDesc(routeId).stream().map(this::toDto).toList();
   }
@@ -176,6 +204,12 @@ public class RouteRevisionService {
   private ObjectNode mergeObject(JsonNode raw, ObjectNode generated, String message) {
     ObjectNode merged = raw == null || raw.isNull() ? objectMapper.createObjectNode() : asObject(raw, message);
     generated.fields().forEachRemaining(field -> merged.set(field.getKey(), field.getValue()));
+    return merged;
+  }
+
+  private ObjectNode mergeMapIdentity(JsonNode raw, ObjectNode identity) {
+    ObjectNode merged = raw instanceof ObjectNode object ? object.deepCopy() : objectMapper.createObjectNode();
+    identity.fields().forEachRemaining(field -> merged.set(field.getKey(), field.getValue()));
     return merged;
   }
 

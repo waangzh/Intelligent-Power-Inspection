@@ -1,23 +1,38 @@
 import { http } from '@/api/http'
 import type {
   Alarm,
+  AlarmWorkOrderPolicy,
   Area,
   Checkpoint,
   DetectionTemplate,
   InspectionRecord,
   InspectionTask,
-  LingBotMapJob,
-  LingBotVideoUploadResponse,
   ManualDetectionResponse,
+  MapAsset,
   Robot,
   Route,
+  RouteRevision,
   TaskEvent,
 } from '@/types'
 import type { AppNotification, NotificationType } from '@/types/notification'
-import type { AgentAction, AgentSession, CreateAgentSessionRequest } from '@/types/agent'
-import type { WorkOrder, WorkOrderStatus } from '@/types/workOrder'
+import type { RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
+import type {
+  AgentAction,
+  AgentActionDecisionRequest,
+  AgentHumanInputRequest,
+  AgentCaseDetail,
+  AgentCaseSummary,
+  AgentRunDetail,
+  AgentRunSummary,
+  AgentSession,
+  AuditedAgentAction,
+  AuditedAgentEvidence,
+  CreateAgentCaseRequest,
+  CreateAgentSessionRequest,
+  StartAgentRunRequest,
+} from '@/types/agent'
+import type { WorkOrder, WorkOrderReviewInput, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
-import type { MapAsset, MapAssetUploadInput } from '@/types/mapAsset'
 
 export const resourcesApi = {
   listSites: () => http.get<Site[]>('/sites'),
@@ -32,24 +47,23 @@ export const resourcesApi = {
   createRoute: (route: Route) => http.post<Route>('/routes', route),
   updateRoute: (id: string, patch: Partial<Route>) => http.patch<Route>(`/routes/${id}`, patch),
   removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
-
-  getMapAsset: (id: string) => http.get<MapAsset>(`/map-assets/${id}`),
-  uploadMapAsset: (siteId: string, input: MapAssetUploadInput) => {
-    const form = new FormData()
-    form.append('siteId', siteId)
-    form.append('yaml', new File([input.yamlText], input.yamlName, { type: 'application/yaml' }))
-    form.append('pgm', new File([input.pgmBuffer], input.pgmName, { type: 'image/x-portable-graymap' }))
-    return http.postForm<MapAsset>('/map-assets', form)
-  },
-  getMapAssetYaml: (id: string) => http.get<Blob>(`/map-assets/${id}/yaml`),
-  getMapAssetPgm: (id: string) => http.get<Blob>(`/map-assets/${id}/pgm`),
-  removeMapAsset: (id: string) => http.delete<void>(`/map-assets/${id}`),
+  listRouteRevisions: (routeId: string) => http.get<RouteRevision[]>(`/routes/${routeId}/revisions`),
+  createRouteRevision: (routeId: string) => http.post<RouteRevision>(`/routes/${routeId}/revisions`),
+  validateRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, mapAssetId?: string) =>
+    http.post<RouteDraftValidationReport>(`/routes/${routeId}/draft:validate`, { executorJson, mapAssetId }),
+  getRouteRevision: (revisionId: string) => http.get<RouteRevision>(`/route-revisions/${revisionId}`),
   addCheckpoint: (routeId: string, checkpoint: Checkpoint) =>
     http.post<Checkpoint>(`/routes/${routeId}/checkpoints`, checkpoint),
   updateCheckpoint: (routeId: string, checkpointId: string, patch: Partial<Checkpoint>) =>
     http.patch<Checkpoint>(`/routes/${routeId}/checkpoints/${checkpointId}`, patch),
   removeCheckpoint: (routeId: string, checkpointId: string) =>
     http.delete<void>(`/routes/${routeId}/checkpoints/${checkpointId}`),
+
+  uploadMapAsset: (form: FormData) => http.postForm<MapAsset>('/map-assets', form),
+  getMapAsset: (id: string) => http.get<MapAsset>(`/map-assets/${id}`),
+  getMapAssetYaml: (id: string) => http.get<Blob>(`/map-assets/${id}/yaml`),
+  getMapAssetPgm: (id: string) => http.get<Blob>(`/map-assets/${id}/pgm`),
+  removeMapAsset: (id: string) => http.delete<void>(`/map-assets/${id}`),
 
   listTasks: () => http.get<InspectionTask[]>('/tasks'),
   createTask: (task: InspectionTask) => http.post<InspectionTask>('/tasks', task),
@@ -65,13 +79,20 @@ export const resourcesApi = {
   listAlarms: () => http.get<Alarm[]>('/alarms'),
   acknowledgeAlarm: (id: string) => http.post<Alarm>(`/alarms/${id}/ack`),
   acknowledgeAllAlarms: () => http.post<Alarm[]>('/alarms/ack-all'),
+  getAlarmWorkOrderPolicy: () => http.get<AlarmWorkOrderPolicy>('/alarms/work-order-policy'),
+  updateAlarmWorkOrderPolicy: (policy: Pick<AlarmWorkOrderPolicy, 'rules'>) =>
+    http.put<AlarmWorkOrderPolicy>('/alarms/work-order-policy', policy),
+  retryAlarmWorkOrder: (id: string) => http.post<Alarm>(`/alarms/${id}/retry-work-order`),
 
   listWorkOrders: () => http.get<WorkOrder[]>('/work-orders'),
   createWorkOrderFromAlarm: (alarmId: string) =>
     http.post<WorkOrder>(`/work-orders/from-alarm/${alarmId}`, {}),
   claimWorkOrder: (id: string) => http.post<WorkOrder>(`/work-orders/${id}/claim`),
-  updateWorkOrderStatus: (id: string, status: WorkOrderStatus, extra?: { resolution?: string }) =>
-    http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
+  updateWorkOrderStatus: (
+    id: string,
+    status: WorkOrderStatus,
+    extra?: { resolution?: string; review?: WorkOrderReviewInput },
+  ) => http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
 
   listRobots: () => http.get<Robot[]>('/robots'),
   createRobot: (robot: Robot) => http.post<Robot>('/robots', robot),
@@ -84,12 +105,6 @@ export const resourcesApi = {
   removeDetectionTemplate: (id: string) => http.delete<void>(`/detection-templates/${id}`),
   manualLocateDetection: (form: FormData) => http.postForm<ManualDetectionResponse>(`/detections/manual`, form),
   getManualLocateDetection: (requestId: string) => http.get<ManualDetectionResponse>(`/detections/manual/${requestId}`),
-
-  listLingBotJobs: () => http.get<LingBotMapJob[]>('/lingbot/jobs'),
-  createLingBotJob: (job: LingBotMapJob) => http.post<LingBotMapJob>('/lingbot/jobs', job),
-  simulateLingBotJob: (id: string) => http.post<LingBotMapJob>(`/lingbot/jobs/${id}/simulate`),
-  refreshLingBotJob: (id: string) => http.post<LingBotMapJob>(`/lingbot/jobs/${id}/refresh`),
-  uploadLingBotVideo: (form: FormData) => http.postForm<LingBotVideoUploadResponse>('/lingbot/uploads/video', form),
 
   listNotifications: () => http.get<AppNotification[]>('/notifications'),
   markNotificationRead: (id: string) => http.patch<AppNotification>(`/notifications/${id}/read`),
@@ -118,4 +133,16 @@ export const resourcesApi = {
   rerunAgentSession: (id: string) => http.post<AgentSession>(`/agents/sessions/${id}/runs`),
   confirmAgentAction: (id: string) => http.post<AgentAction>(`/agents/actions/${id}/confirm`),
   rejectAgentAction: (id: string) => http.post<AgentAction>(`/agents/actions/${id}/reject`),
+
+  listAgentCases: () => http.get<AgentCaseSummary[]>('/agent-cases'),
+  createAgentCase: (body: CreateAgentCaseRequest) => http.post<AgentCaseSummary>('/agent-cases', body),
+  getAgentCase: (id: string) => http.get<AgentCaseDetail>(`/agent-cases/${id}`),
+  startAgentRun: (caseId: string, body: StartAgentRunRequest) => http.post<AgentRunSummary>(`/agent-cases/${caseId}/runs`, body),
+  getAgentRun: (runId: string) => http.get<AgentRunDetail>(`/agent-runs/${runId}`),
+  getAgentRunEvidence: (runId: string) => http.get<AuditedAgentEvidence[]>(`/agent-runs/${runId}/evidence`),
+  submitAgentHumanInput: (runId: string, body: AgentHumanInputRequest) => http.post(`/agent-runs/${runId}/human-inputs`, body),
+  cancelAuditedAgentRun: (runId: string) => http.post<AgentRunSummary>(`/agent-runs/${runId}/cancel`),
+  approveAuditedAgentAction: (id: string, body: AgentActionDecisionRequest) => http.post<AuditedAgentAction>(`/agent-actions/${id}/approve`, body),
+  rejectAuditedAgentAction: (id: string, body: AgentActionDecisionRequest) => http.post<AuditedAgentAction>(`/agent-actions/${id}/reject`, body),
+  retryAuditedAgentAction: (id: string, body: AgentActionDecisionRequest) => http.post<AuditedAgentAction>(`/agent-actions/${id}/retry`, body),
 }

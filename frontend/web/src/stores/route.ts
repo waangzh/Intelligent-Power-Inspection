@@ -118,6 +118,7 @@ export const useRouteStore = defineStore('route', () => {
   }
 
   async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument, mapId?: string) {
+    if (doc.routes.length !== 1) throw new Error('路线执行 JSON 必须且只能包含一条 route。')
     const route = routes.value.find((r) => r.id === routeId)
     const platformName = route?.name?.trim() || doc.routes[0]?.name || doc.active_route_id
     const executorJson = withPlatformRouteName(doc, platformName)

@@ -16,5 +16,9 @@ export async function fetchMapAssetFiles(mapId: string): Promise<MapAssetFiles> 
 }
 
 export async function uploadMapAsset(siteId: string, input: MapAssetUploadInput) {
-  return resourcesApi.uploadMapAsset(siteId, input)
+  const form = new FormData()
+  form.append('siteId', siteId)
+  form.append('yaml', new File([input.yamlText], input.yamlName, { type: 'application/yaml' }))
+  form.append('pgm', new File([input.pgmBuffer], input.pgmName, { type: 'image/x-portable-graymap' }))
+  return resourcesApi.uploadMapAsset(form)
 }
