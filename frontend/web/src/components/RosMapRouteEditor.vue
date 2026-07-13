@@ -113,7 +113,7 @@
             <label>路线名称<el-input v-model="form.routeName" size="small" @change="syncForm" /></label>
             <div class="grid-2">
               <label>路线 ID<el-input v-model="form.routeId" size="small" @change="onRouteIdChange" /></label>
-              <label>默认路线<el-input v-model="form.activeRouteId" size="small" @change="syncForm" /></label>
+              <label>默认路线<el-input :model-value="form.routeId" size="small" disabled /></label>
             </div>
             <div class="grid-2">
               <label>超时(s)<el-input-number v-model="form.goalTimeout" size="small" :step="1" controls-position="right" @change="syncForm" /></label>
