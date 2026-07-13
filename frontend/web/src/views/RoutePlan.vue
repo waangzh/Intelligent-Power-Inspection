@@ -93,7 +93,7 @@ import RosMapRouteEditor from '@/components/RosMapRouteEditor.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
-import type { MapAsset, MapAssetFiles, Route } from '@/types'
+import type { MapAsset, MapAssetUploadFiles, Route } from '@/types'
 import type { RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
 import { hasRouteDraftErrors } from '@/utils/route/draftValidation'
 
@@ -109,7 +109,7 @@ const creatingRoute = ref(false)
 const savingRoute = ref(false)
 const deletingRoute = ref(false)
 const creatingRevision = ref(false)
-const pendingMapFiles = ref<MapAssetFiles | null>(null)
+const pendingMapFiles = ref<MapAssetUploadFiles | null>(null)
 const draftValidation = shallowRef<RouteDraftValidationReport | null>(null)
 
 const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
@@ -181,7 +181,7 @@ function onEditorChange(doc: RouteExecutorDocument) {
   draftValidation.value = null
 }
 
-function onMapFilesChange(files: MapAssetFiles) {
+function onMapFilesChange(files: MapAssetUploadFiles) {
   pendingMapFiles.value = files
 }
 

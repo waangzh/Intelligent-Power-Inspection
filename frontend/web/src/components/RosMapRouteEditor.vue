@@ -157,7 +157,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resourcesApi } from '@/api/resources'
 import { useRosMapRouteEditor } from '@/composables/useRosMapRouteEditor'
-import type { MapAssetFiles } from '@/types'
+import type { MapAssetUploadFiles } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
 import { downloadRouteJson } from '@/utils/routeExecutorJson'
 import { rosMapImageFileName } from '@/utils/rosMap'
@@ -170,7 +170,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   change: [doc: RouteExecutorDocument]
-  mapFilesChange: [files: MapAssetFiles]
+  mapFilesChange: [files: MapAssetUploadFiles]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)

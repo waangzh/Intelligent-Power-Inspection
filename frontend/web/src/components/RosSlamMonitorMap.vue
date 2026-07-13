@@ -23,7 +23,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import Map3D from '@/components/Map3D.vue'
 import type { LatLng, Route } from '@/types'
-import type { RouteExecutorDocument, RosMapState } from '@/types/routeExecutor'
+import type { RouteExecutorDocument, RosMapState, RouteMapSnapshot } from '@/types/routeExecutor'
 import {
   createDefaultMapState,
   decodeMapSnapshot,
@@ -76,12 +76,25 @@ function applyMapState(patch: Partial<typeof map>) {
   fitToScreen()
 }
 
+function isRouteMapSnapshot(value: unknown): value is RouteMapSnapshot {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const snapshot = value as Record<string, unknown>
+  return typeof snapshot.width === 'number'
+    && typeof snapshot.height === 'number'
+    && typeof snapshot.resolution === 'number'
+    && typeof snapshot.negate === 'number'
+    && typeof snapshot.pgm_base64 === 'string'
+    && Array.isArray(snapshot.origin)
+    && snapshot.origin.length === 3
+}
+
 function loadMapFromDoc(doc: RouteExecutorDocument | null | undefined) {
-  if (!doc?.map_snapshot) {
+  const snapshot = doc?.map_snapshot
+  if (!isRouteMapSnapshot(snapshot)) {
     Object.assign(map, createDefaultMapState())
     return
   }
-  applyMapState(decodeMapSnapshot(doc.map_snapshot))
+  applyMapState(decodeMapSnapshot(snapshot))
 }
 
 async function loadMapFromRoute(route: Route | null | undefined) {

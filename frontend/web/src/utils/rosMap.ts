@@ -4,6 +4,11 @@ export function round3(value: number): number {
   return Math.round(Number(value) * 1000) / 1000
 }
 
+/** 将 YAML 中可能带目录的 image 值归一化为 PGM 文件名。 */
+export function rosMapImageFileName(image: string): string {
+  return image.trim().replace(/\\/g, '/').split('/').pop() || ''
+}
+
 function parseScalar(valueStr: string): unknown {
   const value = valueStr.trim()
   if (

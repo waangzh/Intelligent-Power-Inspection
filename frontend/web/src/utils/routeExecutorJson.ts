@@ -47,6 +47,15 @@ export function buildRouteJson(
   return mergeManagedRouteFields(sourceTemplate, draftFromForm(form, targets, keepoutZones, sourceTemplate), resolvedMap)
 }
 
+export function withPlatformRouteName(doc: RouteExecutorDocument, routeName: string): RouteExecutorDocument {
+  const normalizedName = routeName.trim()
+  if (!normalizedName || !doc.routes[0] || doc.routes[0].name === normalizedName) return doc
+  return {
+    ...doc,
+    routes: [{ ...doc.routes[0], name: normalizedName }],
+  }
+}
+
 export function downloadRouteJson(doc: RouteExecutorDocument, filename?: string) {
   const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json;charset=utf-8' })
   const url = URL.createObjectURL(blob); const link = document.createElement('a')
