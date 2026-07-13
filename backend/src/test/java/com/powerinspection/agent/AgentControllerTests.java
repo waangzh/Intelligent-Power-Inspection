@@ -35,6 +35,9 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 class AgentControllerTests {
+  private static final String HIGH_ALARM_ID = "agent_controller_alarm_high";
+  private static final String MEDIUM_ALARM_ID = "agent_controller_alarm_medium";
+
   @Autowired
   MockMvc mockMvc;
 
@@ -57,8 +60,8 @@ class AgentControllerTests {
   void setUpData() {
     saveUser("agent_controller_dispatcher", "dispatcher", "Disp@123", UserRole.DISPATCHER);
     saveUser("agent_controller_viewer", "viewer", "View@123", UserRole.VIEWER);
-    saveAlarm("alarm_seed_001", "HIGH", "agent controller high alarm");
-    saveAlarm("alarm_seed_003", "MEDIUM", "agent controller medium alarm");
+    saveAlarm(HIGH_ALARM_ID, "HIGH", "agent controller high alarm");
+    saveAlarm(MEDIUM_ALARM_ID, "MEDIUM", "agent controller medium alarm");
   }
 
   @Test
@@ -75,7 +78,7 @@ class AgentControllerTests {
     String created = mockMvc.perform(post("/api/v1/agents/sessions")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"alarmId\":\"alarm_seed_001\",\"prompt\":\"请优先判断是否需要派单\"}"))
+        .content("{\"alarmId\":\"" + HIGH_ALARM_ID + "\",\"prompt\":\"请优先判断是否需要派单\"}"))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("RUNNING"))
       .andReturn()
@@ -100,7 +103,7 @@ class AgentControllerTests {
     mockMvc.perform(post("/api/v1/agents/sessions")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"alarmId\":\"alarm_seed_001\"}"))
+        .content("{\"alarmId\":\"" + HIGH_ALARM_ID + "\"}"))
       .andExpect(status().isForbidden());
   }
 
@@ -118,7 +121,7 @@ class AgentControllerTests {
     String created = mockMvc.perform(post("/api/v1/agents/sessions")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"alarmId\":\"alarm_seed_003\"}"))
+        .content("{\"alarmId\":\"" + MEDIUM_ALARM_ID + "\"}"))
       .andExpect(status().isOk())
       .andReturn()
       .getResponse()
