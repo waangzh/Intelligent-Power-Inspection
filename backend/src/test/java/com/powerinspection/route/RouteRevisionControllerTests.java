@@ -1,5 +1,7 @@
 package com.powerinspection.route;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -7,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.route.RouteRevisionRepository;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +35,85 @@ class RouteRevisionControllerTests {
 
   @Autowired
   DataStoreService dataStore;
+
+  @Autowired
+  RouteRevisionRepository routeRevisionRepository;
+
+  @Test
+  void draftValidationOverwritesMapIdentityReportsAllIssuesAndDoesNotPersist() throws Exception {
+    String token = login("dispatcher", "Disp@123");
+    String siteId = "site_draft_validate";
+    String routeId = "route_draft_validate";
+    mockMvc.perform(post("/api/v1/sites")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("id", siteId, "name", "草稿校验测试站点")))
+      .andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/routes")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("id", routeId, "siteId", siteId, "name", "草稿校验测试路线")))
+      .andExpect(status().isOk());
+    String mapId = createMapAsset(siteId, "map_draft_validate");
+    mockMvc.perform(patch("/api/v1/routes/{id}", routeId)
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("mapId", mapId, "executorJson", validV3Executor())))
+      .andExpect(status().isOk());
+
+    String routeBefore = objectMapper.writeValueAsString(dataStore.get(DataCategory.ROUTE, routeId));
+    long revisionsBefore = routeRevisionRepository.count();
+    Map<String, Object> forgedMap = validV3Executor();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> map = (Map<String, Object>) forgedMap.get("map");
+    map.put("yaml", "forged.yaml");
+    map.put("image_sha256", "c".repeat(64));
+    map.put("vendor_extension", "preserve");
+    String normalized = mockMvc.perform(post("/api/v1/routes/{id}/draft:validate", routeId)
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("executorJson", forgedMap)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.valid").value(true))
+      .andExpect(jsonPath("$.data.normalizedExecutorJson.map.yaml").value("floor.yaml"))
+      .andExpect(jsonPath("$.data.normalizedExecutorJson.map.image_sha256").value("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+      .andExpect(jsonPath("$.data.normalizedExecutorJson.map.vendor_extension").value("preserve"))
+      .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+    assertEquals(mapId, objectMapper.readTree(normalized).path("data").path("mapAssetId").asText());
+    assertEquals(revisionsBefore, routeRevisionRepository.count());
+    assertEquals(routeBefore, objectMapper.writeValueAsString(dataStore.get(DataCategory.ROUTE, routeId)));
+
+    Map<String, Object> invalid = validV3Executor();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> startLocation = (Map<String, Object>) ((Map<String, Object>) invalid.get("start_pose")).get("location");
+    startLocation.put("x", 99.0);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> onlyRoute = (Map<String, Object>) ((List<?>) invalid.get("routes")).get(0);
+    onlyRoute.put("goal_timeout_sec", 0);
+    invalid.put("schedules", List.of(map("id", "schedule_1")));
+    String invalidResponse = mockMvc.perform(post("/api/v1/routes/{id}/draft:validate", routeId)
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("executorJson", invalid)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.valid").value(false))
+      .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+    List<String> pointers = new java.util.ArrayList<>();
+    for (var issue : objectMapper.readTree(invalidResponse).path("data").path("issues")) pointers.add(issue.path("jsonPointer").asText());
+    org.junit.jupiter.api.Assertions.assertTrue(pointers.contains("/start_pose/location/x"));
+    org.junit.jupiter.api.Assertions.assertTrue(pointers.contains("/routes/0/goal_timeout_sec"));
+    org.junit.jupiter.api.Assertions.assertTrue(pointers.contains("/schedules"));
+    assertEquals(revisionsBefore, routeRevisionRepository.count());
+    assertEquals(routeBefore, objectMapper.writeValueAsString(dataStore.get(DataCategory.ROUTE, routeId)));
+
+    mockMvc.perform(post("/api/v1/routes/{id}/draft:validate", routeId)
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("executorJson", validV2Executor())))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.valid").value(false))
+      .andExpect(jsonPath("$.data.issues[0].code").value("INVALID_VERSION"));
+  }
 
   @Test
   void v2DraftWithMapAssetCreatesStableV3Revision() throws Exception {
@@ -124,7 +206,10 @@ class RouteRevisionControllerTests {
   }
 
   private String createMapAsset(String siteId) {
-    String mapId = "map_route_revision";
+    return createMapAsset(siteId, "map_route_revision");
+  }
+
+  private String createMapAsset(String siteId, String mapId) {
     dataStore.upsert(DataCategory.MAP_ASSET, map(
       "id", mapId,
       "siteId", siteId,
@@ -172,6 +257,28 @@ class RouteRevisionControllerTests {
       )),
       "schedules", List.of()
     );
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> validV3Executor() {
+    Map<String, Object> executor = objectMapper.convertValue(validV2Executor(), Map.class);
+    executor.put("version", 3);
+    executor.put("map", map(
+      "yaml", "client.yaml", "image", "client.pgm", "resolution", 1.0,
+      "origin", List.of(1.0, 2.0, 3.0), "width", 9, "height", 9,
+      "image_sha256", "a".repeat(64)
+    ));
+    Map<String, Object> start = (Map<String, Object>) executor.get("start_pose");
+    start.put("frame_id", "map");
+    start.put("location", mapPose((Map<String, Object>) start.get("pose")));
+    Map<String, Object> target = (Map<String, Object>) ((List<?>) executor.get("targets")).get(0);
+    target.put("location", mapPose((Map<String, Object>) target.get("pose")));
+    executor.put("keepout_zones", List.of());
+    return executor;
+  }
+
+  private Map<String, Object> mapPose(Map<String, Object> pose) {
+    return map("type", "map_pose", "frame_id", "map", "x", pose.get("x"), "y", pose.get("y"), "yaw", pose.get("yaw"));
   }
 
   private String login(String username, String password) throws Exception {

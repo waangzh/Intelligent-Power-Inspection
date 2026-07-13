@@ -93,36 +93,12 @@ export const useRouteStore = defineStore('route', () => {
     void resourcesApi.removeCheckpoint(routeId, checkpointId)
   }
 
-  function checkpointsFromExecutor(routeId: string, doc: RouteExecutorDocument): Checkpoint[] {
-    const orderedIds = doc.routes[0]?.target_ids?.length
-      ? doc.routes[0].target_ids
-      : doc.targets.map((t) => t.id)
-    const byId = new Map(doc.targets.map((t) => [t.id, t]))
-    return orderedIds
-      .map((id) => byId.get(id))
-      .filter(Boolean)
-      .map((target, index) => ({
-        id: target!.id,
-        routeId,
-        name: target!.name,
-        seq: index + 1,
-        position: { lat: target!.pose.y, lng: target!.pose.x, x: target!.pose.x, y: target!.pose.y },
-        pan: Math.round(((target!.pose.yaw || 0) * 180) / Math.PI),
-        tilt: -15,
-        dwellSeconds: target!.task_duration_sec ?? 5,
-        detections: defaultDetectionItems(CHECKPOINT_DETECTIONS),
-      }))
-  }
-
   async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument, mapId: string) {
-    const routeName = doc.routes[0]?.name || doc.active_route_id
-    const checkpoints = checkpointsFromExecutor(routeId, doc)
-    const path = checkpoints.map((cp) => cp.position)
+    if (doc.routes.length !== 1) throw new Error('路线执行 JSON 必须且只能包含一条 route。')
+    const routeName = doc.routes[0].name || doc.active_route_id
     return updateRoute(routeId, {
       name: routeName,
       executorJson: doc,
-      checkpoints,
-      path,
       mapMode: '2d',
       mapId,
     })
