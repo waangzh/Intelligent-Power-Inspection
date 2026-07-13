@@ -33,6 +33,7 @@ public class RecordController {
 
   @GetMapping
   public ApiResponse<List<Map<String, Object>>> records() {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
     return ApiResponse.ok(dataStore.list(DataCategory.RECORD));
   }
 

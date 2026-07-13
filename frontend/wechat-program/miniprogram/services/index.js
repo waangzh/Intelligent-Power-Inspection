@@ -387,11 +387,9 @@ async function createWorkOrderFromAlarm(alarm, creator) {
       id: uid('wo'),
       title: `告警处置：${alarm.message.slice(0, 24)}`,
       description: alarm.message,
-      locationDescription: [alarm.routeName, alarm.checkpointName].filter(Boolean).join(' / '),
       alarmId: alarm.id,
       status: 'PENDING',
       priority,
-      assigneeName: creator.name,
       createdById: creator.id,
       createdByName: creator.name,
       createdAt: now,
@@ -399,10 +397,39 @@ async function createWorkOrderFromAlarm(alarm, creator) {
     }
     orders.unshift(order)
     mock.save(mock.KEYS.workOrders, orders)
-    mock.pushNotification(creator.id, 'WORKORDER', '工单已创建', order.title, '/pages/workorders/index')
+    const dispatchers = mock.getState().users.filter((u) => u.role === 'DISPATCHER' && u.enabled !== false)
+    dispatchers.forEach((d) => {
+      mock.pushNotification(d.id, 'WORKORDER', '新工单待接单', order.title, '/pages/workorders/index')
+    })
     return order
   }
-  return http.post(`/work-orders/from-alarm/${alarm.id}`, { assigneeName: creator.displayName || creator.name })
+  return http.post(`/work-orders/from-alarm/${alarm.id}`, {})
+}
+
+async function claimWorkOrder(id) {
+  if (useMock()) {
+    const orders = mock.getState().workOrders
+    const idx = orders.findIndex((o) => o.id === id)
+    if (idx < 0) throw new Error('工单不存在')
+    const order = orders[idx]
+    if (order.status !== 'PENDING') throw new Error('仅待处理工单可接单')
+    if (order.assigneeId || (order.assigneeName && order.assigneeName !== order.createdByName)) {
+      throw new Error('工单已被其他调度员接单')
+    }
+    const app = getApp()
+    const me = app.globalData.user
+    orders[idx] = {
+      ...order,
+      assigneeId: me.id,
+      assigneeName: me.displayName,
+      status: 'PROCESSING',
+      claimedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    mock.save(mock.KEYS.workOrders, orders)
+    return orders[idx]
+  }
+  return http.post(`/work-orders/${id}/claim`)
 }
 
 async function updateWorkOrderStatus(id, status, extra = {}) {
@@ -567,6 +594,7 @@ module.exports = {
   acknowledgeAllAlarms,
   getWorkOrders,
   createWorkOrderFromAlarm,
+  claimWorkOrder,
   updateWorkOrderStatus,
   getRobots,
   addRobot,

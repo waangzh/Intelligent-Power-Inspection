@@ -2,16 +2,9 @@
   <div>
     <PageHeader
       title="机器人管理"
-      description="注册、绑定站点与运行状态监控"
+      description="单台实机状态监控（对接 mobile bridge :8000）"
       :breadcrumbs="[{ label: '资产感知' }, { label: '机器人管理' }]"
-    >
-      <template #actions>
-        <el-button v-if="can('robot:manage')" type="primary" @click="dialogVisible = true">
-          <el-icon><Plus /></el-icon>
-          注册机器人
-        </el-button>
-      </template>
-    </PageHeader>
+    />
 
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6" v-for="s in statusStats" :key="s.label">
@@ -22,115 +15,90 @@
       </el-col>
     </el-row>
 
-    <el-card shadow="never">
-      <el-table :data="robotStore.robots" size="small">
-        <el-table-column prop="name" label="名称" min-width="130" />
-        <el-table-column prop="model" label="型号" width="120" />
-        <el-table-column prop="serialNo" label="序列号" width="150" />
-        <el-table-column label="绑定站点" width="150">
-          <template #default="{ row }">{{ siteName(row.siteId) }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="电量" width="130">
-          <template #default="{ row }">
-            <el-progress :percentage="row.battery" :stroke-width="8" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="firmware" label="固件" width="90" />
-        <el-table-column label="最后在线" width="160">
-          <template #default="{ row }">{{ row.lastOnlineAt ? fmt(row.lastOnlineAt) : '-' }}</template>
-        </el-table-column>
-        <el-table-column v-if="can('robot:manage')" label="操作" width="80">
-          <template #default="{ row }">
-            <el-button text type="danger" size="small" @click="remove(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <el-card v-if="robot" shadow="never">
+      <el-descriptions :column="2" border size="small">
+        <el-descriptions-item label="名称">{{ robot.name }}</el-descriptions-item>
+        <el-descriptions-item label="型号">{{ robot.model }}</el-descriptions-item>
+        <el-descriptions-item label="序列号">{{ robot.serialNo }}</el-descriptions-item>
+        <el-descriptions-item label="绑定站点">{{ siteName(robot.siteId) }}</el-descriptions-item>
+        <el-descriptions-item label="平台状态">
+          <el-tag :type="statusType(robot.status)" size="small">{{ platformStatusLabel(robot.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="Bridge 连接">
+          <el-tag :type="bridgeReachable(robot) ? 'success' : 'danger'" size="small">
+            {{ bridgeReachable(robot) ? '已连接' : '未连接' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="巡逻状态">{{ patrolStateLabel(robot.telemetry?.patrolState) }}</el-descriptions-item>
+        <el-descriptions-item label="系统模式">{{ robot.telemetry?.systemMode || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="建图状态">{{ mappingStatusLabel(robot.telemetry?.mappingStatus) }}</el-descriptions-item>
+        <el-descriptions-item label="Nav2 状态">{{ nav2StatusLabel(robot.telemetry?.nav2Status) }}</el-descriptions-item>
+        <el-descriptions-item label="CAN 状态">{{ robot.telemetry?.canStatus || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="底盘状态">{{ robot.telemetry?.zlacStatus || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="里程计">{{ sensorFreshness(robot.telemetry?.lastOdomAgeSec) }}</el-descriptions-item>
+        <el-descriptions-item label="雷达">{{ sensorFreshness(robot.telemetry?.lastScanAgeSec) }}</el-descriptions-item>
+        <el-descriptions-item label="位姿" :span="2">
+          <span v-if="robot.telemetry?.pose">
+            x={{ robot.telemetry.pose.x.toFixed(2) }},
+            y={{ robot.telemetry.pose.y.toFixed(2) }},
+            yaw={{ robot.telemetry.pose.yaw.toFixed(2) }}
+          </span>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="Bridge 地址" :span="2">{{ robot.telemetry?.bridgeBaseUrl || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="最近同步" :span="2">{{ robot.telemetry?.bridgeSyncedAt ? fmt(robot.telemetry.bridgeSyncedAt) : '-' }}</el-descriptions-item>
+      </el-descriptions>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="注册机器人" width="480px">
-      <el-form :model="form" label-width="90px">
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="型号"><el-input v-model="form.model" /></el-form-item>
-        <el-form-item label="序列号"><el-input v-model="form.serialNo" /></el-form-item>
-        <el-form-item label="绑定站点">
-          <el-select v-model="form.siteId" style="width: 100%">
-            <el-option v-for="s in siteStore.sites" :key="s.id" :label="s.name" :value="s.id" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submit">注册</el-button>
-      </template>
-    </el-dialog>
+    <el-empty v-else description="未找到机器人设备" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { usePermission } from '@/composables/usePermission'
 import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
 import type { Robot } from '@/types'
+import {
+  bridgeReachable,
+  mappingStatusLabel,
+  nav2StatusLabel,
+  patrolStateLabel,
+  PLATFORM_STATUS_LABELS,
+  sensorFreshness,
+} from '@/utils/robotStatus'
 
 const robotStore = useRobotStore()
 const siteStore = useSiteStore()
-const { can } = usePermission()
-const dialogVisible = ref(false)
-const form = reactive({ name: '', model: '', serialNo: '', siteId: siteStore.sites[0]?.id ?? '' })
 
-const statusStats = computed(() => [
-  { label: '总数', value: robotStore.robots.length },
-  { label: '在线', value: robotStore.robots.filter((r) => r.status === 'ONLINE').length },
-  { label: '任务中', value: robotStore.robots.filter((r) => r.status === 'BUSY').length },
-  { label: '充电中', value: robotStore.robots.filter((r) => r.status === 'CHARGING').length },
-])
+const robot = computed(() => robotStore.robots[0])
+
+const statusStats = computed(() => {
+  const item = robot.value
+  const t = item?.telemetry
+  return [
+    { label: '设备数', value: robotStore.robots.length },
+    { label: 'Bridge', value: item && bridgeReachable(item) ? '在线' : '离线' },
+    { label: '巡逻', value: patrolStateLabel(t?.patrolState) },
+    { label: 'Nav2', value: nav2StatusLabel(t?.nav2Status) },
+  ]
+})
 
 function siteName(id?: string) {
   return id ? siteStore.getSiteById(id)?.name ?? '-' : '未绑定'
 }
 
 function statusType(s: Robot['status']) {
-  return { ONLINE: 'success', BUSY: 'warning', CHARGING: 'info', OFFLINE: 'danger' }[s] as 'success' | 'warning' | 'info' | 'danger'
+  return { ONLINE: 'success', BUSY: 'warning', OFFLINE: 'danger' }[s] as 'success' | 'warning' | 'danger'
+}
+
+function platformStatusLabel(s: Robot['status']) {
+  return PLATFORM_STATUS_LABELS[s]
 }
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString('zh-CN')
-}
-
-function submit() {
-  if (!form.name || !form.model) {
-    ElMessage.warning('请填写完整信息')
-    return
-  }
-  robotStore.addRobot({
-    name: form.name,
-    model: form.model,
-    serialNo: form.serialNo || `SN-${Date.now()}`,
-    siteId: form.siteId,
-    status: 'OFFLINE',
-    battery: 100,
-    firmware: 'v1.0.0',
-    lastOnlineAt: new Date().toISOString(),
-  })
-  dialogVisible.value = false
-  ElMessage.success('机器人已注册')
-}
-
-function remove(id: string) {
-  ElMessageBox.confirm('确定删除？', '确认', { type: 'warning' })
-    .then(() => {
-      robotStore.removeRobot(id)
-      ElMessage.success('已删除')
-    })
-    .catch(() => {})
 }
 </script>
 

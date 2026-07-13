@@ -23,3 +23,6 @@ app:
   agent:
     orchestration:
       auto-execution-enabled: true
+  robot:
+    mode: simulation
+    allow-registration: false

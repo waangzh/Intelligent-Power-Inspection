@@ -6,6 +6,16 @@ interface ApiResponse<T> {
   data: T
 }
 
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const SESSION_KEY = 'pi_session'
 
@@ -25,7 +35,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
-  const token = authToken()
+  const isAuthRequest = path.startsWith('/auth/login') || path.startsWith('/auth/register')
+  const token = isAuthRequest ? null : authToken()
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
@@ -41,13 +52,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const contentType = response.headers.get('content-type') || ''
   if (!contentType.includes('application/json')) {
-    if (!response.ok) throw new Error('请求失败')
+    if (!response.ok) throw new ApiError(`请求失败 (${response.status})`, response.status)
     return (await response.blob()) as T
   }
 
-  const payload = (await response.json()) as ApiResponse<T>
+  const payload = (await response.json()) as ApiResponse<T> & { error?: string }
   if (!response.ok || payload.code !== 0) {
-    throw new Error(payload.message || '请求失败')
+    const message = payload.message || payload.error || `请求失败 (${response.status})`
+    throw new ApiError(message, response.status)
   }
   return payload.data
 }

@@ -85,12 +85,14 @@ export const resourcesApi = {
   retryAlarmWorkOrder: (id: string) => http.post<Alarm>(`/alarms/${id}/retry-work-order`),
 
   listWorkOrders: () => http.get<WorkOrder[]>('/work-orders'),
-  createWorkOrderFromAlarm: (alarmId: string, assigneeName?: string) =>
-    http.post<WorkOrder>(`/work-orders/from-alarm/${alarmId}`, { assigneeName }),
-  updateWorkOrderStatus: (id: string, status: WorkOrderStatus, extra?: { review?: WorkOrderReviewInput }) =>
-    http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
-  assignWorkOrder: (id: string, assigneeName: string) =>
-    http.patch<WorkOrder>(`/work-orders/${id}/assign`, { assigneeName }),
+  createWorkOrderFromAlarm: (alarmId: string) =>
+    http.post<WorkOrder>(`/work-orders/from-alarm/${alarmId}`, {}),
+  claimWorkOrder: (id: string) => http.post<WorkOrder>(`/work-orders/${id}/claim`),
+  updateWorkOrderStatus: (
+    id: string,
+    status: WorkOrderStatus,
+    extra?: { resolution?: string; review?: WorkOrderReviewInput },
+  ) => http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
 
   listRobots: () => http.get<Robot[]>('/robots'),
   createRobot: (robot: Robot) => http.post<Robot>('/robots', robot),

@@ -25,7 +25,7 @@ MySQL / H2 测试数据库
 | **认证** | JWT Token，前端 `pi_session` 保存会话 |
 | **鉴权** | 后端 Spring Security + 前端路由守卫，基于 `UserRole` + `Permission` |
 | **数据** | 后端数据库持久化，刷新后从 `/api/v1` 恢复 |
-| **实时** | 后端调度器模拟任务进度，并通过 WebSocket/STOMP topic 推送；前端启动后订阅实时更新 |
+| **实时** | 后端调度器模拟任务/建图进度，并通过 WebSocket/STOMP topic 推送；前端启动后订阅实时更新 |
 
 ---
 
@@ -63,29 +63,41 @@ type UserRole = 'ADMIN' | 'DISPATCHER' | 'VIEWER'
 
 ```typescript
 type Permission =
-  | 'task:view'       // 查看任务
-  | 'task:create'     // 创建任务
-  | 'task:dispatch'   // 下发任务 / 工单
-  | 'task:control'    // 暂停/恢复/接管/取消
-  | 'site:edit'       // 站点管理
-  | 'route:edit'      // 巡检规划
-  | 'alarm:ack'       // 告警确认
-  | 'robot:manage'    // 机器人管理
-  | 'detection:manage'// 检测策略
-  | 'user:manage'     // 用户管理
-  | 'record:export'   // 记录导出
+  | 'task:view'          // 查看任务/监控/告警/记录
+  | 'task:create'        // 创建任务（调度员）
+  | 'task:dispatch'      // 下发任务 / Agent 研判（调度员）
+  | 'task:control'       // 暂停/恢复/接管/取消（调度员）
+  | 'task:estop'         // 远程急停（管理员应急）
+  | 'site:edit'          // 站点管理
+  | 'route:edit'         // 巡检规划
+  | 'alarm:ack'          // 告警确认（调度员）
+  | 'robot:manage'       // 机器人管理（管理员）
+  | 'detection:manage'   // 检测策略（管理员）
+  | 'user:manage'        // 用户管理（管理员）
+  | 'record:export'      // 记录导出
+  | 'workorder:view'     // 查看工单
+  | 'workorder:create'   // 创建/转工单（管理员）
+  | 'workorder:process'  // 接单与现场处理（调度员）
+  | 'workorder:review'   // 复核关闭（管理员）
+  | 'alarm:policy'       // 告警转工单策略（管理员，前端）
 ```
 
 ### 3.3 角色权限矩阵
 
-| 权限 | ADMIN | DISPATCHER | VIEWER |
-|------|:-----:|:----------:|:------:|
+| 权限域 | ADMIN 管理员 | DISPATCHER 调度员 | VIEWER 观察员 |
+|--------|:------------:|:-----------------:|:-------------:|
+| **定位** | 系统治理者 | 值班运维者 | 监督查阅者 |
 | task:view | ✅ | ✅ | ✅ |
-| task:create / dispatch / control | ✅ | ✅ | ❌ |
+| task:create / dispatch / control | ❌ | ✅ | ❌ |
+| task:estop（应急急停） | ✅ | ❌ | ❌ |
 | site:edit / route:edit | ✅ | ✅ | ❌ |
-| alarm:ack | ✅ | ✅ | ❌ |
+| alarm:ack | ❌ | ✅ | ❌ |
 | record:export | ✅ | ✅ | ❌ |
 | robot / detection / user:manage | ✅ | ❌ | ❌ |
+| workorder:view | ✅ | ✅（接单大厅 + 自己的） | ❌ |
+| workorder:create / review | ✅ | ❌ | ❌ |
+| workorder:process（含接单） | ❌ | ✅ | ❌ |
+| alarm:policy | ✅ | ❌ | ❌ |
 
 **路由守卫**：未登录 → `/login`；无权限 → `/403`  
 **用户管理**：额外限制 `roles: ['ADMIN']`
@@ -272,6 +284,7 @@ interface Site {
   address: string
   description: string
   center: { lat: number; lng: number }
+  lingbotMapId?: string    // 关联三维建图 ID
   createdAt: string
 }
 ```
@@ -289,7 +302,7 @@ interface Site {
 | `load()` | 从后端加载路线列表 |
 | `createRoute(siteId, name, description?)` | 创建空路线 |
 | `updateRoute(id, patch)` | 更新路线（含 `executorJson`、`checkpoints`、`path` 等） |
-| `saveExecutorRoute(routeId, doc)` | **推荐**：保存 ROS 标注结果；写入 `executorJson`，并同步 `name`、`checkpoints`、`path` |
+| `saveExecutorRoute(routeId, doc, mapId?)` | **推荐**：保存 ROS 标注结果；写入 `executorJson`、`mapId`（可选），并同步 `name`、`checkpoints`、`path` |
 | `removeRoute(id)` | 删除路线 |
 | `addCheckpoint` / `updateCheckpoint` / `removeCheckpoint` | 检查点 CRUD（Store 仍保留；`/routes` 页面不再直接调用） |
 | `getRouteById(id)` | 查询路线 |
@@ -357,7 +370,7 @@ y = origin_y + (image_height - pixel_y) * resolution
 1. 选择站点 → 新建/选择路线  
 2. 上传 `.yaml` + `.pgm`（支持拖拽），可选导入已有 `.json`  
 3. 模式：**起点** / **巡检点** / **方向** / **拖动**  
-4. 点击 **保存到平台** → 调用 `saveExecutorRoute` → `PATCH /routes/{id}`  
+4. 点击 **保存到平台** → 若本地加载了新 YAML/PGM，先 `POST /map-assets` 上传地图资产，再 `PATCH /routes/{id}`（含 `mapId` 与 `executorJson`）  
 5. 可 **复制 JSON** 或 **下载 route.json** 供机器人执行器加载  
 
 **Checkpoint 兼容字段**（`saveExecutorRoute` 自动生成）：
@@ -372,7 +385,7 @@ y = origin_y + (image_height - pixel_y) * resolution
 | `pan` | `yaw` 转角度 |
 | `dwellSeconds` | `task_duration_sec` |
 
-> ⚠️ 监控/任务页的 `Map2D` 仍使用 Leaflet 地理坐标，**不会**显示 PGM 底图；ROS 地图标注仅在 `/routes` 页使用。YAML/PGM 文件由用户本地上传，**不**通过后端 API 存储。
+> ⚠️ 监控页 `RosSlamMonitorMap` 优先通过路线 `mapId` 拉取 `/map-assets/{id}/yaml|pgm` 显示底图；若无 `mapId` 则回退到 `executorJson.map_snapshot`。保存时仍会在 `executorJson` 内嵌 `map_snapshot` 以兼容旧数据。
 
 **相关前端文件**：
 
@@ -456,9 +469,9 @@ interface Alarm {
 
 | 方法 | 说明 |
 |------|------|
-| `createFromAlarm(alarm, creator, assigneeName?)` | 从告警创建工单 |
+| `createFromAlarm(alarm, creator)` | 从告警创建工单（待接单，通知所有调度员） |
+| `claim(id)` | 调度员抢单接单 |
 | `updateStatus(id, status, extra?)` | 更新状态 |
-| `assign(id, assigneeName)` | 指派处理人 |
 | `getById(id)` / `getByAlarmId(alarmId)` | 查询 |
 
 **WorkOrderStatus**：`PENDING → PROCESSING → REVIEW → CLOSED`（或 `CANCELLED`）  
@@ -472,17 +485,37 @@ interface Alarm {
 
 ### 5.9 机器人 — `useRobotStore`
 
-**数据来源**：后端 `/api/v1/robots`，实时状态通过 `/topic/robots` 推送。
+**数据来源**：后端 `/api/v1/robots`，实机模式下每 2s 从 mobile bridge（`:8000`）同步；实时状态通过 `/topic/robots` 推送。
 
 | 方法 | 说明 |
 |------|------|
-| `addRobot(robot)` | 新增 |
-| `updateRobot(id, patch)` | 更新 |
-| `removeRobot(id)` | 删除 |
-| `setPosition(id, position)` | 更新 GPS 位置 |
+| `updateRobot(id, patch)` | 更新（实机模式不可注册/删除） |
+| `setPosition(id, position)` | 更新地图位姿 |
 | `getRobotById(id)` | 查询 |
 
-**Robot.status**：`ONLINE | OFFLINE | BUSY | CHARGING`
+**Robot.status**：`ONLINE | OFFLINE | BUSY`（由 bridge 在线状态与巡逻状态推导）
+
+**Robot.telemetry**（实机联调，对应 `electric-power-inspection-robot` mobile bridge）：
+
+| 字段 | 说明 |
+|------|------|
+| `bridgeReachable` / `online` | bridge 是否可达 |
+| `patrolState` | `idle/running/paused/succeeded/failed/canceled/unavailable` |
+| `systemMode` | 系统模式 |
+| `mappingStatus` / `nav2Status` | 建图 / Nav2 状态 |
+| `canStatus` / `zlacStatus` | CAN / 底盘状态 |
+| `lastOdomAgeSec` / `lastScanAgeSec` | 传感器数据新鲜度 |
+| `pose` | `{ x, y, yaw }` 地图坐标 |
+
+后端配置（`application.yml` 或环境变量）：
+
+```yaml
+app:
+  robot:
+    mode: http
+    bridge-base-url: http://<Jetson_IP>:8000
+    robot-id: robot_001
+```
 
 ---
 
@@ -499,7 +532,37 @@ interface Alarm {
 
 ---
 
-### 5.11 消息通知 — `useNotificationStore`
+### 5.11 LingBot 建图 — `useLingBotStore`
+
+**Key**：`pi_lingbot_jobs`
+
+| 方法 | 说明 |
+|------|------|
+| `createJob(siteId, siteName, name)` | 创建建图任务（状态 `PENDING`） |
+| `simulateProgress(id)` | **演示**：进度 +15%，点云数假增 |
+
+**LingBotMapJob**：
+
+```typescript
+interface LingBotMapJob {
+  id: string
+  siteId: string
+  siteName: string
+  name: string
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  progress: number        // 0～100
+  pointCount: number
+  videoCount: number
+  createdAt: string
+  completedAt?: string
+}
+```
+
+> ⚠️ **未对接**真实 LingBot-Map，当前为后端模拟建图进度。
+
+---
+
+### 5.12 消息通知 — `useNotificationStore`
 
 **数据来源**：后端 `/api/v1/notifications`，新通知通过 `/topic/notifications` 或 `/topic/notifications/{userId}` 推送。
 
@@ -521,7 +584,7 @@ interface Alarm {
 |-----|------|
 | `pi_session` | 登录会话，包含 JWT token、当前用户和可选过期时间 |
 
-核心业务数据（用户、站点、路线、任务、告警、工单、机器人、检测模板、通知、记录）由后端数据库持久化。
+核心业务数据（用户、站点、路线、任务、告警、工单、机器人、检测模板、建图任务、通知、记录）由后端数据库持久化。
 
 ---
 
@@ -534,6 +597,7 @@ interface Alarm {
 | `/dashboard` | 运行总览 | 登录 |
 | `/monitor` | 实时监控 | 登录 |
 | `/alarms` | 告警中心 | 登录 |
+| `/bigscreen` | 集控大屏 | 登录 |
 | `/workorders` | 工单管理 | `task:dispatch` |
 | `/notifications` | 消息中心 | 登录 |
 | `/sites` | 站点管理 | `site:edit` |
@@ -541,6 +605,7 @@ interface Alarm {
 | `/tasks` | 任务调度 | `task:view` |
 | `/tasks/:id` | 任务详情 | `task:view` |
 | `/robots` | 机器人管理 | `robot:manage` |
+| `/lingbot` | LingBot 建图 | `lingbot:manage` |
 | `/detection` | 检测策略 | `detection:manage` |
 | `/records` | 巡检记录 | 登录 |
 | `/statistics` | 统计分析 | 登录 |
@@ -598,7 +663,8 @@ Content-Type: application/json
 | 用户 | GET/PUT | `/users/me/preferences` | 偏好设置 |
 | 站点 | CRUD | `/sites`, `/sites/{id}/areas` | `useSiteStore` |
 | 路线 | CRUD | `/routes`, `/routes/{id}/checkpoints` | `useRouteStore` |
-| 路线 | PATCH | `/routes/{id}`（body 含 `executorJson`） | `saveExecutorRoute` |
+| 路线 | PATCH | `/routes/{id}`（body 含 `executorJson`、`mapId`） | `saveExecutorRoute` |
+| 地图资产 | POST/GET/DELETE | `/map-assets`, `/map-assets/{id}/yaml`, `/map-assets/{id}/pgm` | `resourcesApi.uploadMapAsset` 等 |
 | 任务 | CRUD | `/tasks` | `useTaskStore` |
 | 任务 | POST | `/tasks/{id}/dispatch` | `dispatch` |
 | 任务 | POST | `/tasks/{id}/pause` | `pause` |
@@ -609,12 +675,15 @@ Content-Type: application/json
 | 告警 | GET | `/alarms` | `useAlarmStore.alarms` |
 | 告警 | POST | `/alarms/{id}/ack` | `acknowledge` |
 | 告警 | POST | `/alarms/ack-all` | `acknowledgeAll` |
-| 工单 | CRUD | `/work-orders` | `useWorkOrderStore` |
+| 工单 | CRUD + claim | `/work-orders`、`/work-orders/{id}/claim` | `useWorkOrderStore` |
 | 机器人 | CRUD | `/robots` | `useRobotStore` |
 | 机器人 | GET | `/robots/{id}/telemetry` | 查询当前遥测快照 |
 | 检测 | CRUD | `/detection-templates` | `useDetectionStore` |
 | 记录 | GET | `/records` | `useTaskStore.records` |
 | 记录 | POST | `/records/export` | 导出 CSV |
+| 建图 | POST | `/lingbot/jobs` | 创建建图任务 |
+| 建图 | GET | `/lingbot/jobs/{id}` | 查询任务状态 |
+| 建图 | GET | `/lingbot/maps/{id}/pointcloud` | 点云/模型 URL |
 | 通知 | GET | `/notifications` | `forUser` |
 | 通知 | PATCH | `/notifications/{id}/read` | `markRead` |
 
@@ -624,6 +693,7 @@ Content-Type: application/json
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
+| `mapId` | string | 关联的 ROS 地图资产 ID（`POST /map-assets` 返回） |
 | `executorJson` | object | ROS 执行器 route.json v2，结构见 §5.5 `RouteExecutorDocument` |
 
 **示例**（节选）：
@@ -645,7 +715,7 @@ Content-Type: application/json
 }
 ```
 
-`GET /routes`、`GET /routes/{id}` 返回体中若曾保存过标注，会包含 `executorJson`；`/routes` 页面加载时将其传给 `RosMapRouteEditor` 的 `initial-json`。
+`GET /routes`、`GET /routes/{id}` 返回体中若曾保存过标注，会包含 `executorJson` 与可选 `mapId`；`/routes` 页面加载时优先按 `mapId` 拉取地图，并将 `executorJson` 传给 `RosMapRouteEditor`。
 
 ### 9.4 实时通道（WebSocket/STOMP）
 
@@ -656,6 +726,8 @@ Content-Type: application/json
 /topic/robots                → 机器人状态/遥测更新
 /topic/robots/{robotId}      → 单机器人状态/遥测更新
 /topic/alarms                → 新告警推送
+/topic/lingbot/jobs          → 建图任务更新
+/topic/lingbot/jobs/{id}     → 单建图任务更新
 /topic/notifications         → 全员通知
 /topic/notifications/{userId}→ 用户通知
 ```
@@ -667,7 +739,8 @@ Content-Type: application/json
 | 问题 | 答案 |
 |------|------|
 | 有没有 HTTP API？ | **有**，`/api/v1` |
+| 三维建图真实吗？ | **否**，后端 `simulate` 模拟 |
 | 任务执行真实吗？ | **半真实**，后端调度器模拟进度、事件、机器人位置和记录 |
-| 路线规划真实吗？ | **半真实**，`/routes` 为 ROS map 标注 + route.json v2；PGM/YAML 本地上传，平台持久化 `executorJson` |
+| 路线规划真实吗？ | **半真实**，`/routes` 为 ROS map 标注 + route.json v2；YAML/PGM 上传至 `/map-assets` 并关联 `mapId`，同时持久化 `executorJson` |
 | 检测/告警真实吗？ | **否**，后端随机模拟 + picsum 占位图 |
 | 接口在哪？ | 前端 `src/api/*`，后端 `backend/src/main/java/com/powerinspection/*` |

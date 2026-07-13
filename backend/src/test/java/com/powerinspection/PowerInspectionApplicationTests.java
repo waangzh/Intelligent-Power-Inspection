@@ -28,9 +28,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @ActiveProfiles("test")
+@TestPropertySource(properties = {
+  "app.robot.mode=simulation",
+  "app.robot.allow-registration=false"
+})
 @SpringBootTest
 @AutoConfigureMockMvc
 class PowerInspectionApplicationTests {
@@ -81,6 +86,17 @@ class PowerInspectionApplicationTests {
         .header("Authorization", bearer(viewerToken))
         .contentType(MediaType.APPLICATION_JSON)
         .content(json("id", "task_viewer_denied", "name", "viewer denied")))
+      .andExpect(status().isForbidden())
+      .andExpect(jsonPath("$.message").value("无权限访问"));
+
+    mockMvc.perform(post("/api/v1/tasks")
+        .header("Authorization", bearer(adminToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("id", "task_admin_denied", "name", "admin denied")))
+      .andExpect(status().isForbidden())
+      .andExpect(jsonPath("$.message").value("无权限访问"));
+
+    mockMvc.perform(post("/api/v1/alarms/alarm_seed_003/ack").header("Authorization", bearer(adminToken)))
       .andExpect(status().isForbidden())
       .andExpect(jsonPath("$.message").value("无权限访问"));
   }
@@ -260,24 +276,23 @@ class PowerInspectionApplicationTests {
     mockMvc.perform(post("/api/v1/robots")
         .header("Authorization", bearer(adminToken))
         .contentType(MediaType.APPLICATION_JSON)
-        .content(json("id", "robot_test_api", "name", "接口测试机器人", "model", "TestBot", "serialNo", "TB-001", "siteId", "site_test_api", "status", "ONLINE", "battery", 88)))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.id").value("robot_test_api"));
+        .content(json("id", "robot_test_api", "name", "接口测试机器人", "model", "TestBot", "serialNo", "TB-001", "siteId", "site_test_api", "status", "ONLINE")))
+      .andExpect(status().isBadRequest());
 
-    mockMvc.perform(get("/api/v1/robots/robot_test_api").header("Authorization", bearer(adminToken)))
+    mockMvc.perform(get("/api/v1/robots/robot_001").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.name").value("接口测试机器人"));
+      .andExpect(jsonPath("$.data.id").value("robot_001"));
 
-    mockMvc.perform(get("/api/v1/robots/robot_test_api/telemetry").header("Authorization", bearer(adminToken)))
+    mockMvc.perform(get("/api/v1/robots/robot_001/telemetry").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("ONLINE"));
+      .andExpect(jsonPath("$.data.id").value("robot_001"));
 
-    mockMvc.perform(patch("/api/v1/robots/robot_test_api")
+    mockMvc.perform(patch("/api/v1/robots/robot_001")
         .header("Authorization", bearer(adminToken))
         .contentType(MediaType.APPLICATION_JSON)
-        .content(json("battery", 77)))
+        .content(json("firmware", "ROS2-test")))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.battery").value(77));
+      .andExpect(jsonPath("$.data.firmware").value("ROS2-test"));
 
     mockMvc.perform(post("/api/v1/detection-templates")
         .header("Authorization", bearer(adminToken))
@@ -299,8 +314,8 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(delete("/api/v1/detection-templates/tpl_test_api").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk());
-    mockMvc.perform(delete("/api/v1/robots/robot_test_api").header("Authorization", bearer(adminToken)))
-      .andExpect(status().isOk());
+    mockMvc.perform(delete("/api/v1/robots/robot_001").header("Authorization", bearer(adminToken)))
+      .andExpect(status().isBadRequest());
     mockMvc.perform(delete("/api/v1/routes/route_test_api/checkpoints/cp_test_api").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk());
     mockMvc.perform(delete("/api/v1/routes/route_test_api").header("Authorization", bearer(dispatcherToken)))
@@ -374,12 +389,21 @@ class PowerInspectionApplicationTests {
     mockMvc.perform(post("/api/v1/alarms/ack-all").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk());
 
-    String workOrderId = postAndReadId("/api/v1/work-orders/from-alarm/alarm_seed_003", dispatcherToken, json("assigneeName", "张调度"));
+    String workOrderId = postAndReadId("/api/v1/work-orders/from-alarm/alarm_seed_003", adminToken, "{}");
 
     mockMvc.perform(get("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.alarmId").value("alarm_seed_003"))
+      .andExpect(jsonPath("$.data.status").value("PENDING"))
       .andExpect(jsonPath("$.data.locationDescription").value("电容器组巡检"));
+
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.assigneeName").value("张调度"))
+      .andExpect(jsonPath("$.data.status").value("PROCESSING"));
+
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isBadRequest());
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId)
         .header("Authorization", bearer(dispatcherToken))
@@ -387,20 +411,6 @@ class PowerInspectionApplicationTests {
         .content(json("priority", "LOW")))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.priority").value("LOW"));
-
-    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/assign")
-        .header("Authorization", bearer(dispatcherToken))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("assigneeName", "李观察")))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.assigneeName").value("李观察"));
-
-    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
-        .header("Authorization", bearer(dispatcherToken))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("status", "PROCESSING")))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("PROCESSING"));
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
         .header("Authorization", bearer(dispatcherToken))
@@ -431,11 +441,19 @@ class PowerInspectionApplicationTests {
       .andExpect(jsonPath("$.data.review.submittedByName").value("张调度"));
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
-        .header("Authorization", bearer(dispatcherToken))
+        .header("Authorization", bearer(adminToken))
         .contentType(MediaType.APPLICATION_JSON)
         .content(json("status", "CLOSED")))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.closedAt", not(blankOrNullString())));
+
+    mockMvc.perform(post("/api/v1/work-orders/from-alarm/alarm_seed_002").header("Authorization", bearer(dispatcherToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{}"))
+      .andExpect(status().isForbidden());
+
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(adminToken)))
+      .andExpect(status().isForbidden());
 
     mockMvc.perform(get("/api/v1/notifications").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
@@ -445,7 +463,7 @@ class PowerInspectionApplicationTests {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.read").value(true));
 
-    mockMvc.perform(delete("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(dispatcherToken)))
+    mockMvc.perform(delete("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk());
     mockMvc.perform(delete("/api/v1/tasks/task_flow_api").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk());

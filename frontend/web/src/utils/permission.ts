@@ -5,6 +5,7 @@ export type Permission =
   | 'task:create'
   | 'task:dispatch'
   | 'task:control'
+  | 'task:estop'
   | 'site:edit'
   | 'route:edit'
   | 'alarm:ack'
@@ -12,6 +13,11 @@ export type Permission =
   | 'detection:manage'
   | 'user:manage'
   | 'record:export'
+  | 'workorder:view'
+  | 'workorder:create'
+  | 'workorder:process'
+  | 'workorder:review'
+  | 'alarm:policy'
   | 'agent:view'
   | 'agent:run'
   | 'agent:approve'
@@ -22,24 +28,27 @@ export interface AccessRule {
   roles?: UserRole[]
 }
 
+/** 管理员：系统治理与流程审批，不执行一线巡检调度 */
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ADMIN: [
     'task:view',
-    'task:create',
-    'task:dispatch',
-    'task:control',
+    'task:estop',
     'site:edit',
     'route:edit',
-    'alarm:ack',
     'robot:manage',
     'detection:manage',
     'user:manage',
     'record:export',
+    'workorder:view',
+    'workorder:create',
+    'workorder:review',
+    'alarm:policy',
     'agent:view',
     'agent:run',
     'agent:approve',
     'agent:admin',
   ],
+  /** 调度员：值班运维，负责任务执行与告警现场处置 */
   DISPATCHER: [
     'task:view',
     'task:create',
@@ -49,10 +58,13 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'route:edit',
     'alarm:ack',
     'record:export',
+    'workorder:view',
+    'workorder:process',
     'agent:view',
     'agent:run',
     'agent:approve',
   ],
+  /** 观察员：只读监督，无写操作 */
   VIEWER: ['task:view'],
 }
 
@@ -79,4 +91,19 @@ export function hasPermission(role: UserRole | undefined, permission: Permission
 
 export function hasAnyPermission(role: UserRole | undefined, permissions: Permission[]): boolean {
   return permissions.some((p) => hasPermission(role, p))
+}
+
+export const ROLE_SUMMARIES: Record<UserRole, { title: string; scope: string }> = {
+  ADMIN: {
+    title: '系统治理者',
+    scope: '用户与策略配置、告警转工单与复核、Agent 审批；可应急急停，不执行日常巡检调度',
+  },
+  DISPATCHER: {
+    title: '值班运维者',
+    scope: '任务创建下发、告警确认处置、接单处理并提交复核、Agent 执行；不可改角色与复核关闭',
+  },
+  VIEWER: {
+    title: '监督查阅者',
+    scope: '查看监控、告警、任务与记录；不可操作任务、机器人与工单',
+  },
 }

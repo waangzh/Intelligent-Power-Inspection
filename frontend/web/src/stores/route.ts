@@ -4,6 +4,7 @@ import { resourcesApi } from '@/api/resources'
 import type { Checkpoint, DetectionItem, DetectionType, Route } from '@/types'
 import { CHECKPOINT_DETECTIONS, ROUTE_DETECTIONS } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
+import { withPlatformRouteName } from '@/utils/routeExecutorJson'
 import { uid } from '@/utils/storage'
 
 function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
@@ -41,22 +42,24 @@ export const useRouteStore = defineStore('route', () => {
       mapMode: '2d',
       createdAt: new Date().toISOString(),
     }
+    routes.value.push(route)
     const saved = await resourcesApi.createRoute(route)
-    routes.value.push(saved)
+    updateLocalRoute(saved)
     return saved
   }
 
   async function updateRoute(id: string, patch: Partial<Route>) {
     const idx = routes.value.findIndex((r) => r.id === id)
-    if (idx < 0) throw new Error('待保存的路线不存在。')
+    if (idx < 0) return
+    routes.value[idx] = { ...routes.value[idx], ...patch }
     const saved = await resourcesApi.updateRoute(id, patch)
     updateLocalRoute(saved)
     return saved
   }
 
   async function removeRoute(id: string) {
-    await resourcesApi.removeRoute(id)
     routes.value = routes.value.filter((r) => r.id !== id)
+    await resourcesApi.removeRoute(id)
   }
 
   function addCheckpoint(routeId: string, checkpoint: Omit<Checkpoint, 'id' | 'routeId' | 'seq' | 'detections'>) {
@@ -93,15 +96,43 @@ export const useRouteStore = defineStore('route', () => {
     void resourcesApi.removeCheckpoint(routeId, checkpointId)
   }
 
-  async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument, mapId: string) {
+  function checkpointsFromExecutor(routeId: string, doc: RouteExecutorDocument): Checkpoint[] {
+    const orderedIds = doc.routes[0]?.target_ids?.length
+      ? doc.routes[0].target_ids
+      : doc.targets.map((t) => t.id)
+    const byId = new Map(doc.targets.map((t) => [t.id, t]))
+    return orderedIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((target, index) => ({
+        id: target!.id,
+        routeId,
+        name: target!.name,
+        seq: index + 1,
+        position: { lat: target!.pose.y, lng: target!.pose.x, x: target!.pose.x, y: target!.pose.y },
+        pan: Math.round(((target!.pose.yaw || 0) * 180) / Math.PI),
+        tilt: -15,
+        dwellSeconds: target!.task_duration_sec ?? 5,
+        detections: defaultDetectionItems(CHECKPOINT_DETECTIONS),
+      }))
+  }
+
+  async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument, mapId?: string) {
     if (doc.routes.length !== 1) throw new Error('路线执行 JSON 必须且只能包含一条 route。')
-    const routeName = doc.routes[0].name || doc.active_route_id
-    return updateRoute(routeId, {
-      name: routeName,
-      executorJson: doc,
+    const route = routes.value.find((r) => r.id === routeId)
+    const platformName = route?.name?.trim() || doc.routes[0]?.name || doc.active_route_id
+    const executorJson = withPlatformRouteName(doc, platformName)
+    const checkpoints = checkpointsFromExecutor(routeId, executorJson)
+    const path = checkpoints.map((cp) => cp.position)
+    const patch: Partial<Route> = {
+      name: platformName,
+      executorJson,
+      checkpoints,
+      path,
       mapMode: '2d',
-      mapId,
-    })
+    }
+    if (mapId) patch.mapId = mapId
+    return updateRoute(routeId, patch)
   }
 
   function getRouteById(id: string) {

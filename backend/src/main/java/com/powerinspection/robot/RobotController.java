@@ -26,12 +26,14 @@ public class RobotController extends CrudSupport {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
   private final SimpMessagingTemplate messagingTemplate;
+  private final RobotProperties robotProperties;
 
-  public RobotController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, SimpMessagingTemplate messagingTemplate) {
+  public RobotController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, SimpMessagingTemplate messagingTemplate, RobotProperties robotProperties) {
     super(dataStore);
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.messagingTemplate = messagingTemplate;
+    this.robotProperties = robotProperties;
   }
 
   @GetMapping
@@ -47,9 +49,11 @@ public class RobotController extends CrudSupport {
   @PostMapping
   public ApiResponse<Map<String, Object>> createRobot(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
+    if (!robotProperties.isAllowRegistration()) {
+      throw ApiException.badRequest("当前为单机器人实机模式，不支持注册新机器人");
+    }
     validateSite(body.get("siteId"));
-    body.putIfAbsent("status", "ONLINE");
-    body.putIfAbsent("battery", 100);
+    body.putIfAbsent("status", "OFFLINE");
     Map<String, Object> robot = create(DataCategory.ROBOT, "robot", body);
     publishRobot(robot);
     return ApiResponse.ok(robot);
@@ -69,6 +73,9 @@ public class RobotController extends CrudSupport {
   @DeleteMapping("/{id}")
   public ApiResponse<Void> deleteRobot(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
+    if (!robotProperties.isAllowRegistration()) {
+      throw ApiException.badRequest("当前为单机器人实机模式，不支持删除机器人");
+    }
     ensureRobotNotBusy(id);
     delete(DataCategory.ROBOT, id);
     return ApiResponse.ok();

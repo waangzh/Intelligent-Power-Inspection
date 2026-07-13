@@ -60,15 +60,16 @@ import PageHeader from '@/components/PageHeader.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
+import { ROLE_SUMMARIES } from '@/utils/permission'
 import type { User, UserRole } from '@/types/auth'
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
 
 const roleTable = [
-  { role: '管理员', desc: '系统全权管理', perms: '全部功能 + 用户管理' },
-  { role: '调度员', desc: '日常运维调度', perms: '任务下发/控制、站点路线编辑、告警确认' },
-  { role: '观察员', desc: '只读浏览', perms: '查看监控、告警、记录，不可操作任务' },
+  { role: '管理员', desc: ROLE_SUMMARIES.ADMIN.title, perms: ROLE_SUMMARIES.ADMIN.scope },
+  { role: '调度员', desc: ROLE_SUMMARIES.DISPATCHER.title, perms: ROLE_SUMMARIES.DISPATCHER.scope },
+  { role: '观察员', desc: ROLE_SUMMARIES.VIEWER.title, perms: ROLE_SUMMARIES.VIEWER.scope },
 ]
 
 onMounted(() => userStore.loadUsers())

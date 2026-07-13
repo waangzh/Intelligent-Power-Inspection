@@ -12,7 +12,6 @@ const props = defineProps<{
 
 const chartEl = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
-let resizeObserver: ResizeObserver | null = null
 
 function render() {
   if (!chartEl.value) return
@@ -26,17 +25,11 @@ function onResize() {
 
 onMounted(() => {
   render()
-  if (chartEl.value) {
-    resizeObserver = new ResizeObserver(onResize)
-    resizeObserver.observe(chartEl.value)
-  }
   window.addEventListener('resize', onResize)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', onResize)
-  resizeObserver?.disconnect()
-  resizeObserver = null
   chart?.dispose()
   chart = null
 })
