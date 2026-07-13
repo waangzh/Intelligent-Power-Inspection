@@ -12,6 +12,8 @@ import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotProgressSnapshot;
 import com.powerinspection.route.RouteExecutorSupport;
+import com.powerinspection.route.RouteRevisionEntity;
+import com.powerinspection.route.RouteRevisionService;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -19,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -26,6 +29,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class TaskService {
   private static final List<String> ACTIVE_STATUSES = List.of("DISPATCHED", "RUNNING", "PAUSED", "MANUAL_TAKEOVER");
+  private static final Set<String> REVISION_MANAGED_FIELDS = Set.of(
+    "routeRevisionId", "routeId", "robotId", "executionId", "routeContentSha256", "mapImageSha256", "status"
+  );
   private static final List<String> ROUTE_ALARM_TYPES = List.of("PERSON", "HELMET", "FIRE", "OBSTACLE");
   private static final Map<String, String> SEVERITY = Map.of(
     "PERSON", "MEDIUM",
@@ -53,14 +59,25 @@ public class TaskService {
   private final SimpMessagingTemplate messagingTemplate;
   private final RobotGateway robotGateway;
   private final LocateAnythingGateway locateAnythingGateway;
+  private final RouteRevisionService routeRevisionService;
+  private final TaskExecutionService taskExecutionService;
   private final Random random = new Random();
 
-  public TaskService(DataStoreService dataStore, AlarmService alarmService, SimpMessagingTemplate messagingTemplate, RobotGateway robotGateway, LocateAnythingGateway locateAnythingGateway) {
+  public TaskService(
+      DataStoreService dataStore,
+      AlarmService alarmService,
+      SimpMessagingTemplate messagingTemplate,
+      RobotGateway robotGateway,
+      LocateAnythingGateway locateAnythingGateway,
+      RouteRevisionService routeRevisionService,
+      TaskExecutionService taskExecutionService) {
     this.dataStore = dataStore;
     this.alarmService = alarmService;
     this.messagingTemplate = messagingTemplate;
     this.robotGateway = robotGateway;
     this.locateAnythingGateway = locateAnythingGateway;
+    this.routeRevisionService = routeRevisionService;
+    this.taskExecutionService = taskExecutionService;
   }
 
   public List<Map<String, Object>> tasks() {
@@ -86,13 +103,26 @@ public class TaskService {
     body.putIfAbsent("progress", 0);
     body.putIfAbsent("currentCheckpointSeq", 0);
     body.putIfAbsent("createdAt", Instant.now().toString());
+    RouteRevisionEntity revision = attachRouteRevision(body);
     validateTaskBinding(body);
+    if (revision != null) {
+      TaskExecutionEntity execution = taskExecutionService.bind(body, revision);
+      body.put("executionId", execution.getExecutionId());
+      body.put("routeContentSha256", execution.getRouteContentSha256());
+      body.put("mapImageSha256", execution.getMapImageSha256());
+    }
     return saveTask(body);
   }
 
   @Transactional
   public Map<String, Object> updateTask(String id, Map<String, Object> body) {
     Map<String, Object> current = dataStore.get(DataCategory.TASK, id);
+    if (hasRouteRevision(current)) {
+      String managedField = body.keySet().stream().filter(REVISION_MANAGED_FIELDS::contains).findFirst().orElse(null);
+      if (managedField != null) {
+        throw ApiException.badRequest("已绑定路线修订的任务不能通过通用更新接口修改 " + managedField);
+      }
+    }
     if (ACTIVE_STATUSES.contains(text(current.get("status"))) && (body.containsKey("routeId") || body.containsKey("robotId"))) {
       throw ApiException.badRequest("任务执行中不能更换路线或机器人");
     }
@@ -107,11 +137,13 @@ public class TaskService {
   public void deleteTask(String id) {
     dataStore.delete(DataCategory.TASK, id);
     dataStore.deleteWhere(DataCategory.EVENT, "taskId", id);
+    taskExecutionService.delete(id);
   }
 
   @Transactional
   public Map<String, Object> dispatch(String id) {
     Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
+    requireSimulationTask(task);
     requireStatus(task, "CREATED");
     Map<String, Object> route = requireRoute(task);
     Map<String, Object> robot = requireRobot(task);
@@ -130,6 +162,7 @@ public class TaskService {
   @Transactional
   public Map<String, Object> pause(String id) {
     Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
+    requireSimulationTask(task);
     requireStatus(task, "RUNNING");
     Map<String, Object> robot = requireRobot(task);
     robotGateway.pauseTask(robot, task);
@@ -142,6 +175,7 @@ public class TaskService {
   @Transactional
   public Map<String, Object> resume(String id) {
     Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
+    requireSimulationTask(task);
     String status = text(task.get("status"));
     if ("PAUSED".equals(status) || "MANUAL_TAKEOVER".equals(status) || "DISPATCHED".equals(status)) {
       Map<String, Object> robot = requireRobot(task);
@@ -163,6 +197,7 @@ public class TaskService {
   @Transactional
   public Map<String, Object> takeover(String id) {
     Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
+    requireSimulationTask(task);
     requireStatus(task, "RUNNING");
     Map<String, Object> robot = requireRobot(task);
     robotGateway.takeoverTask(robot, task);
@@ -175,6 +210,7 @@ public class TaskService {
   @Transactional
   public Map<String, Object> cancel(String id) {
     Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
+    requireSimulationTask(task);
     if ("COMPLETED".equals(task.get("status")) || "CANCELLED".equals(task.get("status"))) {
       throw ApiException.badRequest("已结束任务不能重复取消");
     }
@@ -191,6 +227,9 @@ public class TaskService {
   @Transactional
   public void tick() {
     for (Map<String, Object> task : dataStore.list(DataCategory.TASK)) {
+      if (hasRouteRevision(task)) {
+        continue;
+      }
       String status = text(task.get("status"));
       if ("DISPATCHED".equals(status)) {
         resume(text(task.get("id")));
@@ -388,6 +427,33 @@ public class TaskService {
     Map<String, Object> route = requireRoute(task);
     Map<String, Object> robot = requireRobot(task);
     validateRouteAndRobotSite(route, robot);
+  }
+
+  private RouteRevisionEntity attachRouteRevision(Map<String, Object> task) {
+    String revisionId = text(task.get("routeRevisionId"));
+    if (revisionId == null || revisionId.isBlank()) {
+      return null;
+    }
+    RouteRevisionEntity revision = routeRevisionService.require(revisionId);
+    String requestedRouteId = text(task.get("routeId"));
+    if (requestedRouteId != null && !requestedRouteId.equals(revision.getRouteId())) {
+      throw ApiException.badRequest("routeId 与 routeRevisionId 不一致");
+    }
+    task.put("routeId", revision.getRouteId());
+    task.put("routeContentSha256", revision.getContentSha256());
+    task.put("mapImageSha256", revision.getMapImageSha256());
+    return revision;
+  }
+
+  private boolean hasRouteRevision(Map<String, Object> task) {
+    String revisionId = text(task.get("routeRevisionId"));
+    return revisionId != null && !revisionId.isBlank();
+  }
+
+  private void requireSimulationTask(Map<String, Object> task) {
+    if (hasRouteRevision(task)) {
+      throw ApiException.conflict("真实路线修订任务必须通过 Robot Bridge 接口控制，当前平台仅支持创建不可变任务绑定");
+    }
   }
 
   @SuppressWarnings("unchecked")

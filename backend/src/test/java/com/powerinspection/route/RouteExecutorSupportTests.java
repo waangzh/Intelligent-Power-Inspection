@@ -51,6 +51,27 @@ class RouteExecutorSupportTests {
     assertEquals("executorJson.targets[0].pose must be an object", ex.getMessage());
   }
 
+  @Test
+  void validateAcceptsV3RouteWithMapIdentityAndKeepoutZone() {
+    Map<String, Object> executor = validExecutorV3();
+
+    RouteExecutorSupport.validate(executor);
+
+    assertEquals(3, executor.get("version"));
+  }
+
+  @Test
+  void validateRejectsV3LocationMismatch() {
+    Map<String, Object> executor = validExecutorV3();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> location = (Map<String, Object>) targetDefs(executor).get(0).get("location");
+    location.put("yaw", 0.4);
+
+    ApiException ex = assertThrows(ApiException.class, () -> RouteExecutorSupport.validate(executor));
+
+    assertEquals("executorJson.targets[0].pose and location disagree on yaw", ex.getMessage());
+  }
+
   @SuppressWarnings("unchecked")
   private List<Map<String, Object>> routeDefs(Map<String, Object> executor) {
     return (List<Map<String, Object>>) executor.get("routes");
@@ -88,6 +109,38 @@ class RouteExecutorSupportTests {
       )),
       "schedules", List.of()
     );
+  }
+
+  private Map<String, Object> validExecutorV3() {
+    Map<String, Object> executor = validExecutor();
+    executor.put("version", 3);
+    executor.put("map", map(
+      "yaml", "my_map.yaml",
+      "image", "my_map.pgm",
+      "resolution", 0.025,
+      "origin", List.of(-2.89, -6.37, 0.0),
+      "width", 1024,
+      "height", 1024,
+      "image_sha256", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    ));
+    Map<String, Object> start = (Map<String, Object>) executor.get("start_pose");
+    start.put("frame_id", "map");
+    start.put("location", location((Map<String, Object>) start.get("pose")));
+    for (Map<String, Object> target : targetDefs(executor)) {
+      target.put("location", location((Map<String, Object>) target.get("pose")));
+    }
+    executor.put("keepout_zones", List.of(map(
+      "id", "keepout_001",
+      "type", "hard_keepout",
+      "enabled", true,
+      "mask_padding_m", 0.025,
+      "polygon", List.of(map("x", 5.0, "y", 5.0), map("x", 6.0, "y", 5.0), map("x", 5.0, "y", 6.0))
+    )));
+    return executor;
+  }
+
+  private Map<String, Object> location(Map<String, Object> pose) {
+    return map("type", "map_pose", "frame_id", "map", "x", pose.get("x"), "y", pose.get("y"), "yaw", pose.get("yaw"));
   }
 
   private Map<String, Object> pose(double x, double y, double yaw) {

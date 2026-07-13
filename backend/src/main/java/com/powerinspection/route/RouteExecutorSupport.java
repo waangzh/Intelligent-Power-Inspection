@@ -2,11 +2,16 @@ package com.powerinspection.route;
 
 import com.powerinspection.common.ApiException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class RouteExecutorSupport {
+  private static final Pattern SHA256_PATTERN = Pattern.compile("^[0-9a-f]{64}$");
+
   private RouteExecutorSupport() {
   }
 
@@ -89,15 +94,25 @@ public final class RouteExecutorSupport {
   }
 
   public static void validate(Map<String, Object> executor) {
-    if (!Integer.valueOf(2).equals(number(executor.get("version")))) {
-      throw ApiException.badRequest("executorJson.version must be 2");
+    Integer version = number(executor.get("version"));
+    if (version == null || (version != 2 && version != 3)) {
+      throw ApiException.badRequest("executorJson.version must be 2 or 3");
     }
     if (!"map".equals(String.valueOf(executor.get("frame_id")))) {
       throw ApiException.badRequest("executorJson.frame_id must be map");
     }
+    if (version == 3) {
+      validateMapIdentity(executor.get("map"));
+    }
     String activeRouteId = requiredText(executor.get("active_route_id"), "executorJson.active_route_id is required");
     Map<String, Object> startPose = requireMap(executor.get("start_pose"), "executorJson.start_pose must be an object");
-    requirePose(startPose.get("pose"), "executorJson.start_pose.pose");
+    Map<String, Object> normalizedStartPose = requirePose(startPose.get("pose"), "executorJson.start_pose.pose");
+    if (version == 3) {
+      if (!"map".equals(String.valueOf(startPose.get("frame_id")))) {
+        throw ApiException.badRequest("executorJson.start_pose.frame_id must be map");
+      }
+      requireMatchingLocation(normalizedStartPose, startPose.get("location"), "executorJson.start_pose");
+    }
     if (startPose.containsKey("covariance")) {
       Map<String, Object> covariance = requireMap(startPose.get("covariance"), "executorJson.start_pose.covariance must be an object");
       requireFiniteNumber(covariance.get("x"), "executorJson.start_pose.covariance.x must be a number");
@@ -117,7 +132,10 @@ public final class RouteExecutorSupport {
       if (targetById.put(id, target) != null) {
         throw ApiException.badRequest("executorJson.targets contains duplicate id: " + id);
       }
-      requirePose(target.get("pose"), "executorJson.targets[" + i + "].pose");
+      Map<String, Object> pose = requirePose(target.get("pose"), "executorJson.targets[" + i + "].pose");
+      if (version == 3) {
+        requireMatchingLocation(pose, target.get("location"), "executorJson.targets[" + i + "]");
+      }
       if (target.containsKey("task_duration_sec")) {
         requireNonNegativeNumber(target.get("task_duration_sec"), "executorJson.targets[" + i + "].task_duration_sec must be a non-negative number");
       }
@@ -128,10 +146,14 @@ public final class RouteExecutorSupport {
       throw ApiException.badRequest("executorJson.routes must contain one route");
     }
     boolean activeRouteFound = false;
+    Set<String> routeIds = new HashSet<>();
     List<Map<String, Object>> routes = castMapList((List<?>) rawRoutes);
     for (int i = 0; i < routes.size(); i++) {
       Map<String, Object> route = routes.get(i);
       String id = requiredText(route.get("id"), "executorJson.routes[" + i + "].id is required");
+      if (!routeIds.add(id)) {
+        throw ApiException.badRequest("executorJson.routes contains duplicate id: " + id);
+      }
       activeRouteFound = activeRouteFound || activeRouteId.equals(id);
       Object rawIds = route.get("target_ids");
       if (rawIds != null) {
@@ -168,6 +190,17 @@ public final class RouteExecutorSupport {
     }
     if (!activeRouteFound) {
       throw ApiException.badRequest("executorJson.active_route_id must reference a route id");
+    }
+
+    Object rawSchedules = executor.get("schedules");
+    if (!(rawSchedules instanceof List<?>)) {
+      throw ApiException.badRequest("executorJson.schedules must be a list");
+    }
+    if (version == 3) {
+      Map<String, Object> map = requireMap(executor.get("map"), "executorJson.map must be an object");
+      validateKeepoutZones(executor.get("keepout_zones"), requirePositiveNumber(map.get("resolution"), "executorJson.map.resolution must be a positive number"));
+    } else if (executor.containsKey("keepout_zones")) {
+      validateKeepoutZones(executor.get("keepout_zones"), null);
     }
   }
 
@@ -243,11 +276,143 @@ public final class RouteExecutorSupport {
     return position;
   }
 
-  private static void requirePose(Object value, String field) {
+  private static Map<String, Object> requirePose(Object value, String field) {
     Map<String, Object> pose = requireMap(value, field + " must be an object");
     requireFiniteNumber(pose.get("x"), field + ".x must be a number");
     requireFiniteNumber(pose.get("y"), field + ".y must be a number");
     requireFiniteNumber(pose.get("yaw"), field + ".yaw must be a number");
+    return pose;
+  }
+
+  private static void validateMapIdentity(Object value) {
+    Map<String, Object> map = requireMap(value, "executorJson.map must be an object");
+    requiredText(map.get("yaml"), "executorJson.map.yaml is required");
+    requiredText(map.get("image"), "executorJson.map.image is required");
+    requirePositiveNumber(map.get("resolution"), "executorJson.map.resolution must be a positive number");
+    Object rawOrigin = map.get("origin");
+    if (!(rawOrigin instanceof List<?> origin) || origin.size() != 3) {
+      throw ApiException.badRequest("executorJson.map.origin must contain 3 numbers");
+    }
+    for (int i = 0; i < origin.size(); i++) {
+      requireFiniteNumber(origin.get(i), "executorJson.map.origin[" + i + "] must be a number");
+    }
+    requirePositiveInteger(map.get("width"), "executorJson.map.width must be a positive integer");
+    requirePositiveInteger(map.get("height"), "executorJson.map.height must be a positive integer");
+    String hash = requiredText(map.get("image_sha256"), "executorJson.map.image_sha256 is required");
+    if (!SHA256_PATTERN.matcher(hash).matches()) {
+      throw ApiException.badRequest("executorJson.map.image_sha256 must be a lowercase SHA-256 hex string");
+    }
+  }
+
+  private static void requireMatchingLocation(Map<String, Object> pose, Object value, String field) {
+    Map<String, Object> location = requireMap(value, field + ".location must be an object");
+    if (!"map_pose".equals(String.valueOf(location.get("type")))) {
+      throw ApiException.badRequest(field + ".location.type must be map_pose");
+    }
+    if (!"map".equals(String.valueOf(location.get("frame_id")))) {
+      throw ApiException.badRequest(field + ".location.frame_id must be map");
+    }
+    for (String axis : List.of("x", "y", "yaw")) {
+      double locationValue = requireFiniteNumber(location.get(axis), field + ".location." + axis + " must be a number");
+      double poseValue = requireFiniteNumber(pose.get(axis), field + ".pose." + axis + " must be a number");
+      if (Math.abs(locationValue - poseValue) > 1e-6) {
+        throw ApiException.badRequest(field + ".pose and location disagree on " + axis);
+      }
+    }
+  }
+
+  private static void validateKeepoutZones(Object value, Double maxMaskPadding) {
+    if (!(value instanceof List<?> zones)) {
+      throw ApiException.badRequest("executorJson.keepout_zones must be a list");
+    }
+    Set<String> zoneIds = new HashSet<>();
+    for (int i = 0; i < zones.size(); i++) {
+      Map<String, Object> zone = requireMap(zones.get(i), "executorJson.keepout_zones[" + i + "] must be an object");
+      String id = requiredText(zone.get("id"), "executorJson.keepout_zones[" + i + "].id is required");
+      if (!zoneIds.add(id)) {
+        throw ApiException.badRequest("executorJson.keepout_zones contains duplicate id: " + id);
+      }
+      if (!"hard_keepout".equals(String.valueOf(zone.get("type")))) {
+        throw ApiException.badRequest("executorJson.keepout_zones[" + i + "].type must be hard_keepout");
+      }
+      if (!(zone.get("enabled") instanceof Boolean)) {
+        throw ApiException.badRequest("executorJson.keepout_zones[" + i + "].enabled must be a boolean");
+      }
+      Object rawPolygon = zone.get("polygon");
+      if (!(rawPolygon instanceof List<?> polygon) || polygon.size() < 3) {
+        throw ApiException.badRequest("executorJson.keepout_zones[" + i + "].polygon must contain at least 3 points");
+      }
+      List<Map<String, Object>> points = new ArrayList<>();
+      for (int pointIndex = 0; pointIndex < polygon.size(); pointIndex++) {
+        Map<String, Object> point = requireMap(polygon.get(pointIndex), "executorJson.keepout_zones[" + i + "].polygon[" + pointIndex + "] must be an object");
+        requireFiniteNumber(point.get("x"), "executorJson.keepout_zones[" + i + "].polygon[" + pointIndex + "].x must be a number");
+        requireFiniteNumber(point.get("y"), "executorJson.keepout_zones[" + i + "].polygon[" + pointIndex + "].y must be a number");
+        points.add(point);
+      }
+      if (polygonSelfIntersects(points)) {
+        throw ApiException.badRequest("executorJson.keepout_zones[" + i + "].polygon self-intersects");
+      }
+      if (Math.abs(polygonArea(points)) <= 1e-9) {
+        throw ApiException.badRequest("executorJson.keepout_zones[" + i + "].polygon area must not be zero");
+      }
+      if (zone.containsKey("mask_padding_m")) {
+        double padding = requireNonNegativeNumber(zone.get("mask_padding_m"), "executorJson.keepout_zones[" + i + "].mask_padding_m must be a non-negative number");
+        if (maxMaskPadding != null && padding > maxMaskPadding + 1e-12) {
+          throw ApiException.badRequest("executorJson.keepout_zones[" + i + "].mask_padding_m must not exceed executorJson.map.resolution");
+        }
+      }
+    }
+  }
+
+  private static boolean polygonSelfIntersects(List<Map<String, Object>> points) {
+    for (int i = 0; i < points.size(); i++) {
+      for (int j = i + 1; j < points.size(); j++) {
+        if (j == i || j == (i + 1) % points.size() || (i == 0 && j == points.size() - 1)) continue;
+        if (segmentsIntersect(points.get(i), points.get((i + 1) % points.size()), points.get(j), points.get((j + 1) % points.size()))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private static boolean segmentsIntersect(Map<String, Object> a, Map<String, Object> b, Map<String, Object> c, Map<String, Object> d) {
+    double abC = orientation(a, b, c);
+    double abD = orientation(a, b, d);
+    double cdA = orientation(c, d, a);
+    double cdB = orientation(c, d, b);
+    if (abC * abD < -1e-9 && cdA * cdB < -1e-9) return true;
+    return (Math.abs(abC) <= 1e-9 && onSegment(a, b, c))
+      || (Math.abs(abD) <= 1e-9 && onSegment(a, b, d))
+      || (Math.abs(cdA) <= 1e-9 && onSegment(c, d, a))
+      || (Math.abs(cdB) <= 1e-9 && onSegment(c, d, b));
+  }
+
+  private static boolean onSegment(Map<String, Object> a, Map<String, Object> b, Map<String, Object> point) {
+    double x = decimalOr(point.get("x"), 0);
+    double y = decimalOr(point.get("y"), 0);
+    return x >= Math.min(decimalOr(a.get("x"), 0), decimalOr(b.get("x"), 0)) - 1e-9
+      && x <= Math.max(decimalOr(a.get("x"), 0), decimalOr(b.get("x"), 0)) + 1e-9
+      && y >= Math.min(decimalOr(a.get("y"), 0), decimalOr(b.get("y"), 0)) - 1e-9
+      && y <= Math.max(decimalOr(a.get("y"), 0), decimalOr(b.get("y"), 0)) + 1e-9;
+  }
+
+  private static double orientation(Map<String, Object> a, Map<String, Object> b, Map<String, Object> c) {
+    return (decimalOr(b.get("x"), 0) - decimalOr(a.get("x"), 0))
+      * (decimalOr(c.get("y"), 0) - decimalOr(a.get("y"), 0))
+      - (decimalOr(b.get("y"), 0) - decimalOr(a.get("y"), 0))
+      * (decimalOr(c.get("x"), 0) - decimalOr(a.get("x"), 0));
+  }
+
+  private static double polygonArea(List<Map<String, Object>> points) {
+    double area = 0;
+    for (int i = 0; i < points.size(); i++) {
+      Map<String, Object> current = points.get(i);
+      Map<String, Object> next = points.get((i + 1) % points.size());
+      area += decimalOr(current.get("x"), 0) * decimalOr(next.get("y"), 0)
+        - decimalOr(current.get("y"), 0) * decimalOr(next.get("x"), 0);
+    }
+    return area / 2;
   }
 
   @SuppressWarnings("unchecked")
@@ -332,6 +497,21 @@ public final class RouteExecutorSupport {
       throw ApiException.badRequest(message);
     }
     return n;
+  }
+
+  private static double requirePositiveNumber(Object value, String message) {
+    double n = requireFiniteNumber(value, message);
+    if (n <= 0) {
+      throw ApiException.badRequest(message);
+    }
+    return n;
+  }
+
+  private static void requirePositiveInteger(Object value, String message) {
+    Integer n = number(value);
+    if (n == null || n <= 0 || (value instanceof Number number && number.doubleValue() != n.doubleValue())) {
+      throw ApiException.badRequest(message);
+    }
   }
 
   private static Double decimal(Object value) {

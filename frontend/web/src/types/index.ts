@@ -150,6 +150,24 @@ export interface MapAssetFiles {
   pgm: File
 }
 
+export interface RouteRevision {
+  id: string
+  routeId: string
+  revisionNo: number
+  contentSha256: string
+  mapAssetId: string
+  mapImageSha256: string
+  executorJson: Record<string, unknown>
+  validationReport: {
+    valid: boolean
+    validatedAt: string
+    issues: unknown[]
+    [key: string]: unknown
+  }
+  createdBy?: string
+  createdAt: string
+}
+
 export interface Robot {
   id: string
   name: string

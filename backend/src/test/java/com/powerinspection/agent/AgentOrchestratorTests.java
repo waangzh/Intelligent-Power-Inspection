@@ -125,7 +125,7 @@ class AgentOrchestratorTests {
   void rejectsIllegalToolArgumentsAndFallsBackWithoutExecutingThem() throws Exception {
     when(llmPlanner.decide(any())).thenReturn(PlannerDecision.callTool("非法参数", "get_alarm", Map.of("path", "C:/sensitive"), List.of()));
     AgentDtos.RunDetail detail = awaitTerminal(start());
-    assertThat(detail.run().status()).isEqualTo(AgentEnums.RunStatus.SUCCEEDED);
+    assertThat(detail.run().status()).isEqualTo(AgentEnums.RunStatus.WAITING_APPROVAL);
     assertThat(detail.run().degraded()).isTrue();
     assertThat(detail.toolCalls()).allSatisfy(call -> assertThat(call.arguments().has("path")).isFalse());
   }
@@ -138,7 +138,7 @@ class AgentOrchestratorTests {
   private AgentDtos.RunDetail awaitTerminal(AgentDtos.RunSummary run) throws Exception {
     for (int attempt = 0; attempt < 100; attempt += 1) {
       AgentDtos.RunDetail detail = agentService.runDetail(run.id());
-      if (detail.run().status() == AgentEnums.RunStatus.SUCCEEDED || detail.run().status() == AgentEnums.RunStatus.FAILED || detail.run().status() == AgentEnums.RunStatus.STEP_LIMIT_REACHED || detail.run().status() == AgentEnums.RunStatus.WAITING_HUMAN) {
+      if (detail.run().status() == AgentEnums.RunStatus.SUCCEEDED || detail.run().status() == AgentEnums.RunStatus.FAILED || detail.run().status() == AgentEnums.RunStatus.STEP_LIMIT_REACHED || detail.run().status() == AgentEnums.RunStatus.WAITING_HUMAN || detail.run().status() == AgentEnums.RunStatus.WAITING_APPROVAL) {
         return detail;
       }
       Thread.sleep(25);

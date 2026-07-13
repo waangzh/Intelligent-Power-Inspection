@@ -1,0 +1,45 @@
+package com.powerinspection.route;
+
+import com.powerinspection.common.ApiResponse;
+import com.powerinspection.security.CurrentUser;
+import com.powerinspection.user.Permission;
+import com.powerinspection.user.PermissionService;
+import java.util.List;
+import java.util.Map;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1")
+public class RouteRevisionController {
+  private final RouteRevisionService routeRevisionService;
+  private final PermissionService permissionService;
+  private final CurrentUser currentUser;
+
+  public RouteRevisionController(RouteRevisionService routeRevisionService, PermissionService permissionService, CurrentUser currentUser) {
+    this.routeRevisionService = routeRevisionService;
+    this.permissionService = permissionService;
+    this.currentUser = currentUser;
+  }
+
+  @GetMapping("/routes/{routeId}/revisions")
+  public ApiResponse<List<Map<String, Object>>> list(@PathVariable String routeId) {
+    permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
+    return ApiResponse.ok(routeRevisionService.list(routeId));
+  }
+
+  @PostMapping("/routes/{routeId}/revisions")
+  public ApiResponse<Map<String, Object>> create(@PathVariable String routeId) {
+    permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
+    return ApiResponse.ok(routeRevisionService.create(routeId, currentUser.get().getId()));
+  }
+
+  @GetMapping("/route-revisions/{revisionId}")
+  public ApiResponse<Map<String, Object>> get(@PathVariable String revisionId) {
+    permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
+    return ApiResponse.ok(routeRevisionService.get(revisionId));
+  }
+}
