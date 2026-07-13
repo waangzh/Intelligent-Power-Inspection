@@ -73,6 +73,21 @@ class AlarmWorkOrderPolicyTests {
   }
 
   @Test
+  void policyDemoCriticalAlarmUsesAutomaticConversion() {
+    Map<String, Object> alarm = dataStore.get(DataCategory.ALARM, "alarm_demo_policy_critical");
+
+    assertThat(alarm)
+      .containsEntry("workOrderModeApplied", "AUTO")
+      .containsEntry("workOrderConversionStatus", "SUCCEEDED")
+      .containsEntry("acknowledged", false);
+    assertThat(workOrderService.findByAlarmId("alarm_demo_policy_critical"))
+      .containsEntry("id", "wo_alarm_alarm_demo_policy_critical")
+      .containsEntry("priority", "URGENT")
+      .containsEntry("source", "AUTO")
+      .containsEntry("createdById", "system");
+  }
+
+  @Test
   void lowAlarmWaitsForManualConversionAndKeepsLowPriority() throws Exception {
     saveDefaultPolicy(login("admin", "Admin@123"));
 

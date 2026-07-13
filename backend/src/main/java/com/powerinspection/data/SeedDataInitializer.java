@@ -1,5 +1,6 @@
 package com.powerinspection.data;
 
+import com.powerinspection.alarm.AlarmService;
 import com.powerinspection.auth.AuthService;
 import com.powerinspection.common.Ids;
 import com.powerinspection.user.UserEntity;
@@ -24,19 +25,22 @@ public class SeedDataInitializer implements ApplicationRunner {
   private final PasswordEncoder passwordEncoder;
   private final DataStoreService dataStore;
   private final AuthService authService;
+  private final AlarmService alarmService;
 
   public SeedDataInitializer(
     UserRepository userRepository,
     UserPreferenceRepository preferenceRepository,
     PasswordEncoder passwordEncoder,
     DataStoreService dataStore,
-    AuthService authService
+    AuthService authService,
+    AlarmService alarmService
   ) {
     this.userRepository = userRepository;
     this.preferenceRepository = preferenceRepository;
     this.passwordEncoder = passwordEncoder;
     this.dataStore = dataStore;
     this.authService = authService;
+    this.alarmService = alarmService;
   }
 
   @Override
@@ -253,24 +257,39 @@ public class SeedDataInitializer implements ApplicationRunner {
   }
 
   private void seedDemoAlarms() {
-    demoAlarm("alarm_demo_001", "task_demo_active", "城西开关室日常巡检", "母线桥接区", "HELMET", "HIGH", "检测到作业人员未佩戴安全帽，已转人工接管", "https://picsum.photos/seed/demo-helmet/400/240", false, minutesAgo(22));
-    demoAlarm("alarm_demo_002", "task_demo_paused", "城南 500kV 户外设备巡检", "1# 主变 A 相", "FIRE", "CRITICAL", "红外画面出现疑似局部过热热点，需立即复核", "https://picsum.photos/seed/demo-hotspot/400/240", false, minutesAgo(16));
-    demoAlarm("alarm_demo_003", "task_demo_paused", "城南 500kV 户外设备巡检", "1# 主变 A 相", "OIL_LEAK", "HIGH", "主变底部疑似存在渗油痕迹", "https://picsum.photos/seed/demo-oil-leak/400/240", false, hoursAgo(5));
-    demoAlarm("alarm_demo_004", "task_demo_cancelled", "城西开关室日常巡检", "2# 电容器组", "METER", "LOW", "压力表读数处于预警区间，建议下次巡检复核", "https://picsum.photos/seed/demo-meter/400/240", true, daysAgo(1));
-    demoAlarm("alarm_demo_005", "task_hist_demo_003", "城东主变区例行巡检", "GIS 刀闸", "SWITCH", "HIGH", "GIS 刀闸状态与计划状态不一致", "https://picsum.photos/seed/demo-switch/400/240", true, daysAgo(2));
-    demoAlarm("alarm_demo_006", "task_hist_demo_004", "城南 500kV 户外设备巡检", null, "OBSTACLE", "MEDIUM", "机器人前方发现临时施工围栏，已减速绕行", "https://picsum.photos/seed/demo-obstacle/400/240", true, daysAgo(3));
-    demoAlarm("alarm_demo_007", "task_hist_demo_005", "城西开关室日常巡检", "母线桥接区", "FOREIGN_OBJECT", "MEDIUM", "发现绝缘子附近悬挂异物", "https://picsum.photos/seed/demo-foreign-object/400/240", false, daysAgo(4));
-    demoAlarm("alarm_demo_008", "task_hist_demo_006", "城东主变区例行巡检", null, "PERSON", "MEDIUM", "检测到未授权人员进入设备区", "https://picsum.photos/seed/demo-person/400/240", true, daysAgo(5));
-    demoAlarm("alarm_demo_009", "task_hist_demo_007", "城南 500kV 户外设备巡检", "500kV 避雷器", "METER", "LOW", "避雷器泄漏电流读数轻微波动", "https://picsum.photos/seed/demo-arrester/400/240", true, daysAgo(6));
+    currentDemoAlarm("alarm_demo_001", "task_demo_active", "城西开关室日常巡检", "母线桥接区", "HELMET", "HIGH", "检测到作业人员未佩戴安全帽，已转人工接管", "https://picsum.photos/seed/demo-helmet/400/240", false, minutesAgo(22));
+    currentDemoAlarm("alarm_demo_002", "task_demo_paused", "城南 500kV 户外设备巡检", "1# 主变 A 相", "FIRE", "CRITICAL", "红外画面出现疑似局部过热热点，需立即复核", "https://picsum.photos/seed/demo-hotspot/400/240", false, minutesAgo(16));
+    currentDemoAlarm("alarm_demo_003", "task_demo_paused", "城南 500kV 户外设备巡检", "1# 主变 A 相", "OIL_LEAK", "HIGH", "主变底部疑似存在渗油痕迹", "https://picsum.photos/seed/demo-oil-leak/400/240", false, hoursAgo(5));
+    currentDemoAlarm("alarm_demo_004", "task_demo_cancelled", "城西开关室日常巡检", "2# 电容器组", "METER", "LOW", "压力表读数处于预警区间，建议下次巡检复核", "https://picsum.photos/seed/demo-meter/400/240", true, daysAgo(1));
+    currentDemoAlarm("alarm_demo_policy_critical", "task_demo_paused", "城南 500kV 户外设备巡检", "1# 主变 A 相", "FIRE", "CRITICAL", "【测试】CRITICAL 告警，应自动创建 URGENT 工单", "https://picsum.photos/seed/policy-critical/400/240", false, minutesAgo(1));
+    currentDemoAlarm("alarm_demo_policy_high", "task_demo_active", "城西开关室日常巡检", "母线桥接区", "HELMET", "HIGH", "【测试】HIGH 告警，等待人工转工单", "https://picsum.photos/seed/policy-high/400/240", false, minutesAgo(2));
+    currentDemoAlarm("alarm_demo_policy_low", "task_demo_cancelled", "城西开关室日常巡检", "2# 电容器组", "METER", "LOW", "【测试】LOW 告警，等待人工转工单", "https://picsum.photos/seed/policy-low/400/240", false, minutesAgo(3));
+    historicalDemoAlarm("alarm_demo_005", "task_hist_demo_003", "城东主变区例行巡检", "GIS 刀闸", "SWITCH", "HIGH", "GIS 刀闸状态与计划状态不一致", "https://picsum.photos/seed/demo-switch/400/240", true, daysAgo(2));
+    historicalDemoAlarm("alarm_demo_006", "task_hist_demo_004", "城南 500kV 户外设备巡检", null, "OBSTACLE", "MEDIUM", "机器人前方发现临时施工围栏，已减速绕行", "https://picsum.photos/seed/demo-obstacle/400/240", true, daysAgo(3));
+    historicalDemoAlarm("alarm_demo_007", "task_hist_demo_005", "城西开关室日常巡检", "母线桥接区", "FOREIGN_OBJECT", "MEDIUM", "发现绝缘子附近悬挂异物", "https://picsum.photos/seed/demo-foreign-object/400/240", false, daysAgo(4));
+    historicalDemoAlarm("alarm_demo_008", "task_hist_demo_006", "城东主变区例行巡检", null, "PERSON", "MEDIUM", "检测到未授权人员进入设备区", "https://picsum.photos/seed/demo-person/400/240", true, daysAgo(5));
+    historicalDemoAlarm("alarm_demo_009", "task_hist_demo_007", "城南 500kV 户外设备巡检", "500kV 避雷器", "METER", "LOW", "避雷器泄漏电流读数轻微波动", "https://picsum.photos/seed/demo-arrester/400/240", true, daysAgo(6));
+    historicalDemoAlarm("alarm_demo_policy_history_pending", "task_hist_demo_008", "城东主变区例行巡检", "GIS 刀闸", "SWITCH", "MEDIUM", "【测试】历史告警，无关联工单", "https://picsum.photos/seed/policy-history-pending/400/240", true, daysAgo(7));
+    historicalDemoAlarm("alarm_demo_policy_history", "task_hist_demo_008", "城东主变区例行巡检", "GIS 刀闸", "SWITCH", "MEDIUM", "【测试】历史告警，未应用转工单规则", "https://picsum.photos/seed/policy-history/400/240", true, daysAgo(7));
   }
 
-  private void demoAlarm(String id, String taskId, String routeName, String checkpointName, String type, String severity, String message, String imageUrl, boolean acknowledged, String createdAt) {
+  private void currentDemoAlarm(String id, String taskId, String routeName, String checkpointName, String type, String severity, String message, String imageUrl, boolean acknowledged, String createdAt) {
+    if (!dataStore.exists(DataCategory.ALARM, id)) {
+      alarmService.create(demoAlarmItem(id, taskId, routeName, checkpointName, type, severity, message, imageUrl, acknowledged, createdAt));
+    }
+  }
+
+  private void historicalDemoAlarm(String id, String taskId, String routeName, String checkpointName, String type, String severity, String message, String imageUrl, boolean acknowledged, String createdAt) {
+    insertIfMissing(DataCategory.ALARM, demoAlarmItem(id, taskId, routeName, checkpointName, type, severity, message, imageUrl, acknowledged, createdAt));
+  }
+
+  private Map<String, Object> demoAlarmItem(String id, String taskId, String routeName, String checkpointName, String type, String severity, String message, String imageUrl, boolean acknowledged, String createdAt) {
     Map<String, Object> item = map(
       "id", id, "taskId", taskId, "routeName", routeName, "type", type, "severity", severity,
       "message", message, "imageUrl", imageUrl, "acknowledged", acknowledged, "createdAt", createdAt
     );
     if (checkpointName != null) item.put("checkpointName", checkpointName);
-    insertIfMissing(DataCategory.ALARM, item);
+    return item;
   }
 
   private void seedDemoRecords() {
@@ -299,7 +318,7 @@ public class SeedDataInitializer implements ApplicationRunner {
     ));
     insertIfMissing(DataCategory.WORK_ORDER, map(
       "id", "wo_demo_002", "alarmId", "alarm_demo_003", "title", "主变渗油痕迹现场检查", "description", "检查主变底部油位、密封件与地面油迹。", "locationDescription", "城南 500kV 变电站 / 户外主变区 / 1# 主变 A 相 / 本体底部",
-      "status", "REVIEW", "priority", "HIGH", "assigneeName", "王运维", "createdById", "user_dispatcher", "createdByName", "张调度",
+      "source", "MANUAL", "status", "REVIEW", "priority", "HIGH", "assigneeName", "王运维", "createdById", "user_dispatcher", "createdByName", "张调度",
       "resolution", "现场未发现持续渗漏，已清洁油迹并安排 24 小时复测。", "review", map("conclusion", "PARTIALLY_RESOLVED", "onsiteFinding", "复核主变本体底部、油位计和密封件，未发现持续渗漏。", "handlingMeasures", "已清洁历史油迹并完成油位复测，当前读数正常。", "followUpPlan", "安排 24 小时后复测油位与地面油迹。", "submittedById", "user_dispatcher", "submittedByName", "王运维", "submittedAt", hoursAgo(2)), "createdAt", hoursAgo(5), "updatedAt", hoursAgo(2)
     ));
     insertIfMissing(DataCategory.WORK_ORDER, map(
@@ -312,11 +331,16 @@ public class SeedDataInitializer implements ApplicationRunner {
       "status", "PENDING", "priority", "MEDIUM", "assigneeName", "李运维", "createdById", "user_dispatcher", "createdByName", "张调度",
       "createdAt", daysAgo(4), "updatedAt", daysAgo(4)
     ));
+    insertIfMissing(DataCategory.WORK_ORDER, map(
+      "id", "wo_demo_policy_history", "alarmId", "alarm_demo_policy_history", "title", "历史告警工单", "description", "【测试】用于验证缺少转单来源时的“已有工单”展示。",
+      "status", "CLOSED", "priority", "MEDIUM", "assigneeName", "陈检修", "createdById", "user_dispatcher", "createdByName", "张调度",
+      "createdAt", daysAgo(7), "updatedAt", daysAgo(6), "closedAt", daysAgo(6)
+    ));
   }
 
   private void seedDemoNotifications() {
     demoNotification("ntf_demo_001", "user_dispatcher", "ALARM", "主变热点待复核", "城南 500kV 站 1# 主变 A 相出现疑似过热热点。", "/alarms", false, minutesAgo(15));
-    demoNotification("ntf_demo_002", "user_dispatcher", "WORKORDER", "紧急工单处理中", "工单 wo_demo_001 已指派给张调度。", "/workorders", false, minutesAgo(12));
+    demoNotification("ntf_demo_002", "user_dispatcher", "WORKORDER", "紧急工单已自动创建", "工单 wo_alarm_alarm_demo_002 已由系统自动创建，待调度员处理。", "/workorders", false, minutesAgo(12));
     demoNotification("ntf_demo_003", "user_admin", "SYSTEM", "今日巡检运行概览", "当前 2 项任务处于人工干预状态，请关注处置进展。", "/dashboard", false, minutesAgo(10));
     demoNotification("ntf_demo_004", "user_dispatcher", "TASK", "夜间例行巡检待下发", "城东主变区晚间例行巡检已创建。", "/tasks", true, minutesAgo(18));
   }
