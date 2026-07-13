@@ -106,6 +106,7 @@ def run_smoke(base_url, store) -> None:
     command = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"]
     ack = {"robotId": "robot-001", "leaseToken": command["leaseToken"], "status": "RECEIVED", "executionId": "execution-1"}
     assert request(base_url, "POST", f"/robot-api/v1/commands/{command['commandId']}/ack", ack, "token-placeholder")[0] == 200
+    assert request(base_url, "POST", f"/robot-api/v1/commands/{command['commandId']}/ack", ack, "token-placeholder")[1]["state"] == "ACKED"
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"] is None
     assert request(base_url, "GET", "/robot-api/v1/deployments/deploy-1/manifest", token="token-placeholder")[1]["yamlName"] == "site.yaml"
     events = [{"robot_id": "robot-001", "boot_id": "boot-1", "sequence": 2, "event": "route_started", "execution_id": "execution-1", "deployment_id": "deploy-1", "request_id": "request-1", "command_id": command["commandId"], "occurred_at": "2026-01-01T00:00:00Z"}]

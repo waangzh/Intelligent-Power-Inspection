@@ -231,11 +231,15 @@ class Store:
     def ack_command(self, command_id, robot_id, lease_token, status, error=""):
         with self.db() as db:
             row = db.execute("SELECT * FROM commands WHERE command_id=?", (command_id,)).fetchone()
-            if not row or row["robot_id"] != robot_id or row["lease_token"] != lease_token:
+            if not row or row["robot_id"] != robot_id:
                 return None
             state = "ACKED" if status == "RECEIVED" else "REJECTED"
+            if row["state"] == state:
+                return state if row["lease_token"] == lease_token else None
+            if row["state"] != "LEASED" or row["lease_token"] != lease_token:
+                return None
             stamp = now()
-            db.execute("UPDATE commands SET state=?,updated_at=?,acked_at=?,lease_until='',lease_token='' WHERE command_id=?", (state, stamp, stamp if state == "ACKED" else "", command_id))
+            db.execute("UPDATE commands SET state=?,updated_at=?,acked_at=?,lease_until='' WHERE command_id=?", (state, stamp, stamp if state == "ACKED" else "", command_id))
             if state == "REJECTED" and row["command_type"] == "START":
                 db.execute("UPDATE executions SET state='FAILED',last_error=?,updated_at=? WHERE execution_id=? AND state='DISPATCHING'", (error, stamp, row["execution_id"]))
             return state
