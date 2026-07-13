@@ -12,7 +12,7 @@ import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
-from .store import Store, now
+from .store import Store, StoreConflict, now
 
 
 class BridgeError(Exception):
@@ -53,6 +53,10 @@ def create_app() -> FastAPI:
     @app.exception_handler(BridgeError)
     async def bridge_error(_request, exc):
         return JSONResponse(status_code=exc.status, content={"code": exc.code, "message": exc.message, "requestId": ""})
+
+    @app.exception_handler(StoreConflict)
+    async def store_conflict(_request, exc):
+        return JSONResponse(status_code=409, content={"code": exc.code, "message": str(exc), "requestId": ""})
 
     def token_robot(request, body=None):
         value = request.headers.get("authorization", "")
@@ -97,6 +101,13 @@ def create_app() -> FastAPI:
         asset = platform_get(f"/api/v1/map-assets/{asset_id}")
         yaml_name, pgm_name = safe_name(asset.get("yamlName"), (".yaml", ".yml")), safe_name(asset.get("pgmName"), (".pgm",))
         route_bytes = canonical(route)
+        manifest = {"schemaVersion": "1.0", "deploymentId": deployment_id, "robotId": robot_id, "routeRevisionId": revision_id, "routeRevisionContentSha256": route_revision_hash, "routePayloadSha256": hashlib.sha256(route_bytes).hexdigest(), "routeContentSha256": hashlib.sha256(route_bytes).hexdigest(), "mapAssetId": asset_id, "mapImageSha256": asset["pgmSha256"], "yamlName": yaml_name, "pgmName": pgm_name}
+        existing = store.deployment(deployment_id)
+        if existing:
+            complete = all(store.deployment_file(deployment_id, robot_id, name) for name in ("manifest", "route", "yaml", "pgm"))
+            if existing["robot_id"] == robot_id and existing["manifest"] == manifest and complete:
+                return {"deploymentId": deployment_id, "state": "READY_FOR_ROBOT", **manifest}
+            raise BridgeError("DEPLOYMENT_CONFLICT", "deploymentId already has different identity or incomplete cache", 409)
         yaml_bytes, pgm = platform_get(f"/api/v1/map-assets/{asset_id}/yaml", True), platform_get(f"/api/v1/map-assets/{asset_id}/pgm", True)
         if hashlib.sha256(pgm).hexdigest() != asset.get("pgmSha256"):
             raise BridgeError("MAP_HASH_MISMATCH", "platform map hash mismatch")
@@ -105,7 +116,6 @@ def create_app() -> FastAPI:
                 raise ValueError("yaml image does not match pgm")
         except (yaml.YAMLError, AttributeError, ValueError) as exc:
             raise BridgeError("INVALID_MAP", str(exc)) from exc
-        manifest = {"schemaVersion": "1.0", "deploymentId": deployment_id, "robotId": robot_id, "routeRevisionId": revision_id, "routeRevisionContentSha256": route_revision_hash, "routePayloadSha256": hashlib.sha256(route_bytes).hexdigest(), "routeContentSha256": hashlib.sha256(route_bytes).hexdigest(), "mapAssetId": asset_id, "mapImageSha256": asset["pgmSha256"], "yamlName": yaml_name, "pgmName": pgm_name}
         store.cache_deployment(deployment_id, robot_id, manifest, route_bytes, yaml_bytes, pgm)
         return {"deploymentId": deployment_id, "state": "READY_FOR_ROBOT", **manifest}
 
@@ -136,7 +146,8 @@ def create_app() -> FastAPI:
         payload.update({"executionId": execution_id, "deploymentId": deployment_id, "requestId": request_id, "type": command_type})
         item, conflict = store.queue_command(secrets.token_urlsafe(18), request_id, robot_id, str(body.get("taskId") or ""), execution_id, deployment_id, command_type, payload)
         if conflict:
-            raise BridgeError("IDEMPOTENCY_CONFLICT", "requestId has different payload", 409)
+            message = "executionId belongs to another robot or deployment" if conflict == "EXECUTION_CONFLICT" else "requestId has different payload"
+            raise BridgeError(conflict, message, 409)
         return {"accepted": True, "commandId": item["command_id"], "state": item["state"], "executionId": execution_id}
 
     @app.get("/bridge/v1/executions/{execution_id}")
@@ -151,6 +162,28 @@ def create_app() -> FastAPI:
         if not store.execution(execution_id):
             raise BridgeError("EXECUTION_NOT_FOUND", "execution not found", 404)
         return {"events": store.events(execution_id, afterSequence, limit)}
+
+    @app.get("/bridge/v1/robots/{robot_id}")
+    async def robot_status(robot_id: str):
+        robot = store.robot(robot_id)
+        if not robot and robot_id not in robot_tokens:
+            raise BridgeError("ROBOT_NOT_FOUND", "robot not found", 404)
+        robot = robot or {}
+        try:
+            last_seen = datetime.fromisoformat(str(robot.get("last_seen") or ""))
+            online = (datetime.now(timezone.utc) - last_seen).total_seconds() <= 12
+        except ValueError:
+            online = False
+        status = json.loads(robot.get("status_json") or "{}")
+        return {
+            "robotId": robot_id, "configured": robot_id in robot_tokens, "online": online,
+            "bootId": robot.get("boot_id", ""), "state": robot.get("state", "offline"),
+            "lastSeen": robot.get("last_seen", ""),
+            "acceptedEventSequence": int(robot.get("last_event_sequence", 0)),
+            "activeExecutionId": status.get("activeExecutionId"),
+            "activeDeploymentId": status.get("activeDeploymentId"),
+            "softwareVersion": status.get("softwareVersion"), "health": status.get("health", {}),
+        }
 
     @app.post("/robot-api/v1/heartbeat")
     async def heartbeat(request: Request):

@@ -5,9 +5,11 @@ Wants=network-online.target
 
 [Service]
 User=robotbridge
-WorkingDirectory=/opt/Intelligent-Power-Inspection/integration/robot-bridge
+Group=robotbridge
+WorkingDirectory=/opt/robot-bridge/current
 EnvironmentFile=/etc/robot-bridge/robot-bridge.env
-ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+ExecCondition=/bin/sh -c 'test -n "$ROBOT_AUTH_TOKENS_JSON" && test -n "$BRIDGE_API_TOKEN" && test -n "$PLATFORM_BASE_URL" && test -n "$PLATFORM_BEARER_TOKEN" && test -n "$ROBOT_BRIDGE_STORAGE_PATH"'
+ExecStart=/opt/robot-bridge/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001
 Restart=always
 RestartSec=3
 

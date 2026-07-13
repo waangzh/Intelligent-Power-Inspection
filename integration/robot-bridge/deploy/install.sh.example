@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
-install -d -m 700 /etc/robot-bridge
-install -m 600 /dev/null /etc/robot-bridge/robot-bridge.env
-install -m 644 robot-bridge.service /etc/systemd/system/robot-bridge.service
+
+SOURCE_DIR=${1:-$(cd "$(dirname "$0")/.." && pwd)}
+id -u robotbridge >/dev/null 2>&1 || useradd --system --home /var/lib/robot-bridge --shell /usr/sbin/nologin robotbridge
+install -d -o robotbridge -g robotbridge -m 750 /opt/robot-bridge/current /var/lib/robot-bridge
+install -d -o robotbridge -g robotbridge -m 750 /opt/robot-bridge/current/app
+install -d -o root -g robotbridge -m 750 /etc/robot-bridge
+install -o robotbridge -g robotbridge -m 640 "$SOURCE_DIR"/app/*.py /opt/robot-bridge/current/app/
+install -o robotbridge -g robotbridge -m 640 "$SOURCE_DIR/requirements.txt" /opt/robot-bridge/current/requirements.txt
+python3 -m venv /opt/robot-bridge/venv
+/opt/robot-bridge/venv/bin/pip install -r /opt/robot-bridge/current/requirements.txt
+if [[ ! -e /etc/robot-bridge/robot-bridge.env ]]; then
+  install -o root -g robotbridge -m 640 "$SOURCE_DIR/.env.example" /etc/robot-bridge/robot-bridge.env
+fi
+install -m 644 "$SOURCE_DIR/deploy/robot-bridge.service" /etc/systemd/system/robot-bridge.service
 systemctl daemon-reload
-systemctl enable --now robot-bridge.service
-# Put only placeholders while preparing the env file: ROBOT_AUTH_TOKENS_JSON={"robot-001":"token-placeholder"}
+configured=true
+for key in ROBOT_AUTH_TOKENS_JSON BRIDGE_API_TOKEN PLATFORM_BASE_URL PLATFORM_BEARER_TOKEN ROBOT_BRIDGE_STORAGE_PATH; do
+  grep -Eq "^${key}=.+" /etc/robot-bridge/robot-bridge.env || configured=false
+done
+if grep -q 'token-placeholder' /etc/robot-bridge/robot-bridge.env || [[ "$configured" != true ]]; then
+  echo 'robot-bridge installed; configure /etc/robot-bridge/robot-bridge.env before starting'
+else
+  systemctl enable --now robot-bridge.service
+fi
