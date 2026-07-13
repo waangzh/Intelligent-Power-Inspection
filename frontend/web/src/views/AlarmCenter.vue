@@ -228,17 +228,23 @@ function hasWorkOrder(alarm: Alarm) {
   return Boolean(alarm.workOrderId || workOrderStore.getByAlarmId(alarm.id))
 }
 
+function isLegacyAlarm(alarm: Alarm) {
+  return !alarm.workOrderModeApplied
+}
+
 function shouldShowManualConversion(alarm: Alarm) {
   if (hasWorkOrder(alarm) || alarm.workOrderConversionStatus === 'FAILED') return false
-  return !alarm.workOrderModeApplied || alarm.workOrderModeApplied === 'MANUAL'
+  return isLegacyAlarm(alarm) || alarm.workOrderModeApplied === 'MANUAL'
 }
 
 function conversionLabel(alarm: Alarm) {
   if (hasWorkOrder(alarm)) {
     const source = alarm.workOrderConversionSource || workOrderStore.getByAlarmId(alarm.id)?.source
+    if (!source) return '已有工单'
     return source === 'AUTO' ? '已自动转工单' : source === 'AGENT' ? '已由 Agent 转工单' : '已人工转工单'
   }
   if (alarm.workOrderConversionStatus === 'FAILED') return '自动转单失败'
+  if (isLegacyAlarm(alarm)) return '历史告警/未应用转单规则'
   if (alarm.workOrderConversionStatus === 'PROCESSING') return '自动转单中'
   if (alarm.workOrderModeApplied === 'AUTO') return '等待自动转单'
   return '等待人工转单'
