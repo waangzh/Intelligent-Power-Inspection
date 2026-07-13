@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+install -d -m 700 /etc/robot-bridge
+install -m 600 /dev/null /etc/robot-bridge/robot-bridge.env
+install -m 644 robot-bridge.service /etc/systemd/system/robot-bridge.service
+systemctl daemon-reload
+systemctl enable --now robot-bridge.service
+# Put only placeholders while preparing the env file: ROBOT_AUTH_TOKENS_JSON={"robot-001":"token-placeholder"}

@@ -1,0 +1,8 @@
+server {
+    listen 443 ssl http2;
+    server_name robot-bridge.example.invalid;
+    # ssl_certificate /etc/letsencrypt/live/robot-bridge.example.invalid/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/robot-bridge.example.invalid/privkey.pem;
+    location /robot-api/ { proxy_pass http://127.0.0.1:8001/robot-api/; }
+    location /bridge/ { proxy_pass http://127.0.0.1:8001/bridge/; }
+}
