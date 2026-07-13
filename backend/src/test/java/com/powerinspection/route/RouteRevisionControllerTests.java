@@ -120,13 +120,8 @@ class RouteRevisionControllerTests {
   @Test
   void v2DraftWithMapAssetCreatesStableV3Revision() throws Exception {
     String token = login("dispatcher", "Disp@123");
-    String siteId = "site_route_revision";
+    String siteId = "site_001";
     String routeId = "route_route_revision";
-    mockMvc.perform(post("/api/v1/sites")
-        .header("Authorization", bearer(token))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("id", siteId, "name", "路线修订测试站点")))
-      .andExpect(status().isOk());
     mockMvc.perform(post("/api/v1/routes")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
@@ -159,13 +154,7 @@ class RouteRevisionControllerTests {
       .andExpect(jsonPath("$.data.id").value(revisionId))
       .andExpect(jsonPath("$.data.revisionNo").value(1));
 
-    String adminToken = login("admin", "Admin@123");
-    String robotId = "robot_route_revision";
-    mockMvc.perform(post("/api/v1/robots")
-        .header("Authorization", bearer(adminToken))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("id", robotId, "name", "路线修订测试机器人", "siteId", siteId)))
-      .andExpect(status().isOk());
+    String robotId = "robot_001";
 
     mockMvc.perform(post("/api/v1/route-revisions/{id}/deployments", revisionId)
         .header("Authorization", bearer(token))
