@@ -77,7 +77,7 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
 
   async function createFromAlarm(
     alarm: Alarm,
-    creator: { id: string; name: string },
+    creator: { id: string; name: string } = { id: '', name: '' },
     options?: { autoConverted?: boolean },
   ) {
     if (getByAlarmId(alarm.id)) {

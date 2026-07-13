@@ -1,7 +1,13 @@
-ALTER TABLE agent_actions ADD COLUMN evidence_ids_json LONGTEXT NOT NULL DEFAULT '[]';
+ALTER TABLE agent_actions ADD COLUMN evidence_ids_json LONGTEXT;
 ALTER TABLE agent_actions ADD COLUMN payload_audit_json LONGTEXT;
-ALTER TABLE agent_actions ADD COLUMN policy_reason LONGTEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_actions ADD COLUMN policy_reason LONGTEXT;
 ALTER TABLE agent_actions ADD COLUMN confidence DOUBLE NOT NULL DEFAULT 0;
+
+UPDATE agent_actions SET evidence_ids_json = '[]' WHERE evidence_ids_json IS NULL;
+UPDATE agent_actions SET policy_reason = '' WHERE policy_reason IS NULL;
+
+ALTER TABLE agent_actions MODIFY COLUMN evidence_ids_json LONGTEXT NOT NULL;
+ALTER TABLE agent_actions MODIFY COLUMN policy_reason LONGTEXT NOT NULL;
 
 CREATE TABLE agent_human_questions (
   id VARCHAR(64) PRIMARY KEY,

@@ -172,7 +172,6 @@ const robotPos = computed(() => {
   return robotStore.getRobotById(activeTask.value.robotId)?.position ?? null
 })
 
-const availableRobots = computed(() => robotStore.robots)
 const defaultRobotLabel = computed(() => {
   const robot = robotStore.robots[0]
   return robot ? `${robot.name}（${robot.status}）` : 'robot_001'

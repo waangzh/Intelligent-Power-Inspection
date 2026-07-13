@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
-import type { Alarm, AlarmSeverity, Checkpoint, DetectionType, InspectionTask } from '@/types'
+import type { Alarm, AlarmSeverity, AlarmWorkOrderMode, AlarmWorkOrderPolicy, Checkpoint, DetectionType, InspectionTask } from '@/types'
 import { DETECTION_LABELS } from '@/types'
-import { useAlarmPolicyStore } from '@/stores/alarmPolicy'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { hasPermission } from '@/utils/permission'
@@ -24,22 +23,30 @@ const SEVERITY_MAP: Record<DetectionType, AlarmSeverity> = {
 
 export const useAlarmStore = defineStore('alarm', () => {
   const alarms = ref<Alarm[]>([])
+  const workOrderPolicy = ref<AlarmWorkOrderPolicy>({
+    id: 'default',
+    rules: { CRITICAL: 'AUTO', HIGH: 'AUTO', MEDIUM: 'MANUAL', LOW: 'MANUAL' },
+  })
 
   const unacknowledgedCount = computed(() => alarms.value.filter((a) => !a.acknowledged).length)
 
   async function load() {
     alarms.value = await resourcesApi.listAlarms()
+    try {
+      workOrderPolicy.value = await resourcesApi.getAlarmWorkOrderPolicy()
+    } catch {
+      // 无法读取策略时继续使用默认规则，告警列表不受影响。
+    }
     await tryAutoConvertPending()
   }
 
   async function tryAutoConvertForAlarm(alarm: Alarm) {
-    const policyStore = useAlarmPolicyStore()
     const workOrderStore = useWorkOrderStore()
     const authStore = useAuthStore()
     const user = authStore.user
     if (!user || !hasPermission(user.role, 'workorder:create')) return
     if (workOrderStore.getByAlarmId(alarm.id)) return
-    if (!policyStore.shouldAutoConvert(alarm.severity)) return
+    if (workOrderPolicy.value.rules[alarm.severity] !== 'AUTO') return
     try {
       await workOrderStore.createFromAlarm(alarm, { id: user.id, name: user.displayName }, { autoConverted: true })
       if (!alarm.acknowledged) acknowledge(alarm.id)
@@ -130,8 +137,20 @@ export const useAlarmStore = defineStore('alarm', () => {
     void tryAutoConvertForAlarm(alarm)
   }
 
+  async function retryWorkOrder(id: string) {
+    const updated = await resourcesApi.retryAlarmWorkOrder(id)
+    updateLocalAlarm(updated)
+    return updated
+  }
+
+  async function saveWorkOrderPolicy(rules: Record<AlarmSeverity, AlarmWorkOrderMode>) {
+    workOrderPolicy.value = await resourcesApi.updateAlarmWorkOrderPolicy({ rules })
+    return workOrderPolicy.value
+  }
+
   return {
     alarms,
+    workOrderPolicy,
     unacknowledgedCount,
     load,
     addAlarm,
@@ -139,6 +158,8 @@ export const useAlarmStore = defineStore('alarm', () => {
     acknowledgeAll,
     maybeGenerateRouteAlarm,
     maybeGenerateCheckpointAlarm,
+    retryWorkOrder,
+    saveWorkOrderPolicy,
     applyRemoteAlarm: updateLocalAlarm,
   }
 })

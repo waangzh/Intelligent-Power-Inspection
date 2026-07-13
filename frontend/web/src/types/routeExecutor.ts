@@ -107,3 +107,12 @@ export interface RosMapState {
   width: number; height: number; pixels: Uint8Array | null; yamlName: string; pgmName: string
   image: string; resolution: number; origin: [number, number, number]; negate: number
 }
+
+export interface RouteMapSnapshot {
+  width: number
+  height: number
+  resolution: number
+  origin: [number, number, number]
+  negate: number
+  pgm_base64: string
+}

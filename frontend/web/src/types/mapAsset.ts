@@ -32,3 +32,9 @@ export interface MapAssetFiles {
   yamlName: string
   pgmName: string
 }
+
+/** 路线编辑器上传地图时选择的一对源文件。 */
+export interface MapAssetUploadFiles {
+  yaml: File
+  pgm: File
+}
