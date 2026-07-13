@@ -25,18 +25,21 @@ public class RouteRevisionService {
   private final RouteRevisionRepository repository;
   private final RouteCanonicalJsonService canonicalJson;
   private final ObjectMapper objectMapper;
+  private final RouteDocumentValidator documentValidator;
 
   public RouteRevisionService(
       DataStoreService dataStore,
       MapAssetService mapAssetService,
       RouteRevisionRepository repository,
       RouteCanonicalJsonService canonicalJson,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      RouteDocumentValidator documentValidator) {
     this.dataStore = dataStore;
     this.mapAssetService = mapAssetService;
     this.repository = repository;
     this.canonicalJson = canonicalJson;
     this.objectMapper = objectMapper;
+    this.documentValidator = documentValidator;
   }
 
   @Transactional
@@ -57,7 +60,10 @@ public class RouteRevisionService {
     @SuppressWarnings("unchecked")
     Map<String, Object> normalizedMap = objectMapper.convertValue(document, new TypeReference<Map<String, Object>>() {});
     RouteExecutorSupport.validate(normalizedMap);
-    validatePlatformPublishability(document);
+    List<RouteDocumentValidator.ValidationIssue> issues = documentValidator.validate(document);
+    if (!issues.isEmpty()) {
+      throw ApiException.badRequest("路线参数校验失败: " + issues.get(0).jsonPointer() + " " + issues.get(0).message());
+    }
 
     String contentSha256 = canonicalJson.sha256(document);
     RouteRevisionEntity existing = repository.findByRouteIdAndContentSha256(routeId, contentSha256).orElse(null);
@@ -77,7 +83,7 @@ public class RouteRevisionService {
     entity.setContentSha256(contentSha256);
     entity.setMapAssetId(mapId);
     entity.setMapImageSha256(requiredText(mapAsset.get("pgmSha256"), "地图资产缺少 PGM SHA-256"));
-    entity.setValidationReportJson(canonicalJson.canonicalJson(validationReport(document, mapAsset, now)));
+    entity.setValidationReportJson(canonicalJson.canonicalJson(validationReport(document, mapAsset, now, issues)));
     entity.setCreatedBy(createdBy);
     entity.setCreatedAt(now);
     return toDto(repository.save(entity));
@@ -100,6 +106,13 @@ public class RouteRevisionService {
     if (sourceVersion != 2 && sourceVersion != 3) {
       throw ApiException.badRequest("executorJson.version must be 2 or 3");
     }
+    JsonNode rawRoutes = document.get("routes");
+    if (!(rawRoutes instanceof ArrayNode routes) || routes.size() != 1) {
+      throw ApiException.badRequest("平台发布仅支持一条路线");
+    }
+    ObjectNode route = asObject(routes.get(0), "executorJson.routes[0] must be an object");
+    String routeId = route.path("id").asText();
+    if (routeId.isBlank()) throw ApiException.badRequest("executorJson.routes[0].id is required");
     document.put("version", 3);
     document.put("frame_id", "map");
     document.set("map", mergeObject(document.get("map"), mapIdentity(mapAsset), "executorJson.map must be an object"));
@@ -113,16 +126,21 @@ public class RouteRevisionService {
     if (!(rawTargets instanceof ArrayNode targets)) {
       throw ApiException.badRequest("executorJson.targets must be a list");
     }
+    ArrayNode targetIds = route.putArray("target_ids");
     for (JsonNode rawTarget : targets) {
       ObjectNode target = asObject(rawTarget, "executorJson target must be an object");
+      targetIds.add(target.path("id").asText());
       ObjectNode pose = asObject(target.get("pose"), "executorJson target.pose must be an object");
       target.set("location", mergeObject(target.get("location"), mapPose(pose), "executorJson target.location must be an object"));
+      target.remove("safety");
     }
 
     JsonNode schedules = document.get("schedules");
     if (!(schedules instanceof ArrayNode) || !schedules.isEmpty()) {
       throw ApiException.badRequest("平台路线不允许配置 schedules");
     }
+    document.put("active_route_id", routeId);
+    document.remove("safety");
     if (sourceVersion == 2 && !document.has("keepout_zones")) {
       document.set("keepout_zones", objectMapper.createArrayNode());
     }
@@ -173,14 +191,14 @@ public class RouteRevisionService {
     }
   }
 
-  private ObjectNode validationReport(ObjectNode document, Map<String, Object> mapAsset, String now) {
+  private ObjectNode validationReport(ObjectNode document, Map<String, Object> mapAsset, String now, List<RouteDocumentValidator.ValidationIssue> issues) {
     ObjectNode report = objectMapper.createObjectNode();
     report.put("valid", true);
     report.put("validatedAt", now);
     report.put("routeVersion", document.path("version").asInt());
     report.put("mapAssetId", requiredText(mapAsset.get("id"), "地图资产缺少 id"));
     report.put("mapImageSha256", requiredText(mapAsset.get("pgmSha256"), "地图资产缺少 PGM SHA-256"));
-    report.set("issues", objectMapper.createArrayNode());
+    report.set("issues", objectMapper.valueToTree(issues));
     return report;
   }
 

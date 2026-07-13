@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resourcesApi } from '@/api/resources'
 import PageHeader from '@/components/PageHeader.vue'
@@ -76,6 +76,7 @@ import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import type { MapAsset, MapAssetFiles, Route } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
+import { validateRouteDocument } from '@/utils/route/validation'
 
 const siteStore = useSiteStore()
 const routeStore = useRouteStore()
@@ -83,7 +84,7 @@ const { can } = usePermission()
 
 const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
 const selectedRouteId = ref('')
-const pendingDoc = ref<RouteExecutorDocument | null>(null)
+const pendingDoc = shallowRef<RouteExecutorDocument | null>(null)
 const editorRef = ref<InstanceType<typeof RosMapRouteEditor> | null>(null)
 const creatingRoute = ref(false)
 const savingRoute = ref(false)
@@ -91,8 +92,8 @@ const deletingRoute = ref(false)
 const creatingRevision = ref(false)
 const pendingMapFiles = ref<MapAssetFiles | null>(null)
 
-const siteRoutes = computed(() => routeStore.getRoutesBySite(selectedSiteId.value))
-const currentRoute = computed(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
+const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
+const currentRoute = computed<Route | null>(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
 
 watch(
   () => siteStore.sites.map((site) => site.id),
@@ -170,6 +171,13 @@ async function saveToPlatform() {
     ElMessage.warning('请先导入完整的 YAML/PGM 地图')
     return
   }
+  if (currentRoute.value.mapId && pendingDoc.value.version === 3) {
+    const result = validateRouteDocument(pendingDoc.value)
+    if (!result.valid) {
+      ElMessage.error(result.issues[0].message)
+      return
+    }
+  }
   if (savingRoute.value) return
   savingRoute.value = true
   let uploadedAsset: MapAsset | null = null
@@ -224,6 +232,15 @@ async function createRevision() {
   if (!currentRoute.value || creatingRevision.value) return
   if (!currentRoute.value.mapId || !currentRoute.value.executorJson) {
     ElMessage.warning('请先保存已绑定地图的路线草稿')
+    return
+  }
+  if (currentRoute.value.executorJson.version !== 3) {
+    ElMessage.error('旧版草稿需要转换为 v3 后才能创建路线修订')
+    return
+  }
+  const result = validateRouteDocument(currentRoute.value.executorJson)
+  if (!result.valid) {
+    ElMessage.error(result.issues[0].message)
     return
   }
   creatingRevision.value = true

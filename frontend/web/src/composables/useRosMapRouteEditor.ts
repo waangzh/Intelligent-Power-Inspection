@@ -1,5 +1,5 @@
-import { computed, onMounted, onUnmounted, reactive, ref, watch, type Ref } from 'vue'
-import type { EditorMode, RouteExecutorDocument, RouteExecutorTarget, RosMapState } from '@/types/routeExecutor'
+import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
+import type { EditorMode, RouteExecutorDocument, RosMapState } from '@/types/routeExecutor'
 import {
   createDefaultMapState,
   isMapCoordinateInside,
@@ -15,8 +15,10 @@ import {
   buildRouteJson,
   createDefaultRouteForm,
   loadRouteJson,
+  type RouteExecutorTarget,
   type RouteFormState,
 } from '@/utils/routeExecutorJson'
+import { parseRouteDocument } from '@/utils/route/parseRouteDocument'
 
 type YawTarget = { kind: 'start'; id: null } | { kind: 'target'; id: string }
 type PointHit = { kind: 'start' } | { kind: 'target'; id: string }
@@ -38,12 +40,13 @@ export function useRosMapRouteEditor(
   const map = reactive<RosMapState>(createDefaultMapState())
   const view = reactive({ scale: 1, offsetX: 0, offsetY: 0 })
   const mode = ref<EditorMode>('start')
-  const targets = ref<RouteExecutorTarget[]>([])
+  const targets = shallowRef<RouteExecutorTarget[]>([])
   const selectedTargetId = ref<string | null>(null)
   const yawTarget = ref<YawTarget>({ kind: 'start', id: null })
   const yawPreview = ref<{ x: number; y: number } | null>(null)
   const drag = ref<DragState | null>(null)
   const nextTargetNo = ref(1)
+  const sourceTemplate = shallowRef<RouteExecutorDocument | null>(null)
   const form = reactive<RouteFormState>(createDefaultRouteForm(options?.defaultRouteId))
   const activeRouteIdSynced = ref(true)
   const cursorInfo = ref('map: -, -')
@@ -52,7 +55,7 @@ export function useRosMapRouteEditor(
   const mapBitmapCanvas = document.createElement('canvas')
   let mapBitmapCtx = mapBitmapCanvas.getContext('2d')
 
-  const jsonPreview = computed(() => JSON.stringify(buildRouteJson(form, targets.value), null, 2))
+  const jsonPreview = computed<string>(() => JSON.stringify(exportDocument() as unknown, null, 2))
 
   const outOfBounds = computed(() => {
     const items: string[] = []
@@ -430,8 +433,10 @@ export function useRosMapRouteEditor(
     emitChange()
   }
 
-  function importRouteJson(doc: RouteExecutorDocument) {
+  function importRouteJson(input: unknown) {
+    const doc = parseRouteDocument(input)
     const loaded = loadRouteJson(doc, form)
+    sourceTemplate.value = doc
     targets.value = loaded.targets
     nextTargetNo.value = loaded.nextTargetNo
     selectedTargetId.value = targets.value[0]?.id ?? null
@@ -444,7 +449,7 @@ export function useRosMapRouteEditor(
   }
 
   function exportDocument(): RouteExecutorDocument {
-    return buildRouteJson(form, targets.value)
+    return buildRouteJson(form, targets.value, sourceTemplate.value)
   }
 
   function emitChange() {
