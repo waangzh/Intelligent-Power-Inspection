@@ -99,6 +99,25 @@ export interface RouteDraftValidationReport extends RouteValidationResult {
   normalizedExecutorJson: RouteExecutorDocument
   mapAssetId: string
   mapImageSha256: string
+  checkedAt?: string
+  publishable?: boolean
+  mapIdentity?: RouteMapIdentity | null
+}
+
+export interface RouteDraftMetadata {
+  version: number
+  updatedAt: string
+  updatedBy?: string | null
+  publishable: boolean
+  lastPublishable?: { checkedAt: string; mapAssetId: string; mapImageSha256: string }
+}
+
+export interface PersistedRouteDraftReport extends Omit<RouteDraftValidationReport, 'normalizedExecutorJson' | 'checkedAt' | 'publishable'> {
+  normalizedExecutorJson: RouteExecutorDocument | null
+  checkedAt: string | null
+  publishable: boolean
+  draft: RouteDraftMetadata | null
+  fallback?: 'ROUTE_CONFIGURATION' | 'EMPTY'
 }
 
 /** 兼容地图画布的轻量状态，不属于执行 JSON。 */

@@ -32,7 +32,7 @@ export function useRosMapRouteEditor(
   canvasRef: Ref<HTMLCanvasElement | null>,
   wrapRef: Ref<HTMLElement | null>,
   options?: {
-    initialJson?: RouteExecutorDocument | null
+    initialJson?: () => RouteExecutorDocument | null | undefined
     defaultRouteId?: string
     onChange?: (doc: RouteExecutorDocument) => void
   },
@@ -641,7 +641,7 @@ export function useRosMapRouteEditor(
   }
 
   watch(
-    () => options?.initialJson,
+    () => options?.initialJson?.(),
     (doc) => {
       if (doc) importRouteJson(doc)
     },

@@ -184,7 +184,7 @@ const pgmSourceFile = ref<File | null>(null)
 let mapLoadVersion = 0
 
 const editor = useRosMapRouteEditor(canvasRef, wrapRef, {
-  initialJson: props.initialJson,
+  initialJson: () => props.initialJson,
   defaultRouteId: props.defaultRouteId,
   onChange: (doc) => emit('change', doc),
 })
