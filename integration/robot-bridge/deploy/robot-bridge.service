@@ -12,6 +12,8 @@ ExecCondition=/bin/sh -c 'test -n "$ROBOT_AUTH_TOKENS_JSON" && test -n "$BRIDGE_
 ExecStart=/opt/robot-bridge/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001
 Restart=always
 RestartSec=3
+UMask=0027
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
