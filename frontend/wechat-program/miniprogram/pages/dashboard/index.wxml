@@ -10,8 +10,6 @@
     <view class="quick-actions">
       <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/tasks/index">任务</button>
       <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/alarms/index">告警{{unack ? '('+unack+')' : ''}}</button>
-      <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/statistics/index">统计</button>
-      <button size="mini" class="btn-plain" bindtap="go" data-url="/pages/more/index">更多</button>
     </view>
   </view>
 

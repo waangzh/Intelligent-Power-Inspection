@@ -1,6 +1,0 @@
-{
-  "navigationBarTitleText": "机器人管理",
-  "usingComponents": {
-    "page-header": "/components/page-header/index"
-  }
-}
