@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="任务调度" description="创建、下发与控制巡检任务" :breadcrumbs="[{ label: '巡检业务' }, { label: '任务调度' }]">
+    <PageHeader title="任务调度" :description="can('task:create') ? '创建、下发与控制巡检任务' : '查看巡检任务进度（管理员仅可应急急停）'" :breadcrumbs="[{ label: '巡检业务' }, { label: '任务调度' }]">
       <template #actions>
         <el-button v-if="can('task:create')" type="primary" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
@@ -48,10 +48,10 @@
         <el-button v-if="can('task:control') && activeTask.status === 'PAUSED'" type="primary" @click="taskStore.resume(activeTask.id)">恢复</el-button>
         <el-button v-if="can('task:control') && activeTask.status === 'RUNNING'" type="warning" @click="taskStore.takeover(activeTask.id)">人工接管</el-button>
         <el-button
-          v-if="can('task:control') && ['RUNNING', 'PAUSED', 'MANUAL_TAKEOVER', 'DISPATCHED'].includes(activeTask.status)"
+          v-if="canCancelTask(activeTask.status)"
           type="danger"
           @click="cancelTask(activeTask.id)"
-        >取消任务</el-button>
+        >{{ can('task:estop') && !can('task:control') ? '远程急停' : '取消任务' }}</el-button>
         <el-button v-if="can('task:dispatch')" type="success" @click="openAgentForTask(activeTask.id)">Agent 分析</el-button>
         <el-button @click="router.push(`/tasks/${activeTask.id}`)">任务详情</el-button>
       </div>
@@ -93,12 +93,12 @@
             <el-button v-if="can('task:dispatch')" text type="success" size="small" @click="openAgentForTask(row.id)">Agent</el-button>
             <el-button text size="small" @click="router.push(`/tasks/${row.id}`)">详情</el-button>
             <el-button
-              v-if="can('task:control') && !['COMPLETED', 'CANCELLED'].includes(row.status)"
+              v-if="canCancelTask(row.status)"
               text
               type="danger"
               size="small"
               @click="cancelTask(row.id)"
-            >取消</el-button>
+            >{{ can('task:estop') && !can('task:control') ? '急停' : '取消' }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -119,16 +119,8 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="执行机器人" required>
-          <el-select v-model="form.robotId" style="width: 100%">
-            <el-option
-              v-for="r in availableRobots"
-              :key="r.id"
-              :label="`${r.name} (${r.status})`"
-              :value="r.id"
-              :disabled="r.status === 'OFFLINE'"
-            />
-          </el-select>
+        <el-form-item label="执行机器人">
+          <el-input :model-value="defaultRobotLabel" disabled />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -153,14 +145,14 @@ import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
 
 const router = useRouter()
-const { can } = usePermission()
+const { can, canAny } = usePermission()
 const taskStore = useTaskStore()
 const routeStore = useRouteStore()
 const robotStore = useRobotStore()
 const siteStore = useSiteStore()
 
 const dialogVisible = ref(false)
-const form = reactive({ name: '', routeId: '', robotId: '' })
+const form = reactive({ name: '', routeId: '', robotId: 'robot_001' })
 
 const activeTask = computed(() => taskStore.getActiveTask())
 const activeRoute = computed(() =>
@@ -181,6 +173,10 @@ const robotPos = computed(() => {
 })
 
 const availableRobots = computed(() => robotStore.robots)
+const defaultRobotLabel = computed(() => {
+  const robot = robotStore.robots[0]
+  return robot ? `${robot.name}（${robot.status}）` : 'robot_001'
+})
 
 function routeName(id: string) {
   return routeStore.getRouteById(id)?.name ?? '-'
@@ -201,7 +197,7 @@ function formatTime(iso: string) {
 function openCreateDialog() {
   form.name = `巡检任务 ${new Date().toLocaleDateString('zh-CN')}`
   form.routeId = routeStore.routes[0]?.id ?? ''
-  form.robotId = robotStore.robots.find((r) => r.status === 'ONLINE')?.id ?? ''
+  form.robotId = robotStore.robots[0]?.id ?? 'robot_001'
   dialogVisible.value = true
 }
 
@@ -220,11 +216,17 @@ function submitTask() {
   ElMessage.success('任务已创建，可点击下发开始执行')
 }
 
+function canCancelTask(status: string) {
+  if (!canAny('task:control', 'task:estop')) return false
+  return !['COMPLETED', 'CANCELLED'].includes(status)
+}
+
 function cancelTask(id: string) {
-  ElMessageBox.confirm('确定取消该任务？', '确认', { type: 'warning' })
+  const emergency = can('task:estop') && !can('task:control')
+  ElMessageBox.confirm(emergency ? '确定远程急停该任务？' : '确定取消该任务？', '确认', { type: 'warning' })
     .then(() => {
       taskStore.cancel(id)
-      ElMessage.success('任务已取消')
+      ElMessage.success(emergency ? '已发送远程急停' : '任务已取消')
     })
     .catch(() => {})
 }

@@ -63,30 +63,42 @@ type UserRole = 'ADMIN' | 'DISPATCHER' | 'VIEWER'
 
 ```typescript
 type Permission =
-  | 'task:view'       // 查看任务
-  | 'task:create'     // 创建任务
-  | 'task:dispatch'   // 下发任务 / 工单
-  | 'task:control'    // 暂停/恢复/接管/取消
-  | 'site:edit'       // 站点管理
-  | 'route:edit'      // 巡检规划
-  | 'alarm:ack'       // 告警确认
-  | 'robot:manage'    // 机器人管理
-  | 'lingbot:manage'  // LingBot 建图
-  | 'detection:manage'// 检测策略
-  | 'user:manage'     // 用户管理
-  | 'record:export'   // 记录导出
+  | 'task:view'          // 查看任务/监控/告警/记录
+  | 'task:create'        // 创建任务（调度员）
+  | 'task:dispatch'      // 下发任务 / Agent 研判（调度员）
+  | 'task:control'       // 暂停/恢复/接管/取消（调度员）
+  | 'task:estop'         // 远程急停（管理员应急）
+  | 'site:edit'          // 站点管理
+  | 'route:edit'         // 巡检规划
+  | 'alarm:ack'          // 告警确认（调度员）
+  | 'robot:manage'       // 机器人管理（管理员）
+  | 'detection:manage'   // 检测策略（管理员）
+  | 'user:manage'        // 用户管理（管理员）
+  | 'record:export'      // 记录导出
+  | 'workorder:view'     // 查看工单
+  | 'workorder:create'   // 创建/转工单（管理员）
+  | 'workorder:assign'   // 指派改派（管理员）
+  | 'workorder:process'  // 现场处理（调度员）
+  | 'workorder:review'   // 复核关闭（管理员）
+  | 'alarm:policy'       // 告警转工单策略（管理员，前端）
 ```
 
 ### 3.3 角色权限矩阵
 
-| 权限 | ADMIN | DISPATCHER | VIEWER |
-|------|:-----:|:----------:|:------:|
+| 权限域 | ADMIN 管理员 | DISPATCHER 调度员 | VIEWER 观察员 |
+|--------|:------------:|:-----------------:|:-------------:|
+| **定位** | 系统治理者 | 值班运维者 | 监督查阅者 |
 | task:view | ✅ | ✅ | ✅ |
-| task:create / dispatch / control | ✅ | ✅ | ❌ |
+| task:create / dispatch / control | ❌ | ✅ | ❌ |
+| task:estop（应急急停） | ✅ | ❌ | ❌ |
 | site:edit / route:edit | ✅ | ✅ | ❌ |
-| alarm:ack | ✅ | ✅ | ❌ |
+| alarm:ack | ❌ | ✅ | ❌ |
 | record:export | ✅ | ✅ | ❌ |
-| robot / lingbot / detection / user:manage | ✅ | ❌ | ❌ |
+| robot / detection / user:manage | ✅ | ❌ | ❌ |
+| workorder:view | ✅ | ✅（仅自己的） | ❌ |
+| workorder:create / assign / review | ✅ | ❌ | ❌ |
+| workorder:process | ❌ | ✅ | ❌ |
+| alarm:policy | ✅ | ❌ | ❌ |
 
 **路由守卫**：未登录 → `/login`；无权限 → `/403`  
 **用户管理**：额外限制 `roles: ['ADMIN']`
@@ -470,17 +482,37 @@ interface Alarm {
 
 ### 5.9 机器人 — `useRobotStore`
 
-**数据来源**：后端 `/api/v1/robots`，实时状态通过 `/topic/robots` 推送。
+**数据来源**：后端 `/api/v1/robots`，实机模式下每 2s 从 mobile bridge（`:8000`）同步；实时状态通过 `/topic/robots` 推送。
 
 | 方法 | 说明 |
 |------|------|
-| `addRobot(robot)` | 新增 |
-| `updateRobot(id, patch)` | 更新 |
-| `removeRobot(id)` | 删除 |
-| `setPosition(id, position)` | 更新 GPS 位置 |
+| `updateRobot(id, patch)` | 更新（实机模式不可注册/删除） |
+| `setPosition(id, position)` | 更新地图位姿 |
 | `getRobotById(id)` | 查询 |
 
-**Robot.status**：`ONLINE | OFFLINE | BUSY | CHARGING`
+**Robot.status**：`ONLINE | OFFLINE | BUSY`（由 bridge 在线状态与巡逻状态推导）
+
+**Robot.telemetry**（实机联调，对应 `electric-power-inspection-robot` mobile bridge）：
+
+| 字段 | 说明 |
+|------|------|
+| `bridgeReachable` / `online` | bridge 是否可达 |
+| `patrolState` | `idle/running/paused/succeeded/failed/canceled/unavailable` |
+| `systemMode` | 系统模式 |
+| `mappingStatus` / `nav2Status` | 建图 / Nav2 状态 |
+| `canStatus` / `zlacStatus` | CAN / 底盘状态 |
+| `lastOdomAgeSec` / `lastScanAgeSec` | 传感器数据新鲜度 |
+| `pose` | `{ x, y, yaw }` 地图坐标 |
+
+后端配置（`application.yml` 或环境变量）：
+
+```yaml
+app:
+  robot:
+    mode: http
+    bridge-base-url: http://<Jetson_IP>:8000
+    robot-id: robot_001
+```
 
 ---
 

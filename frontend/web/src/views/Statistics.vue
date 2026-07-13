@@ -46,8 +46,8 @@
       </el-col>
       <el-col :span="8">
         <el-card shadow="never">
-          <template #header>机器人电量</template>
-          <ChartCard :option="batteryGaugeOption" :height="280" />
+          <template #header>机器人运行状态</template>
+          <ChartCard :option="robotStatusOption" :height="280" />
         </el-card>
       </el-col>
     </el-row>
@@ -161,27 +161,31 @@ const severityOption = computed(() => ({
   }],
 }))
 
-const batteryGaugeOption = computed(() => ({
-  tooltip: { formatter: '{b}: {c}%' },
-  series: robotStore.robots.map((r, i) => ({
-    type: 'gauge',
-    center: [`${(i + 0.5) * (100 / robotStore.robots.length)}%`, '55%'],
-    radius: '70%',
-    min: 0,
-    max: 100,
-    startAngle: 200,
-    endAngle: -20,
-    progress: { show: true, width: 8 },
-    axisLine: { lineStyle: { width: 8 } },
-    axisTick: { show: false },
-    splitLine: { show: false },
-    axisLabel: { show: false },
-    pointer: { show: false },
-    title: { offsetCenter: [0, '75%'], fontSize: 11 },
-    detail: { fontSize: 14, offsetCenter: [0, '20%'], formatter: '{value}%' },
-    data: [{ value: r.battery, name: r.name.replace('机器人-', '') }],
-  })),
-}))
+const robotStatusOption = computed(() => {
+  const robot = robotStore.robots[0]
+  const t = robot?.telemetry
+  const labels = ['Bridge', '巡逻', '建图', 'Nav2', '里程计', '雷达']
+  const values = [
+    t?.bridgeReachable && t?.online ? 1 : 0,
+    t?.patrolState === 'running' ? 1 : 0,
+    t?.mappingStatus === 'running' ? 1 : 0,
+    t?.nav2Status === 'running' ? 1 : 0,
+    t?.lastOdomAgeSec != null && t.lastOdomAgeSec <= 3 ? 1 : 0,
+    t?.lastScanAgeSec != null && t.lastScanAgeSec <= 3 ? 1 : 0,
+  ]
+  return {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 50, right: 20, top: 20, bottom: 40 },
+    xAxis: { type: 'category', data: labels },
+    yAxis: { type: 'value', max: 1, axisLabel: { formatter: (v: number) => (v ? '正常' : '异常') } },
+    series: [{
+      type: 'bar',
+      data: values,
+      itemStyle: { color: (params: { value: number }) => (params.value ? '#67c23a' : '#f56c6c') },
+      barWidth: 36,
+    }],
+  }
+})
 
 const siteBarOption = computed(() => ({
   tooltip: { trigger: 'axis' },

@@ -122,18 +122,47 @@ export interface Route {
   createdAt: string
 }
 
+export interface RobotPose {
+  frame?: string
+  x: number
+  y: number
+  yaw: number
+}
+
+export interface RobotTelemetry {
+  bridgeBaseUrl?: string
+  bridgeReachable?: boolean
+  bridgeSyncedAt?: string
+  online?: boolean
+  canStatus?: string
+  zlacStatus?: string
+  taskStatus?: string
+  systemMode?: string
+  mappingStatus?: 'running' | 'not_running'
+  nav2Status?: 'running' | 'not_running'
+  patrolState?: string
+  patrolExecutorRunning?: boolean
+  patrolMessage?: string
+  activeRouteId?: string
+  activeTargetId?: string
+  lastOdomAgeSec?: number | null
+  lastScanAgeSec?: number | null
+  velocity?: { linear_x: number; angular_z: number }
+  pose?: RobotPose
+}
+
 export interface Robot {
   id: string
   name: string
   model: string
   serialNo: string
   siteId?: string
-  status: 'ONLINE' | 'OFFLINE' | 'BUSY' | 'CHARGING'
-  battery: number
-  position?: LatLng
+  status: 'ONLINE' | 'OFFLINE' | 'BUSY'
+  position?: LatLng & { x?: number; y?: number; yaw?: number }
   currentTaskId?: string
   firmware?: string
   lastOnlineAt?: string
+  telemetry?: RobotTelemetry
 }
 
 export interface TaskEvent {

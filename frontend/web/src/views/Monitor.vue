@@ -2,7 +2,7 @@
   <div>
     <PageHeader
       title="实时监控"
-      description="基于 ROS 建图的机器人位姿追踪（2D 底图 + 3D 叠加）"
+      description="基于 ROS 建图的机器人位姿追踪（对接实机 mobile bridge）"
       :breadcrumbs="[{ label: '监控中心' }, { label: '实时监控' }]"
     />
 
@@ -11,10 +11,10 @@
         <el-card shadow="never">
           <template #header>
             <div class="card-head">
-              <span>地图实时追踪</span>
-              <el-select v-model="selectedRobotId" size="small" style="width: 180px">
-                <el-option v-for="r in robotStore.robots" :key="r.id" :label="r.name" :value="r.id" />
-              </el-select>
+              <span>地图实时追踪 · {{ selectedRobot?.name ?? '未连接' }}</span>
+              <el-tag size="small" :type="selectedRobot && bridgeReachable(selectedRobot) ? 'success' : 'info'">
+                {{ selectedRobot ? patrolStateLabel(selectedRobot.telemetry?.patrolState) : '无设备' }}
+              </el-tag>
             </div>
           </template>
           <div class="map-panel">
@@ -24,17 +24,26 @@
       </el-col>
       <el-col :span="8">
         <el-card shadow="never" style="margin-bottom: 16px">
-          <template #header>遥测数据</template>
+          <template #header>实机遥测</template>
           <el-descriptions v-if="selectedRobot" :column="1" border size="small">
             <el-descriptions-item label="名称">{{ selectedRobot.name }}</el-descriptions-item>
             <el-descriptions-item label="型号">{{ selectedRobot.model }}</el-descriptions-item>
-            <el-descriptions-item label="状态">
-              <el-tag size="small">{{ selectedRobot.status }}</el-tag>
+            <el-descriptions-item label="平台状态">
+              <el-tag size="small">{{ platformStatusLabel(selectedRobot.status) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="电量">
-              <el-progress :percentage="selectedRobot.battery" :stroke-width="10" />
+            <el-descriptions-item label="巡逻状态">{{ patrolStateLabel(selectedRobot.telemetry?.patrolState) }}</el-descriptions-item>
+            <el-descriptions-item label="系统模式">{{ selectedRobot.telemetry?.systemMode || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="建图">{{ mappingStatusLabel(selectedRobot.telemetry?.mappingStatus) }}</el-descriptions-item>
+            <el-descriptions-item label="Nav2">{{ nav2StatusLabel(selectedRobot.telemetry?.nav2Status) }}</el-descriptions-item>
+            <el-descriptions-item label="里程计">{{ sensorFreshness(selectedRobot.telemetry?.lastOdomAgeSec) }}</el-descriptions-item>
+            <el-descriptions-item label="雷达">{{ sensorFreshness(selectedRobot.telemetry?.lastScanAgeSec) }}</el-descriptions-item>
+            <el-descriptions-item label="位姿">
+              <span v-if="selectedRobot.telemetry?.pose">
+                x={{ selectedRobot.telemetry.pose.x.toFixed(2) }},
+                y={{ selectedRobot.telemetry.pose.y.toFixed(2) }}
+              </span>
+              <span v-else>-</span>
             </el-descriptions-item>
-            <el-descriptions-item label="固件">{{ selectedRobot.firmware }}</el-descriptions-item>
             <el-descriptions-item label="序列号">{{ selectedRobot.serialNo }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
@@ -49,21 +58,22 @@
     </el-row>
 
     <el-card shadow="never" style="margin-top: 16px">
-      <template #header>全部机器人在线状态</template>
+      <template #header>设备运行状态</template>
       <el-table :data="robotStore.robots" size="small">
         <el-table-column prop="name" label="机器人" />
         <el-table-column prop="model" label="型号" />
-        <el-table-column label="状态" width="100">
+        <el-table-column label="Bridge" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ONLINE' ? 'success' : row.status === 'BUSY' ? 'warning' : 'info'" size="small">
-              {{ row.status }}
+            <el-tag :type="bridgeReachable(row) ? 'success' : 'danger'" size="small">
+              {{ bridgeReachable(row) ? '在线' : '离线' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="电量" width="140">
-          <template #default="{ row }">
-            <el-progress :percentage="row.battery" :stroke-width="8" />
-          </template>
+        <el-table-column label="巡逻" width="100">
+          <template #default="{ row }">{{ patrolStateLabel(row.telemetry?.patrolState) }}</template>
+        </el-table-column>
+        <el-table-column label="Nav2" width="100">
+          <template #default="{ row }">{{ nav2StatusLabel(row.telemetry?.nav2Status) }}</template>
         </el-table-column>
         <el-table-column label="当前任务" min-width="120">
           <template #default="{ row }">{{ taskName(row.currentTaskId) }}</template>
@@ -74,29 +84,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import RosSlamMonitorMap from '@/components/RosSlamMonitorMap.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useRobotStore } from '@/stores/robot'
 import { useRouteStore } from '@/stores/route'
 import { useTaskStore } from '@/stores/task'
+import {
+  bridgeReachable,
+  mappingStatusLabel,
+  nav2StatusLabel,
+  patrolStateLabel,
+  PLATFORM_STATUS_LABELS,
+  sensorFreshness,
+} from '@/utils/robotStatus'
 
 const robotStore = useRobotStore()
 const taskStore = useTaskStore()
 const routeStore = useRouteStore()
 
-const selectedRobotId = ref(robotStore.robots[0]?.id ?? '')
-watch(
-  () => robotStore.robots.map((robot) => robot.id),
-  (ids) => {
-    if (ids.length > 0 && !ids.includes(selectedRobotId.value)) {
-      selectedRobotId.value = ids[0]
-    }
-  },
-  { immediate: true },
-)
-
-const selectedRobot = computed(() => robotStore.getRobotById(selectedRobotId.value))
+const selectedRobot = computed(() => robotStore.robots[0])
 const robotTask = computed(() => {
   const robot = selectedRobot.value
   if (!robot?.currentTaskId) return null
@@ -113,7 +120,11 @@ const displayRoute = computed(() => {
   return null
 })
 const robotPos = computed(() => selectedRobot.value?.position ?? null)
-const videoUrl = computed(() => `https://picsum.photos/seed/monitor_${selectedRobotId.value}/640/360`)
+const videoUrl = computed(() => `https://picsum.photos/seed/monitor_${selectedRobot.value?.id ?? 'robot'}/640/360`)
+
+function platformStatusLabel(status: keyof typeof PLATFORM_STATUS_LABELS) {
+  return PLATFORM_STATUS_LABELS[status]
+}
 
 function taskName(taskId?: string) {
   if (!taskId) return '-'

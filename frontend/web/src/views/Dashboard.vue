@@ -88,7 +88,10 @@
               <strong>{{ robot.name }}</strong>
               <el-tag :type="robotStatusType(robot.status)" size="small">{{ robotStatusLabel(robot.status) }}</el-tag>
             </div>
-            <el-progress :percentage="robot.battery" :stroke-width="8" :color="batteryColor(robot.battery)" />
+            <div class="robot-meta">
+              <span>巡逻：{{ patrolStateLabel(robot.telemetry?.patrolState) }}</span>
+              <span>Nav2：{{ nav2StatusLabel(robot.telemetry?.nav2Status) }}</span>
+            </div>
           </div>
         </el-card>
         <el-card shadow="never">
@@ -152,6 +155,7 @@ import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
 import type { Robot } from '@/types'
+import { nav2StatusLabel, patrolStateLabel } from '@/utils/robotStatus'
 
 const router = useRouter()
 const { can } = usePermission()
@@ -252,17 +256,11 @@ function formatTime(iso: string) {
 }
 
 function robotStatusLabel(s: Robot['status']) {
-  return { ONLINE: '在线', OFFLINE: '离线', BUSY: '任务中', CHARGING: '充电中' }[s]
+  return { ONLINE: '在线', OFFLINE: '离线', BUSY: '任务中' }[s]
 }
 
 function robotStatusType(s: Robot['status']) {
-  return { ONLINE: 'success', OFFLINE: 'info', BUSY: 'warning', CHARGING: 'info' }[s] as 'success' | 'warning' | 'info'
-}
-
-function batteryColor(p: number) {
-  if (p > 60) return '#67c23a'
-  if (p > 30) return '#e6a23c'
-  return '#f56c6c'
+  return { ONLINE: 'success', OFFLINE: 'info', BUSY: 'warning' }[s] as 'success' | 'warning' | 'info'
 }
 </script>
 
@@ -333,5 +331,13 @@ function batteryColor(p: number) {
   display: flex;
   justify-content: space-between;
   margin-bottom: 6px;
+}
+
+.robot-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #606266;
 }
 </style>

@@ -11,6 +11,7 @@ import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotProgressSnapshot;
+import com.powerinspection.robot.RobotProperties;
 import com.powerinspection.route.RouteExecutorSupport;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
@@ -53,14 +54,16 @@ public class TaskService {
   private final SimpMessagingTemplate messagingTemplate;
   private final RobotGateway robotGateway;
   private final LocateAnythingGateway locateAnythingGateway;
+  private final RobotProperties robotProperties;
   private final Random random = new Random();
 
-  public TaskService(DataStoreService dataStore, NotificationService notificationService, SimpMessagingTemplate messagingTemplate, RobotGateway robotGateway, LocateAnythingGateway locateAnythingGateway) {
+  public TaskService(DataStoreService dataStore, NotificationService notificationService, SimpMessagingTemplate messagingTemplate, RobotGateway robotGateway, LocateAnythingGateway locateAnythingGateway, RobotProperties robotProperties) {
     this.dataStore = dataStore;
     this.notificationService = notificationService;
     this.messagingTemplate = messagingTemplate;
     this.robotGateway = robotGateway;
     this.locateAnythingGateway = locateAnythingGateway;
+    this.robotProperties = robotProperties;
   }
 
   public List<Map<String, Object>> tasks() {
@@ -82,6 +85,7 @@ public class TaskService {
   @Transactional
   public Map<String, Object> createTask(Map<String, Object> body) {
     body.putIfAbsent("id", Ids.next("task"));
+    body.putIfAbsent("robotId", robotProperties.getRobotId());
     body.putIfAbsent("status", "CREATED");
     body.putIfAbsent("progress", 0);
     body.putIfAbsent("currentCheckpointSeq", 0);
@@ -190,6 +194,9 @@ public class TaskService {
   @Scheduled(fixedRate = 1500)
   @Transactional
   public void tick() {
+    if (robotProperties.isHttpMode()) {
+      return;
+    }
     for (Map<String, Object> task : dataStore.list(DataCategory.TASK)) {
       String status = text(task.get("status"));
       if ("DISPATCHED".equals(status)) {

@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { hasPermission, type Permission } from '@/utils/permission'
+import { hasPermission, hasAnyPermission, type Permission } from '@/utils/permission'
 
 export function usePermission() {
   const authStore = useAuthStore()
@@ -10,5 +10,9 @@ export function usePermission() {
     return hasPermission(role.value, permission)
   }
 
-  return { role, can }
+  function canAny(...permissions: Permission[]) {
+    return hasAnyPermission(role.value, permissions)
+  }
+
+  return { role, can, canAny }
 }

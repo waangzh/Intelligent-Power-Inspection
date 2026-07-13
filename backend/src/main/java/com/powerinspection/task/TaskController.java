@@ -91,7 +91,7 @@ public class TaskController {
 
   @PostMapping("/{id}/cancel")
   public ApiResponse<Map<String, Object>> cancel(@PathVariable String id) {
-    permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
+    permissionService.requireAny(currentUser.get(), Permission.TASK_CONTROL, Permission.TASK_ESTOP);
     return ApiResponse.ok(taskService.cancel(id));
   }
 

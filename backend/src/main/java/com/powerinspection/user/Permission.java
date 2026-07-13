@@ -5,13 +5,19 @@ public enum Permission {
   TASK_CREATE("task:create"),
   TASK_DISPATCH("task:dispatch"),
   TASK_CONTROL("task:control"),
+  TASK_ESTOP("task:estop"),
   SITE_EDIT("site:edit"),
   ROUTE_EDIT("route:edit"),
   ALARM_ACK("alarm:ack"),
   ROBOT_MANAGE("robot:manage"),
   DETECTION_MANAGE("detection:manage"),
   USER_MANAGE("user:manage"),
-  RECORD_EXPORT("record:export");
+  RECORD_EXPORT("record:export"),
+  WORKORDER_VIEW("workorder:view"),
+  WORKORDER_CREATE("workorder:create"),
+  WORKORDER_ASSIGN("workorder:assign"),
+  WORKORDER_PROCESS("workorder:process"),
+  WORKORDER_REVIEW("workorder:review");
 
   private final String value;
 

@@ -114,11 +114,15 @@ Content-Type: application/json
 type UserRole = 'ADMIN' | 'DISPATCHER' | 'VIEWER'
 
 type Permission =
-  | 'task:view' | 'task:create' | 'task:dispatch' | 'task:control'
+  | 'task:view' | 'task:create' | 'task:dispatch' | 'task:control' | 'task:estop'
   | 'site:edit' | 'route:edit' | 'alarm:ack'
   | 'robot:manage' | 'detection:manage'
   | 'user:manage' | 'record:export'
+  | 'workorder:view' | 'workorder:create' | 'workorder:assign' | 'workorder:process' | 'workorder:review'
+  | 'alarm:policy'
 ```
+
+**角色定位**：管理员=系统治理；调度员=值班运维；观察员=只读查阅。
 
 页面守卫：`app.requireAuth()` + `app.requirePermission(permission, roles?)`
 
@@ -223,7 +227,7 @@ type Permission =
 | `pages/dashboard/index` | `/dashboard` | 登录 |
 | `pages/monitor/index` | `/monitor` | 登录 |
 | `pages/alarms/index` | `/alarms` | 登录 |
-| `pages/workorders/index` | `/workorders` | `task:dispatch` |
+| `pages/workorders/index` | `/workorders` | `workorder:view` |
 | `pages/notifications/index` | `/notifications` | 登录 |
 | `pages/sites/index` | `/sites` | `site:edit` |
 | `pages/routes/index` | `/routes` | `route:edit` |

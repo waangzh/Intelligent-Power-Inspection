@@ -12,7 +12,7 @@ const menuGroups = [
   {
     title: '运维中心',
     items: [
-      { path: '/pages/workorders/index', label: '工单管理', icon: '📋', permission: 'task:dispatch' },
+      { path: '/pages/workorders/index', label: '工单管理', icon: '📋', permission: 'workorder:view' },
       { path: '/pages/notifications/index', label: '消息中心', icon: '💬' },
     ],
   },

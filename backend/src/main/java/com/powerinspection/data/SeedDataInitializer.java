@@ -7,6 +7,7 @@ import com.powerinspection.user.UserPreferenceEntity;
 import com.powerinspection.user.UserPreferenceRepository;
 import com.powerinspection.user.UserRepository;
 import com.powerinspection.user.UserRole;
+import com.powerinspection.robot.RobotProperties;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -24,19 +25,22 @@ public class SeedDataInitializer implements ApplicationRunner {
   private final PasswordEncoder passwordEncoder;
   private final DataStoreService dataStore;
   private final AuthService authService;
+  private final RobotProperties robotProperties;
 
   public SeedDataInitializer(
     UserRepository userRepository,
     UserPreferenceRepository preferenceRepository,
     PasswordEncoder passwordEncoder,
     DataStoreService dataStore,
-    AuthService authService
+    AuthService authService,
+    RobotProperties robotProperties
   ) {
     this.userRepository = userRepository;
     this.preferenceRepository = preferenceRepository;
     this.passwordEncoder = passwordEncoder;
     this.dataStore = dataStore;
     this.authService = authService;
+    this.robotProperties = robotProperties;
   }
 
   @Override
@@ -86,11 +90,7 @@ public class SeedDataInitializer implements ApplicationRunner {
       area("area_002", "site_001", "GIS 设备区", List.of(latLng(30.2737, 120.1546), latLng(30.2737, 120.1556), latLng(30.2732, 120.1556), latLng(30.2732, 120.1546)));
       area("area_003", "site_002", "开关室", List.of(latLng(30.2602, 120.1195), latLng(30.2602, 120.1205), latLng(30.2596, 120.1205), latLng(30.2596, 120.1195)));
     }
-    if (dataStore.list(DataCategory.ROBOT).isEmpty()) {
-      robot("robot_001", "巡检机器人-A1", "Unitree B2", "UT-B2-2024-001", "site_001", "ONLINE", 87, latLng(30.274, 120.1548), "v2.3.1");
-      robot("robot_002", "巡检机器人-B2", "云深处 X30", "YS-X30-2024-008", "site_001", "CHARGING", 42, null, "v1.8.0");
-      robot("robot_003", "巡检机器人-C3", "宇树 Go2", "UT-G2-2025-003", "site_002", "ONLINE", 91, latLng(30.2599, 120.12), "v3.0.2");
-    }
+    ensureSingleRobot();
     if (dataStore.list(DataCategory.DETECTION_TEMPLATE).isEmpty()) {
       template("tpl_route_001", "路线标准检测", "ROUTE", List.of("PERSON", "HELMET", "OBSTACLE", "FIRE"), "行进过程中持续检测人员、安全帽、障碍物与火源", map(), "2026-01-10T08:00:00Z");
       template("tpl_cp_001", "刀闸开关检测", "CHECKPOINT", List.of("SWITCH", "METER"), "检查点刀闸分合状态与表计读数", map("SWITCH", "红色刀闸开关", "METER", "压力表读数区域"), "2026-01-10T08:00:00Z");
@@ -105,8 +105,8 @@ public class SeedDataInitializer implements ApplicationRunner {
       alarm("alarm_seed_003", "task_demo", "电容器组巡检", null, "FIRE", "CRITICAL", "路线视野内检测到疑似火源/烟雾", "https://picsum.photos/seed/alarm3/400/240", false);
     }
     if (dataStore.list(DataCategory.RECORD).isEmpty()) {
-      record("record_seed_001", "task_hist_001", "主变区夜间巡检", "主变区例行巡检", "巡检机器人-A1", 2, 3, "28 分钟", "完成城东 220kV 变电站巡检，共 3 个检查点，触发 2 条告警");
-      record("record_seed_002", "task_hist_002", "GIS 设备专项巡检", "GIS 专项路线", "巡检机器人-B2", 0, 5, "35 分钟", "完成城东 220kV 变电站巡检，共 5 个检查点，无异常告警");
+      record("record_seed_001", "task_hist_001", "主变区夜间巡检", "主变区例行巡检", "电力巡检机器人", 2, 3, "28 分钟", "完成城东 220kV 变电站巡检，共 3 个检查点，触发 2 条告警");
+      record("record_seed_002", "task_hist_002", "GIS 设备专项巡检", "GIS 专项路线", "电力巡检机器人", 0, 5, "35 分钟", "完成城东 220kV 变电站巡检，共 5 个检查点，无异常告警");
     }
     if (dataStore.list(DataCategory.WORK_ORDER).isEmpty()) {
       dataStore.upsert(DataCategory.WORK_ORDER, map("id", "wo_seed_1", "title", "主变区漏油异常处置", "description", "告警：检查点「主变 A 相」漏油检测异常，需现场复核", "status", "PROCESSING", "priority", "HIGH", "assigneeName", "张调度", "createdById", "user_admin", "createdByName", "系统管理员", "createdAt", "2026-06-10T08:00:00Z", "updatedAt", "2026-06-11T10:00:00Z"));
@@ -128,8 +128,29 @@ public class SeedDataInitializer implements ApplicationRunner {
     dataStore.upsert(DataCategory.AREA, map("id", id, "siteId", siteId, "name", name, "polygon", polygon, "createdAt", "2026-01-15T08:00:00Z"));
   }
 
-  private void robot(String id, String name, String model, String serialNo, String siteId, String status, int battery, Map<String, Object> position, String firmware) {
-    Map<String, Object> item = map("id", id, "name", name, "model", model, "serialNo", serialNo, "siteId", siteId, "status", status, "battery", battery, "firmware", firmware, "lastOnlineAt", Instant.now().toString(), "createdAt", Instant.now().toString());
+  private void ensureSingleRobot() {
+    String robotId = robotProperties.getRobotId();
+    for (Map<String, Object> existing : dataStore.list(DataCategory.ROBOT)) {
+      if (!robotId.equals(String.valueOf(existing.get("id")))) {
+        dataStore.delete(DataCategory.ROBOT, String.valueOf(existing.get("id")));
+      }
+    }
+    Map<String, Object> current = dataStore.find(DataCategory.ROBOT, robotId);
+    if (current == null) {
+      robot(robotId, "电力巡检机器人", "Jetson Orin + ZLAC8015D", "YLHB-001", "site_001", "ONLINE", null, "ROS2 Humble");
+      return;
+    }
+    current.put("name", "电力巡检机器人");
+    current.put("model", "Jetson Orin + ZLAC8015D");
+    current.put("serialNo", "YLHB-001");
+    current.put("siteId", "site_001");
+    current.put("firmware", "ROS2 Humble");
+    current.remove("battery");
+    dataStore.upsert(DataCategory.ROBOT, current);
+  }
+
+  private void robot(String id, String name, String model, String serialNo, String siteId, String status, Map<String, Object> position, String firmware) {
+    Map<String, Object> item = map("id", id, "name", name, "model", model, "serialNo", serialNo, "siteId", siteId, "status", status, "firmware", firmware, "lastOnlineAt", Instant.now().toString(), "createdAt", Instant.now().toString());
     if (position != null) {
       item.put("position", position);
     }

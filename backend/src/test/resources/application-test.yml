@@ -22,3 +22,6 @@ app:
       - http://169.254.*:*
   model:
     mode: mock
+  robot:
+    mode: simulation
+    allow-registration: false

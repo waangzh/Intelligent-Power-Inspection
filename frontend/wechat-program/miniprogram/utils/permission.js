@@ -1,14 +1,23 @@
 const ROLE_PERMISSIONS = {
   ADMIN: [
-    'task:view', 'task:create', 'task:dispatch', 'task:control',
-    'site:edit', 'route:edit', 'alarm:ack', 'robot:manage',
-    'detection:manage', 'user:manage', 'record:export',
+    'task:view', 'task:estop',
+    'site:edit', 'route:edit', 'robot:manage', 'detection:manage',
+    'user:manage', 'record:export',
+    'workorder:view', 'workorder:create', 'workorder:assign', 'workorder:review',
+    'alarm:policy',
   ],
   DISPATCHER: [
     'task:view', 'task:create', 'task:dispatch', 'task:control',
     'site:edit', 'route:edit', 'alarm:ack', 'record:export',
+    'workorder:view', 'workorder:process',
   ],
   VIEWER: ['task:view'],
+}
+
+const ROLE_SUMMARIES = {
+  ADMIN: { title: '系统治理者', scope: '用户与策略配置、告警转工单、指派与复核；可应急急停' },
+  DISPATCHER: { title: '值班运维者', scope: '任务调度、告警处置、工单现场处理' },
+  VIEWER: { title: '监督查阅者', scope: '只读查看监控与记录' },
 }
 
 function hasPermission(role, permission) {
@@ -28,4 +37,4 @@ function canAccess(role, rule) {
   return true
 }
 
-module.exports = { hasPermission, canAccessByRole, canAccess, ROLE_PERMISSIONS }
+module.exports = { hasPermission, canAccessByRole, canAccess, ROLE_PERMISSIONS, ROLE_SUMMARIES }

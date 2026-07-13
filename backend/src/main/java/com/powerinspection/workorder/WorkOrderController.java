@@ -39,19 +39,19 @@ public class WorkOrderController {
 
   @GetMapping
   public ApiResponse<List<Map<String, Object>>> orders() {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    permissionService.require(currentUser.get(), Permission.WORKORDER_VIEW);
     return ApiResponse.ok(dataStore.list(DataCategory.WORK_ORDER));
   }
 
   @GetMapping("/{id}")
   public ApiResponse<Map<String, Object>> order(@PathVariable String id) {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    permissionService.require(currentUser.get(), Permission.WORKORDER_VIEW);
     return ApiResponse.ok(dataStore.get(DataCategory.WORK_ORDER, id));
   }
 
   @PostMapping
   public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    permissionService.require(currentUser.get(), Permission.WORKORDER_CREATE);
     body.putIfAbsent("id", Ids.next("wo"));
     body.putIfAbsent("status", "PENDING");
     body.putIfAbsent("createdAt", Instant.now().toString());
@@ -61,7 +61,7 @@ public class WorkOrderController {
 
   @PostMapping("/from-alarm/{alarmId}")
   public ApiResponse<Map<String, Object>> createFromAlarm(@PathVariable String alarmId, @RequestBody(required = false) Map<String, Object> body) {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    permissionService.require(currentUser.get(), Permission.WORKORDER_CREATE);
     dataStore.list(DataCategory.WORK_ORDER).stream()
       .filter(order -> alarmId.equals(String.valueOf(order.get("alarmId"))))
       .findFirst()
@@ -92,22 +92,26 @@ public class WorkOrderController {
 
   @PatchMapping("/{id}")
   public ApiResponse<Map<String, Object>> update(@PathVariable String id, @RequestBody Map<String, Object> body) {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    permissionService.requireAny(currentUser.get(), Permission.WORKORDER_PROCESS, Permission.WORKORDER_ASSIGN);
     body.put("updatedAt", Instant.now().toString());
     return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, body));
   }
 
   @DeleteMapping("/{id}")
   public ApiResponse<Void> delete(@PathVariable String id) {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    permissionService.require(currentUser.get(), Permission.WORKORDER_CREATE);
     dataStore.delete(DataCategory.WORK_ORDER, id);
     return ApiResponse.ok();
   }
 
   @PatchMapping("/{id}/status")
   public ApiResponse<Map<String, Object>> updateStatus(@PathVariable String id, @RequestBody Map<String, Object> body) {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
     String status = String.valueOf(body.get("status"));
+    if ("CLOSED".equals(status) || "CANCELLED".equals(status)) {
+      permissionService.require(currentUser.get(), Permission.WORKORDER_REVIEW);
+    } else {
+      permissionService.require(currentUser.get(), Permission.WORKORDER_PROCESS);
+    }
     Map<String, Object> patch = new java.util.LinkedHashMap<>();
     patch.put("status", status);
     patch.put("updatedAt", Instant.now().toString());
@@ -122,7 +126,7 @@ public class WorkOrderController {
 
   @PatchMapping("/{id}/assign")
   public ApiResponse<Map<String, Object>> assign(@PathVariable String id, @RequestBody Map<String, Object> body) {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    permissionService.require(currentUser.get(), Permission.WORKORDER_ASSIGN);
     return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, Map.of("assigneeName", body.get("assigneeName"), "updatedAt", Instant.now().toString())));
   }
 }

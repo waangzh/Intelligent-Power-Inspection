@@ -7,6 +7,11 @@
         <el-button v-if="can('task:control') && task.status === 'RUNNING'" @click="taskStore.pause(task.id)">暂停</el-button>
         <el-button v-if="can('task:control') && task.status === 'PAUSED'" type="primary" @click="taskStore.resume(task.id)">恢复</el-button>
         <el-button v-if="can('task:dispatch')" type="success" @click="openAgent">Agent 分析</el-button>
+        <el-button
+          v-if="canCancelTask"
+          type="danger"
+          @click="cancelTask"
+        >{{ can('task:estop') && !can('task:control') ? '远程急停' : '取消任务' }}</el-button>
         <el-button @click="router.push('/tasks')">返回列表</el-button>
       </template>
     </PageHeader>
@@ -78,6 +83,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import Map2D from '@/components/Map2D.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TaskStatusTag from '@/components/TaskStatusTag.vue'
@@ -96,7 +102,7 @@ const routeStore = useRouteStore()
 const robotStore = useRobotStore()
 const alarmStore = useAlarmStore()
 const siteStore = useSiteStore()
-const { can } = usePermission()
+const { can, canAny } = usePermission()
 
 const taskId = computed(() => routeParam.params.id as string)
 const task = computed(() => taskStore.getTaskById(taskId.value))
@@ -132,6 +138,22 @@ function timelineType(type: TaskEvent['type']) {
   if (type === 'ALARM') return 'danger'
   if (type === 'COMPLETE') return 'success'
   return 'primary'
+}
+
+const canCancelTask = computed(() => {
+  if (!task.value || !canAny('task:control', 'task:estop')) return false
+  return !['COMPLETED', 'CANCELLED'].includes(task.value.status)
+})
+
+function cancelTask() {
+  if (!task.value) return
+  const emergency = can('task:estop') && !can('task:control')
+  ElMessageBox.confirm(emergency ? '确定远程急停该任务？' : '确定取消该任务？', '确认', { type: 'warning' })
+    .then(() => {
+      taskStore.cancel(task.value!.id)
+      ElMessage.success(emergency ? '已发送远程急停' : '任务已取消')
+    })
+    .catch(() => {})
 }
 
 function openAgent() {

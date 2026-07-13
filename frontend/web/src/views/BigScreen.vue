@@ -62,8 +62,8 @@
           <div class="panel-title">机器人状态</div>
           <div v-for="r in robotStore.robots" :key="r.id" class="robot-row">
             <span>{{ r.name }}</span>
-            <el-tag size="small" :type="r.status === 'ONLINE' ? 'success' : 'info'">{{ r.status }}</el-tag>
-            <el-progress :percentage="r.battery" :stroke-width="6" style="width: 80px" />
+            <el-tag size="small" :type="r.status === 'ONLINE' ? 'success' : r.status === 'BUSY' ? 'warning' : 'info'">{{ r.status }}</el-tag>
+            <span class="patrol-text">{{ patrolStateLabel(r.telemetry?.patrolState) }}</span>
           </div>
         </div>
         <div class="bs-panel">
@@ -101,6 +101,7 @@ import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { ALARM_SEVERITY_LABELS } from '@/types'
+import { patrolStateLabel } from '@/utils/robotStatus'
 
 const router = useRouter()
 const siteStore = useSiteStore()
