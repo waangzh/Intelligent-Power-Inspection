@@ -67,6 +67,13 @@ const ACTIVITY_TYPE_LABELS = {
   SETTINGS: '设置',
 }
 
+const ROBOT_STATUS_LABELS = {
+  ONLINE: '在线',
+  BUSY: '忙碌',
+  CHARGING: '充电中',
+  OFFLINE: '离线',
+}
+
 module.exports = {
   DETECTION_LABELS,
   TASK_STATUS_LABELS,
@@ -78,4 +85,5 @@ module.exports = {
   ROUTE_DETECTIONS,
   CHECKPOINT_DETECTIONS,
   ACTIVITY_TYPE_LABELS,
+  ROBOT_STATUS_LABELS,
 }

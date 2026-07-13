@@ -1,6 +1,8 @@
 const api = require('../../services/index')
 const { computeAnalytics } = require('../../utils/analytics')
 const { hasPermission } = require('../../utils/permission')
+const { syncTabBar } = require('../../utils/tab-page')
+const { isNativeTabPage } = require('../../config/tab-bar')
 const { ALARM_SEVERITY_LABELS } = require('../../utils/constants')
 
 Page({
@@ -10,37 +12,30 @@ Page({
     stats: [],
     recentAlarms: [],
     activeTasks: [],
-    robots: [],
     schedule: [],
     unack: 0,
     canControl: false,
-    sites: [],
-    siteIndex: 0,
-    activeSite: null,
-    displayRoute: null,
-    robotPosition: null,
     alarmChartData: [],
     completionRate: 0,
-    prefsLoaded: false,
   },
 
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/dashboard/index')) return
+    syncTabBar(this)
     const user = app.globalData.user
     const h = new Date().getHours()
     this.setData({
       user,
       greeting: h < 12 ? '早上好' : h < 18 ? '下午好' : '晚上好',
       canControl: hasPermission(user.role, 'task:control'),
-      prefsLoaded: false,
     })
     this.load()
     app.refreshBadges()
   },
 
   async load() {
-    const [d, prefs] = await Promise.all([api.fetchDashboard(), api.getPreferences()])
+    const d = await api.fetchDashboard()
     const analytics = computeAnalytics(d)
     const alarmChartData = analytics.weeklyAlarmCounts.map((v, i) => ({
       label: `${6 - i}天`,
@@ -54,9 +49,9 @@ Page({
         text: `${t.name}（${robotName(t.robotId)}）`,
       }))
       : [
-        { time: '08:00', text: '主变区例行巡检（机器人-A1）' },
-        { time: '10:30', text: 'GIS 专项巡检（机器人-B2）' },
-        { time: '14:00', text: '电容器组巡检（机器人-C3）' },
+        { time: '08:00', text: '主变区例行巡检（巡检机器人）' },
+        { time: '10:30', text: 'GIS 专项巡检（巡检机器人）' },
+        { time: '14:00', text: '电容器组巡检（巡检机器人）' },
         { time: '16:00', text: '夜间预检任务待命' },
       ]
     const runningCount = d.tasks.filter((t) =>
@@ -67,19 +62,6 @@ Page({
       { label: '进行中任务', value: runningCount, trend: '实时更新', up: true },
       { label: '未确认告警', value: d.unack, trend: d.unack ? '需及时处理' : '暂无待处理', up: !d.unack },
     ]
-    let siteIndex = this.data.siteIndex || 0
-    if (!this.data.prefsLoaded && prefs.defaultSiteId) {
-      const idx = d.sites.findIndex((s) => s.id === prefs.defaultSiteId)
-      if (idx >= 0) siteIndex = idx
-    }
-    const activeSite = d.sites[siteIndex] || d.sites[0]
-    const activeTask = d.activeTasks[0]
-    const displayRoute = activeTask
-      ? d.routes.find((r) => r.id === activeTask.routeId)
-      : d.routes.find((r) => r.siteId === activeSite?.id)
-    const robotPosition = activeTask
-      ? d.robots.find((r) => r.id === activeTask.robotId)?.position
-      : null
     this.setData({
       stats,
       recentAlarms: d.alarms.slice(0, 5).map((a) => ({
@@ -88,33 +70,21 @@ Page({
         sevType: a.severity === 'CRITICAL' ? 'danger' : 'warning',
       })),
       activeTasks: d.activeTasks,
-      robots: d.robots.map((r) => ({
-        ...r,
-        statusType: r.status === 'ONLINE' ? 'success' : r.status === 'BUSY' ? 'warning' : 'info',
-      })),
       unack: d.unack,
       schedule,
       alarmChartData,
       completionRate: analytics.completionRate,
-      sites: d.sites,
-      siteIndex: activeSite ? d.sites.findIndex((s) => s.id === activeSite.id) : 0,
-      activeSite,
-      displayRoute: displayRoute || null,
-      robotPosition,
-      prefsLoaded: true,
     })
-  },
-
-  onSiteChange(e) {
-    this.setData({ siteIndex: Number(e.detail.value), prefsLoaded: true })
-    this.load()
   },
 
   go(e) {
     const url = e.currentTarget.dataset.url
-    const tabs = ['/pages/dashboard/index', '/pages/monitor/index', '/pages/alarms/index', '/pages/tasks/index', '/pages/profile/info/index']
-    if (tabs.some((t) => url.startsWith(t.replace('/index', '')))) wx.switchTab({ url: url.split('?')[0] })
-    else wx.navigateTo({ url })
+    const path = url.split('?')[0]
+    if (isNativeTabPage(path)) {
+      wx.switchTab({ url: path })
+    } else {
+      wx.navigateTo({ url })
+    }
   },
 
   goDetail(e) {

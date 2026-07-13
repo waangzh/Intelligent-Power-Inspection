@@ -77,9 +77,7 @@ const defaultAreas = [
 ]
 
 const defaultRobots = [
-  { id: 'robot_001', name: '巡检机器人-A1', model: 'Unitree B2', serialNo: 'UT-B2-2024-001', siteId: 'site_001', status: 'ONLINE', battery: 87, position: { lat: 30.274, lng: 120.1548 }, firmware: 'v2.3.1', lastOnlineAt: new Date().toISOString() },
-  { id: 'robot_002', name: '巡检机器人-B2', model: '云深处 X30', serialNo: 'YS-X30-2024-008', siteId: 'site_001', status: 'CHARGING', battery: 42, firmware: 'v1.8.0', lastOnlineAt: new Date(Date.now() - 3600000).toISOString() },
-  { id: 'robot_003', name: '巡检机器人-C3', model: '宇树 Go2', serialNo: 'UT-G2-2025-003', siteId: 'site_002', status: 'ONLINE', battery: 91, position: { lat: 30.2599, lng: 120.12 }, firmware: 'v3.0.2', lastOnlineAt: new Date().toISOString() },
+  { id: 'robot_001', name: '巡检机器人', model: 'Unitree B2', serialNo: 'UT-B2-2024-001', siteId: 'site_001', status: 'ONLINE', battery: 87, position: { lat: 30.274, lng: 120.1548 }, firmware: 'v2.3.1', lastOnlineAt: new Date().toISOString() },
 ]
 
 const seedAlarms = [
@@ -89,13 +87,13 @@ const seedAlarms = [
 ]
 
 const seedRecords = [
-  { id: 'record_seed_001', taskId: 'task_hist_001', taskName: '主变区夜间巡检', routeName: '主变区例行巡检', robotName: '巡检机器人-A1', alarmCount: 2, checkpointCount: 3, duration: '28 分钟', summary: '完成城东 220kV 变电站巡检，共 3 个检查点，触发 2 条告警', completedAt: new Date(Date.now() - 172800000).toISOString() },
-  { id: 'record_seed_002', taskId: 'task_hist_002', taskName: 'GIS 设备专项巡检', routeName: 'GIS 专项路线', robotName: '巡检机器人-B2', alarmCount: 0, checkpointCount: 5, duration: '35 分钟', summary: '完成城东 220kV 变电站巡检，共 5 个检查点，无异常告警', completedAt: new Date(Date.now() - 432000000).toISOString() },
+  { id: 'record_seed_001', taskId: 'task_hist_001', taskName: '主变区夜间巡检', routeName: '主变区例行巡检', robotName: '巡检机器人', alarmCount: 2, checkpointCount: 3, duration: '28 分钟', summary: '完成城东 220kV 变电站巡检，共 3 个检查点，触发 2 条告警', completedAt: new Date(Date.now() - 172800000).toISOString() },
+  { id: 'record_seed_002', taskId: 'task_hist_002', taskName: 'GIS 设备专项巡检', routeName: 'GIS 专项路线', robotName: '巡检机器人', alarmCount: 0, checkpointCount: 5, duration: '35 分钟', summary: '完成城东 220kV 变电站巡检，共 5 个检查点，无异常告警', completedAt: new Date(Date.now() - 432000000).toISOString() },
 ]
 
 const seedWorkOrders = [
-  { id: 'wo_seed_1', title: '主变区漏油异常处置', description: '告警：检查点「主变 A 相」漏油检测异常，需现场复核', locationDescription: '城东 220kV 变电站 / 主变区域 / 1# 主变 A 相 / 本体底部', status: 'PROCESSING', priority: 'HIGH', assigneeName: '张调度', createdById: 'user_admin', createdByName: '系统管理员', createdAt: '2026-06-10T08:00:00Z', updatedAt: '2026-06-11T10:00:00Z' },
-  { id: 'wo_seed_2', title: 'GIS 区未佩戴安全帽', description: '路线行进中检测到作业人员未佩戴安全帽', status: 'PENDING', priority: 'URGENT', createdById: 'user_dispatcher', createdByName: '张调度', createdAt: '2026-06-12T14:30:00Z', updatedAt: '2026-06-12T14:30:00Z' },
+  { id: 'wo_seed_1', title: '主变区漏油异常处置', description: '告警：检查点「主变 A 相」漏油检测异常，需现场复核', status: 'PROCESSING', priority: 'HIGH', assigneeId: 'user_dispatcher', assigneeName: '张调度', createdById: 'user_admin', createdByName: '系统管理员', location: { siteName: '城东 220kV 变电站', routeName: '主变区例行巡检', checkpointName: '主变 A 相', areaName: '主变区例行巡检 · 主变 A 相', address: '浙江省杭州市余杭区' }, createdAt: '2026-06-10T08:00:00Z', updatedAt: '2026-06-11T10:00:00Z' },
+  { id: 'wo_seed_2', title: 'GIS 区未佩戴安全帽', description: '路线行进中检测到作业人员未佩戴安全帽', status: 'PENDING', priority: 'URGENT', createdById: 'user_admin', createdByName: '系统管理员', location: { siteName: '城东 220kV 变电站', routeName: '主变区例行巡检', areaName: '主变区例行巡检', address: '浙江省杭州市余杭区' }, createdAt: '2026-06-12T14:30:00Z', updatedAt: '2026-06-12T14:30:00Z' },
 ]
 
 /** 云端地图库默认条目（yaml + png；site_002/003 演示复用 site_001 栅格） */

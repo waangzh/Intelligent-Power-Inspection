@@ -1,5 +1,6 @@
 const api = require('../../services/index')
 const { mapNotificationLink } = require('../../config/menu')
+const { isTabPage } = require('../../config/tab-bar')
 const { NOTIFICATION_TYPE_LABELS } = require('../../utils/constants')
 
 const TYPE_OPTIONS = [
@@ -111,8 +112,7 @@ Page({
     getApp().refreshBadges()
     if (item.link) {
       const path = mapNotificationLink(item.link)
-      const tabs = ['/pages/dashboard/index', '/pages/monitor/index', '/pages/alarms/index', '/pages/tasks/index', '/pages/profile/info/index']
-      if (tabs.some((t) => path.startsWith(t))) wx.switchTab({ url: path.split('?')[0] })
+      if (isTabPage(path)) wx.switchTab({ url: path.split('?')[0] })
       else wx.navigateTo({ url: path })
     }
     this.load()
