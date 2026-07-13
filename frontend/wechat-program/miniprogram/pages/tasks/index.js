@@ -1,5 +1,6 @@
 const api = require('../../services/index')
 const { hasPermission } = require('../../utils/permission')
+const { syncTabBar } = require('../../utils/tab-page')
 
 Page({
   data: {
@@ -24,6 +25,7 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/tasks/index')) return
     if (!app.requirePermission('task:view')) return
+    syncTabBar(this)
     app.refreshBadges()
     const user = app.globalData.user
     this.setData({

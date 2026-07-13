@@ -1,10 +1,13 @@
 const api = require('./services/index')
+const { countWorkOrderBadge } = require('./utils/work-order-badge')
 
 App({
   globalData: {
     user: null,
     unreadNotifications: 0,
     unackAlarms: 0,
+    pendingWorkOrders: 0,
+    tabBarComponent: null,
   },
 
   onLaunch() {
@@ -19,6 +22,11 @@ App({
     }
   },
 
+  registerTabBar(component) {
+    this.globalData.tabBarComponent = component
+    this.applyTabBarBadges()
+  },
+
   async refreshBadges() {
     const user = this.globalData.user
     if (!user) {
@@ -26,12 +34,14 @@ App({
       return
     }
     try {
-      const [ntf, alarms] = await Promise.all([
+      const [ntf, alarms, orders] = await Promise.all([
         api.getNotifications(user.id),
         api.getAlarms(),
+        api.getWorkOrders().catch(() => []),
       ])
       this.globalData.unreadNotifications = ntf.filter((n) => !n.read).length
       this.globalData.unackAlarms = alarms.filter((a) => !a.acknowledged).length
+      this.globalData.pendingWorkOrders = countWorkOrderBadge(orders, user)
       this.applyTabBarBadges()
     } catch (e) {
       console.warn('refreshBadges', e)
@@ -39,45 +49,59 @@ App({
   },
 
   applyTabBarBadges() {
-    const alarmCount = this.globalData.unackAlarms
-    const ntfCount = this.globalData.unreadNotifications
-    if (alarmCount > 0) {
-      wx.setTabBarBadge({
-        index: 2,
-        text: alarmCount > 99 ? '99+' : String(alarmCount),
+    const tabBar = this.globalData.tabBarComponent
+    if (tabBar && typeof tabBar.updateBadges === 'function') {
+      tabBar.updateBadges({
+        alarms: this.globalData.unackAlarms,
+        workorders: this.globalData.pendingWorkOrders,
+        profile: this.globalData.unreadNotifications,
       })
-    } else {
-      wx.removeTabBarBadge({ index: 2 })
+      return
     }
-    if (ntfCount > 0) {
-      wx.setTabBarBadge({
-        index: 4,
-        text: ntfCount > 99 ? '99+' : String(ntfCount),
-      })
-    } else {
-      wx.removeTabBarBadge({ index: 4 })
+    try {
+      if (this.globalData.unackAlarms > 0) {
+        wx.setTabBarBadge({ index: 2, text: this.globalData.unackAlarms > 99 ? '99+' : String(this.globalData.unackAlarms) })
+      } else {
+        wx.removeTabBarBadge({ index: 2 })
+      }
+      if (this.globalData.unreadNotifications > 0) {
+        wx.setTabBarBadge({ index: 4, text: this.globalData.unreadNotifications > 99 ? '99+' : String(this.globalData.unreadNotifications) })
+      } else {
+        wx.removeTabBarBadge({ index: 4 })
+      }
+    } catch (e) {
+      // tab bar may not be ready
     }
   },
 
   clearTabBarBadges() {
+    const tabBar = this.globalData.tabBarComponent
+    if (tabBar && typeof tabBar.updateBadges === 'function') {
+      tabBar.updateBadges({ alarms: 0, workorders: 0, profile: 0 })
+    }
     try {
       wx.removeTabBarBadge({ index: 2 })
       wx.removeTabBarBadge({ index: 4 })
     } catch (e) {
-      // tab bar may not be ready on cold start
+      // ignore
     }
   },
 
   setUser(user) {
     this.globalData.user = user
     this.refreshBadges()
+    const tabBar = this.globalData.tabBarComponent
+    if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
   },
 
   clearUser() {
     this.globalData.user = null
     this.globalData.unreadNotifications = 0
     this.globalData.unackAlarms = 0
+    this.globalData.pendingWorkOrders = 0
     this.clearTabBarBadges()
+    const tabBar = this.globalData.tabBarComponent
+    if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
   },
 
   requireAuth(redirectUrl) {

@@ -1,7 +1,23 @@
 <view class="container">
-  <page-header title="工单管理" description="管理员指派/改派与复核，调度员现场处置并提交复核">
-    <view slot="actions"><button wx:if="{{canCreate}}" size="mini" bindtap="goAlarms">从告警创建</button></view>
-  </page-header>
+  <page-header title="工单管理" description="{{pageDesc}}" />
+
+  <view class="card pending-alarms" wx:if="{{canCreate && pendingAlarms.length}}">
+    <view class="card-title flex-between">
+      <text>待转工单告警</text>
+      <text class="muted">{{pendingAlarms.length}} 条</text>
+    </view>
+    <view class="pending-item" wx:for="{{pendingAlarms}}" wx:key="id">
+      <view class="flex-between">
+        <text class="tag tag-{{item.sevType}}">{{item.severityLabel}}</text>
+        <text class="muted">{{item.time}}</text>
+      </view>
+      <view class="pending-msg">{{item.message}}</view>
+      <view class="muted">{{item.routeName}} · {{item.typeLabel}}</view>
+      <view class="pending-actions">
+        <button size="mini" type="primary" catchtap="createFromAlarm" data-id="{{item.id}}">转工单</button>
+      </view>
+    </view>
+  </view>
 
   <view class="stat-grid">
     <view class="stat-item {{statusFilter===item.key?'sel':''}}" wx:for="{{statusCards}}" wx:key="key" bindtap="filterByCard" data-key="{{item.key}}">
@@ -17,10 +33,10 @@
     </view>
     <view class="muted">工单号 {{item.id}}</view>
     <view class="muted">地点 {{item.locationLabel}}</view>
-    <view class="muted">优先级 {{item.priorityLabel}} · {{item.assigneeName || item.createdByName}} · {{item.createdLabel}}</view>
+    <view class="muted">优先级 {{item.priorityLabel}} · {{item.assigneeLabel}} · {{item.createdLabel}}</view>
     <view class="wo-desc">{{item.description}}</view>
     <view class="wo-actions" catchtap="stop">
-      <button wx:if="{{item.canAccept}}" size="mini" catchtap="accept" data-id="{{item.id}}">接单</button>
+      <button wx:if="{{item.canAssign}}" size="mini" type="primary" catchtap="openAssign" data-id="{{item.id}}">{{item.assignLabel}}</button>
       <button wx:if="{{item.canSubmitReview}}" size="mini" type="primary" catchtap="openResolve" data-id="{{item.id}}">提交复核</button>
       <button wx:if="{{item.canConfirmReview}}" size="mini" type="primary" catchtap="openReview" data-id="{{item.id}}">确认复核</button>
     </view>
@@ -37,7 +53,7 @@
       <view class="detail-row"><text class="muted">状态</text><text>{{detail.statusLabel}}</text></view>
       <view class="detail-row"><text class="muted">创建人</text><text>{{detail.createdByName || '-'}}</text></view>
       <view class="detail-row"><text class="muted">创建时间</text><text>{{detail.createdLabel}}</text></view>
-      <view class="detail-row"><text class="muted">处理人</text><text>{{detail.assigneeName || '-'}}</text></view>
+      <view class="detail-row"><text class="muted">处理人</text><text>{{detail.assigneeLabel || detail.assigneeName || '待指派'}}</text></view>
       <view class="detail-row" wx:if="{{detail.autoConverted}}"><text class="muted">来源</text><text>告警自动转工单</text></view>
 
       <view class="section-title">具体地点</view>
@@ -53,6 +69,21 @@
         <view class="detail-row"><text class="muted">更换部件</text><text>{{detail.resolutionForm.replacedParts || '-'}}</text></view>
         <view class="detail-row"><text class="muted">试验结果</text><text class="detail-desc-inline">{{detail.resolutionForm.testResult}}</text></view>
         <view class="detail-row"><text class="muted">补充说明</text><text class="detail-desc-inline">{{detail.resolutionForm.remarks || '-'}}</text></view>
+        <view class="detail-row" wx:if="{{detail.resolutionForm.photos && detail.resolutionForm.photos.length}}">
+          <text class="muted">现场照片</text>
+          <text>{{detail.resolutionForm.photos.length}} 张</text>
+        </view>
+        <view class="photo-grid" wx:if="{{detail.resolutionForm.photoSrcs && detail.resolutionForm.photoSrcs.length}}">
+          <image
+            class="photo-thumb"
+            wx:for="{{detail.resolutionForm.photoSrcs}}"
+            wx:key="*this"
+            src="{{item}}"
+            mode="aspectFill"
+            bindtap="previewDetailPhoto"
+            data-index="{{index}}"
+          />
+        </view>
         <view class="detail-row"><text class="muted">提交人</text><text>{{detail.resolutionSubmittedLabel}}</text></view>
       </block>
 
@@ -64,6 +95,22 @@
       </block>
 
       <button size="mini" bindtap="closeDetail">关闭</button>
+    </view>
+  </view>
+
+  <view class="modal-mask" wx:if="{{showAssign}}" bindtap="closeAssign">
+    <view class="modal-panel form-panel" catchtap="">
+      <view class="card-title">{{assignDialogTitle}}</view>
+      <view class="form-item required">
+        <text class="form-label">调度员</text>
+        <picker mode="selector" range="{{dispatcherLabels}}" value="{{assignForm.dispatcherIndex}}" bindchange="onDispatcherChange">
+          <view class="form-picker">{{dispatcherLabels[assignForm.dispatcherIndex] || '请选择调度员'}}</view>
+        </picker>
+      </view>
+      <view class="form-actions">
+        <button size="mini" bindtap="closeAssign">取消</button>
+        <button size="mini" type="primary" bindtap="submitAssign">确认指派</button>
+      </view>
     </view>
   </view>
 
@@ -93,6 +140,17 @@
       <view class="form-item">
         <text class="form-label">补充说明</text>
         <textarea class="form-textarea" placeholder="其他现场情况" value="{{resolveForm.remarks}}" data-field="remarks" bindinput="onResolveFieldInput" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">现场照片</text>
+        <text class="photo-hint">建议拍摄故障点、处理前后对比，最多 3 张</text>
+        <view class="photo-grid">
+          <view class="photo-item" wx:for="{{resolveForm.photoItems}}" wx:key="localPath">
+            <image class="photo-thumb" src="{{item.localPath}}" mode="aspectFill" bindtap="previewResolvePhoto" data-index="{{index}}" />
+            <text class="photo-remove" catchtap="removePhoto" data-index="{{index}}">×</text>
+          </view>
+          <view class="photo-add" wx:if="{{resolveForm.photoItems.length < 3}}" bindtap="choosePhotos">+</view>
+        </view>
       </view>
       <view class="form-actions">
         <button size="mini" bindtap="closeResolve">取消</button>

@@ -1,18 +1,11 @@
 <view class="container">
-  <page-header title="告警中心" description="实时告警监控与处置" />
+  <page-header title="告警中心" description="告警监控、筛选与确认（转工单请至工单页）" />
 
   <view class="stat-grid">
     <view class="stat-item"><view class="stat-value">{{stats.unack}}</view><view class="stat-label">未确认</view></view>
     <view class="stat-item"><view class="stat-value">{{stats.critical}}</view><view class="stat-label">紧急</view></view>
     <view class="stat-item"><view class="stat-value">{{stats.high}}</view><view class="stat-label">高</view></view>
     <view class="stat-item"><view class="stat-value">{{stats.total}}</view><view class="stat-label">总数</view></view>
-  </view>
-
-  <view class="card wo-entry" wx:if="{{canViewWorkOrder}}" bindtap="goWorkOrders">
-    <view class="flex-between wo-entry-inner">
-      <text class="wo-entry-label">工单管理</text>
-      <text class="arrow">›</text>
-    </view>
   </view>
 
   <view class="card toolbar">
@@ -37,8 +30,7 @@
     <view class="alarm-actions" catchtap="stop">
       <text wx:if="{{item.acknowledged}}" class="tag tag-success">已确认</text>
       <button wx:if="{{!item.acknowledged && canAck}}" size="mini" catchtap="ackOne" data-id="{{item.id}}">确认</button>
-      <button wx:if="{{canCreateWorkOrder && !item.hasWorkOrder}}" size="mini" type="primary" catchtap="createWorkOrder" data-id="{{item.id}}">转工单</button>
-      <text wx:if="{{item.hasWorkOrder && canViewWorkOrder}}" class="tag tag-info" catchtap="goWorkOrders">{{item.workOrderLabel}}</text>
+      <text wx:if="{{item.hasWorkOrder}}" class="tag tag-info">{{item.workOrderLabel}}</text>
     </view>
   </view>
   <view wx:if="{{!filtered.length}}" class="empty-hint">暂无告警</view>

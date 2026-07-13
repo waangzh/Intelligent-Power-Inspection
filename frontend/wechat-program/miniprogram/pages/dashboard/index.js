@@ -1,6 +1,8 @@
 const api = require('../../services/index')
 const { computeAnalytics } = require('../../utils/analytics')
 const { hasPermission } = require('../../utils/permission')
+const { syncTabBar } = require('../../utils/tab-page')
+const { isNativeTabPage } = require('../../config/tab-bar')
 const { ALARM_SEVERITY_LABELS } = require('../../utils/constants')
 
 Page({
@@ -20,6 +22,7 @@ Page({
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/dashboard/index')) return
+    syncTabBar(this)
     const user = app.globalData.user
     const h = new Date().getHours()
     this.setData({
@@ -76,9 +79,12 @@ Page({
 
   go(e) {
     const url = e.currentTarget.dataset.url
-    const tabs = ['/pages/dashboard/index', '/pages/monitor/index', '/pages/alarms/index', '/pages/tasks/index', '/pages/profile/info/index']
-    if (tabs.some((t) => url.startsWith(t.replace('/index', '')))) wx.switchTab({ url: url.split('?')[0] })
-    else wx.navigateTo({ url })
+    const path = url.split('?')[0]
+    if (isNativeTabPage(path)) {
+      wx.switchTab({ url: path })
+    } else {
+      wx.navigateTo({ url })
+    }
   },
 
   goDetail(e) {

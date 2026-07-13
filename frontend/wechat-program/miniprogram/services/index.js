@@ -4,7 +4,7 @@ const mock = require('./mock/store')
 const { uid, loadFromStorage } = require('../utils/storage')
 const { ROUTE_DETECTIONS, CHECKPOINT_DETECTIONS } = require('../utils/constants')
 const { createEmptyRosRoute } = require('../utils/ros-route')
-const { buildLocationFromAlarm, resolutionSummary } = require('../utils/work-order')
+const { buildLocationFromAlarm, resolutionSummary, normalizeWorkOrder } = require('../utils/work-order')
 const workOrderPerm = require('../utils/work-order-permission')
 
 function currentUser() {
@@ -78,6 +78,23 @@ async function listUsers() {
     return mock.getState().users
   }
   return http.get('/users')
+}
+
+async function notifyWorkOrderByRole(role, title, content, excludeUserId) {
+  const users = await listUsers()
+  users
+    .filter((u) => u.role === role && u.id !== excludeUserId)
+    .forEach((u) => {
+      if (useMock()) {
+        mock.pushNotification(u.id, 'WORKORDER', title, content, '/pages/workorders/index')
+      }
+    })
+}
+
+async function uploadWorkOrderPhoto(filePath) {
+  const { persistPhoto } = require('../utils/work-order-photo')
+  if (useMock()) return persistPhoto(filePath)
+  return filePath
 }
 
 async function updateUserRole(userId, role) {
@@ -387,9 +404,36 @@ async function acknowledgeAllAlarms() {
 }
 
 // ==================== Work Orders ====================
+async function patchWorkOrderQuiet(id, patch) {
+  if (useMock()) {
+    const orders = mock.getState().workOrders
+    const idx = orders.findIndex((o) => o.id === id)
+    if (idx < 0) return
+    orders[idx] = { ...orders[idx], ...patch, updatedAt: new Date().toISOString() }
+    mock.save(mock.KEYS.workOrders, orders)
+    return orders[idx]
+  }
+  return http.patch(`/work-orders/${id}`, patch)
+}
+
 async function getWorkOrders() {
-  if (useMock()) return mock.getState().workOrders
-  return http.get('/work-orders')
+  let raw
+  if (useMock()) raw = mock.getState().workOrders
+  else raw = await http.get('/work-orders')
+
+  const normalized = raw.map(normalizeWorkOrder)
+  await Promise.all(
+    normalized.map(async (order) => {
+      const original = raw.find((o) => o.id === order.id)
+      if (!original || original.status === order.status) return
+      try {
+        await patchWorkOrderQuiet(order.id, { status: order.status })
+      } catch (e) {
+        // 修复历史脏数据失败时忽略，界面已按归一化结果展示
+      }
+    }),
+  )
+  return normalized
 }
 
 async function createWorkOrderFromAlarm(alarm, creator, options = {}) {
@@ -411,7 +455,6 @@ async function createWorkOrderFromAlarm(alarm, creator, options = {}) {
       alarmId: alarm.id,
       status: 'PENDING',
       priority,
-      assigneeName: creatorName,
       createdById: sessionUser.id,
       createdByName: creatorName,
       location,
@@ -421,7 +464,6 @@ async function createWorkOrderFromAlarm(alarm, creator, options = {}) {
     }
     orders.unshift(order)
     mock.save(mock.KEYS.workOrders, orders)
-    mock.pushNotification(sessionUser.id, 'WORKORDER', '工单已创建', order.title, '/pages/workorders/index')
     return order
   }
   return http.post('/work-orders', { alarmId: alarm.id, autoConverted: !!options.autoConverted, location })
@@ -444,6 +486,43 @@ async function tryAutoConvertPendingAlarms(alarms, creator) {
       // 已转工单或创建失败时跳过
     }
   }
+}
+
+async function assignWorkOrder(id, assignee) {
+  const user = currentUser()
+  const order = await getWorkOrderById(id)
+  workOrderPerm.assertCanAssignOrder(order, user)
+
+  const nextStatus = 'PROCESSING'
+  const now = new Date().toISOString()
+  const patch = {
+    assigneeId: assignee.id,
+    assigneeName: assignee.name,
+    status: nextStatus,
+    updatedAt: now,
+  }
+
+  if (useMock()) {
+    const orders = mock.getState().workOrders
+    const idx = orders.findIndex((o) => o.id === id)
+    if (idx < 0) throw new Error('工单不存在')
+    orders[idx] = { ...orders[idx], ...patch }
+    mock.save(mock.KEYS.workOrders, orders)
+    mock.pushNotification(
+      assignee.id,
+      'WORKORDER',
+      '有新的单子要接',
+      orders[idx].title,
+      '/pages/workorders/index',
+    )
+    return orders[idx]
+  }
+
+  await http.patch(`/work-orders/${id}/assign`, {
+    assigneeName: assignee.name,
+    assigneeId: assignee.id,
+  })
+  return patchWorkOrderQuiet(id, { status: nextStatus, assigneeId: assignee.id })
 }
 
 async function updateWorkOrderStatus(id, status, extra = {}) {
@@ -470,10 +549,14 @@ async function submitWorkOrderResolution(id, form) {
     submittedAt: new Date().toISOString(),
     submittedBy: submitter,
   }
-  return updateWorkOrderStatus(id, 'REVIEW', {
+  const order = await updateWorkOrderStatus(id, 'REVIEW', {
     resolution: resolutionSummary(fullForm),
     resolutionForm: fullForm,
   })
+  if (useMock()) {
+    await notifyWorkOrderByRole('ADMIN', '工单待复核', order.title || '有新的现场处理记录', user.id)
+  }
+  return order
 }
 
 async function submitWorkOrderReview(id, form) {
@@ -485,7 +568,18 @@ async function submitWorkOrderReview(id, form) {
     reviewedBy: reviewer,
   }
   const status = form.result === 'PASS' ? 'CLOSED' : 'PROCESSING'
-  return updateWorkOrderStatus(id, status, { reviewForm: fullForm })
+  const order = await getWorkOrderById(id)
+  const updated = await updateWorkOrderStatus(id, status, { reviewForm: fullForm })
+  if (useMock() && form.result === 'REJECT' && order.assigneeId) {
+    mock.pushNotification(
+      order.assigneeId,
+      'WORKORDER',
+      '工单已退回',
+      order.title || '请重新现场处理',
+      '/pages/workorders/index',
+    )
+  }
+  return updated
 }
 
 // ==================== Robots ====================
@@ -638,6 +732,8 @@ module.exports = {
   getWorkOrders,
   createWorkOrderFromAlarm,
   tryAutoConvertPendingAlarms,
+  assignWorkOrder,
+  uploadWorkOrderPhoto,
   updateWorkOrderStatus,
   submitWorkOrderResolution,
   submitWorkOrderReview,

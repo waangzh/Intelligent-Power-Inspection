@@ -1,20 +1,29 @@
 const { hasPermission } = require('./permission')
+const { canAssignOrder: isAssignableStatus, isWorkOrderUnassigned } = require('./work-order')
 
+/** 与 lzm Web WorkOrderManage visibleOrders 一致 */
 function isWorkOrderAssignee(order, user) {
   if (!user || !order) return false
-  return order.assigneeId === user.id
-    || order.assigneeName === user.displayName
-    || order.assigneeName === user.name
+  return order.assigneeId === user.id || order.assigneeName === user.displayName
+}
+
+/** 调度员仅看指派给自己的工单；待指派 PENDING 不展示 */
+function filterVisibleWorkOrders(orders, user) {
+  if (!user || !orders?.length) return orders || []
+  if (user.role !== 'DISPATCHER') return orders
+  return orders.filter((o) => {
+    if (!isWorkOrderAssignee(o, user)) return false
+    if (o.status === 'PENDING' && isWorkOrderUnassigned(o)) return false
+    return true
+  })
 }
 
 function canCreateWorkOrder(user) {
   return !!user && hasPermission(user.role, 'workorder:create')
 }
 
-function canAcceptOrder(order, user) {
-  if (!user || order.status !== 'PENDING') return false
-  if (hasPermission(user.role, 'workorder:assign')) return true
-  return hasPermission(user.role, 'workorder:process') && isWorkOrderAssignee(order, user)
+function canAssignOrder(order, user) {
+  return !!user && hasPermission(user.role, 'workorder:assign') && isAssignableStatus(order)
 }
 
 function canSubmitReview(order, user) {
@@ -32,9 +41,9 @@ function assertCanCreateWorkOrder(user) {
   if (!canCreateWorkOrder(user)) throw new Error('无转工单权限')
 }
 
-function assertCanAcceptOrder(order, user) {
+function assertCanAssignOrder(order, user) {
   if (!user) throw new Error('未登录')
-  if (!canAcceptOrder(order, user)) throw new Error('无接单权限')
+  if (!canAssignOrder(order, user)) throw new Error('无指派权限')
 }
 
 function assertCanSubmitReview(order, user) {
@@ -49,10 +58,6 @@ function assertCanConfirmReview(order, user) {
 
 function assertStatusTransition(order, nextStatus, user) {
   const cur = order.status
-  if (nextStatus === 'PROCESSING' && cur === 'PENDING') {
-    assertCanAcceptOrder(order, user)
-    return
-  }
   if (nextStatus === 'REVIEW' && cur === 'PROCESSING') {
     assertCanSubmitReview(order, user)
     return
@@ -66,12 +71,13 @@ function assertStatusTransition(order, nextStatus, user) {
 
 module.exports = {
   isWorkOrderAssignee,
+  filterVisibleWorkOrders,
   canCreateWorkOrder,
-  canAcceptOrder,
+  canAssignOrder,
   canSubmitReview,
   canConfirmReview,
   assertCanCreateWorkOrder,
-  assertCanAcceptOrder,
+  assertCanAssignOrder,
   assertCanSubmitReview,
   assertCanConfirmReview,
   assertStatusTransition,

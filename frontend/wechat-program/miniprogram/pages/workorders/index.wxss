@@ -18,3 +18,13 @@
 .mode-chip { flex: 1; text-align: center; padding: 14rpx 20rpx; background: #f0f4f8; border-radius: 8rpx; font-size: 24rpx; color: #606266; }
 .mode-chip.on { background: #1a5fb4; color: #fff; }
 .form-actions { display: flex; gap: 16rpx; justify-content: flex-end; margin-top: 8rpx; }
+.pending-item { padding: 16rpx 0; border-bottom: 1rpx solid #f0f2f5; }
+.pending-item:last-child { border-bottom: none; }
+.pending-msg { margin: 8rpx 0; font-size: 26rpx; color: #303133; }
+.pending-actions { margin-top: 12rpx; }
+.photo-hint { display: block; font-size: 22rpx; color: #909399; margin-bottom: 12rpx; }
+.photo-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.photo-item { position: relative; }
+.photo-thumb { width: 160rpx; height: 160rpx; border-radius: 12rpx; background: #f0f4f8; }
+.photo-remove { position: absolute; top: -8rpx; right: -8rpx; width: 36rpx; height: 36rpx; line-height: 32rpx; text-align: center; background: #f56c6c; color: #fff; border-radius: 50%; font-size: 28rpx; }
+.photo-add { width: 160rpx; height: 160rpx; border: 2rpx dashed #c0c4cc; border-radius: 12rpx; display: flex; align-items: center; justify-content: center; font-size: 56rpx; color: #909399; }
