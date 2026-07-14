@@ -6,6 +6,7 @@ import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,9 +34,18 @@ public class RouteDeploymentController {
       @RequestHeader(value = "Idempotency-Key", required = false) String requestId,
       @RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    if (!body.keySet().equals(Set.of("robotId"))) {
+      throw ApiException.badRequest("部署请求只允许包含 robotId；路线、地图哈希和 Bridge 凭据由服务端生成");
+    }
     String robotId = text(body.get("robotId"));
     if (robotId == null) throw ApiException.badRequest("请选择机器人");
     return ApiResponse.ok(routeDeploymentService.request(revisionId, robotId, requestId));
+  }
+
+  @GetMapping("/route-revisions/{revisionId}/deployments")
+  public ApiResponse<java.util.List<Map<String, Object>>> list(@PathVariable String revisionId) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(routeDeploymentService.listByRevision(revisionId));
   }
 
   @GetMapping("/route-deployments/{deploymentId}")

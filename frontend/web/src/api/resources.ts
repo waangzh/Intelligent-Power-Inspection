@@ -14,6 +14,7 @@ import type {
   RouteRevision,
   TaskEvent,
 } from '@/types'
+import type { RouteDeployment } from '@/types/routeDeployment'
 import type { AppNotification, NotificationType } from '@/types/notification'
 import type { PersistedRouteDraftReport, RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
 import type {
@@ -50,6 +51,10 @@ export const resourcesApi = {
   removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
   listRouteRevisions: (routeId: string) => http.get<RouteRevision[]>(`/routes/${routeId}/revisions`),
   createRouteRevision: (routeId: string) => http.post<RouteRevision>(`/routes/${routeId}/revisions`),
+  listRouteDeployments: (revisionId: string) => http.get<RouteDeployment[]>(`/route-revisions/${encodeURIComponent(revisionId)}/deployments`),
+  createRouteDeployment: (revisionId: string, robotId: string, idempotencyKey: string) =>
+    http.post<RouteDeployment>(`/route-revisions/${encodeURIComponent(revisionId)}/deployments`, { robotId }, { 'Idempotency-Key': idempotencyKey }),
+  getRouteDeployment: (deploymentId: string) => http.get<RouteDeployment>(`/route-deployments/${encodeURIComponent(deploymentId)}`),
   validateRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, mapAssetId?: string) =>
     http.post<RouteDraftValidationReport>(`/routes/${routeId}/draft:validate`, { executorJson, mapAssetId }),
   getRouteDraft: (routeId: string) => http.get<PersistedRouteDraftReport>(`/routes/${routeId}/draft`),

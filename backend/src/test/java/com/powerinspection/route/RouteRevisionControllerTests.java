@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.Map;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.robot.BridgeRobotSnapshot;
+import com.powerinspection.robot.RobotHeartbeatService;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -40,6 +43,9 @@ class RouteRevisionControllerTests {
 
   @Autowired
   RouteRevisionRepository routeRevisionRepository;
+
+  @Autowired
+  RobotHeartbeatService heartbeatService;
 
   @Test
   void draftValidationOverwritesMapIdentityReportsAllIssuesAndDoesNotPersist() throws Exception {
@@ -155,6 +161,8 @@ class RouteRevisionControllerTests {
       .andExpect(jsonPath("$.data.revisionNo").value(1));
 
     String robotId = "robot_001";
+    Instant heartbeatAt = Instant.now();
+    heartbeatService.applyBridgeSnapshot(new BridgeRobotSnapshot(robotId, heartbeatAt, "1.0", "test-boot", "idle", "test", 0, Map.of()), heartbeatAt);
 
     mockMvc.perform(post("/api/v1/route-revisions/{id}/deployments", revisionId)
         .header("Authorization", bearer(token))
