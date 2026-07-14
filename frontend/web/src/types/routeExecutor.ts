@@ -91,7 +91,7 @@ export interface EditableRouteDraft {
     loopEnabled: boolean; loopWait: number; maxCycles: number
   }
 }
-export interface PlatformRouteContext { defaultRouteId?: string }
+export interface PlatformRouteContext { defaultRouteId?: string; defaultRouteName?: string }
 export interface MapAssetIdentity extends RouteMapIdentity {}
 export interface RouteValidationIssue { code: string; jsonPointer: string; message: string; severity: 'ERROR' | 'WARNING' }
 export interface RouteValidationResult { valid: boolean; issues: RouteValidationIssue[] }

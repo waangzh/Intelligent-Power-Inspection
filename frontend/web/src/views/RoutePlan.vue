@@ -6,10 +6,10 @@
       :breadcrumbs="[{ label: '巡检业务' }, { label: '巡检规划' }]"
     >
       <template #actions>
-        <el-select v-model="selectedSiteId" placeholder="选择站点" style="width: 220px" @change="onSiteChange">
+        <el-select v-model="selectedSiteId" placeholder="选择站点" style="width: 220px" :disabled="savingRoute" @change="onSiteChange">
           <el-option v-for="s in siteStore.sites" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
-        <el-button v-if="can('route:edit')" type="primary" :disabled="!selectedSiteId" :loading="creatingRoute" @click="createRoute">
+        <el-button v-if="can('route:edit')" type="primary" :disabled="!selectedSiteId || savingRoute" :loading="creatingRoute" @click="createRoute">
           <el-icon><Plus /></el-icon>
           新建路线
         </el-button>
@@ -22,7 +22,7 @@
         <el-button v-if="can('route:edit') && currentRoute" type="warning" plain :title="publishBlockReason" :disabled="!canCreateRevision" :loading="creatingRevision" @click="createRevision">
           创建路线修订
         </el-button>
-        <el-button v-if="can('route:edit') && currentRoute" type="danger" plain :loading="deletingRoute" @click="deleteRoute">
+        <el-button v-if="can('route:edit') && currentRoute" type="danger" plain :disabled="savingRoute" :loading="deletingRoute" @click="deleteRoute">
           删除路线
         </el-button>
       </template>
@@ -39,6 +39,7 @@
               type="button"
               class="route-item"
               :class="{ active: selectedRouteId === r.id }"
+              :disabled="savingRoute || deletingRoute"
               @click="selectRoute(r.id)"
             >
               <span class="route-name">{{ r.name }}</span>
@@ -56,6 +57,7 @@
           :key="currentRoute.id"
           :initial-json="editorInitialJson ?? undefined"
           :default-route-id="currentRoute.id"
+          :default-route-name="currentRoute.name"
           :map-id="draftState?.mapAssetId ?? currentRoute.mapId"
           @change="onEditorChange"
           @map-files-change="onMapFilesChange"
@@ -100,7 +102,7 @@ import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import type { MapAsset, MapAssetUploadFiles, Route } from '@/types'
 import type { PersistedRouteDraftReport, RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
-import { applySavedRouteDraft, keepLocalDraftAfterSaveFailure, restoreRouteDraft, routePublishBlockReason, type DraftSaveState } from '@/utils/route/draftPersistence'
+import { applySavedRouteDraft, keepLocalDraftAfterSaveFailure, restoreRouteDraft, routePublishBlockReason, serializeRouteDocument, type DraftSaveState } from '@/utils/route/draftPersistence'
 
 const siteStore = useSiteStore()
 const routeStore = useRouteStore()
@@ -217,12 +219,13 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 async function createRoute() {
-  if (creatingRoute.value) return
+  if (creatingRoute.value || savingRoute.value) return
+  if (!(await confirmDiscardChanges())) return
   creatingRoute.value = true
   try {
     const route = await routeStore.createRoute(selectedSiteId.value, `巡检路线 ${siteRoutes.value.length + 1}`)
-    selectRoute(route.id)
-    pendingDoc.value = null
+    selectedRouteId.value = route.id
+    await loadDraft(route.id)
     ElMessage.success('路线已创建，请加载 YAML/PGM 地图并开始标注')
   } catch (error) {
     ElMessage.error(errorMessage(error, '路线创建失败'))
@@ -234,7 +237,7 @@ async function createRoute() {
 function onEditorChange(doc: RouteExecutorDocument) {
   pendingDoc.value = doc
   draftValidation.value = null
-  hasUnsavedChanges.value = JSON.stringify(doc) !== persistedDocument.value
+  hasUnsavedChanges.value = serializeRouteDocument(doc) !== persistedDocument.value
   if (hasUnsavedChanges.value) draftSaveState.value = 'unsaved'
 }
 
@@ -245,11 +248,13 @@ function onMapFilesChange(files: MapAssetUploadFiles) {
 }
 
 async function saveDraft() {
-  if (!currentRoute.value || !pendingDoc.value) {
+  const route = currentRoute.value
+  const document = pendingDoc.value
+  if (!route || !document) {
     ElMessage.warning('请先在地图上标注路线')
     return
   }
-  if (!currentRoute.value.mapId && !pendingMapFiles.value && !draftState.value?.mapAssetId) {
+  if (!route.mapId && !pendingMapFiles.value && !draftState.value?.mapAssetId) {
     ElMessage.warning('请先导入完整的 YAML/PGM 地图')
     return
   }
@@ -260,25 +265,27 @@ async function saveDraft() {
   try {
     if (pendingMapFiles.value) {
       const form = new FormData()
-      form.append('siteId', currentRoute.value.siteId)
+      form.append('siteId', route.siteId)
       form.append('yaml', pendingMapFiles.value.yaml)
       form.append('pgm', pendingMapFiles.value.pgm)
       uploadedAsset = await resourcesApi.uploadMapAsset(form)
     }
-    const mapId = uploadedAsset?.id ?? draftState.value?.mapAssetId ?? currentRoute.value.mapId
+    const mapId = uploadedAsset?.id ?? draftState.value?.mapAssetId ?? route.mapId
     if (!mapId) throw new Error('地图资产上传失败')
     const saved = await resourcesApi.saveRouteDraft(
-      currentRoute.value.id,
-      pendingDoc.value,
+      route.id,
+      document,
       draftState.value?.draft?.version,
       mapId,
     )
     const normalizedDocument = applySavedRouteDraft(saved)
+    await routeStore.saveExecutorRoute(route.id, normalizedDocument, mapId)
+    if (selectedRouteId.value !== route.id) return
     draftState.value = saved
     draftValidation.value = saved
     pendingDoc.value = normalizedDocument
     editorInitialJson.value = normalizedDocument
-    persistedDocument.value = JSON.stringify(normalizedDocument)
+    persistedDocument.value = serializeRouteDocument(normalizedDocument)
     pendingMapFiles.value = null
     hasUnsavedChanges.value = false
     draftSaveState.value = 'saved'

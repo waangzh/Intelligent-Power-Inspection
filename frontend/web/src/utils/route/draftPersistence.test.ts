@@ -5,6 +5,7 @@ import {
   keepLocalDraftAfterSaveFailure,
   restoreRouteDraft,
   routePublishBlockReason,
+  serializeRouteDocument,
 } from './draftPersistence'
 
 const normalized = { version: 3, map: { yaml: 'server.yaml' } } as unknown as RouteExecutorDocument
@@ -28,7 +29,12 @@ describe('路线草稿持久化编辑状态', () => {
     const restored = restoreRouteDraft(report(), null)
     expect(restored.document).toBe(normalized)
     expect(restored.state).toBe('saved')
-    expect(restored.persistedDocument).toBe(JSON.stringify(normalized))
+    expect(restored.persistedDocument).toBe(serializeRouteDocument(normalized))
+  })
+
+  it('忽略对象字段顺序，避免规范化回填被误判为本地编辑', () => {
+    const reordered = { map: { yaml: 'server.yaml' }, version: 3 } as unknown as RouteExecutorDocument
+    expect(serializeRouteDocument(normalized)).toBe(serializeRouteDocument(reordered))
   })
 
   it('服务端规范化结果回写编辑器，保存失败不会丢失本地内容', () => {

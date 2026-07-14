@@ -9,8 +9,8 @@ export interface RouteFormState {
   failurePolicy: 'abort_and_return_home' | 'abort'; returnToStart: boolean; loopEnabled: boolean; loopWait: number; maxCycles: number
 }
 
-export function createDefaultRouteForm(routeId = 'route_patrol_001'): RouteFormState {
-  return formFromDraft(createEditableRouteDraft({ defaultRouteId: routeId }))
+export function createDefaultRouteForm(routeId = 'route_patrol_001', routeName?: string): RouteFormState {
+  return formFromDraft(createEditableRouteDraft({ defaultRouteId: routeId, defaultRouteName: routeName }))
 }
 
 export function loadRouteJson(route: RouteExecutorDocument, form: RouteFormState): { targets: RouteExecutorTarget[]; keepoutZones: EditableKeepoutZone[]; nextTargetNo: number } {

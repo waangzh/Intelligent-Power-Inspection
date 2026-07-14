@@ -42,24 +42,20 @@ export const useRouteStore = defineStore('route', () => {
       mapMode: '2d',
       createdAt: new Date().toISOString(),
     }
-    routes.value.push(route)
     const saved = await resourcesApi.createRoute(route)
-    updateLocalRoute(saved)
+    routes.value = [...routes.value, saved]
     return saved
   }
 
   async function updateRoute(id: string, patch: Partial<Route>) {
-    const idx = routes.value.findIndex((r) => r.id === id)
-    if (idx < 0) return
-    routes.value[idx] = { ...routes.value[idx], ...patch }
     const saved = await resourcesApi.updateRoute(id, patch)
     updateLocalRoute(saved)
     return saved
   }
 
   async function removeRoute(id: string) {
-    routes.value = routes.value.filter((r) => r.id !== id)
     await resourcesApi.removeRoute(id)
+    routes.value = routes.value.filter((r) => r.id !== id)
   }
 
   function addCheckpoint(routeId: string, checkpoint: Omit<Checkpoint, 'id' | 'routeId' | 'seq' | 'detections'>) {
@@ -72,7 +68,7 @@ export const useRouteStore = defineStore('route', () => {
       seq: route.checkpoints.length + 1,
       detections: defaultDetectionItems(CHECKPOINT_DETECTIONS),
     }
-    route.checkpoints.push(cp)
+    updateLocalRoute({ ...route, checkpoints: [...route.checkpoints, cp] })
     void resourcesApi.addCheckpoint(routeId, cp).then((saved) => updateLocalCheckpoint(routeId, saved))
     return cp
   }
@@ -82,7 +78,12 @@ export const useRouteStore = defineStore('route', () => {
     if (!route) return
     const idx = route.checkpoints.findIndex((c) => c.id === checkpointId)
     if (idx >= 0) {
-      route.checkpoints[idx] = { ...route.checkpoints[idx], ...patch }
+      updateLocalRoute({
+        ...route,
+        checkpoints: route.checkpoints.map((checkpoint) =>
+          checkpoint.id === checkpointId ? { ...checkpoint, ...patch } : checkpoint,
+        ),
+      })
       void resourcesApi.updateCheckpoint(routeId, checkpointId, patch).then((saved) => updateLocalCheckpoint(routeId, saved))
     }
   }
@@ -90,9 +91,10 @@ export const useRouteStore = defineStore('route', () => {
   function removeCheckpoint(routeId: string, checkpointId: string) {
     const route = routes.value.find((r) => r.id === routeId)
     if (!route) return
-    route.checkpoints = route.checkpoints
+    const checkpoints = route.checkpoints
       .filter((c) => c.id !== checkpointId)
       .map((c, i) => ({ ...c, seq: i + 1 }))
+    updateLocalRoute({ ...route, checkpoints })
     void resourcesApi.removeCheckpoint(routeId, checkpointId)
   }
 
@@ -120,7 +122,7 @@ export const useRouteStore = defineStore('route', () => {
   async function saveExecutorRoute(routeId: string, doc: RouteExecutorDocument, mapId?: string) {
     if (doc.routes.length !== 1) throw new Error('路线执行 JSON 必须且只能包含一条 route。')
     const route = routes.value.find((r) => r.id === routeId)
-    const platformName = route?.name?.trim() || doc.routes[0]?.name || doc.active_route_id
+    const platformName = doc.routes[0]?.name?.trim() || route?.name?.trim() || doc.active_route_id
     const executorJson = withPlatformRouteName(doc, platformName)
     const checkpoints = checkpointsFromExecutor(routeId, executorJson)
     const path = checkpoints.map((cp) => cp.position)
@@ -145,13 +147,16 @@ export const useRouteStore = defineStore('route', () => {
 
   function updateLocalRoute(route: Route) {
     const idx = routes.value.findIndex((r) => r.id === route.id)
-    if (idx >= 0) routes.value[idx] = route
+    if (idx >= 0) routes.value = routes.value.map((item) => (item.id === route.id ? route : item))
   }
 
   function updateLocalCheckpoint(routeId: string, checkpoint: Checkpoint) {
     const route = routes.value.find((r) => r.id === routeId)
-    const idx = route?.checkpoints.findIndex((c) => c.id === checkpoint.id) ?? -1
-    if (route && idx >= 0) route.checkpoints[idx] = checkpoint
+    if (!route || !route.checkpoints.some((item) => item.id === checkpoint.id)) return
+    updateLocalRoute({
+      ...route,
+      checkpoints: route.checkpoints.map((item) => (item.id === checkpoint.id ? checkpoint : item)),
+    })
   }
 
   return {

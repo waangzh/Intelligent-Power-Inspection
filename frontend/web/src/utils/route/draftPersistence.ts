@@ -2,6 +2,23 @@ import type { PersistedRouteDraftReport, RouteExecutorDocument } from '@/types/r
 
 export type DraftSaveState = 'unsaved' | 'saving' | 'saved' | 'failed'
 
+export function serializeRouteDocument(document: RouteExecutorDocument | null): string | null {
+  return document ? JSON.stringify(sortJson(document)) : null
+}
+
+function sortJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJson)
+  if (value && typeof value === 'object') {
+    return Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((result, key) => {
+        result[key] = sortJson((value as Record<string, unknown>)[key])
+        return result
+      }, {})
+  }
+  return value
+}
+
 export function restoreRouteDraft(
   report: PersistedRouteDraftReport,
   fallback: RouteExecutorDocument | null,
@@ -10,7 +27,7 @@ export function restoreRouteDraft(
   return {
     document,
     state: report.draft ? 'saved' : 'unsaved',
-    persistedDocument: document ? JSON.stringify(document) : null,
+    persistedDocument: serializeRouteDocument(document),
   }
 }
 
