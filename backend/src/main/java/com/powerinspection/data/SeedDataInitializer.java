@@ -84,6 +84,7 @@ public class SeedDataInitializer implements ApplicationRunner {
   }
 
   private void seedBusinessData() {
+    removeDemoData();
     if (dataStore.list(DataCategory.SITE).isEmpty()) {
       site("site_001", "城东 220kV 变电站", "浙江省杭州市余杭区", "主变 2 台，户外 GIS 设备区", 30.2741, 120.1551, "2026-01-15T08:00:00Z");
       site("site_002", "城西 110kV 变电站", "浙江省杭州市西湖区", "室内开关室 + 室外电容器组", 30.2599, 120.12, "2026-02-01T08:00:00Z");
@@ -100,28 +101,47 @@ public class SeedDataInitializer implements ApplicationRunner {
       template("tpl_cp_001", "刀闸开关检测", "CHECKPOINT", List.of("SWITCH", "METER"), "检查点刀闸分合状态与表计读数", map("SWITCH", "红色刀闸开关", "METER", "压力表读数区域"), "2026-01-10T08:00:00Z");
       template("tpl_cp_002", "设备渗漏检测", "CHECKPOINT", List.of("OIL_LEAK", "FOREIGN_OBJECT", "FIRE"), "变压器及 GIS 渗漏、异物与烟火", map("OIL_LEAK", "设备底部渗油区域", "FOREIGN_OBJECT", "绝缘子表面异物"), "2026-02-15T08:00:00Z");
     }
-    if (dataStore.list(DataCategory.ROUTE).isEmpty()) {
-      routeDemo();
+  }
+
+  private void removeDemoData() {
+    List.of(
+      DataCategory.AGENT_ACTION,
+      DataCategory.AGENT_EVIDENCE,
+      DataCategory.AGENT_RUN,
+      DataCategory.AGENT_SESSION,
+      DataCategory.NOTIFICATION,
+      DataCategory.WORK_ORDER,
+      DataCategory.RECORD,
+      DataCategory.ALARM,
+      DataCategory.EVENT,
+      DataCategory.TASK,
+      DataCategory.ROUTE,
+      DataCategory.ROBOT,
+      DataCategory.AREA
+    ).forEach(this::removeDemoRecords);
+  }
+
+  private void removeDemoRecords(String category) {
+    dataStore.list(category).stream()
+      .map(item -> String.valueOf(item.get("id")))
+      .filter(this::isDemoRecordId)
+      .forEach(id -> dataStore.delete(category, id));
+  }
+
+  private boolean isDemoRecordId(String id) {
+    if (id == null || id.isBlank()) return false;
+    if (List.of(
+      "area_demo_", "robot_demo_", "route_demo_", "task_demo_", "evt_demo_", "alarm_demo_",
+      "record_demo_", "wo_demo_", "ntf_demo_", "agent_session_demo_", "agent_run_demo_",
+      "agent_ev_demo_", "agent_act_demo_", "wo_alarm_alarm_demo_"
+    ).stream().anyMatch(id::startsWith)) {
+      return true;
     }
-    if (dataStore.list(DataCategory.ALARM).isEmpty()) {
-      alarm("alarm_seed_001", "task_demo", "主变区例行巡检", null, "HELMET", "HIGH", "检测到作业人员未佩戴安全帽", "https://picsum.photos/seed/alarm1/400/240", false);
-      alarm("alarm_seed_002", "task_demo", "主变区例行巡检", "GIS 刀闸", "SWITCH", "HIGH", "检查点「GIS 刀闸」开关/刀闸状态异常（LocateAnything: 红色刀闸开关）", "https://picsum.photos/seed/alarm2/400/240", true);
-      alarm("alarm_seed_003", "task_demo", "电容器组巡检", null, "FIRE", "CRITICAL", "路线视野内检测到疑似火源/烟雾", "https://picsum.photos/seed/alarm3/400/240", false);
-    }
-    if (dataStore.list(DataCategory.RECORD).isEmpty()) {
-      record("record_seed_001", "task_hist_001", "主变区夜间巡检", "主变区例行巡检", "电力巡检机器人", 2, 3, "28 分钟", "完成城东 220kV 变电站巡检，共 3 个检查点，触发 2 条告警");
-      record("record_seed_002", "task_hist_002", "GIS 设备专项巡检", "GIS 专项路线", "电力巡检机器人", 0, 5, "35 分钟", "完成城东 220kV 变电站巡检，共 5 个检查点，无异常告警");
-    }
-    if (dataStore.list(DataCategory.WORK_ORDER).isEmpty()) {
-      dataStore.upsert(DataCategory.WORK_ORDER, map("id", "wo_seed_1", "title", "主变区漏油异常处置", "description", "告警：检查点「主变 A 相」漏油检测异常，需现场复核", "status", "PROCESSING", "priority", "HIGH", "assigneeId", "user_dispatcher", "assigneeName", "张调度", "createdById", "user_admin", "createdByName", "系统管理员", "createdAt", "2026-06-10T08:00:00Z", "updatedAt", "2026-06-11T10:00:00Z"));
-      dataStore.upsert(DataCategory.WORK_ORDER, map("id", "wo_seed_2", "title", "GIS 区未佩戴安全帽", "description", "路线行进中检测到作业人员未佩戴安全帽", "status", "PENDING", "priority", "URGENT", "createdById", "user_dispatcher", "createdByName", "张调度", "createdAt", "2026-06-12T14:30:00Z", "updatedAt", "2026-06-12T14:30:00Z"));
-    }
-    if (dataStore.list(DataCategory.NOTIFICATION).isEmpty()) {
-      notification("ntf_seed_admin", "user_admin", "SYSTEM", "欢迎使用", "电力智能巡检平台已就绪，祝您工作顺利！", "/dashboard");
-      notification("ntf_seed_dispatcher", "user_dispatcher", "SYSTEM", "欢迎使用", "电力智能巡检平台已就绪，祝您工作顺利！", "/dashboard");
-      notification("ntf_seed_viewer", "user_viewer", "SYSTEM", "欢迎使用", "电力智能巡检平台已就绪，祝您工作顺利！", "/dashboard");
-    }
-    seedDemoScenarios();
+    return List.of(
+      "alarm_seed_001", "alarm_seed_002", "alarm_seed_003",
+      "record_seed_001", "record_seed_002", "wo_seed_1", "wo_seed_2",
+      "ntf_seed_admin", "ntf_seed_dispatcher", "ntf_seed_viewer"
+    ).contains(id);
   }
 
   /**
@@ -432,11 +452,7 @@ public class SeedDataInitializer implements ApplicationRunner {
 
   private void ensureSingleRobot() {
     String robotId = robotProperties.getRobotId();
-    for (Map<String, Object> existing : dataStore.list(DataCategory.ROBOT)) {
-      if (!robotId.equals(String.valueOf(existing.get("id")))) {
-        dataStore.delete(DataCategory.ROBOT, String.valueOf(existing.get("id")));
-      }
-    }
+    if (dataStore.find(DataCategory.ROBOT, robotId) != null) return;
     robot(robotId, "电力巡检机器人", "Jetson Orin + ZLAC8015D", "YLHB-001", "site_001", "ONLINE", null, "ROS2 Humble");
   }
 

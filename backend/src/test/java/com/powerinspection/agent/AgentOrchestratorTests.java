@@ -11,6 +11,8 @@ import com.powerinspection.agent.planner.LlmAgentPlanner;
 import com.powerinspection.agent.planner.PlannerConclusion;
 import com.powerinspection.agent.planner.PlannerDecision;
 import com.powerinspection.agent.planner.PlannerQuestion;
+import com.powerinspection.data.DataCategory;
+import com.powerinspection.data.DataStoreService;
 import com.powerinspection.user.UserEntity;
 import com.powerinspection.user.UserRepository;
 import java.util.LinkedHashMap;
@@ -27,19 +29,25 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 @SpringBootTest
 class AgentOrchestratorTests {
+  private static final String ALARM_ID = "alarm_agent_orchestrator_test";
   @Autowired AuditedAgentService agentService;
   @Autowired UserRepository userRepository;
+  @Autowired DataStoreService dataStore;
   @MockBean LlmAgentPlanner llmPlanner;
   private UserEntity dispatcher;
 
   @BeforeEach
   void setUp() {
     dispatcher = userRepository.findByUsername("dispatcher").orElseThrow();
+    dataStore.upsert(DataCategory.ALARM, new LinkedHashMap<>(Map.of(
+      "id", ALARM_ID, "routeName", "Agent 测试路线", "type", "FIRE", "severity", "HIGH",
+      "message", "Agent 编排测试告警", "imageUrl", "https://example.test/alarm.jpg", "acknowledged", false
+    )));
   }
 
   @Test
   void blocksDuplicateToolCallWithSameArguments() throws Exception {
-    when(llmPlanner.decide(any())).thenReturn(PlannerDecision.callTool("读取告警", "get_alarm", Map.of("alarmId", "alarm_seed_001"), List.of()));
+    when(llmPlanner.decide(any())).thenReturn(PlannerDecision.callTool("读取告警", "get_alarm", Map.of("alarmId", ALARM_ID), List.of()));
     AgentDtos.RunDetail detail = awaitTerminal(start());
     assertThat(detail.run().status()).isEqualTo(AgentEnums.RunStatus.FAILED);
     assertThat(detail.run().errorCode()).isEqualTo("DUPLICATE_TOOL_CALL");
@@ -48,11 +56,11 @@ class AgentOrchestratorTests {
   @Test
   void blocksDuplicateToolCallWhenArgumentOrderDiffers() throws Exception {
     Map<String, Object> first = new LinkedHashMap<>();
-    first.put("alarmId", "alarm_seed_001");
+    first.put("alarmId", ALARM_ID);
     first.put("taskId", "task_seed_001");
     Map<String, Object> second = new LinkedHashMap<>();
     second.put("taskId", "task_seed_001");
-    second.put("alarmId", "alarm_seed_001");
+    second.put("alarmId", ALARM_ID);
     when(llmPlanner.decide(any())).thenAnswer(invocation -> {
       AgentPlanningContext context = invocation.getArgument(0);
       return PlannerDecision.callTool("list work orders", "list_related_work_orders", context.evidence().isEmpty() ? first : second, List.of());
@@ -80,7 +88,7 @@ class AgentOrchestratorTests {
   void enforcesMaximumVisionCalls() throws Exception {
     AtomicInteger sequence = new AtomicInteger();
     when(llmPlanner.decide(any())).thenAnswer(invocation -> PlannerDecision.callTool(
-      "复核图像", "inspect_alarm_image", Map.of("alarmId", "alarm_seed_001", "taskId", "task_vision_" + sequence.incrementAndGet()), List.of()
+      "复核图像", "inspect_alarm_image", Map.of("alarmId", ALARM_ID, "taskId", "task_vision_" + sequence.incrementAndGet()), List.of()
     ));
     AgentDtos.RunDetail detail = awaitTerminal(start());
     assertThat(detail.run().status()).isEqualTo(AgentEnums.RunStatus.STEP_LIMIT_REACHED);
@@ -102,7 +110,7 @@ class AgentOrchestratorTests {
     when(llmPlanner.decide(any())).thenAnswer(invocation -> {
       AgentPlanningContext context = invocation.getArgument(0);
       if (context.evidence().isEmpty()) {
-        return PlannerDecision.callTool("读取告警", "get_alarm", Map.of("alarmId", "alarm_seed_001"), List.of());
+        return PlannerDecision.callTool("读取告警", "get_alarm", Map.of("alarmId", ALARM_ID), List.of());
       }
       return PlannerDecision.finish("证据充分", new PlannerConclusion(AgentEnums.RiskLevel.HIGH, "告警已核对", List.of("人工复核")), context.evidenceIds(), 0.9);
     });
@@ -114,7 +122,7 @@ class AgentOrchestratorTests {
 
   @Test
   void rejectsUnknownToolFromPlannerAndFallsBackWithoutExecutingIt() throws Exception {
-    when(llmPlanner.decide(any())).thenReturn(PlannerDecision.callTool("非法工具", "delete_everything", Map.of("alarmId", "alarm_seed_001"), List.of()));
+    when(llmPlanner.decide(any())).thenReturn(PlannerDecision.callTool("非法工具", "delete_everything", Map.of("alarmId", ALARM_ID), List.of()));
     AgentDtos.RunDetail detail = awaitTerminal(start());
     assertThat(detail.run().status()).isEqualTo(AgentEnums.RunStatus.SUCCEEDED);
     assertThat(detail.run().degraded()).isTrue();
@@ -131,7 +139,7 @@ class AgentOrchestratorTests {
   }
 
   private AgentDtos.RunSummary start() {
-    AgentDtos.CaseSummary agentCase = agentService.createCase(new AgentDtos.CreateCaseRequest("编排器验收", null, "alarm_seed_001", "HIGH", null), dispatcher);
+    AgentDtos.CaseSummary agentCase = agentService.createCase(new AgentDtos.CreateCaseRequest("编排器验收", null, ALARM_ID, "HIGH", null), dispatcher);
     return agentService.startRun(agentCase.id(), new AgentDtos.StartRunRequest("ORCHESTRATOR_TEST"), dispatcher);
   }
 

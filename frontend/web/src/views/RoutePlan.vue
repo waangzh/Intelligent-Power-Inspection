@@ -82,7 +82,65 @@
             </li>
           </ul>
         </el-card>
-        <div v-else class="empty-panel">
+        <el-card v-if="currentRoute" class="deployment-panel" shadow="never">
+          <template #header>
+            <div class="deployment-header">
+              <div><strong>当前站点机器人</strong><small>仅显示绑定到“{{ currentRouteSiteName }}”的机器人及其 Robot Bridge 连接、心跳和路线部署资格。</small></div>
+              <el-tag effect="plain" type="info">{{ currentSiteRobots.length }} 台已绑定</el-tag>
+            </div>
+          </template>
+          <div v-loading="deploymentLoading">
+            <div v-if="currentSiteRobots.length" class="site-robot-list" aria-label="当前站点机器人状态">
+              <article v-for="robot in currentSiteRobots" :key="robot.id" class="site-robot-item">
+                <div class="site-robot-heading">
+                  <div><strong>{{ robot.name }}</strong><span>{{ robot.model || '型号未登记' }} · {{ robot.serialNo || '序列号未登记' }}</span></div>
+                  <div class="site-robot-tags">
+                    <el-tag size="small" :type="heartbeatVisual(robot.status)">{{ robot.status.online ? '在线' : connectionLabel(robot.status.connectionStatus) }}</el-tag>
+                    <el-tag size="small" effect="plain" :type="robot.eligibility.eligible ? 'success' : 'warning'">{{ robot.eligibility.reason }}</el-tag>
+                  </div>
+                </div>
+                <dl class="site-robot-details">
+                  <div><dt>平台状态</dt><dd>{{ robot.platformStatus || '-' }}</dd></div>
+                  <div><dt>Bridge 配置</dt><dd>{{ robot.status.source?.bridgeConfigured ? '已配置' : '未配置' }}</dd></div>
+                  <div><dt>最近心跳</dt><dd>{{ formatTime(robot.status.lastHeartbeatAt) }}</dd></div>
+                  <div><dt>状态原因</dt><dd>{{ robot.status.online ? '心跳正常' : offlineReasonLabel(robot.status.offlineReason) }}</dd></div>
+                  <div v-if="robot.status.diagnosticSummary" class="site-robot-diagnostic"><dt>诊断摘要</dt><dd>{{ robot.status.diagnosticSummary }}</dd></div>
+                </dl>
+              </article>
+            </div>
+            <el-empty v-else-if="!deploymentLoading" description="当前站点尚未绑定机器人，请先在机器人管理中完成站点绑定。" :image-size="48" />
+          </div>
+          <div class="deployment-diagnosis-actions">
+            <el-button link type="primary" @click="router.push('/robots/status')">查看在线状态</el-button>
+            <el-button v-if="can('robot:manage')" link type="primary" @click="router.push('/robots')">前往机器人管理</el-button>
+            <el-button link type="primary" :loading="deploymentLoading" @click="loadDeploymentData(selectedRouteId)">刷新状态</el-button>
+          </div>
+          <template v-if="can('task:dispatch')">
+            <el-divider content-position="left">部署路线</el-divider>
+            <div class="deployment-controls">
+              <el-select v-model="selectedRevisionId" placeholder="选择路线修订" :loading="deploymentLoading" class="deployment-select">
+                <el-option v-for="revision in revisions" :key="revision.id" :label="`r${revision.revisionNo} · ${shortHash(revision.contentSha256)}`" :value="revision.id" />
+              </el-select>
+              <el-select v-model="selectedDeploymentRobotId" placeholder="选择符合条件的机器人" :loading="deploymentLoading" class="deployment-select">
+                <el-option v-for="robot in currentSiteRobots" :key="robot.id" :label="`${robot.name} · ${robot.eligibility.reason}`" :value="robot.id" :disabled="!robot.eligibility.eligible" />
+              </el-select>
+              <el-button type="primary" :loading="creatingDeployment" :disabled="!canCreateDeployment" @click="createDeployment">发起部署</el-button>
+            </div>
+            <el-alert v-if="selectedDeploymentRobot && !selectedDeploymentRobot.eligibility.eligible" class="deployment-alert" type="warning" :closable="false" :title="selectedDeploymentRobot.eligibility.reason" />
+            <el-alert v-if="deploymentError" class="deployment-alert" type="error" :closable="false" :title="deploymentError" />
+            <el-empty v-if="!deployments.length && !deploymentLoading" description="尚无路线部署记录" :image-size="48" />
+            <el-table v-else :data="deployments" v-loading="deploymentLoading" size="small" class="deployment-table">
+              <el-table-column label="修订 / 机器人" min-width="180">
+                <template #default="{ row }"><div class="deployment-identity"><strong>{{ revisionLabel(row.routeRevisionId) }}</strong><span>{{ robotName(row.robotId) }}</span></div></template>
+              </el-table-column>
+              <el-table-column label="状态" width="136"><template #default="{ row }"><el-tag size="small" :type="deploymentStateType(row.state)">{{ deploymentStateLabel(row.state) }}</el-tag></template></el-table-column>
+              <el-table-column label="最近尝试" min-width="164"><template #default="{ row }">{{ formatTime(row.lastAttemptAt) }}<small v-if="row.attemptCount">第 {{ row.attemptCount }} 次</small></template></el-table-column>
+              <el-table-column label="路线 / 地图哈希" min-width="205"><template #default="{ row }"><code>{{ shortHash(row.routeContentSha256) }}</code><code>{{ shortHash(row.mapImageSha256) }}</code></template></el-table-column>
+              <el-table-column label="错误摘要" min-width="210"><template #default="{ row }"><span v-if="row.errorCode" class="deployment-error">{{ row.errorCode }} · {{ row.errorMessage }}</span><span v-else>-</span></template></el-table-column>
+            </el-table>
+          </template>
+        </el-card>
+        <div v-if="!draftValidation" class="empty-panel">
           <div class="empty-hint">请选择或创建巡检路线</div>
         </div>
       </el-col>
@@ -93,20 +151,27 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { resourcesApi } from '@/api/resources'
 import PageHeader from '@/components/PageHeader.vue'
 import RosMapRouteEditor from '@/components/RosMapRouteEditor.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
-import type { MapAsset, MapAssetUploadFiles, Route } from '@/types'
+import type { MapAsset, MapAssetUploadFiles, Route, RouteRevision } from '@/types'
+import type { RouteDeployment } from '@/types/routeDeployment'
 import type { PersistedRouteDraftReport, RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
+import type { RobotHeartbeatStatus } from '@/types/robotHeartbeat'
 import { applySavedRouteDraft, keepLocalDraftAfterSaveFailure, restoreRouteDraft, routePublishBlockReason, serializeRouteDocument, type DraftSaveState } from '@/utils/route/draftPersistence'
+import { DEPLOYMENT_STATE_LABELS, deploymentEligibility, deploymentStateType, shortHash, shouldPollDeployment } from '@/utils/routeDeployment'
+import { useRobotStore } from '@/stores/robot'
+import { connectionLabel, heartbeatVisual, offlineReasonLabel } from '@/utils/robotHeartbeatStatus'
 
 const siteStore = useSiteStore()
 const routeStore = useRouteStore()
 const { can } = usePermission()
+const robotStore = useRobotStore()
+const router = useRouter()
 
 const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
 const selectedRouteId = ref('')
@@ -124,6 +189,14 @@ const draftSaveState = ref<DraftSaveState>('unsaved')
 const hasUnsavedChanges = ref(false)
 const persistedDocument = shallowRef<string | null>(null)
 const switchingSite = ref(false)
+const revisions = ref<RouteRevision[]>([])
+const deployments = ref<RouteDeployment[]>([])
+const deploymentRobotStatuses = ref<RobotHeartbeatStatus[]>([])
+const selectedRevisionId = ref('')
+const selectedDeploymentRobotId = ref('')
+const deploymentLoading = ref(false)
+const creatingDeployment = ref(false)
+const deploymentError = ref('')
 
 const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
 const currentRoute = computed<Route | null>(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
@@ -131,6 +204,24 @@ const draftSaveLabel = computed(() => ({ unsaved: '未保存', saving: '保存�
 const draftSaveTagType = computed(() => ({ unsaved: 'warning', saving: 'info', saved: 'success', failed: 'danger' })[draftSaveState.value])
 const publishBlockReason = computed(() => routePublishBlockReason(Boolean(currentRoute.value), hasUnsavedChanges.value, draftState.value))
 const canCreateRevision = computed(() => Boolean(can('route:edit') && !publishBlockReason.value))
+const currentRouteSiteName = computed(() => currentRoute.value ? siteStore.getSiteById(currentRoute.value.siteId)?.name ?? currentRoute.value.siteId : '-')
+const currentSiteRobots = computed(() => deploymentRobotStatuses.value.flatMap((status) => {
+  const robot = robotStore.getRobotById(status.robotId)
+  if (!robot || robot.siteId !== currentRoute.value?.siteId) return []
+  return [{
+    id: status.robotId,
+    name: robot?.name || status.displayName || status.robotId,
+    model: robot.model,
+    serialNo: robot.serialNo || status.serialNo,
+    platformStatus: robot.status,
+    status,
+    eligibility: deploymentEligibility(status, true),
+  }]
+}))
+const selectedDeploymentRobot = computed(() => currentSiteRobots.value.find((robot) => robot.id === selectedDeploymentRobotId.value) ?? null)
+const canCreateDeployment = computed(() => Boolean(
+  can('task:dispatch') && selectedRevisionId.value && selectedDeploymentRobot.value?.eligibility.eligible && !creatingDeployment.value,
+))
 
 watch(
   () => siteStore.sites.map((site) => site.id),
@@ -191,6 +282,11 @@ async function loadDraft(routeId: string) {
   persistedDocument.value = null
   hasUnsavedChanges.value = false
   draftSaveState.value = 'unsaved'
+  revisions.value = []
+  deployments.value = []
+  selectedRevisionId.value = ''
+  selectedDeploymentRobotId.value = ''
+  deploymentError.value = ''
   if (!routeId) {
     return
   }
@@ -205,12 +301,14 @@ async function loadDraft(routeId: string) {
     persistedDocument.value = restored.persistedDocument
     draftSaveState.value = restored.state
     hasUnsavedChanges.value = false
+    void loadDeploymentData(routeId)
   } catch (error) {
     if (routeId !== selectedRouteId.value) return
     pendingDoc.value = routeStore.getRouteById(routeId)?.executorJson ?? null
     editorInitialJson.value = pendingDoc.value
     draftSaveState.value = 'failed'
     ElMessage.error(errorMessage(error, '草稿加载失败'))
+    void loadDeploymentData(routeId)
   }
 }
 
@@ -343,12 +441,92 @@ async function createRevision() {
       return
     }
     const revision = await resourcesApi.createRouteRevision(currentRoute.value.id)
+    await loadDeploymentData(currentRoute.value.id)
+    selectedRevisionId.value = revision.id
     ElMessage.success(`已创建路线修订 r${revision.revisionNo}`)
   } catch (error) {
     ElMessage.error(errorMessage(error, '创建路线修订失败'))
   } finally {
     creatingRevision.value = false
   }
+}
+
+async function loadDeploymentData(routeId: string) {
+  deploymentLoading.value = true
+  deploymentError.value = ''
+  try {
+    const [loadedRevisions, statusPage] = await Promise.all([
+      resourcesApi.listRouteRevisions(routeId),
+      resourcesApi.listRobotHeartbeatStatus({ size: 100, sort: 'displayName', direction: 'asc' }),
+      robotStore.robots.length ? Promise.resolve() : robotStore.load(),
+    ])
+    if (routeId !== selectedRouteId.value) return
+    revisions.value = loadedRevisions
+    deploymentRobotStatuses.value = statusPage.items
+    if (!loadedRevisions.some((revision) => revision.id === selectedRevisionId.value)) {
+      selectedRevisionId.value = loadedRevisions[0]?.id ?? ''
+    }
+    const groups = await Promise.all(loadedRevisions.map((revision) => resourcesApi.listRouteDeployments(revision.id)))
+    if (routeId !== selectedRouteId.value) return
+    deployments.value = groups.flat().sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  } catch (error) {
+    if (routeId === selectedRouteId.value) deploymentError.value = errorMessage(error, '无法加载路线部署信息')
+  } finally {
+    if (routeId === selectedRouteId.value) deploymentLoading.value = false
+  }
+}
+
+async function createDeployment() {
+  const revisionId = selectedRevisionId.value
+  const robot = selectedDeploymentRobot.value
+  if (!revisionId || !robot?.eligibility.eligible || creatingDeployment.value) {
+    ElMessage.warning(robot?.eligibility.reason || '请选择可部署的机器人和路线修订')
+    return
+  }
+  creatingDeployment.value = true
+  deploymentError.value = ''
+  try {
+    const idempotencyKey = `route-deploy:${revisionId}:${robot.id}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`
+    const deployment = await resourcesApi.createRouteDeployment(revisionId, robot.id, idempotencyKey)
+    deployments.value = [deployment, ...deployments.value.filter((item) => item.id !== deployment.id)]
+    ElMessage.success('部署请求已提交，正在由后台同步到 Bridge')
+  } catch (error) {
+    deploymentError.value = errorMessage(error, '部署请求失败')
+    ElMessage.error(deploymentError.value)
+  } finally {
+    creatingDeployment.value = false
+  }
+}
+
+async function refreshDeploymentDetails() {
+  if (!deployments.value.some((deployment) => shouldPollDeployment(deployment.state))) return
+  try {
+    const refreshed = await Promise.all(deployments.value.map((deployment) =>
+      shouldPollDeployment(deployment.state) ? resourcesApi.getRouteDeployment(deployment.id) : Promise.resolve(deployment),
+    ))
+    deployments.value = refreshed.sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  } catch (error) {
+    deploymentError.value = errorMessage(error, '部署状态刷新失败')
+  }
+}
+
+function deploymentStateLabel(state: RouteDeployment['state']) {
+  return DEPLOYMENT_STATE_LABELS[state]
+}
+
+function revisionLabel(revisionId: string) {
+  const revision = revisions.value.find((item) => item.id === revisionId)
+  return revision ? `r${revision.revisionNo}` : revisionId
+}
+
+function robotName(robotId: string) {
+  return robotStore.getRobotById(robotId)?.name || deploymentRobotStatuses.value.find((item) => item.robotId === robotId)?.displayName || robotId
+}
+
+function formatTime(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false })
 }
 
 async function confirmDiscardChanges() {
@@ -367,8 +545,15 @@ function onBeforeUnload(event: BeforeUnloadEvent) {
   event.returnValue = ''
 }
 
-onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
-onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
+let deploymentPollTimer: number | undefined
+onMounted(() => {
+  window.addEventListener('beforeunload', onBeforeUnload)
+  deploymentPollTimer = window.setInterval(() => void refreshDeploymentDetails(), 5000)
+})
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  if (deploymentPollTimer) window.clearInterval(deploymentPollTimer)
+})
 onBeforeRouteLeave(() => confirmDiscardChanges())
 </script>
 
@@ -450,6 +635,147 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
   margin-top: 16px;
 }
 
+.deployment-panel {
+  margin-top: 16px;
+}
+
+.deployment-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.deployment-header strong,
+.deployment-header small {
+  display: block;
+}
+
+.deployment-header small {
+  max-width: 680px;
+  margin-top: 5px;
+  color: #7a8895;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.deployment-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.deployment-select {
+  width: min(290px, 42%);
+}
+
+.deployment-alert {
+  margin-bottom: 12px;
+}
+
+.site-robot-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.site-robot-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #dfe7ee;
+  border-radius: 6px;
+  background: #fbfdff;
+}
+
+.site-robot-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.site-robot-heading strong,
+.site-robot-heading span {
+  display: block;
+}
+
+.site-robot-heading span,
+.site-robot-details dt {
+  margin-top: 3px;
+  color: #7a8895;
+  font-size: 13px;
+}
+
+.site-robot-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.site-robot-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.site-robot-details div {
+  min-width: 0;
+}
+
+.site-robot-details dt,
+.site-robot-details dd {
+  margin: 0;
+}
+
+.site-robot-details dd {
+  overflow: hidden;
+  color: #303133;
+  font-size: 13px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-robot-diagnostic {
+  grid-column: 1 / -1;
+}
+
+.site-robot-diagnostic dd {
+  white-space: normal;
+}
+
+.deployment-diagnosis-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 4px;
+}
+
+.deployment-table code,
+.deployment-identity span,
+.deployment-table small {
+  display: block;
+  color: #7a8895;
+  font-size: 12px;
+}
+
+.deployment-table code + code {
+  margin-top: 4px;
+}
+
+.deployment-identity strong {
+  color: #263a4a;
+}
+
+.deployment-error {
+  color: #c45656;
+  line-height: 1.45;
+}
+
 .validation-header {
   display: flex;
   align-items: center;
@@ -488,5 +814,28 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 
 .validation-issues code {
   color: #606266;
+}
+
+@media (max-width: 760px) {
+  .site-robot-heading {
+    flex-direction: column;
+  }
+
+  .site-robot-tags {
+    justify-content: flex-start;
+  }
+
+  .site-robot-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .deployment-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .deployment-select {
+    width: 100%;
+  }
 }
 </style>

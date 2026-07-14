@@ -180,6 +180,7 @@ def create_app() -> FastAPI:
             "bootId": robot.get("boot_id", ""), "state": robot.get("state", "offline"),
             "lastSeen": robot.get("last_seen", ""),
             "acceptedEventSequence": int(robot.get("last_event_sequence", 0)),
+            "protocolVersion": status.get("protocolVersion", ""),
             "activeExecutionId": status.get("activeExecutionId"),
             "activeDeploymentId": status.get("activeDeploymentId"),
             "softwareVersion": status.get("softwareVersion"), "health": status.get("health", {}),
@@ -187,10 +188,27 @@ def create_app() -> FastAPI:
 
     @app.post("/robot-api/v1/heartbeat")
     async def heartbeat(request: Request):
-        body = await request.json()
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise BridgeError("INVALID_REQUEST", "invalid heartbeat payload") from exc
+        if not isinstance(body, dict):
+            raise BridgeError("INVALID_REQUEST", "invalid heartbeat payload")
         robot_id = token_robot(request, body)
-        if str(body.get("protocolVersion") or "") != "1.0" or not str(body.get("bootId") or ""):
-            raise BridgeError("INVALID_REQUEST", "protocolVersion and bootId are required")
+        required_text = ("robotId", "bootId", "softwareVersion", "state")
+        valid_states = {"idle", "starting", "running", "paused", "manual_takeover", "returning_home", "waiting_loop", "succeeded", "failed", "canceled"}
+        sequence = body.get("latestLocalEventSequence")
+        if (
+            str(body.get("protocolVersion") or "") != "1.0"
+            or str(body.get("robotId") or "") != robot_id
+            or any(not str(body.get(field) or "") for field in required_text)
+            or str(body.get("state") or "") not in valid_states
+            or isinstance(sequence, bool)
+            or not isinstance(sequence, int)
+            or sequence < 0
+            or not isinstance(body.get("health"), dict)
+        ):
+            raise BridgeError("INVALID_REQUEST", "invalid heartbeat payload")
         store.upsert_robot(robot_id, body)
         command = store.lease_command(robot_id, secrets.token_urlsafe(18), str(body.get("state") or "idle"))
         output = None if not command else {"commandId": command["command_id"], "requestId": command["request_id"], "type": command["command_type"], "executionId": command["execution_id"], "deploymentId": command["deployment_id"], "leaseToken": command["lease_token"], **command["payload"]}

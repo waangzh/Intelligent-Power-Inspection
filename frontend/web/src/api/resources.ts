@@ -14,6 +14,7 @@ import type {
   RouteRevision,
   TaskEvent,
 } from '@/types'
+import type { RouteDeployment } from '@/types/routeDeployment'
 import type { AppNotification, NotificationType } from '@/types/notification'
 import type { PersistedRouteDraftReport, RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
 import type {
@@ -33,6 +34,7 @@ import type {
 } from '@/types/agent'
 import type { WorkOrder, WorkOrderReviewInput, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
+import type { RobotHeartbeatStatus, RobotHeartbeatStatusPage, RobotHeartbeatStatusQuery } from '@/types/robotHeartbeat'
 
 export const resourcesApi = {
   listSites: () => http.get<Site[]>('/sites'),
@@ -49,6 +51,10 @@ export const resourcesApi = {
   removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
   listRouteRevisions: (routeId: string) => http.get<RouteRevision[]>(`/routes/${routeId}/revisions`),
   createRouteRevision: (routeId: string) => http.post<RouteRevision>(`/routes/${routeId}/revisions`),
+  listRouteDeployments: (revisionId: string) => http.get<RouteDeployment[]>(`/route-revisions/${encodeURIComponent(revisionId)}/deployments`),
+  createRouteDeployment: (revisionId: string, robotId: string, idempotencyKey: string) =>
+    http.post<RouteDeployment>(`/route-revisions/${encodeURIComponent(revisionId)}/deployments`, { robotId }, { 'Idempotency-Key': idempotencyKey }),
+  getRouteDeployment: (deploymentId: string) => http.get<RouteDeployment>(`/route-deployments/${encodeURIComponent(deploymentId)}`),
   validateRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, mapAssetId?: string) =>
     http.post<RouteDraftValidationReport>(`/routes/${routeId}/draft:validate`, { executorJson, mapAssetId }),
   getRouteDraft: (routeId: string) => http.get<PersistedRouteDraftReport>(`/routes/${routeId}/draft`),
@@ -102,6 +108,15 @@ export const resourcesApi = {
   createRobot: (robot: Robot) => http.post<Robot>('/robots', robot),
   updateRobot: (id: string, patch: Partial<Robot>) => http.patch<Robot>(`/robots/${id}`, patch),
   removeRobot: (id: string) => http.delete<void>(`/robots/${id}`),
+  listRobotHeartbeatStatus: (query: RobotHeartbeatStatusQuery = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined) params.set(key, String(value))
+    })
+    const suffix = params.size ? `?${params.toString()}` : ''
+    return http.get<RobotHeartbeatStatusPage>(`/robots/status${suffix}`)
+  },
+  getRobotHeartbeatStatus: (robotId: string) => http.get<RobotHeartbeatStatus>(`/robots/${encodeURIComponent(robotId)}/status`),
 
   listDetectionTemplates: () => http.get<DetectionTemplate[]>('/detection-templates'),
   createDetectionTemplate: (template: DetectionTemplate) =>

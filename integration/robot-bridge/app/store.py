@@ -3,6 +3,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -82,13 +83,21 @@ class Store:
             if path.is_dir() and (path.name.startswith(".staging-") or path.name not in valid):
                 shutil.rmtree(path, ignore_errors=True)
 
+    @contextmanager
     def db(self):
         db = sqlite3.connect(self.path, timeout=5)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("PRAGMA busy_timeout=5000")
-        return db
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     @staticmethod
     def _payload(row):

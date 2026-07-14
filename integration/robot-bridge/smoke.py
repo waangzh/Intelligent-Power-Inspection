@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Local, no-network smoke test for the outbound robot protocol."""
+import hashlib
 import json
 import os
 import socket
@@ -7,11 +8,67 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from app.store import Store
+
+
+def canonical(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
+
+
+class PlatformStub:
+    def __init__(self):
+        self.route = {"version": 3, "active_route_id": "route-1", "routes": [{"id": "route-1"}], "targets": []}
+        self.route_hash = hashlib.sha256(canonical(self.route)).hexdigest()
+        self.pgm = b"P5\n1 1\n255\n\0"
+        self.map_hash = hashlib.sha256(self.pgm).hexdigest()
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                return
+
+            def do_GET(self):
+                if self.path == "/api/v1/route-deployments/deploy-1":
+                    return self.respond_json({"id": "deploy-1", "robotId": "robot-001", "routeRevisionId": "route-r1"})
+                if self.path == "/api/v1/route-revisions/route-r1":
+                    return self.respond_json({"id": "route-r1", "executorJson": owner.route, "contentSha256": owner.route_hash, "mapAssetId": "map-1"})
+                if self.path == "/api/v1/map-assets/map-1":
+                    return self.respond_json({"id": "map-1", "yamlName": "site.yaml", "pgmName": "site.pgm", "pgmSha256": owner.map_hash})
+                if self.path == "/api/v1/map-assets/map-1/yaml":
+                    return self.respond_bytes(b"image: site.pgm\n", "application/yaml")
+                if self.path == "/api/v1/map-assets/map-1/pgm":
+                    return self.respond_bytes(owner.pgm, "image/x-portable-graymap")
+                self.send_response(404)
+                self.end_headers()
+
+            def respond_json(self, value):
+                self.respond_bytes(json.dumps(value).encode(), "application/json")
+
+            def respond_bytes(self, value, content_type):
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(value)))
+                self.end_headers()
+                self.wfile.write(value)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    @property
+    def base_url(self):
+        return f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
 
 
 def request(base_url, method, path, body=None, token=""):
@@ -39,7 +96,8 @@ def wait_ready(process, base_url):
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError(f"uvicorn exited with {process.returncode}")
+            details = process.stderr.read().decode(errors="replace").strip() if process.stderr else ""
+            raise RuntimeError(f"uvicorn exited with {process.returncode}: {details}")
         try:
             status, _ = request(base_url, "GET", "/bridge/v1/health", token="admin-placeholder")
             if status == 200:
@@ -53,18 +111,16 @@ def wait_ready(process, base_url):
 def main() -> None:
     with tempfile.TemporaryDirectory() as temporary:
         db_path = str(Path(temporary) / "bridge.db")
+        platform = PlatformStub()
         environment = {
             **os.environ,
             "ROBOT_BRIDGE_STORAGE_PATH": db_path,
             "ROBOT_AUTH_TOKENS_JSON": json.dumps({"robot-001": "token-placeholder"}),
             "BRIDGE_API_TOKEN": "admin-placeholder",
+            "PLATFORM_BASE_URL": platform.base_url,
+            "PLATFORM_BEARER_TOKEN": "platform-placeholder",
         }
         store = Store(db_path)
-        store.cache_deployment("deploy-1", "robot-001", {
-            "schemaVersion": "1.0", "robotId": "robot-001", "routeRevisionId": "route-r1",
-            "routeRevisionContentSha256": "a" * 64, "routePayloadSha256": "b" * 64,
-            "mapImageSha256": "c" * 64, "yamlName": "site.yaml", "pgmName": "site.pgm",
-        }, b'{"version":2}', b"image: site.pgm\n", b"P5\n1 1\n255\n\0")
         port = free_port()
         base_url = f"http://127.0.0.1:{port}"
         process = subprocess.Popen(
@@ -72,7 +128,7 @@ def main() -> None:
             cwd=Path(__file__).parent,
             env=environment,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         try:
             wait_ready(process, base_url)
@@ -84,10 +140,19 @@ def main() -> None:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+            platform.close()
     print("bridge smoke: ok")
 
 
 def run_smoke(base_url, store) -> None:
+    status, synced = request(base_url, "POST", "/bridge/v1/deployments/deploy-1/sync", token="admin-placeholder")
+    assert status == 200 and synced["state"] == "READY_FOR_ROBOT"
+    assert synced["deploymentId"] == "deploy-1" and synced["robotId"] == "robot-001"
+    assert synced["routeRevisionContentSha256"] == synced["routePayloadSha256"] == synced["routeContentSha256"]
+    status, retried = request(base_url, "POST", "/bridge/v1/deployments/deploy-1/sync", token="admin-placeholder")
+    assert status == 200 and retried == synced
+    cached = store.deployment("deploy-1")
+    assert cached and cached["robot_id"] == "robot-001" and cached["manifest"]["mapImageSha256"] == synced["mapImageSha256"]
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {})[0] == 401
     heartbeat = {
         "protocolVersion": "1.0", "robotId": "robot-001", "bootId": "boot-1",
@@ -95,6 +160,8 @@ def run_smoke(base_url, store) -> None:
     }
     status, reply = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")
     assert status == 200 and reply["command"] is None
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "robotId": "robot-unknown"}, "token-placeholder")[0] == 401
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "health": []}, "token-placeholder")[0] == 400
     body = {"robotId": "robot-001", "deploymentId": "deploy-1", "executorRouteId": "route-1", "requestId": "request-1"}
     status, queued = request(base_url, "POST", "/bridge/v1/executions/execution-1/start", body, "admin-placeholder")
     assert status == 202

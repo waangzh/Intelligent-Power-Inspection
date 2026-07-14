@@ -12,6 +12,13 @@ public class RobotProperties {
   private int timeoutSeconds = 5;
   private String token = "";
   private boolean allowRegistration = false;
+  /** Heartbeat Bridge 管理 API，仅由 Spring 服务端访问。 */
+  private String heartbeatBridgeBaseUrl = "http://127.0.0.1:8001";
+  private String bridgeAdminToken = "";
+  private int bridgeConnectTimeoutSeconds = 3;
+  private int bridgeReadTimeoutSeconds = 10;
+  private int heartbeatSyncIntervalMs = 3000;
+  private int heartbeatTimeoutSeconds = 12;
 
   public String getMode() {
     return mode;
@@ -72,4 +79,21 @@ public class RobotProperties {
   public boolean isHttpMode() {
     return "http".equalsIgnoreCase(mode);
   }
+
+  public boolean isBridgeMode() {
+    return "bridge".equalsIgnoreCase(mode);
+  }
+
+  public String getHeartbeatBridgeBaseUrl() { return heartbeatBridgeBaseUrl; }
+  public void setHeartbeatBridgeBaseUrl(String heartbeatBridgeBaseUrl) { this.heartbeatBridgeBaseUrl = heartbeatBridgeBaseUrl; }
+  public String getBridgeAdminToken() { return bridgeAdminToken; }
+  public void setBridgeAdminToken(String bridgeAdminToken) { this.bridgeAdminToken = bridgeAdminToken; }
+  public int getBridgeConnectTimeoutSeconds() { return bridgeConnectTimeoutSeconds; }
+  public void setBridgeConnectTimeoutSeconds(int bridgeConnectTimeoutSeconds) { this.bridgeConnectTimeoutSeconds = bridgeConnectTimeoutSeconds; }
+  public int getBridgeReadTimeoutSeconds() { return bridgeReadTimeoutSeconds; }
+  public void setBridgeReadTimeoutSeconds(int bridgeReadTimeoutSeconds) { this.bridgeReadTimeoutSeconds = bridgeReadTimeoutSeconds; }
+  public int getHeartbeatSyncIntervalMs() { return heartbeatSyncIntervalMs; }
+  public void setHeartbeatSyncIntervalMs(int heartbeatSyncIntervalMs) { this.heartbeatSyncIntervalMs = heartbeatSyncIntervalMs; }
+  public int getHeartbeatTimeoutSeconds() { return heartbeatTimeoutSeconds; }
+  public void setHeartbeatTimeoutSeconds(int heartbeatTimeoutSeconds) { this.heartbeatTimeoutSeconds = heartbeatTimeoutSeconds; }
 }
