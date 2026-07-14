@@ -9,7 +9,7 @@ export function createEditableRouteDraft(context?: PlatformRouteContext): Editab
     sourceTemplate: null, requiresConversion: false,
     start: { name: '初始起点', x: 0, y: 0, yaw: 0, publishInitialPose: true, covX: 0.25, covY: 0.25, covYaw: 0.0685 },
     targets: [], keepoutZones: [],
-    route: { id, name: '本地巡检路线', goalTimeout: 120, maxRetries: 0, failurePolicy: 'abort', returnToStart: false, loopEnabled: false, loopWait: 600, maxCycles: 0 },
+    route: { id, name: context?.defaultRouteName || '本地巡检路线', goalTimeout: 120, maxRetries: 0, failurePolicy: 'abort', returnToStart: true, loopEnabled: false, loopWait: 600, maxCycles: 0 },
   }
 }
 

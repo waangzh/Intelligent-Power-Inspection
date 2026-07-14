@@ -6,6 +6,7 @@ import com.powerinspection.config.ModelFileWebConfig;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.route.RouteRevisionRepository;
+import com.powerinspection.route.RouteDraftRepository;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -42,10 +43,12 @@ public class MapAssetService {
 
   private final DataStoreService dataStore;
   private final RouteRevisionRepository routeRevisionRepository;
+  private final RouteDraftRepository routeDraftRepository;
 
-  public MapAssetService(DataStoreService dataStore, RouteRevisionRepository routeRevisionRepository) {
+  public MapAssetService(DataStoreService dataStore, RouteRevisionRepository routeRevisionRepository, RouteDraftRepository routeDraftRepository) {
     this.dataStore = dataStore;
     this.routeRevisionRepository = routeRevisionRepository;
+    this.routeDraftRepository = routeDraftRepository;
   }
 
   public Map<String, Object> create(String siteId, MultipartFile yaml, MultipartFile pgm) throws IOException {
@@ -284,6 +287,7 @@ public class MapAssetService {
 
   private boolean isReferenced(String id) {
     return routeRevisionRepository.existsByMapAssetId(id)
+      || routeDraftRepository.existsByMapAssetId(id)
       || dataStore.list(DataCategory.ROUTE).stream()
         .anyMatch(route -> id.equals(String.valueOf(route.get("mapId"))));
   }

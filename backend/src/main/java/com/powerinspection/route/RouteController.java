@@ -32,12 +32,14 @@ public class RouteController extends CrudSupport {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
   private final MapAssetService mapAssetService;
+  private final RouteRevisionService routeRevisionService;
 
-  public RouteController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, MapAssetService mapAssetService) {
+  public RouteController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, MapAssetService mapAssetService, RouteRevisionService routeRevisionService) {
     super(dataStore);
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.mapAssetService = mapAssetService;
+    this.routeRevisionService = routeRevisionService;
   }
 
   @GetMapping
@@ -109,8 +111,10 @@ public class RouteController extends CrudSupport {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(id);
     String mapId = text(dataStore.get(DataCategory.ROUTE, id).get("mapId"));
+    String draftMapId = routeRevisionService.deleteDraft(id);
     delete(DataCategory.ROUTE, id);
     mapAssetService.deleteIfUnreferenced(mapId);
+    if (draftMapId != null && !draftMapId.equals(mapId)) mapAssetService.deleteIfUnreferenced(draftMapId);
     return ApiResponse.ok();
   }
 

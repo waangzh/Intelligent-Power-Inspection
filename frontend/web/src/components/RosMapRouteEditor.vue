@@ -165,6 +165,7 @@ import { rosMapImageFileName } from '@/utils/rosMap'
 const props = defineProps<{
   initialJson?: RouteExecutorDocument | null
   defaultRouteId?: string
+  defaultRouteName?: string
   mapId?: string | null
 }>()
 
@@ -184,8 +185,9 @@ const pgmSourceFile = ref<File | null>(null)
 let mapLoadVersion = 0
 
 const editor = useRosMapRouteEditor(canvasRef, wrapRef, {
-  initialJson: props.initialJson,
+  initialJson: () => props.initialJson,
   defaultRouteId: props.defaultRouteId,
+  defaultRouteName: props.defaultRouteName,
   onChange: (doc) => emit('change', doc),
 })
 

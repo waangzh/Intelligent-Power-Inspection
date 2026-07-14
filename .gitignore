@@ -10,6 +10,7 @@ venv/
 # IDE
 .idea/
 .vscode/
+.vs/
 *.swp
 *.swo
 
@@ -32,6 +33,8 @@ ai-services/model/
 ai-services/**/runtime-storage/
 ai-services/**/annotated-images/*
 !ai-services/**/annotated-images/.gitkeep
+ai-services/locate-anything-service/input_image/
+ai-services/locate-anything-service/output_image/
 ai-services/**/models/
 ai-services/**/weights/
 *.pth

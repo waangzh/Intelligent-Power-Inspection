@@ -15,7 +15,7 @@ import type {
   TaskEvent,
 } from '@/types'
 import type { AppNotification, NotificationType } from '@/types/notification'
-import type { RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
+import type { PersistedRouteDraftReport, RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
 import type {
   AgentAction,
   AgentActionDecisionRequest,
@@ -51,6 +51,10 @@ export const resourcesApi = {
   createRouteRevision: (routeId: string) => http.post<RouteRevision>(`/routes/${routeId}/revisions`),
   validateRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, mapAssetId?: string) =>
     http.post<RouteDraftValidationReport>(`/routes/${routeId}/draft:validate`, { executorJson, mapAssetId }),
+  getRouteDraft: (routeId: string) => http.get<PersistedRouteDraftReport>(`/routes/${routeId}/draft`),
+  getRouteDraftCheck: (routeId: string) => http.get<PersistedRouteDraftReport>(`/routes/${routeId}/draft:check`),
+  saveRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, expectedVersion?: number, mapAssetId?: string) =>
+    http.put<PersistedRouteDraftReport>(`/routes/${routeId}/draft`, { executorJson, expectedVersion, mapAssetId }),
   getRouteRevision: (revisionId: string) => http.get<RouteRevision>(`/route-revisions/${revisionId}`),
   addCheckpoint: (routeId: string, checkpoint: Checkpoint) =>
     http.post<Checkpoint>(`/routes/${routeId}/checkpoints`, checkpoint),

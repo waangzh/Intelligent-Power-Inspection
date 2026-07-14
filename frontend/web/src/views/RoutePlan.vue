@@ -6,20 +6,23 @@
       :breadcrumbs="[{ label: '巡检业务' }, { label: '巡检规划' }]"
     >
       <template #actions>
-        <el-select v-model="selectedSiteId" placeholder="选择站点" style="width: 220px" @change="onSiteChange">
+        <el-select v-model="selectedSiteId" placeholder="选择站点" style="width: 220px" :disabled="savingRoute" @change="onSiteChange">
           <el-option v-for="s in siteStore.sites" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
-        <el-button v-if="can('route:edit')" type="primary" :disabled="!selectedSiteId" :loading="creatingRoute" @click="createRoute">
+        <el-button v-if="can('route:edit')" type="primary" :disabled="!selectedSiteId || savingRoute" :loading="creatingRoute" @click="createRoute">
           <el-icon><Plus /></el-icon>
           新建路线
         </el-button>
-        <el-button v-if="can('route:edit') && currentRoute" type="success" :loading="savingRoute" @click="saveToPlatform">
-          保存到平台
+        <el-tag v-if="currentRoute" class="draft-status" :type="draftSaveTagType" effect="plain">
+          {{ draftSaveLabel }}
+        </el-tag>
+        <el-button v-if="can('route:edit') && currentRoute" type="success" :loading="savingRoute" @click="saveDraft">
+          保存草稿
         </el-button>
-        <el-button v-if="can('route:edit') && currentRoute" type="warning" plain :loading="creatingRevision" @click="createRevision">
+        <el-button v-if="can('route:edit') && currentRoute" type="warning" plain :title="publishBlockReason" :disabled="!canCreateRevision" :loading="creatingRevision" @click="createRevision">
           创建路线修订
         </el-button>
-        <el-button v-if="can('route:edit') && currentRoute" type="danger" plain :loading="deletingRoute" @click="deleteRoute">
+        <el-button v-if="can('route:edit') && currentRoute" type="danger" plain :disabled="savingRoute" :loading="deletingRoute" @click="deleteRoute">
           删除路线
         </el-button>
       </template>
@@ -36,6 +39,7 @@
               type="button"
               class="route-item"
               :class="{ active: selectedRouteId === r.id }"
+              :disabled="savingRoute || deletingRoute"
               @click="selectRoute(r.id)"
             >
               <span class="route-name">{{ r.name }}</span>
@@ -51,20 +55,22 @@
           v-if="currentRoute"
           ref="editorRef"
           :key="currentRoute.id"
-          :initial-json="currentRoute.executorJson ?? undefined"
+          :initial-json="editorInitialJson ?? undefined"
           :default-route-id="currentRoute.id"
-          :map-id="currentRoute.mapId"
+          :default-route-name="currentRoute.name"
+          :map-id="draftState?.mapAssetId ?? currentRoute.mapId"
           @change="onEditorChange"
           @map-files-change="onMapFilesChange"
         />
         <el-card v-if="draftValidation" class="validation-panel" shadow="never">
           <template #header>
             <div class="validation-header">
-              <span>服务端草稿校验</span>
-              <el-tag :type="draftValidation.valid ? 'success' : 'danger'" effect="light">
-                {{ draftValidation.valid ? '可保存' : '存在错误' }}
+              <span>发布前检查</span>
+              <el-tag :type="draftValidation.publishable ? 'success' : draftValidation.valid ? 'warning' : 'danger'" effect="light">
+                {{ draftValidation.publishable ? '允许发布' : draftValidation.valid ? '不可发布' : '存在错误' }}
               </el-tag>
             </div>
+            <small v-if="draftValidation.checkedAt" class="checked-at">最近校验：{{ draftValidation.checkedAt }}</small>
           </template>
           <el-empty v-if="!draftValidation.issues.length" description="未发现校验问题" :image-size="48" />
           <ul v-else class="validation-issues">
@@ -85,8 +91,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { onBeforeRouteLeave } from 'vue-router'
 import { resourcesApi } from '@/api/resources'
 import PageHeader from '@/components/PageHeader.vue'
 import RosMapRouteEditor from '@/components/RosMapRouteEditor.vue'
@@ -94,8 +101,8 @@ import { usePermission } from '@/composables/usePermission'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import type { MapAsset, MapAssetUploadFiles, Route } from '@/types'
-import type { RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
-import { hasRouteDraftErrors } from '@/utils/route/draftValidation'
+import type { PersistedRouteDraftReport, RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
+import { applySavedRouteDraft, keepLocalDraftAfterSaveFailure, restoreRouteDraft, routePublishBlockReason, serializeRouteDocument, type DraftSaveState } from '@/utils/route/draftPersistence'
 
 const siteStore = useSiteStore()
 const routeStore = useRouteStore()
@@ -104,16 +111,26 @@ const { can } = usePermission()
 const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
 const selectedRouteId = ref('')
 const pendingDoc = shallowRef<RouteExecutorDocument | null>(null)
+const editorInitialJson = shallowRef<RouteExecutorDocument | null>(null)
 const editorRef = ref<InstanceType<typeof RosMapRouteEditor> | null>(null)
 const creatingRoute = ref(false)
 const savingRoute = ref(false)
 const deletingRoute = ref(false)
 const creatingRevision = ref(false)
 const pendingMapFiles = ref<MapAssetUploadFiles | null>(null)
-const draftValidation = shallowRef<RouteDraftValidationReport | null>(null)
+const draftValidation = shallowRef<(RouteDraftValidationReport | PersistedRouteDraftReport) | null>(null)
+const draftState = shallowRef<PersistedRouteDraftReport | null>(null)
+const draftSaveState = ref<DraftSaveState>('unsaved')
+const hasUnsavedChanges = ref(false)
+const persistedDocument = shallowRef<string | null>(null)
+const switchingSite = ref(false)
 
 const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
 const currentRoute = computed<Route | null>(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
+const draftSaveLabel = computed(() => ({ unsaved: '未保存', saving: '保存中', saved: '已保存', failed: '保存失败' })[draftSaveState.value])
+const draftSaveTagType = computed(() => ({ unsaved: 'warning', saving: 'info', saved: 'success', failed: 'danger' })[draftSaveState.value])
+const publishBlockReason = computed(() => routePublishBlockReason(Boolean(currentRoute.value), hasUnsavedChanges.value, draftState.value))
+const canCreateRevision = computed(() => Boolean(can('route:edit') && !publishBlockReason.value))
 
 watch(
   () => siteStore.sites.map((site) => site.id),
@@ -129,7 +146,7 @@ watch(
   siteRoutes,
   (routes) => {
     if (routes.length && !routes.some((route) => route.id === selectedRouteId.value)) {
-      selectRoute(routes[0].id)
+      if (!switchingSite.value) void selectRoute(routes[0].id)
     } else if (!routes.length) {
       selectedRouteId.value = ''
       pendingDoc.value = null
@@ -143,18 +160,58 @@ function targetCount(route: Route) {
   return route.executorJson?.targets?.length ?? route.checkpoints.length
 }
 
-function onSiteChange() {
-  selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
-  pendingDoc.value = currentRoute.value?.executorJson ?? null
-  pendingMapFiles.value = null
-  draftValidation.value = null
+async function onSiteChange() {
+  const previousSiteId = currentRoute.value?.siteId ?? selectedSiteId.value
+  switchingSite.value = true
+  try {
+    if (!(await confirmDiscardChanges())) {
+      selectedSiteId.value = previousSiteId
+      return
+    }
+    selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
+    await loadDraft(selectedRouteId.value)
+  } finally {
+    switchingSite.value = false
+  }
 }
 
-function selectRoute(id: string) {
+async function selectRoute(id: string) {
+  if (id === selectedRouteId.value) return
+  if (!(await confirmDiscardChanges())) return
   selectedRouteId.value = id
-  pendingDoc.value = routeStore.getRouteById(id)?.executorJson ?? null
+  await loadDraft(id)
+}
+
+async function loadDraft(routeId: string) {
   pendingMapFiles.value = null
+  pendingDoc.value = null
+  editorInitialJson.value = null
   draftValidation.value = null
+  draftState.value = null
+  persistedDocument.value = null
+  hasUnsavedChanges.value = false
+  draftSaveState.value = 'unsaved'
+  if (!routeId) {
+    return
+  }
+  try {
+    const state = await resourcesApi.getRouteDraft(routeId)
+    if (routeId !== selectedRouteId.value) return
+    draftState.value = state
+    draftValidation.value = state
+    const restored = restoreRouteDraft(state, routeStore.getRouteById(routeId)?.executorJson ?? null)
+    pendingDoc.value = restored.document
+    editorInitialJson.value = restored.document
+    persistedDocument.value = restored.persistedDocument
+    draftSaveState.value = restored.state
+    hasUnsavedChanges.value = false
+  } catch (error) {
+    if (routeId !== selectedRouteId.value) return
+    pendingDoc.value = routeStore.getRouteById(routeId)?.executorJson ?? null
+    editorInitialJson.value = pendingDoc.value
+    draftSaveState.value = 'failed'
+    ElMessage.error(errorMessage(error, '草稿加载失败'))
+  }
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -162,12 +219,13 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 async function createRoute() {
-  if (creatingRoute.value) return
+  if (creatingRoute.value || savingRoute.value) return
+  if (!(await confirmDiscardChanges())) return
   creatingRoute.value = true
   try {
     const route = await routeStore.createRoute(selectedSiteId.value, `巡检路线 ${siteRoutes.value.length + 1}`)
-    selectRoute(route.id)
-    pendingDoc.value = null
+    selectedRouteId.value = route.id
+    await loadDraft(route.id)
     ElMessage.success('路线已创建，请加载 YAML/PGM 地图并开始标注')
   } catch (error) {
     ElMessage.error(errorMessage(error, '路线创建失败'))
@@ -179,57 +237,70 @@ async function createRoute() {
 function onEditorChange(doc: RouteExecutorDocument) {
   pendingDoc.value = doc
   draftValidation.value = null
+  hasUnsavedChanges.value = serializeRouteDocument(doc) !== persistedDocument.value
+  if (hasUnsavedChanges.value) draftSaveState.value = 'unsaved'
 }
 
 function onMapFilesChange(files: MapAssetUploadFiles) {
   pendingMapFiles.value = files
+  hasUnsavedChanges.value = true
+  draftSaveState.value = 'unsaved'
 }
 
-async function saveToPlatform() {
-  if (!currentRoute.value || !pendingDoc.value) {
+async function saveDraft() {
+  const route = currentRoute.value
+  const document = pendingDoc.value
+  if (!route || !document) {
     ElMessage.warning('请先在地图上标注路线')
     return
   }
-  if (!currentRoute.value.mapId && !pendingMapFiles.value) {
+  if (!route.mapId && !pendingMapFiles.value && !draftState.value?.mapAssetId) {
     ElMessage.warning('请先导入完整的 YAML/PGM 地图')
     return
   }
   if (savingRoute.value) return
   savingRoute.value = true
+  draftSaveState.value = 'saving'
   let uploadedAsset: MapAsset | null = null
   try {
     if (pendingMapFiles.value) {
       const form = new FormData()
-      form.append('siteId', currentRoute.value.siteId)
+      form.append('siteId', route.siteId)
       form.append('yaml', pendingMapFiles.value.yaml)
       form.append('pgm', pendingMapFiles.value.pgm)
       uploadedAsset = await resourcesApi.uploadMapAsset(form)
     }
-    const mapId = uploadedAsset?.id ?? currentRoute.value.mapId
+    const mapId = uploadedAsset?.id ?? draftState.value?.mapAssetId ?? route.mapId
     if (!mapId) throw new Error('地图资产上传失败')
-    const report = await resourcesApi.validateRouteDraft(currentRoute.value.id, pendingDoc.value, uploadedAsset?.id)
-    draftValidation.value = report
-    pendingDoc.value = report.normalizedExecutorJson
-    if (hasRouteDraftErrors(report)) {
-      if (uploadedAsset) {
-        await resourcesApi.removeMapAsset(uploadedAsset.id)
-        uploadedAsset = null
-      }
-      ElMessage.error('请先处理服务端校验报告中的 ERROR 项')
-      return
-    }
-    await routeStore.saveExecutorRoute(currentRoute.value.id, report.normalizedExecutorJson, mapId)
+    const saved = await resourcesApi.saveRouteDraft(
+      route.id,
+      document,
+      draftState.value?.draft?.version,
+      mapId,
+    )
+    const normalizedDocument = applySavedRouteDraft(saved)
+    await routeStore.saveExecutorRoute(route.id, normalizedDocument, mapId)
+    if (selectedRouteId.value !== route.id) return
+    draftState.value = saved
+    draftValidation.value = saved
+    pendingDoc.value = normalizedDocument
+    editorInitialJson.value = normalizedDocument
+    persistedDocument.value = serializeRouteDocument(normalizedDocument)
     pendingMapFiles.value = null
-    ElMessage.success('路线已保存到平台')
+    hasUnsavedChanges.value = false
+    draftSaveState.value = 'saved'
+    ElMessage[saved.publishable ? 'success' : 'warning'](saved.publishable ? '草稿已保存，可创建路线修订' : '草稿已保存，但存在 ERROR，暂不可发布')
   } catch (error) {
+    draftSaveState.value = 'failed'
+    pendingDoc.value = keepLocalDraftAfterSaveFailure(pendingDoc.value)
     if (uploadedAsset) {
       try {
         await resourcesApi.removeMapAsset(uploadedAsset.id)
       } catch {
-        // A late response failure may still leave the asset referenced by the route.
+        // 请求超时后资产可能已被草稿引用，交由后端引用保护处理。
       }
     }
-    ElMessage.error(errorMessage(error, '路线保存失败'))
+    ElMessage.error(errorMessage(error, '草稿保存失败'))
   } finally {
     savingRoute.value = false
   }
@@ -245,8 +316,9 @@ async function deleteRoute() {
   deletingRoute.value = true
   try {
     await routeStore.removeRoute(currentRoute.value.id)
-    selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
-    pendingDoc.value = currentRoute.value?.executorJson ?? null
+    const nextRouteId = siteRoutes.value[0]?.id ?? ''
+    selectedRouteId.value = nextRouteId
+    await loadDraft(nextRouteId)
     ElMessage.success('已删除')
   } catch (error) {
     ElMessage.error(errorMessage(error, '路线删除失败'))
@@ -257,16 +329,17 @@ async function deleteRoute() {
 
 async function createRevision() {
   if (!currentRoute.value || creatingRevision.value) return
-  if (!currentRoute.value.mapId || !currentRoute.value.executorJson) {
-    ElMessage.warning('请先保存已绑定地图的路线草稿')
+  if (!canCreateRevision.value) {
+    ElMessage.warning(publishBlockReason.value || '草稿尚不可发布')
     return
   }
   creatingRevision.value = true
   try {
-    const report = await resourcesApi.validateRouteDraft(currentRoute.value.id, currentRoute.value.executorJson)
-    draftValidation.value = report
-    if (hasRouteDraftErrors(report)) {
-      ElMessage.error('请先处理服务端校验报告中的 ERROR 项')
+    const check = await resourcesApi.getRouteDraftCheck(currentRoute.value.id)
+    draftState.value = check
+    draftValidation.value = check
+    if (!check.publishable) {
+      ElMessage.error('发布前检查未通过，请处理 ERROR 或地图身份不一致的问题')
       return
     }
     const revision = await resourcesApi.createRouteRevision(currentRoute.value.id)
@@ -277,6 +350,26 @@ async function createRevision() {
     creatingRevision.value = false
   }
 }
+
+async function confirmDiscardChanges() {
+  if (!hasUnsavedChanges.value) return true
+  try {
+    await ElMessageBox.confirm('当前路线有未保存的本地编辑，是否放弃？', '未保存的草稿', { type: 'warning' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function onBeforeUnload(event: BeforeUnloadEvent) {
+  if (!hasUnsavedChanges.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
+onBeforeRouteLeave(() => confirmDiscardChanges())
 </script>
 
 <style scoped>
@@ -362,6 +455,17 @@ async function createRevision() {
   align-items: center;
   justify-content: space-between;
   font-weight: 600;
+}
+
+.draft-status {
+  margin-right: 4px;
+}
+
+.checked-at {
+  display: block;
+  margin-top: 6px;
+  color: #909399;
+  font-weight: 400;
 }
 
 .validation-issues {

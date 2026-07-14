@@ -32,8 +32,9 @@ export function useRosMapRouteEditor(
   canvasRef: Ref<HTMLCanvasElement | null>,
   wrapRef: Ref<HTMLElement | null>,
   options?: {
-    initialJson?: RouteExecutorDocument | null
+    initialJson?: () => RouteExecutorDocument | null | undefined
     defaultRouteId?: string
+    defaultRouteName?: string
     onChange?: (doc: RouteExecutorDocument) => void
   },
 ) {
@@ -49,7 +50,7 @@ export function useRosMapRouteEditor(
   const nextTargetNo = ref(1)
   const sourceTemplate = shallowRef<RouteExecutorDocument | null>(null)
   const mapIdentity = shallowRef<MapAssetIdentity>({ yaml: '', image: '', resolution: 0, origin: [0, 0, 0], width: 0, height: 0, image_sha256: '' })
-  const form = reactive<RouteFormState>(createDefaultRouteForm(options?.defaultRouteId))
+  const form = reactive<RouteFormState>(createDefaultRouteForm(options?.defaultRouteId, options?.defaultRouteName))
   const activeRouteIdSynced = ref(true)
   const cursorInfo = ref('map: -, -')
   const mapInfo = ref('等待加载地图')
@@ -436,7 +437,7 @@ export function useRosMapRouteEditor(
     emitChange()
   }
 
-  function importRouteJson(input: unknown) {
+  function importRouteJson(input: unknown, emit = true) {
     const doc = parseRouteDocument(input)
     const loaded = loadRouteJson(doc, form)
     sourceTemplate.value = doc
@@ -448,7 +449,7 @@ export function useRosMapRouteEditor(
       ? { kind: 'target', id: selectedTargetId.value }
       : { kind: 'start', id: null }
     activeRouteIdSynced.value = true
-    emitChange()
+    if (emit) emitChange()
     draw()
   }
 
@@ -641,9 +642,9 @@ export function useRosMapRouteEditor(
   }
 
   watch(
-    () => options?.initialJson,
+    () => options?.initialJson?.(),
     (doc) => {
-      if (doc) importRouteJson(doc)
+      if (doc) importRouteJson(doc, false)
     },
     { immediate: true },
   )

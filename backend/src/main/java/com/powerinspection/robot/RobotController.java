@@ -50,7 +50,7 @@ public class RobotController extends CrudSupport {
   public ApiResponse<Map<String, Object>> createRobot(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
     if (!robotProperties.isAllowRegistration()) {
-      throw ApiException.badRequest("当前为单机器人实机模式，不支持注册新机器人");
+      throw ApiException.badRequest("当前为单机器人管理模式，不支持注册新机器人");
     }
     validateSite(body.get("siteId"));
     body.putIfAbsent("status", "OFFLINE");
@@ -74,7 +74,7 @@ public class RobotController extends CrudSupport {
   public ApiResponse<Void> deleteRobot(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
     if (!robotProperties.isAllowRegistration()) {
-      throw ApiException.badRequest("当前为单机器人实机模式，不支持删除机器人");
+      throw ApiException.badRequest("当前为单机器人管理模式，不支持删除机器人");
     }
     ensureRobotNotBusy(id);
     delete(DataCategory.ROBOT, id);

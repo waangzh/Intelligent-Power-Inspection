@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -118,13 +120,8 @@ class RouteRevisionControllerTests {
   @Test
   void v2DraftWithMapAssetCreatesStableV3Revision() throws Exception {
     String token = login("dispatcher", "Disp@123");
-    String siteId = "site_route_revision";
+    String siteId = "site_001";
     String routeId = "route_route_revision";
-    mockMvc.perform(post("/api/v1/sites")
-        .header("Authorization", bearer(token))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("id", siteId, "name", "路线修订测试站点")))
-      .andExpect(status().isOk());
     mockMvc.perform(post("/api/v1/routes")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
@@ -157,13 +154,7 @@ class RouteRevisionControllerTests {
       .andExpect(jsonPath("$.data.id").value(revisionId))
       .andExpect(jsonPath("$.data.revisionNo").value(1));
 
-    String adminToken = login("admin", "Admin@123");
-    String robotId = "robot_route_revision";
-    mockMvc.perform(post("/api/v1/robots")
-        .header("Authorization", bearer(adminToken))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("id", robotId, "name", "路线修订测试机器人", "siteId", siteId)))
-      .andExpect(status().isOk());
+    String robotId = "robot_001";
 
     mockMvc.perform(post("/api/v1/route-revisions/{id}/deployments", revisionId)
         .header("Authorization", bearer(token))
@@ -203,6 +194,86 @@ class RouteRevisionControllerTests {
     mockMvc.perform(delete("/api/v1/map-assets/{id}", mapId)
         .header("Authorization", bearer(token)))
       .andExpect(status().isConflict());
+  }
+
+  @Test
+  void persistedDraftNormalizesRetainsLastPublishableReportAndChecksVersion() throws Exception {
+    String token = login("dispatcher", "Disp@123");
+    String siteId = "site_draft_persistence";
+    String routeId = "route_draft_persistence";
+    mockMvc.perform(post("/api/v1/sites")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("id", siteId, "name", "草稿持久化测试站点")))
+      .andExpect(status().isOk());
+    mockMvc.perform(post("/api/v1/routes")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("id", routeId, "siteId", siteId, "name", "草稿持久化测试路线")))
+      .andExpect(status().isOk());
+    String mapId = createMapAsset(siteId, "map_draft_persistence");
+
+    Map<String, Object> valid = validV3Executor();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> forgedMap = (Map<String, Object>) valid.get("map");
+    forgedMap.put("yaml", "forged.yaml");
+    long revisionsBefore = routeRevisionRepository.count();
+    mockMvc.perform(put("/api/v1/routes/{id}/draft", routeId)
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("executorJson", valid, "mapAssetId", mapId)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.valid").value(true))
+      .andExpect(jsonPath("$.data.publishable").value(true))
+      .andExpect(jsonPath("$.data.normalizedExecutorJson.map.yaml").value("floor.yaml"))
+      .andExpect(jsonPath("$.data.draft.version").value(0));
+    assertEquals(revisionsBefore, routeRevisionRepository.count());
+
+    mockMvc.perform(get("/api/v1/routes/{id}/draft", routeId)
+        .header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.normalizedExecutorJson.map.yaml").value("floor.yaml"))
+      .andExpect(jsonPath("$.data.checkedAt").isNotEmpty())
+      .andExpect(jsonPath("$.data.publishable").value(true));
+
+    Map<String, Object> invalid = validV3Executor();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> startLocation = (Map<String, Object>) ((Map<String, Object>) invalid.get("start_pose")).get("location");
+    startLocation.put("x", 99.0);
+    mockMvc.perform(put("/api/v1/routes/{id}/draft", routeId)
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("executorJson", invalid, "mapAssetId", mapId, "expectedVersion", 0)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.valid").value(false))
+      .andExpect(jsonPath("$.data.publishable").value(false))
+      .andExpect(jsonPath("$.data.draft.lastPublishable.checkedAt").isNotEmpty());
+
+    mockMvc.perform(get("/api/v1/routes/{id}/draft:check", routeId)
+        .header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.valid").value(false))
+      .andExpect(jsonPath("$.data.publishable").value(false));
+
+    mockMvc.perform(put("/api/v1/routes/{id}/draft", routeId)
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("executorJson", validV3Executor(), "mapAssetId", mapId, "expectedVersion", 0)))
+      .andExpect(status().isConflict());
+
+    Map<String, Object> warning = validV3Executor();
+    warning.put("targets", List.of());
+    @SuppressWarnings("unchecked")
+    Map<String, Object> onlyRoute = (Map<String, Object>) ((List<?>) warning.get("routes")).get(0);
+    onlyRoute.put("target_ids", List.of());
+    mockMvc.perform(put("/api/v1/routes/{id}/draft", routeId)
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("executorJson", warning, "mapAssetId", mapId, "expectedVersion", 1)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.valid").value(true))
+      .andExpect(jsonPath("$.data.publishable").value(true))
+      .andExpect(jsonPath("$.data.issues[0].severity").value("WARNING"));
   }
 
   private String createMapAsset(String siteId) {
