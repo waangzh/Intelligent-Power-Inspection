@@ -6,6 +6,10 @@
       :breadcrumbs="[{ label: '资产感知' }, { label: '机器人管理' }]"
     />
 
+    <div class="page-actions">
+      <el-button type="primary" @click="router.push('/robots/status')">查看在线状态</el-button>
+    </div>
+
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6" v-for="s in statusStats" :key="s.label">
         <el-card shadow="never" class="mini-stat">
@@ -56,6 +60,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
@@ -71,6 +76,7 @@ import {
 
 const robotStore = useRobotStore()
 const siteStore = useSiteStore()
+const router = useRouter()
 
 const robot = computed(() => robotStore.robots[0])
 
@@ -103,6 +109,12 @@ function fmt(iso: string) {
 </script>
 
 <style scoped>
+.page-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: -8px 0 16px;
+}
+
 .mini-stat .val {
   font-size: 24px;
   font-weight: 700;

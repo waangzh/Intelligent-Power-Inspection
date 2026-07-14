@@ -95,6 +95,8 @@ def run_smoke(base_url, store) -> None:
     }
     status, reply = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")
     assert status == 200 and reply["command"] is None
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "robotId": "robot-unknown"}, "token-placeholder")[0] == 401
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "health": []}, "token-placeholder")[0] == 400
     body = {"robotId": "robot-001", "deploymentId": "deploy-1", "executorRouteId": "route-1", "requestId": "request-1"}
     status, queued = request(base_url, "POST", "/bridge/v1/executions/execution-1/start", body, "admin-placeholder")
     assert status == 202

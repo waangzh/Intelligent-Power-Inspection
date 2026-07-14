@@ -24,6 +24,7 @@ flowchart LR
 ## 文档索引
 
 - [Robot Platform Protocol v1](../protocol/robot-platform-v1.md)：唯一协议事实来源。
+- [机器人心跳接入与联调（P2a）](robot-heartbeat-operations.md)：身份模型、在线状态、平台只读 API 与无运动联调。
 - [后端对接](backend-robot-bridge.md)：Spring Client、状态同步、失败处理和改造清单。
 - [前端对接](frontend-robot-bridge.md)：REST/STOMP、状态、按钮与 TypeScript 示例。
 - [状态与事件合同](state-event-contract.md)：跨团队状态机、事件和完整时间线。

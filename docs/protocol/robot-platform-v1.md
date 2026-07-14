@@ -336,6 +336,7 @@ HTTP：`200`、`401`。可重试；仅证明进程和配置加载，不证明 ro
   "acceptedEventSequence": 1,
   "activeExecutionId": "execution-demo",
   "activeDeploymentId": "deployment-demo",
+  "protocolVersion": "1.0",
   "softwareVersion": "79df249",
   "health": {}
 }
