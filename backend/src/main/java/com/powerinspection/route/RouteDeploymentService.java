@@ -56,7 +56,7 @@ public class RouteDeploymentService {
     Map<String, Object> route = dataStore.get(DataCategory.ROUTE, revision.getRouteId());
     String routeSiteId = text(route.get("siteId"));
     String robotSiteId = text(robot.get("siteId"));
-    if (routeSiteId != null && robotSiteId != null && !routeSiteId.equals(robotSiteId)) {
+    if (routeSiteId == null || robotSiteId == null || !routeSiteId.equals(robotSiteId)) {
       throw ApiException.badRequest("机器人与路线修订不属于同一站点");
     }
     requireDeployableRobot(robotId);

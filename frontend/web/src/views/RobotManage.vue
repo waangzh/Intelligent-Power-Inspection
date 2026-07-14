@@ -2,11 +2,15 @@
   <div>
     <PageHeader
       title="机器人管理"
-      description="单台实机状态监控（对接 mobile bridge :8000）"
+      description="机器人资产、站点绑定与运行状态管理"
       :breadcrumbs="[{ label: '资产感知' }, { label: '机器人管理' }]"
     />
 
     <div class="page-actions">
+      <el-select v-if="robotStore.robots.length > 1" v-model="selectedRobotId" class="robot-select" aria-label="选择机器人">
+        <el-option v-for="item in robotStore.robots" :key="item.id" :label="item.name" :value="item.id" />
+      </el-select>
+      <el-button :disabled="!robot" @click="openBindingDialog">重新绑定站点</el-button>
       <el-button type="primary" @click="router.push('/robots/status')">查看在线状态</el-button>
     </div>
 
@@ -54,14 +58,44 @@
       </el-descriptions>
     </el-card>
 
-    <el-empty v-else description="未找到机器人设备" />
+    <el-dialog v-model="bindingDialogVisible" title="重新绑定机器人站点" width="480px" :close-on-click-modal="false">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        title="仅空闲机器人可以重新绑定；执行中、暂停或人工接管的任务会被服务端拒绝。"
+        style="margin-bottom: 16px"
+      />
+      <el-form label-width="96px">
+        <el-form-item label="机器人">
+          <span>{{ robot?.name || '-' }}</span>
+        </el-form-item>
+        <el-form-item label="当前站点">
+          <span>{{ robot ? siteName(robot.siteId) : '-' }}</span>
+        </el-form-item>
+        <el-form-item label="新绑定站点" required>
+          <el-select v-model="bindingSiteId" placeholder="请选择站点" style="width: 100%">
+            <el-option v-for="site in siteStore.sites" :key="site.id" :label="site.name" :value="site.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <p class="binding-hint">重新绑定只改变平台中的站点归属，不会修改 Bridge 地址、设备身份或历史巡检记录。</p>
+      <template #footer>
+        <el-button :disabled="bindingSaving" @click="bindingDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="bindingSaving" @click="saveSiteBinding">确认重新绑定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-empty v-if="!robot" description="未找到机器人设备" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import { resourcesApi } from '@/api/resources'
 import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
 import type { Robot } from '@/types'
@@ -78,7 +112,20 @@ const robotStore = useRobotStore()
 const siteStore = useSiteStore()
 const router = useRouter()
 
-const robot = computed(() => robotStore.robots[0])
+const selectedRobotId = ref('')
+const bindingDialogVisible = ref(false)
+const bindingSaving = ref(false)
+const bindingSiteId = ref('')
+
+const robot = computed(() => robotStore.getRobotById(selectedRobotId.value))
+
+watch(
+  () => robotStore.robots.map((item) => item.id),
+  (ids) => {
+    if (!ids.includes(selectedRobotId.value)) selectedRobotId.value = ids[0] ?? ''
+  },
+  { immediate: true },
+)
 
 const statusStats = computed(() => {
   const item = robot.value
@@ -103,6 +150,47 @@ function platformStatusLabel(s: Robot['status']) {
   return PLATFORM_STATUS_LABELS[s]
 }
 
+function openBindingDialog() {
+  if (!robot.value) return
+  bindingSiteId.value = robot.value.siteId || ''
+  bindingDialogVisible.value = true
+}
+
+async function saveSiteBinding() {
+  const currentRobot = robot.value
+  if (!currentRobot) return
+  if (!bindingSiteId.value) {
+    ElMessage.warning('请选择目标站点')
+    return
+  }
+  if (bindingSiteId.value === currentRobot.siteId) {
+    ElMessage.info('机器人已绑定到该站点')
+    bindingDialogVisible.value = false
+    return
+  }
+  const targetSiteName = siteName(bindingSiteId.value)
+  try {
+    await ElMessageBox.confirm(
+      `确认将“${currentRobot.name}”从“${siteName(currentRobot.siteId)}”重新绑定到“${targetSiteName}”吗？`,
+      '确认重新绑定',
+      { type: 'warning', confirmButtonText: '确认绑定', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  bindingSaving.value = true
+  try {
+    const updated = await resourcesApi.updateRobot(currentRobot.id, { siteId: bindingSiteId.value })
+    robotStore.applyRemoteRobot(updated)
+    bindingDialogVisible.value = false
+    ElMessage.success(`已绑定到${targetSiteName}`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error && error.message ? error.message : '重新绑定失败，请稍后重试')
+  } finally {
+    bindingSaving.value = false
+  }
+}
+
 function fmt(iso: string) {
   return new Date(iso).toLocaleString('zh-CN')
 }
@@ -111,8 +199,22 @@ function fmt(iso: string) {
 <style scoped>
 .page-actions {
   display: flex;
+  align-items: center;
+  gap: 10px;
   justify-content: flex-end;
   margin: -8px 0 16px;
+}
+
+.robot-select {
+  width: min(280px, 42vw);
+  margin-right: auto;
+}
+
+.binding-hint {
+  margin: 0;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .mini-stat .val {
@@ -125,5 +227,17 @@ function fmt(iso: string) {
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .page-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .robot-select {
+    width: 100%;
+    margin-right: 0;
+  }
 }
 </style>

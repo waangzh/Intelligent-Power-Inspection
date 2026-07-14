@@ -512,7 +512,7 @@ public class TaskService {
   private void validateRouteAndRobotSite(Map<String, Object> route, Map<String, Object> robot) {
     String routeSiteId = text(route.get("siteId"));
     String robotSiteId = text(robot.get("siteId"));
-    if (routeSiteId != null && robotSiteId != null && !routeSiteId.equals(robotSiteId)) {
+    if (routeSiteId == null || robotSiteId == null || !routeSiteId.equals(robotSiteId)) {
       throw ApiException.badRequest("机器人与巡检路线不属于同一站点");
     }
   }

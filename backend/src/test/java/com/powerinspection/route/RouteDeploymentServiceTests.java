@@ -96,6 +96,16 @@ class RouteDeploymentServiceTests {
   }
 
   @Test
+  void robotWithoutSiteBindingIsRejected() {
+    Fixture fixture = fixture();
+    Map<String, Object> robot = dataStore.get(DataCategory.ROBOT, fixture.robotId());
+    robot.remove("siteId");
+    dataStore.upsert(DataCategory.ROBOT, robot);
+
+    assertThrows(ApiException.class, () -> deploymentService.request(fixture.revisionId(), fixture.robotId(), "unbound-" + fixture.revisionId()));
+  }
+
+  @Test
   void workerMarksReadyOnlyAfterBridgeIdentityAndHashesMatch() {
     Fixture fixture = fixture();
     String deploymentId = create(fixture);
