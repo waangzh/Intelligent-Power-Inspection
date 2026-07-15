@@ -153,6 +153,36 @@ class RouteDeploymentServiceTests {
   }
 
   @Test
+  void manualReconcileSchedulesAnExhaustedUnknownDeployment() {
+    Fixture fixture = fixture();
+    String deploymentId = create(fixture);
+    RouteDeploymentEntity deployment = deploymentRepository.findById(deploymentId).orElseThrow();
+    deployment.setState(RouteDeploymentState.UNKNOWN.name());
+    deployment.setAttemptNo(5);
+    deployment.setNextReconcileAt(null);
+    deploymentRepository.save(deployment);
+
+    Map<String, Object> response = deploymentService.reconcile(deploymentId);
+    RouteDeploymentEntity reconciled = deploymentRepository.findById(deploymentId).orElseThrow();
+
+    assertEquals(RouteDeploymentState.UNKNOWN.name(), response.get("state"));
+    assertEquals(5, response.get("attemptCount"));
+    assertNotNull(reconciled.getNextReconcileAt());
+  }
+
+  @Test
+  void manualReconcileRejectsDeploymentThatIsAlreadyScheduled() {
+    Fixture fixture = fixture();
+    String deploymentId = create(fixture);
+    RouteDeploymentEntity deployment = deploymentRepository.findById(deploymentId).orElseThrow();
+    deployment.setState(RouteDeploymentState.UNKNOWN.name());
+    deployment.setNextReconcileAt(Instant.now().toString());
+    deploymentRepository.save(deployment);
+
+    assertThrows(ApiException.class, () -> deploymentService.reconcile(deploymentId));
+  }
+
+  @Test
   void interruptedInstallRecoversThroughUnknownReconciliation() {
     Fixture fixture = fixture();
     String deploymentId = create(fixture);

@@ -2,6 +2,7 @@ package com.powerinspection.route;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.robot.RobotBridgeIdMapper;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -21,11 +23,14 @@ public class RouteRevisionController {
   private final RouteRevisionService routeRevisionService;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
+  private final RobotBridgeIdMapper robotBridgeIdMapper;
 
-  public RouteRevisionController(RouteRevisionService routeRevisionService, PermissionService permissionService, CurrentUser currentUser) {
+  public RouteRevisionController(RouteRevisionService routeRevisionService, PermissionService permissionService, CurrentUser currentUser,
+      RobotBridgeIdMapper robotBridgeIdMapper) {
     this.routeRevisionService = routeRevisionService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
+    this.robotBridgeIdMapper = robotBridgeIdMapper;
   }
 
   @GetMapping("/routes/{routeId}/revisions")
@@ -79,8 +84,11 @@ public class RouteRevisionController {
   }
 
   @GetMapping("/route-revisions/{revisionId}")
-  public ApiResponse<Map<String, Object>> get(@PathVariable String revisionId) {
-    permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
+  public ApiResponse<Map<String, Object>> get(@PathVariable String revisionId,
+      @RequestHeader(value = "Authorization", required = false) String authorization) {
+    if (!robotBridgeIdMapper.isBridgePlatformRequest(authorization)) {
+      permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
+    }
     return ApiResponse.ok(routeRevisionService.get(revisionId));
   }
 }

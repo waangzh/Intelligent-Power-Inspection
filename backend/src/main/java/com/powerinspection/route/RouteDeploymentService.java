@@ -85,6 +85,20 @@ public class RouteDeploymentService {
     return toDto(deployment);
   }
 
+  /** 仅重新安排已停止自动对账的未知结果；实际同步仍由后台工作线程以原 deploymentId 幂等执行。 */
+  @Transactional
+  public Map<String, Object> reconcile(String deploymentId) {
+    RouteDeploymentEntity deployment = repository.findById(deploymentId)
+      .orElseThrow(() -> ApiException.notFound("路线部署记录不存在"));
+    if (!RouteDeploymentState.UNKNOWN.name().equals(deployment.getState()) || deployment.getNextReconcileAt() != null) {
+      throw ApiException.conflict("仅可重新对账已停止自动对账的部署记录");
+    }
+    String now = Instant.now().toString();
+    deployment.setNextReconcileAt(now);
+    deployment.setUpdatedAt(now);
+    return toDto(repository.save(deployment));
+  }
+
   public List<Map<String, Object>> listByRevision(String revisionId) {
     routeRevisionService.require(revisionId);
     return repository.findByRouteRevisionIdOrderByCreatedAtDesc(revisionId).stream().map(this::toDto).toList();

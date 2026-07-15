@@ -52,12 +52,19 @@ public class RouteDeploymentController {
     return ApiResponse.ok(routeDeploymentService.listByRevision(revisionId));
   }
 
+  @PostMapping("/route-deployments/{deploymentId}/reconcile")
+  public ApiResponse<Map<String, Object>> reconcile(@PathVariable String deploymentId) {
+    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    return ApiResponse.ok(routeDeploymentService.reconcile(deploymentId));
+  }
+
   @GetMapping("/route-deployments/{deploymentId}")
   public ApiResponse<Map<String, Object>> get(@PathVariable String deploymentId,
       @RequestHeader(value = "Authorization", required = false) String authorization) {
-    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    boolean bridgeRequest = robotBridgeIdMapper.isBridgePlatformRequest(authorization);
+    if (!bridgeRequest) permissionService.require(currentUser.get(), Permission.TASK_VIEW);
     Map<String, Object> deployment = routeDeploymentService.get(deploymentId);
-    return ApiResponse.ok(robotBridgeIdMapper.isBridgePlatformRequest(authorization)
+    return ApiResponse.ok(bridgeRequest
       ? robotBridgeIdMapper.toBridgeDeploymentView(deployment) : deployment);
   }
 

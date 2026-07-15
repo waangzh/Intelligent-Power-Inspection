@@ -57,6 +57,7 @@ export const resourcesApi = {
   createRouteDeployment: (revisionId: string, robotId: string, idempotencyKey: string) =>
     http.post<RouteDeployment>(`/route-revisions/${encodeURIComponent(revisionId)}/deployments`, { robotId }, { 'Idempotency-Key': idempotencyKey }),
   getRouteDeployment: (deploymentId: string) => http.get<RouteDeployment>(`/route-deployments/${encodeURIComponent(deploymentId)}`),
+  reconcileRouteDeployment: (deploymentId: string) => http.post<RouteDeployment>(`/route-deployments/${encodeURIComponent(deploymentId)}/reconcile`),
   validateRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, mapAssetId?: string) =>
     http.post<RouteDraftValidationReport>(`/routes/${routeId}/draft:validate`, { executorJson, mapAssetId }),
   getRouteDraft: (routeId: string) => http.get<PersistedRouteDraftReport>(`/routes/${routeId}/draft`),
