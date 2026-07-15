@@ -176,12 +176,15 @@ def run_smoke(base_url, store) -> None:
     assert request(base_url, "POST", f"/robot-api/v1/commands/{command['commandId']}/ack", ack, "token-placeholder")[1]["state"] == "ACKED"
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"] is None
     assert request(base_url, "GET", "/robot-api/v1/deployments/deploy-1/manifest", token="token-placeholder")[1]["yamlName"] == "site.yaml"
-    events = [{"robot_id": "robot-001", "boot_id": "boot-1", "sequence": 2, "event": "route_started", "execution_id": "execution-1", "deployment_id": "deploy-1", "request_id": "request-1", "command_id": command["commandId"], "occurred_at": "2026-01-01T00:00:00Z"}]
+    events = [{"schema_version": "1.0", "robot_id": "robot-001", "boot_id": "boot-1", "sequence": 2, "event": "route_started", "execution_id": "execution-1", "deployment_id": "deploy-1", "request_id": "request-1", "command_id": command["commandId"], "occurred_at": "2026-01-01T00:00:00Z"}]
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": events}, "token-placeholder")[1]["acceptedThroughSequence"] == 0
     events.insert(0, {**events[0], "sequence": 1, "event": "initial_pose_published"})
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": events}, "token-placeholder")[1]["acceptedThroughSequence"] == 2
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": events}, "token-placeholder")[1]["acceptedThroughSequence"] == 2
     assert request(base_url, "GET", "/bridge/v1/executions/execution-1", token="admin-placeholder")[1]["state"] == "RUNNING"
+    pulled = request(base_url, "GET", "/bridge/v1/executions/execution-1/events?afterSequence=0", token="admin-placeholder")[1]["events"]
+    assert [event["sequence"] for event in pulled] == [1, 2]
+    assert request(base_url, "GET", "/bridge/v1/executions/execution-1/events?afterSequence=2", token="admin-placeholder")[1]["events"] == []
     assert store.command(command["commandId"])["state"] == "APPLIED"
     terminal = [{**events[-1], "sequence": 3, "event": "route_finished"}, {**events[-1], "sequence": 4, "event": "route_started"}]
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": terminal}, "token-placeholder")[1]["acceptedThroughSequence"] == 4

@@ -17,6 +17,8 @@ public interface RouteDeploymentRepository extends JpaRepository<RouteDeployment
 
   Optional<RouteDeploymentEntity> findFirstByRobotIdAndStateInOrderByCreatedAtDesc(String robotId, Collection<String> states);
 
+  List<RouteDeploymentEntity> findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc(String robotId, String routeRevisionId, String state);
+
   List<RouteDeploymentEntity> findByState(String state);
 
   @Query("select d.id from RouteDeploymentEntity d where d.state = :pending or (d.state = :unknown and d.nextReconcileAt is not null and d.nextReconcileAt <= :now) order by d.createdAt asc")

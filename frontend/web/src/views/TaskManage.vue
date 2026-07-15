@@ -13,7 +13,7 @@
       <template #header>
         <div class="card-head">
           <span>执行中 · {{ activeTask.name }}</span>
-          <TaskStatusTag :status="activeTask.status" />
+          <TaskStatusTag :status="taskStore.statusOf(activeTask)" />
         </div>
       </template>
       <el-row :gutter="16">
@@ -22,9 +22,11 @@
             <el-descriptions-item label="路线">{{ routeName(activeTask.routeId) }}</el-descriptions-item>
             <el-descriptions-item label="机器人">{{ robotName(activeTask.robotId) }}</el-descriptions-item>
             <el-descriptions-item label="进度">
-              <el-progress :percentage="activeTask.progress" style="width: 160px" />
+              <el-progress :percentage="taskStore.executionFor(activeTask.id)?.progress ?? activeTask.progress" style="width: 160px" />
             </el-descriptions-item>
             <el-descriptions-item label="当前检查点">第 {{ activeTask.currentCheckpointSeq }} 个</el-descriptions-item>
+            <el-descriptions-item v-if="taskStore.executionFor(activeTask.id)" label="路线修订">{{ taskStore.executionFor(activeTask.id)?.routeRevisionId }}</el-descriptions-item>
+            <el-descriptions-item v-if="taskStore.executionFor(activeTask.id)" label="部署 ID">{{ taskStore.executionFor(activeTask.id)?.deploymentId ?? '-' }}</el-descriptions-item>
           </el-descriptions>
           <div class="voice-hint" v-if="activeTask.status === 'RUNNING'">
             <el-icon><Microphone /></el-icon>
@@ -42,13 +44,28 @@
           </div>
         </el-col>
       </el-row>
+      <el-alert
+        v-if="taskStore.executionFor(activeTask.id) && taskStore.statusOf(activeTask) === 'CREATED'"
+        :title="startDisabledReason(activeTask.id) || '路线修订、部署、机器人在线状态与哈希校验均满足后，才可启动巡检'"
+        :type="taskStore.eligibilityFor(activeTask.id)?.eligible ? 'success' : 'warning'"
+        :closable="false"
+        show-icon
+        style="margin-top: 14px"
+      />
       <div class="action-bar">
-        <el-button v-if="can('task:dispatch') && activeTask.status === 'CREATED'" type="primary" @click="taskStore.dispatch(activeTask.id)">下发任务</el-button>
-        <el-button v-if="can('task:control') && activeTask.status === 'RUNNING'" @click="taskStore.pause(activeTask.id)">暂停</el-button>
-        <el-button v-if="can('task:control') && activeTask.status === 'PAUSED'" type="primary" @click="taskStore.resume(activeTask.id)">恢复</el-button>
-        <el-button v-if="can('task:control') && activeTask.status === 'RUNNING'" type="warning" @click="taskStore.takeover(activeTask.id)">人工接管</el-button>
         <el-button
-          v-if="canCancelTask(activeTask.status)"
+          v-if="can('task:dispatch') && taskStore.executionFor(activeTask.id) && taskStore.statusOf(activeTask) === 'CREATED'"
+          type="primary"
+          :disabled="!taskStore.eligibilityFor(activeTask.id)?.eligible"
+          :title="startDisabledReason(activeTask.id)"
+          @click="startInspection(activeTask.id)"
+        >启动巡检</el-button>
+        <el-button v-if="can('task:dispatch') && !activeTask.executionId && activeTask.status === 'CREATED'" type="primary" @click="taskStore.dispatch(activeTask.id)">下发任务</el-button>
+        <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'RUNNING'" @click="taskStore.pause(activeTask.id)">暂停</el-button>
+        <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'PAUSED'" type="primary" @click="taskStore.resume(activeTask.id)">恢复</el-button>
+        <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'RUNNING'" type="warning" @click="taskStore.takeover(activeTask.id)">人工接管</el-button>
+        <el-button
+          v-if="canCancelTask(activeTask)"
           type="danger"
           @click="cancelTask(activeTask.id)"
         >{{ can('task:estop') && !can('task:control') ? '远程急停' : '取消任务' }}</el-button>
@@ -73,12 +90,21 @@
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <TaskStatusTag :status="row.status" />
+            <TaskStatusTag :status="taskStore.statusOf(row)" />
           </template>
         </el-table-column>
         <el-table-column label="进度" width="140">
           <template #default="{ row }">
-            <el-progress :percentage="row.progress" :stroke-width="8" />
+            <el-button
+              v-if="can('task:dispatch') && taskStore.executionFor(row.id) && taskStore.statusOf(row) === 'CREATED'"
+              text
+              type="primary"
+              size="small"
+              :disabled="!taskStore.eligibilityFor(row.id)?.eligible"
+              :title="startDisabledReason(row.id)"
+              @click="startInspection(row.id)"
+            >启动巡检</el-button>
+            <el-progress :percentage="taskStore.executionFor(row.id)?.progress ?? row.progress" :stroke-width="8" />
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="160">
@@ -86,14 +112,14 @@
         </el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="can('task:dispatch') && row.status === 'CREATED'" text type="primary" size="small" @click="taskStore.dispatch(row.id)">下发</el-button>
-            <el-button v-if="can('task:control') && row.status === 'RUNNING'" text size="small" @click="taskStore.pause(row.id)">暂停</el-button>
-            <el-button v-if="can('task:control') && row.status === 'PAUSED'" text type="primary" size="small" @click="taskStore.resume(row.id)">恢复</el-button>
-            <el-button v-if="can('task:control') && row.status === 'RUNNING'" text type="warning" size="small" @click="taskStore.takeover(row.id)">接管</el-button>
+            <el-button v-if="can('task:dispatch') && !row.executionId && row.status === 'CREATED'" text type="primary" size="small" @click="taskStore.dispatch(row.id)">下发</el-button>
+            <el-button v-if="can('task:control') && !row.executionId && row.status === 'RUNNING'" text size="small" @click="taskStore.pause(row.id)">暂停</el-button>
+            <el-button v-if="can('task:control') && !row.executionId && row.status === 'PAUSED'" text type="primary" size="small" @click="taskStore.resume(row.id)">恢复</el-button>
+            <el-button v-if="can('task:control') && !row.executionId && row.status === 'RUNNING'" text type="warning" size="small" @click="taskStore.takeover(row.id)">接管</el-button>
             <el-button v-if="can('task:dispatch')" text type="success" size="small" @click="openAgentForTask(row.id)">Agent</el-button>
             <el-button text size="small" @click="router.push(`/tasks/${row.id}`)">详情</el-button>
             <el-button
-              v-if="canCancelTask(row.status)"
+              v-if="canCancelTask(row)"
               text
               type="danger"
               size="small"
@@ -215,9 +241,24 @@ function submitTask() {
   ElMessage.success('任务已创建，可点击下发开始执行')
 }
 
-function canCancelTask(status: string) {
-  if (!canAny('task:control', 'task:estop')) return false
-  return !['COMPLETED', 'CANCELLED'].includes(status)
+function canCancelTask(task: { status: string; executionId?: string }) {
+  if (task.executionId || !canAny('task:control', 'task:estop')) return false
+  return !['COMPLETED', 'CANCELLED'].includes(task.status)
+}
+
+function startDisabledReason(taskId: string) {
+  const eligibility = taskStore.eligibilityFor(taskId)
+  if (!eligibility) return '正在核验启动条件'
+  return eligibility.eligible ? '' : eligibility.ineligibleReason || '启动条件未满足'
+}
+
+async function startInspection(taskId: string) {
+  try {
+    await taskStore.startInspection(taskId)
+    ElMessage.success('启动命令已受理，等待机器人 route_started 事件确认运行')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '启动巡检失败')
+  }
 }
 
 function cancelTask(id: string) {

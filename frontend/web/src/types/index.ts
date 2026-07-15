@@ -37,20 +37,30 @@ export const DETECTION_LABELS: Record<DetectionType, string> = {
 export type TaskStatus =
   | 'CREATED'
   | 'DISPATCHED'
+  | 'STARTING'
   | 'RUNNING'
   | 'PAUSED'
   | 'MANUAL_TAKEOVER'
   | 'COMPLETED'
   | 'CANCELLED'
+  | 'START_FAILED'
+  | 'FAILED'
+  | 'DISCONNECTED'
+  | 'RECOVERING'
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   CREATED: '已创建',
   DISPATCHED: '已下发',
+  STARTING: '启动中',
   RUNNING: '执行中',
   PAUSED: '已暂停',
   MANUAL_TAKEOVER: '人工接管',
   COMPLETED: '已完成',
   CANCELLED: '已取消',
+  START_FAILED: '启动失败',
+  FAILED: '执行失败',
+  DISCONNECTED: '机器人断联',
+  RECOVERING: '执行恢复中',
 }
 
 export type AlarmSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
@@ -270,6 +280,36 @@ export interface InspectionTask {
   startedAt?: string
   completedAt?: string
   createdAt: string
+  routeRevisionId?: string
+  executionId?: string
+  routeContentSha256?: string
+  mapImageSha256?: string
+}
+
+export interface TaskExecution {
+  taskId: string
+  executionId: string
+  routeRevisionId: string
+  robotId: string
+  deploymentId?: string | null
+  executorRouteId?: string | null
+  routeContentSha256: string
+  mapImageSha256: string
+  status: TaskStatus
+  currentTargetId?: string | null
+  progress: number
+  lastRobotSequence: number
+  lastEventAt?: string | null
+  lastErrorCode?: string | null
+  lastErrorMessage?: string | null
+  manualReconciliationRequired: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TaskStartEligibility extends TaskExecution {
+  eligible: boolean
+  ineligibleReason?: string | null
 }
 
 export interface Alarm {
