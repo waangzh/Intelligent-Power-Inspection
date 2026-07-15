@@ -6,12 +6,15 @@ import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,11 +22,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/tasks")
 public class TaskController {
   private final TaskService taskService;
+  private final TaskExecutionLifecycleService executionLifecycleService;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public TaskController(TaskService taskService, PermissionService permissionService, CurrentUser currentUser) {
+  public TaskController(TaskService taskService, TaskExecutionLifecycleService executionLifecycleService,
+      PermissionService permissionService, CurrentUser currentUser) {
     this.taskService = taskService;
+    this.executionLifecycleService = executionLifecycleService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
   }
@@ -44,6 +50,18 @@ public class TaskController {
   public ApiResponse<Map<String, Object>> task(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.TASK_VIEW);
     return ApiResponse.ok(taskService.task(id));
+  }
+
+  @GetMapping("/{id}/execution")
+  public ApiResponse<Map<String, Object>> execution(@PathVariable String id) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(executionLifecycleService.detail(id));
+  }
+
+  @GetMapping("/{id}/start-eligibility")
+  public ApiResponse<Map<String, Object>> startEligibility(@PathVariable String id) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(executionLifecycleService.eligibility(id));
   }
 
   @PostMapping
@@ -69,6 +87,13 @@ public class TaskController {
   public ApiResponse<Map<String, Object>> dispatch(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
     return ApiResponse.ok(taskService.dispatch(id));
+  }
+
+  @PostMapping("/{id}/start")
+  public ResponseEntity<ApiResponse<Map<String, Object>>> start(@PathVariable String id,
+      @RequestHeader("Idempotency-Key") String idempotencyKey) {
+    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.ok(executionLifecycleService.start(id, idempotencyKey)));
   }
 
   @PostMapping("/{id}/pause")

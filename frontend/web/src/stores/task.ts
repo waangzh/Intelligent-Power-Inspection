@@ -1,13 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
-import type { InspectionRecord, InspectionTask, TaskEvent, TaskStatus } from '@/types'
+import type { InspectionRecord, InspectionTask, TaskEvent, TaskExecution, TaskStartEligibility, TaskStatus } from '@/types'
 import { uid } from '@/utils/storage'
 
 export const useTaskStore = defineStore('task', () => {
   const tasks = ref<InspectionTask[]>([])
   const records = ref<InspectionRecord[]>([])
   const events = ref<TaskEvent[]>([])
+  const executions = ref<Record<string, TaskExecution>>({})
+  const startEligibility = ref<Record<string, TaskStartEligibility>>({})
+  let executionPollTimer: ReturnType<typeof setInterval> | undefined
 
   async function load() {
     await loadDynamic()
@@ -19,6 +22,53 @@ export const useTaskStore = defineStore('task', () => {
     const taskEvents = await Promise.all(tasks.value.map((task) => resourcesApi.taskEvents(task.id).catch(() => [])))
     events.value = taskEvents.flat()
     records.value = await resourcesApi.listRecords().catch(() => records.value)
+    await refreshExecutions()
+    startExecutionPolling()
+  }
+
+  async function refreshExecution(taskId: string) {
+    const [execution, eligibility] = await Promise.all([
+      resourcesApi.getTaskExecution(taskId).catch(() => null),
+      resourcesApi.getTaskStartEligibility(taskId).catch(() => null),
+    ])
+    if (execution) executions.value = { ...executions.value, [taskId]: execution }
+    if (eligibility) startEligibility.value = { ...startEligibility.value, [taskId]: eligibility }
+    return execution
+  }
+
+  async function refreshExecutions() {
+    await Promise.all(tasks.value.filter((task) => task.executionId).map((task) => refreshExecution(task.id)))
+  }
+
+  function startExecutionPolling() {
+    if (executionPollTimer || !tasks.value.some((task) => task.executionId)) return
+    executionPollTimer = setInterval(() => { void refreshExecutions() }, 2000)
+  }
+
+  function stopExecutionPolling() {
+    if (!executionPollTimer) return
+    clearInterval(executionPollTimer)
+    executionPollTimer = undefined
+  }
+
+  async function startInspection(taskId: string) {
+    const execution = await resourcesApi.startTask(taskId, uid('start'))
+    executions.value = { ...executions.value, [taskId]: execution }
+    await refreshExecution(taskId)
+    startExecutionPolling()
+    return execution
+  }
+
+  function executionFor(taskId: string) {
+    return executions.value[taskId]
+  }
+
+  function eligibilityFor(taskId: string) {
+    return startEligibility.value[taskId]
+  }
+
+  function statusOf(task: InspectionTask): TaskStatus {
+    return executionFor(task.id)?.status ?? task.status
   }
 
   function getEventsByTask(taskId: string) {
@@ -113,7 +163,7 @@ export const useTaskStore = defineStore('task', () => {
 
   function getActiveTask() {
     return tasks.value.find((t) =>
-      ['DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER'].includes(t.status),
+      ['DISPATCHED', 'STARTING', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER', 'DISCONNECTED', 'RECOVERING'].includes(statusOf(t)),
     )
   }
 
@@ -150,8 +200,18 @@ export const useTaskStore = defineStore('task', () => {
     tasks,
     records,
     events,
+    executions,
+    startEligibility,
     load,
     loadDynamic,
+    refreshExecution,
+    refreshExecutions,
+    startExecutionPolling,
+    stopExecutionPolling,
+    startInspection,
+    executionFor,
+    eligibilityFor,
+    statusOf,
     createTask,
     updateTask,
     dispatch,

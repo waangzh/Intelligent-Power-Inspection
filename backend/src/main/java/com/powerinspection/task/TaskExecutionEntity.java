@@ -22,6 +22,30 @@ public class TaskExecutionEntity {
   private String routeContentSha256;
   @Column(name = "map_image_sha256", nullable = false, length = 64)
   private String mapImageSha256;
+  @Column(name = "deployment_id")
+  private String deploymentId;
+  @Column(name = "executor_route_id")
+  private String executorRouteId;
+  @Column(name = "start_request_id", unique = true)
+  private String startRequestId;
+  @Column(name = "start_request_fingerprint", length = 64)
+  private String startRequestFingerprint;
+  @Column(name = "start_command_id")
+  private String startCommandId;
+  @Column(name = "start_attempt_no", nullable = false)
+  private int startAttemptNo;
+  @Column(name = "last_start_attempt_at")
+  private String lastStartAttemptAt;
+  @Column(name = "recovery_status")
+  private String recoveryStatus;
+  @Column(name = "current_target_id")
+  private String currentTargetId;
+  @Column(nullable = false)
+  private int progress;
+  @Column(name = "last_event_at")
+  private String lastEventAt;
+  @Column(name = "manual_reconciliation_required", nullable = false)
+  private boolean manualReconciliationRequired;
   @Column(nullable = false)
   private String status;
   @Column(name = "last_robot_sequence", nullable = false)
@@ -49,6 +73,30 @@ public class TaskExecutionEntity {
   public void setRouteContentSha256(String routeContentSha256) { this.routeContentSha256 = routeContentSha256; }
   public String getMapImageSha256() { return mapImageSha256; }
   public void setMapImageSha256(String mapImageSha256) { this.mapImageSha256 = mapImageSha256; }
+  public String getDeploymentId() { return deploymentId; }
+  public void setDeploymentId(String deploymentId) { this.deploymentId = deploymentId; }
+  public String getExecutorRouteId() { return executorRouteId; }
+  public void setExecutorRouteId(String executorRouteId) { this.executorRouteId = executorRouteId; }
+  public String getStartRequestId() { return startRequestId; }
+  public void setStartRequestId(String startRequestId) { this.startRequestId = startRequestId; }
+  public String getStartRequestFingerprint() { return startRequestFingerprint; }
+  public void setStartRequestFingerprint(String startRequestFingerprint) { this.startRequestFingerprint = startRequestFingerprint; }
+  public String getStartCommandId() { return startCommandId; }
+  public void setStartCommandId(String startCommandId) { this.startCommandId = startCommandId; }
+  public int getStartAttemptNo() { return startAttemptNo; }
+  public void setStartAttemptNo(int startAttemptNo) { this.startAttemptNo = startAttemptNo; }
+  public String getLastStartAttemptAt() { return lastStartAttemptAt; }
+  public void setLastStartAttemptAt(String lastStartAttemptAt) { this.lastStartAttemptAt = lastStartAttemptAt; }
+  public String getRecoveryStatus() { return recoveryStatus; }
+  public void setRecoveryStatus(String recoveryStatus) { this.recoveryStatus = recoveryStatus; }
+  public String getCurrentTargetId() { return currentTargetId; }
+  public void setCurrentTargetId(String currentTargetId) { this.currentTargetId = currentTargetId; }
+  public int getProgress() { return progress; }
+  public void setProgress(int progress) { this.progress = progress; }
+  public String getLastEventAt() { return lastEventAt; }
+  public void setLastEventAt(String lastEventAt) { this.lastEventAt = lastEventAt; }
+  public boolean isManualReconciliationRequired() { return manualReconciliationRequired; }
+  public void setManualReconciliationRequired(boolean manualReconciliationRequired) { this.manualReconciliationRequired = manualReconciliationRequired; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
   public long getLastRobotSequence() { return lastRobotSequence; }

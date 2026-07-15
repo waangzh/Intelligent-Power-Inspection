@@ -2,10 +2,17 @@
   <div v-if="task">
     <PageHeader :title="task.name" description="巡检任务详情" :breadcrumbs="breadcrumbs">
       <template #actions>
-        <TaskStatusTag :status="task.status" />
-        <el-button v-if="can('task:dispatch') && task.status === 'CREATED'" type="primary" @click="taskStore.dispatch(task.id)">下发</el-button>
-        <el-button v-if="can('task:control') && task.status === 'RUNNING'" @click="taskStore.pause(task.id)">暂停</el-button>
-        <el-button v-if="can('task:control') && task.status === 'PAUSED'" type="primary" @click="taskStore.resume(task.id)">恢复</el-button>
+        <TaskStatusTag :status="taskStore.statusOf(task)" />
+        <el-button
+          v-if="can('task:dispatch') && execution && taskStore.statusOf(task) === 'CREATED'"
+          type="primary"
+          :disabled="!eligibility?.eligible"
+          :title="startDisabledReason"
+          @click="startInspection"
+        >启动巡检</el-button>
+        <el-button v-if="can('task:dispatch') && !task.executionId && task.status === 'CREATED'" type="primary" @click="taskStore.dispatch(task.id)">下发</el-button>
+        <el-button v-if="can('task:control') && !task.executionId && task.status === 'RUNNING'" @click="taskStore.pause(task.id)">暂停</el-button>
+        <el-button v-if="can('task:control') && !task.executionId && task.status === 'PAUSED'" type="primary" @click="taskStore.resume(task.id)">恢复</el-button>
         <el-button v-if="can('task:dispatch')" type="success" @click="openAgent">Agent 分析</el-button>
         <el-button
           v-if="canCancelTask"
@@ -24,12 +31,36 @@
             <el-descriptions-item label="路线">{{ route?.name }}</el-descriptions-item>
             <el-descriptions-item label="机器人">{{ robot?.name }}</el-descriptions-item>
             <el-descriptions-item label="进度">
-              <el-progress :percentage="task.progress" style="width: 200px" />
+              <el-progress :percentage="execution?.progress ?? task.progress" style="width: 200px" />
             </el-descriptions-item>
             <el-descriptions-item label="当前检查点">第 {{ task.currentCheckpointSeq }} / {{ route?.checkpoints.length ?? 0 }} 个</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ fmt(task.createdAt) }}</el-descriptions-item>
             <el-descriptions-item label="开始时间">{{ task.startedAt ? fmt(task.startedAt) : '-' }}</el-descriptions-item>
           </el-descriptions>
+          <el-descriptions v-if="execution" :column="2" border size="small" style="margin-top: 12px">
+            <el-descriptions-item label="路线修订">{{ execution.routeRevisionId }}</el-descriptions-item>
+            <el-descriptions-item label="部署 ID">{{ execution.deploymentId || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="当前目标">{{ execution.currentTargetId || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="最后事件">{{ execution.lastEventAt ? fmt(execution.lastEventAt) : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="路线哈希">{{ shortHash(execution.routeContentSha256) }}</el-descriptions-item>
+            <el-descriptions-item label="地图哈希">{{ shortHash(execution.mapImageSha256) }}</el-descriptions-item>
+          </el-descriptions>
+          <el-alert
+            v-if="execution && taskStore.statusOf(task) === 'CREATED'"
+            :title="startDisabledReason || '部署 READY_FOR_ROBOT 且身份、路线哈希、地图哈希一致后才允许启动'"
+            :type="eligibility?.eligible ? 'success' : 'warning'"
+            :closable="false"
+            show-icon
+            style="margin-top: 12px"
+          />
+          <el-alert
+            v-if="execution?.lastErrorMessage"
+            :title="`${execution.lastErrorCode || 'EXECUTION_ERROR'}：${execution.lastErrorMessage}`"
+            type="error"
+            :closable="false"
+            show-icon
+            style="margin-top: 12px"
+          />
         </el-card>
 
         <el-card shadow="never">
@@ -110,6 +141,8 @@ const route = computed(() => (task.value ? routeStore.getRouteById(task.value.ro
 const robot = computed(() => (task.value ? robotStore.getRobotById(task.value.robotId) : undefined))
 const events = computed(() => taskStore.getEventsByTask(taskId.value))
 const taskAlarms = computed(() => alarmStore.alarms.filter((a) => a.taskId === taskId.value))
+const execution = computed(() => taskStore.executionFor(taskId.value))
+const eligibility = computed(() => taskStore.eligibilityFor(taskId.value))
 
 const fallbackCenter = computed(() =>
   route.value ? siteStore.getSiteById(route.value.siteId)?.center ?? siteStore.sites[0]?.center : siteStore.sites[0]?.center,
@@ -134,6 +167,26 @@ function eventLabel(type: TaskEvent['type']) {
   }[type]
 }
 
+const startDisabledReason = computed(() => {
+  if (!execution.value) return '任务未绑定不可变路线修订执行快照'
+  if (!eligibility.value) return '正在核验启动条件'
+  return eligibility.value.eligible ? '' : eligibility.value.ineligibleReason || '启动条件未满足'
+})
+
+function shortHash(value: string) {
+  return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-8)}` : value
+}
+
+async function startInspection() {
+  if (!task.value) return
+  try {
+    await taskStore.startInspection(task.value.id)
+    ElMessage.success('启动命令已受理，等待机器人 route_started 事件确认运行')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '启动巡检失败')
+  }
+}
+
 function timelineType(type: TaskEvent['type']) {
   if (type === 'ALARM') return 'danger'
   if (type === 'COMPLETE') return 'success'
@@ -141,7 +194,7 @@ function timelineType(type: TaskEvent['type']) {
 }
 
 const canCancelTask = computed(() => {
-  if (!task.value || !canAny('task:control', 'task:estop')) return false
+  if (!task.value || task.value.executionId || !canAny('task:control', 'task:estop')) return false
   return !['COMPLETED', 'CANCELLED'].includes(task.value.status)
 })
 
