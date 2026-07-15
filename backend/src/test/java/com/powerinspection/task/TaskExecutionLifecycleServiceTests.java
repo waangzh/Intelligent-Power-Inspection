@@ -35,6 +35,7 @@ import org.mockito.quality.Strictness;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class TaskExecutionLifecycleServiceTests {
   @Mock private TaskExecutionRepository executions;
+  @Mock private TaskExecutionControlCommandRepository controlCommands;
   @Mock private RouteRevisionRepository revisions;
   @Mock private RouteDeploymentRepository deployments;
   @Mock private RobotHeartbeatService heartbeats;
@@ -47,7 +48,7 @@ class TaskExecutionLifecycleServiceTests {
   void setUp() {
     RobotProperties properties = new RobotProperties();
     properties.setMode("bridge");
-    service = new TaskExecutionLifecycleService(executions, revisions, deployments, heartbeats, dataStore, new ObjectMapper(), properties);
+    service = new TaskExecutionLifecycleService(executions, controlCommands, revisions, deployments, heartbeats, dataStore, new ObjectMapper(), properties);
     execution = execution(TaskExecutionStatus.CREATED.name());
     revision = revision();
     when(executions.findById("task-1")).thenReturn(Optional.of(execution));

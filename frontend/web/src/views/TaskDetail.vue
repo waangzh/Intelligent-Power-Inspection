@@ -11,12 +11,15 @@
           @click="startInspection"
         >启动巡检</el-button>
         <el-button v-if="can('task:dispatch') && !task.executionId && task.status === 'CREATED'" type="primary" @click="taskStore.dispatch(task.id)">下发</el-button>
-        <el-button v-if="can('task:control') && !task.executionId && task.status === 'RUNNING'" @click="taskStore.pause(task.id)">暂停</el-button>
-        <el-button v-if="can('task:control') && !task.executionId && task.status === 'PAUSED'" type="primary" @click="taskStore.resume(task.id)">恢复</el-button>
+        <el-button v-if="canPause" :loading="controlBusy" :disabled="controlBusy" @click="sendControl('PAUSE')">暂停</el-button>
+        <el-button v-if="canResume" type="primary" :loading="controlBusy" :disabled="controlBusy" @click="sendControl('RESUME')">恢复</el-button>
+        <el-button v-if="canTakeover" type="warning" :loading="controlBusy" :disabled="controlBusy" @click="requestTakeover">人工接管</el-button>
         <el-button v-if="can('task:dispatch')" type="success" @click="openAgent">Agent 分析</el-button>
         <el-button
           v-if="canCancelTask"
           type="danger"
+          :loading="controlBusy"
+          :disabled="controlBusy"
           @click="cancelTask"
         >{{ can('task:estop') && !can('task:control') ? '远程急停' : '取消任务' }}</el-button>
         <el-button @click="router.push('/tasks')">返回列表</el-button>
@@ -57,6 +60,15 @@
             v-if="execution?.lastErrorMessage"
             :title="`${execution.lastErrorCode || 'EXECUTION_ERROR'}：${execution.lastErrorMessage}`"
             type="error"
+            :closable="false"
+            show-icon
+            style="margin-top: 12px"
+          />
+          <el-alert
+            v-if="execution?.latestControl"
+            :title="commandFeedback.title"
+            :description="commandFeedback.description"
+            :type="commandFeedback.type"
             :closable="false"
             show-icon
             style="margin-top: 12px"
@@ -133,7 +145,7 @@ const routeStore = useRouteStore()
 const robotStore = useRobotStore()
 const alarmStore = useAlarmStore()
 const siteStore = useSiteStore()
-const { can, canAny } = usePermission()
+const { can } = usePermission()
 
 const taskId = computed(() => routeParam.params.id as string)
 const task = computed(() => taskStore.getTaskById(taskId.value))
@@ -143,6 +155,23 @@ const events = computed(() => taskStore.getEventsByTask(taskId.value))
 const taskAlarms = computed(() => alarmStore.alarms.filter((a) => a.taskId === taskId.value))
 const execution = computed(() => taskStore.executionFor(taskId.value))
 const eligibility = computed(() => taskStore.eligibilityFor(taskId.value))
+const controlBusy = computed(() => !!taskStore.controlInFlight[taskId.value])
+const executionStatus = computed(() => execution.value?.status)
+const canPause = computed(() => !!execution.value && can('task:control') && executionStatus.value === 'RUNNING')
+const canResume = computed(() => !!execution.value && can('task:control') && executionStatus.value === 'PAUSED')
+const canTakeover = computed(() => !!execution.value && can('task:takeover') && executionStatus.value === 'RUNNING')
+const canCancelTask = computed(() => !!execution.value && can('task:control')
+  && ['STARTING', 'RUNNING', 'PAUSED'].includes(executionStatus.value ?? ''))
+const commandFeedback = computed(() => {
+  const control = execution.value?.latestControl
+  const status = control?.status
+  const title = ({
+    PENDING_SEND: '命令发送中', SENDING: '命令发送中', QUEUED: '命令已受理，等待机器人 ACK',
+    ACKED: '已被机器人 ACK，等待真实事件确认', RECONCILING: '对账中，尚未假定控制成功或失败',
+    CONFIRMED: '已由真实事件确认', FAILED: '控制命令失败',
+  } as Record<string, string>)[status ?? ''] ?? '控制命令状态未知'
+  return { title, description: control?.resultMessage || '请等待轮询更新', type: status === 'FAILED' ? 'error' : status === 'CONFIRMED' ? 'success' : 'warning' as 'error' | 'success' | 'warning' }
+})
 
 const fallbackCenter = computed(() =>
   route.value ? siteStore.getSiteById(route.value.siteId)?.center ?? siteStore.sites[0]?.center : siteStore.sites[0]?.center,
@@ -193,18 +222,40 @@ function timelineType(type: TaskEvent['type']) {
   return 'primary'
 }
 
-const canCancelTask = computed(() => {
-  if (!task.value || task.value.executionId || !canAny('task:control', 'task:estop')) return false
-  return !['COMPLETED', 'CANCELLED'].includes(task.value.status)
-})
+async function sendControl(action: 'PAUSE' | 'RESUME') {
+  if (!task.value) return
+  try {
+    await taskStore.controlInspection(task.value.id, action)
+    ElMessage.info('控制请求已受理，等待机器人 ACK 与真实事件确认')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '控制请求发送失败')
+  }
+}
+
+function requestTakeover() {
+  if (!task.value) return
+  ElMessageBox.prompt('请说明人工接管原因', '确认人工接管', {
+    confirmButtonText: '确认接管', cancelButtonText: '取消', inputPattern: /\S+/, inputErrorMessage: '必须填写接管原因', type: 'warning',
+  }).then(async ({ value }) => {
+    try {
+      await taskStore.controlInspection(task.value!.id, 'TAKEOVER', value)
+      ElMessage.info('人工接管请求已受理，等待机器人真实事件确认')
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '人工接管请求发送失败')
+    }
+  }).catch(() => {})
+}
 
 function cancelTask() {
   if (!task.value) return
-  const emergency = can('task:estop') && !can('task:control')
-  ElMessageBox.confirm(emergency ? '确定远程急停该任务？' : '确定取消该任务？', '确认', { type: 'warning' })
-    .then(() => {
-      taskStore.cancel(task.value!.id)
-      ElMessage.success(emergency ? '已发送远程急停' : '任务已取消')
+  ElMessageBox.confirm('确定取消该任务？机器人确认前任务不会被标记为已取消。', '确认取消', { type: 'warning' })
+    .then(async () => {
+      try {
+        await taskStore.controlInspection(task.value!.id, 'CANCEL')
+        ElMessage.info('取消请求已受理，等待机器人真实事件确认')
+      } catch (error) {
+        ElMessage.error(error instanceof Error ? error.message : '取消请求发送失败')
+      }
     })
     .catch(() => {})
 }

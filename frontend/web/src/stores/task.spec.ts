@@ -6,6 +6,7 @@ vi.mock('@/api/resources', () => ({
   resourcesApi: {
     listTasks: vi.fn(), taskEvents: vi.fn(), listRecords: vi.fn(),
     getTaskExecution: vi.fn(), getTaskStartEligibility: vi.fn(), startTask: vi.fn(),
+    pauseTask: vi.fn(), resumeTask: vi.fn(), takeoverTask: vi.fn(), cancelTask: vi.fn(),
   },
 }))
 
@@ -92,5 +93,19 @@ describe('任务执行轮询与启动状态', () => {
     expect(store.executionFor('task-1')?.lastErrorMessage).toBe('路线校验失败')
     store.stopExecutionPolling()
     vi.useRealTimers()
+  })
+
+  it('控制请求保持等待态，且重复点击复用同一幂等键', async () => {
+    const store = useTaskStore()
+    await store.loadDynamic()
+    store.stopExecutionPolling()
+    const waiting = execution('PAUSING')
+    vi.mocked(resourcesApi.pauseTask).mockResolvedValue(waiting)
+    vi.mocked(resourcesApi.getTaskExecution).mockResolvedValue(waiting)
+
+    await store.controlInspection('task-1', 'PAUSE')
+
+    expect(resourcesApi.pauseTask).toHaveBeenCalledWith('task-1', expect.any(String))
+    expect(store.statusOf(task)).toBe('PAUSING')
   })
 })

@@ -19,13 +19,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class RobotEventIngestionService {
   private final TaskExecutionRepository executions;
   private final RobotExecutionEventRepository eventRepository;
+  private final TaskExecutionControlCommandRepository controlCommands;
   private final RouteRevisionRepository revisions;
   private final ObjectMapper objectMapper;
 
   public RobotEventIngestionService(TaskExecutionRepository executions, RobotExecutionEventRepository eventRepository,
+      TaskExecutionControlCommandRepository controlCommands,
       RouteRevisionRepository revisions, ObjectMapper objectMapper) {
     this.executions = executions;
     this.eventRepository = eventRepository;
+    this.controlCommands = controlCommands;
     this.revisions = revisions;
     this.objectMapper = objectMapper;
   }
@@ -99,6 +102,19 @@ public class RobotEventIngestionService {
       return;
     }
 
+    TaskExecutionControlCommandEntity control = controlFor(execution, event);
+    if (control != null) {
+      if ("command_accepted".equals(type)) {
+        acknowledged(control, audit);
+        return;
+      }
+      if ("command_rejected".equals(type) || "command_failed".equals(type)) {
+        failedControl(execution, control, event, audit);
+        return;
+      }
+      if (confirmedControl(execution, control, type, audit)) return;
+    }
+
     boolean starting = TaskExecutionStatus.STARTING.name().equals(status)
       || (TaskExecutionStatus.RECOVERING.name().equals(status) && TaskExecutionStatus.STARTING.name().equals(execution.getRecoveryStatus()));
     boolean running = TaskExecutionStatus.RUNNING.name().equals(status)
@@ -162,9 +178,89 @@ public class RobotEventIngestionService {
       String executionId, String deploymentId, String type, long sequence) {
     if (!"1.0".equals(event.text("schema_version")) || sequence <= 0 || !nonBlank(type)
         || !Objects.equals(execution.getRobotId(), robotId) || !Objects.equals(execution.getExecutionId(), executionId)
-        || !Objects.equals(execution.getDeploymentId(), deploymentId) || !Objects.equals(execution.getStartRequestId(), event.text("request_id"))
-        || !nonBlank(event.text("command_id"))) return false;
-    return !nonBlank(execution.getStartCommandId()) || Objects.equals(execution.getStartCommandId(), event.text("command_id"));
+        || !Objects.equals(execution.getDeploymentId(), deploymentId) || !nonBlank(event.text("command_id"))) return false;
+    boolean startCommand = Objects.equals(execution.getStartRequestId(), event.text("request_id"))
+      && (!nonBlank(execution.getStartCommandId()) || Objects.equals(execution.getStartCommandId(), event.text("command_id")));
+    return startCommand || controlFor(execution, event) != null;
+  }
+
+  private TaskExecutionControlCommandEntity controlFor(TaskExecutionEntity execution, RobotBridgeExecutionEvent event) {
+    TaskExecutionControlCommandEntity command = controlCommands.findByExecutionIdAndRequestId(execution.getExecutionId(), event.text("request_id")).orElse(null);
+    if (command == null || !Objects.equals(command.getRobotId(), execution.getRobotId()) || !Objects.equals(command.getDeploymentId(), execution.getDeploymentId())) return null;
+    return !nonBlank(command.getCommandId()) || Objects.equals(command.getCommandId(), event.text("command_id")) ? command : null;
+  }
+
+  private void acknowledged(TaskExecutionControlCommandEntity control, RobotExecutionEventEntity audit) {
+    if (!TaskExecutionControlCommandStatus.CONFIRMED.name().equals(control.getStatus()) && !TaskExecutionControlCommandStatus.FAILED.name().equals(control.getStatus())) {
+      control.setStatus(TaskExecutionControlCommandStatus.ACKED.name());
+      control.setAckedAt(Instant.now().toString());
+      control.setResultCode("ROBOT_ACKED");
+      control.setResultMessage("机器人已持久化命令，等待真实 ROS 事件确认");
+      control.setUpdatedAt(Instant.now().toString());
+      controlCommands.save(control);
+    }
+    audit.setProcessingResult("ACKED");
+    eventRepository.save(audit);
+  }
+
+  private boolean confirmedControl(TaskExecutionEntity execution, TaskExecutionControlCommandEntity control, String eventType,
+      RobotExecutionEventEntity audit) {
+    TaskExecutionStatus confirmed = switch (control.getAction()) {
+      case "PAUSE" -> "route_paused".equals(eventType) ? TaskExecutionStatus.PAUSED : null;
+      case "RESUME" -> "route_resumed".equals(eventType) ? TaskExecutionStatus.RUNNING : null;
+      case "TAKEOVER" -> "manual_takeover".equals(eventType) ? TaskExecutionStatus.MANUAL_TAKEOVER : null;
+      case "CANCEL" -> "route_canceled".equals(eventType) ? TaskExecutionStatus.CANCELLED : null;
+      default -> null;
+    };
+    if (confirmed == null) return false;
+    if (!waitingStatus(control.getAction()).equals(execution.getStatus())) {
+      audit.setProcessingResult("INVALID_TRANSITION");
+      audit.setConflictCode("EVENT_STATE_CONFLICT");
+      eventRepository.save(audit);
+      return true;
+    }
+    String now = Instant.now().toString();
+    execution.setStatus(confirmed.name());
+    execution.setRecoveryStatus(null);
+    control.setStatus(TaskExecutionControlCommandStatus.CONFIRMED.name());
+    control.setConfirmedAt(now);
+    control.setRecoveryAction("REAL_EVENT_CONFIRMED");
+    control.setResultCode("CONTROL_APPLIED");
+    control.setResultMessage("已由机器人真实事件确认");
+    control.setUpdatedAt(now);
+    controlCommands.save(control);
+    audit.setProcessingResult("APPLIED");
+    eventRepository.save(audit);
+    return true;
+  }
+
+  private void failedControl(TaskExecutionEntity execution, TaskExecutionControlCommandEntity control, RobotBridgeExecutionEvent event,
+      RobotExecutionEventEntity audit) {
+    String now = Instant.now().toString();
+    control.setStatus(TaskExecutionControlCommandStatus.FAILED.name());
+    control.setResultCode(safeCode(firstNonBlank(event.text("error_code"), "ROBOT_COMMAND_REJECTED"), "ROBOT_COMMAND_REJECTED"));
+    control.setResultMessage(safeMessage(firstNonBlank(event.text("error_message"), event.text("error"), event.text("reason")), "机器人拒绝控制命令"));
+    control.setRecoveryAction("RESTORE_PREVIOUS_STATUS");
+    control.setUpdatedAt(now);
+    controlCommands.save(control);
+    if (waitingStatus(control.getAction()).equals(execution.getStatus())) {
+      execution.setStatus(control.getPriorExecutionStatus());
+      execution.setRecoveryStatus(null);
+    }
+    execution.setLastErrorCode(control.getResultCode());
+    execution.setLastErrorMessage(control.getResultMessage());
+    audit.setProcessingResult("CONTROL_FAILED");
+    eventRepository.save(audit);
+  }
+
+  private static String waitingStatus(String action) {
+    return switch (action) {
+      case "PAUSE" -> TaskExecutionStatus.PAUSING.name();
+      case "RESUME" -> TaskExecutionStatus.RESUMING.name();
+      case "TAKEOVER" -> TaskExecutionStatus.TAKEOVER_PENDING.name();
+      case "CANCEL" -> TaskExecutionStatus.CANCELLING.name();
+      default -> "";
+    };
   }
 
   private RobotExecutionEventEntity audit(RobotBridgeExecutionEvent input, String robotId, String executionId, String deploymentId,

@@ -17,11 +17,14 @@ public class RobotBridgeHeartbeatSyncService {
   private final RobotBridgeHeartbeatClient client;
   private final RobotHeartbeatService heartbeatService;
   private final DataStoreService dataStore;
+  private final RobotBridgeIdMapper idMapper;
 
-  public RobotBridgeHeartbeatSyncService(RobotBridgeHeartbeatClient client, RobotHeartbeatService heartbeatService, DataStoreService dataStore) {
+  public RobotBridgeHeartbeatSyncService(RobotBridgeHeartbeatClient client, RobotHeartbeatService heartbeatService, DataStoreService dataStore,
+      RobotBridgeIdMapper idMapper) {
     this.client = client;
     this.heartbeatService = heartbeatService;
     this.dataStore = dataStore;
+    this.idMapper = idMapper;
   }
 
   @Scheduled(fixedDelayString = "${app.robot.heartbeat-sync-interval-ms:3000}")
@@ -37,12 +40,15 @@ public class RobotBridgeHeartbeatSyncService {
     List<Map<String, Object>> identities = dataStore.list(DataCategory.ROBOT);
     for (Map<String, Object> identity : identities) {
       String robotId = String.valueOf(identity.get("id"));
-      if (!configuredRobotIds.contains(robotId)) {
+      String bridgeRobotId = idMapper.toBridgeId(robotId);
+      if (!configuredRobotIds.contains(bridgeRobotId)) {
         heartbeatService.markBridgeUnconfigured(robotId, now);
         continue;
       }
       try {
-        heartbeatService.applyBridgeSnapshot(client.robot(robotId), now);
+        BridgeRobotSnapshot snapshot = client.robot(bridgeRobotId);
+        heartbeatService.applyBridgeSnapshot(new BridgeRobotSnapshot(robotId, snapshot.lastHeartbeatAt(), snapshot.protocolVersion(),
+          snapshot.bootId(), snapshot.state(), snapshot.softwareVersion(), snapshot.acceptedEventSequence(), snapshot.health()), now);
       } catch (BridgeRobotClientException ex) {
         heartbeatService.markBridgeUnreachable(robotId, now);
       }

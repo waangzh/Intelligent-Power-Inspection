@@ -24,13 +24,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RobotEventIngestionServiceTests {
   @Mock private TaskExecutionRepository executions;
   @Mock private RobotExecutionEventRepository events;
+  @Mock private TaskExecutionControlCommandRepository controls;
   @Mock private RouteRevisionRepository revisions;
   private RobotEventIngestionService service;
   private TaskExecutionEntity execution;
 
   @BeforeEach
   void setUp() {
-    service = new RobotEventIngestionService(executions, events, revisions, new ObjectMapper());
+    service = new RobotEventIngestionService(executions, events, controls, revisions, new ObjectMapper());
     execution = execution(TaskExecutionStatus.STARTING.name());
     when(executions.findByExecutionId("exec-1")).thenReturn(Optional.of(execution));
     when(events.findByRobotIdAndSequence(anyString(), anyLong())).thenReturn(Optional.empty());
@@ -88,6 +89,33 @@ class RobotEventIngestionServiceTests {
     assertEquals("EVENT_OWNERSHIP_CONFLICT", execution.getLastErrorCode());
   }
 
+  @Test
+  void controlAckDoesNotChangeExecutionUntilTheMatchingRealEventArrives() {
+    execution.setStatus(TaskExecutionStatus.PAUSING.name());
+    TaskExecutionControlCommandEntity control = control("PAUSE", TaskExecutionStatus.RUNNING.name());
+    when(controls.findByExecutionIdAndRequestId("exec-1", "control-1")).thenReturn(Optional.of(control));
+
+    service.ingest("exec-1", controlEvent(1, "command_accepted"));
+    assertEquals(TaskExecutionStatus.PAUSING.name(), execution.getStatus());
+    assertEquals(TaskExecutionControlCommandStatus.ACKED.name(), control.getStatus());
+
+    service.ingest("exec-1", controlEvent(2, "route_paused"));
+    assertEquals(TaskExecutionStatus.PAUSED.name(), execution.getStatus());
+    assertEquals(TaskExecutionControlCommandStatus.CONFIRMED.name(), control.getStatus());
+  }
+
+  @Test
+  void canceledExecutionCannotBeRolledBackByLateControlEvent() {
+    execution.setStatus(TaskExecutionStatus.CANCELLED.name());
+    execution.setLastRobotSequence(2);
+    TaskExecutionControlCommandEntity control = control("CANCEL", TaskExecutionStatus.RUNNING.name());
+    when(controls.findByExecutionIdAndRequestId("exec-1", "control-1")).thenReturn(Optional.of(control));
+
+    service.ingest("exec-1", controlEvent(3, "route_resumed"));
+
+    assertEquals(TaskExecutionStatus.CANCELLED.name(), execution.getStatus());
+  }
+
   private static TaskExecutionEntity execution(String status) {
     TaskExecutionEntity item = new TaskExecutionEntity();
     item.setTaskId("task-1"); item.setExecutionId("exec-1"); item.setRobotId("robot-1"); item.setDeploymentId("dep-1");
@@ -107,6 +135,20 @@ class RobotEventIngestionServiceTests {
   private static RobotBridgeExecutionEvent failedEvent(long sequence) {
     Map<String, Object> fields = new LinkedHashMap<>(event(sequence, "route_failed", Map.of()).fields());
     fields.put("error_code", "MAP_HASH_MISMATCH"); fields.put("error_message", "地图哈希不一致");
+    return new RobotBridgeExecutionEvent(fields);
+  }
+
+  private static TaskExecutionControlCommandEntity control(String action, String priorStatus) {
+    TaskExecutionControlCommandEntity item = new TaskExecutionControlCommandEntity();
+    item.setId("control-1"); item.setExecutionId("exec-1"); item.setRobotId("robot-1"); item.setDeploymentId("dep-1");
+    item.setAction(action); item.setRequestId("control-1"); item.setCommandId("control-command-1"); item.setPriorExecutionStatus(priorStatus);
+    item.setStatus(TaskExecutionControlCommandStatus.QUEUED.name()); item.setRequestedAt("2026-07-14T00:00:00Z"); item.setUpdatedAt("2026-07-14T00:00:00Z");
+    return item;
+  }
+
+  private static RobotBridgeExecutionEvent controlEvent(long sequence, String event) {
+    Map<String, Object> fields = new LinkedHashMap<>(event(sequence, event, Map.of()).fields());
+    fields.put("request_id", "control-1"); fields.put("command_id", "control-command-1");
     return new RobotBridgeExecutionEvent(fields);
   }
 }

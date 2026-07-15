@@ -39,7 +39,11 @@ export type TaskStatus =
   | 'DISPATCHED'
   | 'STARTING'
   | 'RUNNING'
+  | 'PAUSING'
   | 'PAUSED'
+  | 'RESUMING'
+  | 'CANCELLING'
+  | 'TAKEOVER_PENDING'
   | 'MANUAL_TAKEOVER'
   | 'COMPLETED'
   | 'CANCELLED'
@@ -53,7 +57,11 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   DISPATCHED: '已下发',
   STARTING: '启动中',
   RUNNING: '执行中',
+  PAUSING: '暂停请求中',
   PAUSED: '已暂停',
+  RESUMING: '恢复请求中',
+  CANCELLING: '取消请求中',
+  TAKEOVER_PENDING: '人工接管请求中',
   MANUAL_TAKEOVER: '人工接管',
   COMPLETED: '已完成',
   CANCELLED: '已取消',
@@ -303,8 +311,24 @@ export interface TaskExecution {
   lastErrorCode?: string | null
   lastErrorMessage?: string | null
   manualReconciliationRequired: boolean
+  latestControl?: TaskExecutionControl | null
   createdAt: string
   updatedAt: string
+}
+
+export interface TaskExecutionControl {
+  action: 'PAUSE' | 'RESUME' | 'TAKEOVER' | 'CANCEL'
+  requestId: string
+  status: 'PENDING_SEND' | 'SENDING' | 'QUEUED' | 'ACKED' | 'RECONCILING' | 'CONFIRMED' | 'FAILED'
+  commandId?: string | null
+  takeoverReason?: string | null
+  requestedBy?: string | null
+  requestedAt?: string | null
+  ackedAt?: string | null
+  confirmedAt?: string | null
+  recoveryAction?: string | null
+  resultCode?: string | null
+  resultMessage?: string | null
 }
 
 export interface TaskStartEligibility extends TaskExecution {

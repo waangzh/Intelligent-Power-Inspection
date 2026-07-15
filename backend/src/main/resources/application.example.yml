@@ -56,6 +56,11 @@ app:
     bridge-read-timeout-seconds: ${ROBOT_BRIDGE_READ_TIMEOUT_SECONDS:10}
     heartbeat-sync-interval-ms: ${ROBOT_HEARTBEAT_SYNC_INTERVAL_MS:3000}
     heartbeat-timeout-seconds: ${ROBOT_HEARTBEAT_TIMEOUT_SECONDS:12}
+    # 平台 ID 与设备 ID 不一致时在此映射；平台数据库仍保留 robot_001。
+    bridge-robot-id-mappings:
+      robot_001: ${APP_ROBOT_BRIDGE_ID_ROBOT_001:robot-001}
+    # 设置为 Robot Bridge 的 PLATFORM_BEARER_TOKEN，使部署回读响应使用 Bridge ID。
+    bridge-platform-token: ${ROBOT_BRIDGE_PLATFORM_TOKEN:}
   route-deployment:
     worker-delay-ms: ${ROUTE_DEPLOYMENT_WORKER_DELAY_MS:3000}
     worker-initial-delay-ms: ${ROUTE_DEPLOYMENT_WORKER_INITIAL_DELAY_MS:5000}

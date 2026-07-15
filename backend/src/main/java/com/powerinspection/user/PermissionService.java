@@ -34,6 +34,7 @@ public class PermissionService {
       Permission.TASK_CREATE,
       Permission.TASK_DISPATCH,
       Permission.TASK_CONTROL,
+      Permission.TASK_TAKEOVER,
       Permission.SITE_EDIT,
       Permission.ROUTE_EDIT,
       Permission.ALARM_ACK,

@@ -5,6 +5,7 @@ export type Permission =
   | 'task:create'
   | 'task:dispatch'
   | 'task:control'
+  | 'task:takeover'
   | 'task:estop'
   | 'site:edit'
   | 'route:edit'
@@ -54,6 +55,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'task:create',
     'task:dispatch',
     'task:control',
+    'task:takeover',
     'site:edit',
     'route:edit',
     'alarm:ack',

@@ -84,10 +84,14 @@ export const resourcesApi = {
   getTaskStartEligibility: (id: string) => http.get<TaskStartEligibility>(`/tasks/${encodeURIComponent(id)}/start-eligibility`),
   startTask: (id: string, idempotencyKey: string) =>
     http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/start`, undefined, { 'Idempotency-Key': idempotencyKey }),
-  pauseTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/pause`),
-  resumeTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/resume`),
-  takeoverTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/takeover`),
-  cancelTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/cancel`),
+  pauseTask: (id: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/pause`, undefined, { 'Idempotency-Key': idempotencyKey }),
+  resumeTask: (id: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/resume`, undefined, { 'Idempotency-Key': idempotencyKey }),
+  takeoverTask: (id: string, reason: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/takeover`, { reason }, { 'Idempotency-Key': idempotencyKey }),
+  cancelTask: (id: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/cancel`, undefined, { 'Idempotency-Key': idempotencyKey }),
   taskEvents: (id: string) => http.get<TaskEvent[]>(`/tasks/${id}/events`),
   listRecords: () => http.get<InspectionRecord[]>('/records'),
   exportRecords: () => http.post<Blob>('/records/export'),

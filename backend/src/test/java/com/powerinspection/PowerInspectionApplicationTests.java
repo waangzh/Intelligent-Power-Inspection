@@ -141,7 +141,7 @@ class PowerInspectionApplicationTests {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("DISPATCHED"));
 
-    mockMvc.perform(post("/api/v1/tasks/task_test_001/cancel").header("Authorization", bearer(token)))
+    mockMvc.perform(post("/api/v1/tasks/task_test_001/cancel").header("Authorization", bearer(token)).header("Idempotency-Key", "cancel-task-test-001"))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("CANCELLED"));
 

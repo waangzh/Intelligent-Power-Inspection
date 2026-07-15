@@ -20,11 +20,14 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "app.robot", name = "mode", havingValue = "bridge")
 public class TaskExecutionWorker {
   private final TaskExecutionLifecycleService lifecycle;
+  private final TaskExecutionControlService controls;
   private final RobotEventIngestionService ingestion;
   private final RobotBridgeExecutionClient bridge;
 
-  public TaskExecutionWorker(TaskExecutionLifecycleService lifecycle, RobotEventIngestionService ingestion, RobotBridgeExecutionClient bridge) {
+  public TaskExecutionWorker(TaskExecutionLifecycleService lifecycle, TaskExecutionControlService controls,
+      RobotEventIngestionService ingestion, RobotBridgeExecutionClient bridge) {
     this.lifecycle = lifecycle;
+    this.controls = controls;
     this.ingestion = ingestion;
     this.bridge = bridge;
   }
@@ -47,7 +50,10 @@ public class TaskExecutionWorker {
   private void synchronize(String executionId) {
     TaskExecutionEntity execution = lifecycle.findByExecutionId(executionId);
     if (execution == null || TaskExecutionStatus.CREATED.name().equals(execution.getStatus())) return;
-    if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus())) deliverStart(execution);
+    if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus()) || controls.needsStartDelivery(executionId)) deliverStart(execution);
+    execution = lifecycle.findByExecutionId(executionId);
+    if (execution == null || TaskExecutionStatus.TERMINAL.contains(execution.getStatus())) return;
+    deliverControl(execution);
     execution = lifecycle.findByExecutionId(executionId);
     if (execution == null || TaskExecutionStatus.TERMINAL.contains(execution.getStatus())) return;
     boolean recovering = TaskExecutionStatus.DISCONNECTED.name().equals(execution.getStatus());
@@ -69,6 +75,26 @@ public class TaskExecutionWorker {
       if (ex.getDisposition() == RobotBridgeExecutionException.Disposition.EXPLICIT_FAILURE) {
         lifecycle.startFailed(command.executionId(), ex.getErrorCode(), ex.getMessage(), Instant.now());
       } else {
+        lifecycle.disconnected(command.executionId(), ex.getErrorCode(), ex.getMessage(), Instant.now());
+      }
+    }
+  }
+
+  private void deliverControl(TaskExecutionEntity execution) {
+    TaskExecutionControlService.ControlCommand command = controls.claimNext(execution.getExecutionId(), Instant.now());
+    if (command == null) return;
+    try {
+      RobotBridgeExecutionStartResult result = bridge.control(command.executionId(), command.action().toLowerCase(), command.bridgePayload());
+      if (!result.accepted() || !Objects.equals(command.executionId(), result.executionId()) || !"QUEUED".equals(result.state())) {
+        controls.explicitFailure(command, "INVALID_BRIDGE_PAYLOAD", "Bridge 控制回执与本地执行身份不一致", Instant.now());
+        return;
+      }
+      controls.queued(command, result.commandId(), Instant.now());
+    } catch (RobotBridgeExecutionException ex) {
+      if (ex.getDisposition() == RobotBridgeExecutionException.Disposition.EXPLICIT_FAILURE) {
+        controls.explicitFailure(command, ex.getErrorCode(), ex.getMessage(), Instant.now());
+      } else {
+        controls.reconcile(command, ex.getErrorCode(), ex.getMessage(), Instant.now());
         lifecycle.disconnected(command.executionId(), ex.getErrorCode(), ex.getMessage(), Instant.now());
       }
     }
