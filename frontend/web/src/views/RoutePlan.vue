@@ -137,6 +137,12 @@
               <el-table-column label="最近尝试" min-width="164"><template #default="{ row }">{{ formatTime(row.lastAttemptAt) }}<small v-if="row.attemptCount">第 {{ row.attemptCount }} 次</small></template></el-table-column>
               <el-table-column label="路线 / 地图哈希" min-width="205"><template #default="{ row }"><code>{{ shortHash(row.routeContentSha256) }}</code><code>{{ shortHash(row.mapImageSha256) }}</code></template></el-table-column>
               <el-table-column label="错误摘要" min-width="210"><template #default="{ row }"><span v-if="row.errorCode" class="deployment-error">{{ row.errorCode }} · {{ row.errorMessage }}</span><span v-else>-</span></template></el-table-column>
+              <el-table-column v-if="can('task:dispatch')" label="操作" width="106" fixed="right">
+                <template #default="{ row }">
+                  <el-button v-if="canManualReconcile(row)" link type="warning" size="small" :loading="reconcilingDeploymentId === row.id" @click="reconcileDeployment(row)">重新对账</el-button>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
             </el-table>
           </template>
         </el-card>
@@ -197,6 +203,7 @@ const selectedDeploymentRobotId = ref('')
 const deploymentLoading = ref(false)
 const creatingDeployment = ref(false)
 const deploymentError = ref('')
+const reconcilingDeploymentId = ref('')
 
 const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
 const currentRoute = computed<Route | null>(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
@@ -495,6 +502,36 @@ async function createDeployment() {
     ElMessage.error(deploymentError.value)
   } finally {
     creatingDeployment.value = false
+  }
+}
+
+function canManualReconcile(deployment: RouteDeployment) {
+  return deployment.state === 'UNKNOWN' && !deployment.nextReconcileAt
+}
+
+async function reconcileDeployment(deployment: RouteDeployment) {
+  if (!canManualReconcile(deployment) || reconcilingDeploymentId.value) return
+  try {
+    await ElMessageBox.confirm(
+      '将使用原部署 ID 再次向 Bridge 对账。不会删除部署记录，也不会跳过路线和地图哈希校验。',
+      '重新对账',
+      { type: 'warning', confirmButtonText: '开始对账', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+
+  reconcilingDeploymentId.value = deployment.id
+  deploymentError.value = ''
+  try {
+    const updated = await resourcesApi.reconcileRouteDeployment(deployment.id)
+    deployments.value = deployments.value.map((item) => item.id === updated.id ? updated : item)
+    ElMessage.success('已重新安排对账，正在由后台同步到 Bridge')
+  } catch (error) {
+    deploymentError.value = errorMessage(error, '重新对账失败')
+    ElMessage.error(deploymentError.value)
+  } finally {
+    reconcilingDeploymentId.value = ''
   }
 }
 

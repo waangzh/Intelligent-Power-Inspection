@@ -52,7 +52,9 @@ public class RobotBridgeHeartbeatClient {
     Object health = body.get("health");
     if (!(health instanceof Map<?, ?> healthMap)) throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD);
     Map<String, Object> normalizedHealth = new LinkedHashMap<>();
-    healthMap.forEach((key, value) -> normalizedHealth.put(String.valueOf(key), value));
+    healthMap.forEach((key, value) -> {
+      if (key != null && value != null) normalizedHealth.put(String.valueOf(key), value);
+    });
     return new BridgeRobotSnapshot(robotId, lastHeartbeatAt, text(body.get("protocolVersion")), text(body.get("bootId")), text(body.get("state")),
       text(body.get("softwareVersion")), number(body.get("acceptedEventSequence")), Map.copyOf(normalizedHealth));
   }

@@ -1,6 +1,7 @@
 package com.powerinspection.mapasset;
 
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.robot.RobotBridgeIdMapper;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -37,11 +39,14 @@ public class MapAssetController {
   private final MapAssetService mapAssetService;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
+  private final RobotBridgeIdMapper robotBridgeIdMapper;
 
-  public MapAssetController(MapAssetService mapAssetService, PermissionService permissionService, CurrentUser currentUser) {
+  public MapAssetController(MapAssetService mapAssetService, PermissionService permissionService, CurrentUser currentUser,
+      RobotBridgeIdMapper robotBridgeIdMapper) {
     this.mapAssetService = mapAssetService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
+    this.robotBridgeIdMapper = robotBridgeIdMapper;
   }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -59,18 +64,24 @@ public class MapAssetController {
   }
 
   @GetMapping("/{id}")
-  public ApiResponse<Map<String, Object>> metadata(@PathVariable String id) {
+  public ApiResponse<Map<String, Object>> metadata(@PathVariable String id,
+      @RequestHeader(value = "Authorization", required = false) String authorization) {
+    requireReadAccess(authorization);
     return ApiResponse.ok(mapAssetService.get(id));
   }
 
   @GetMapping("/{id}/yaml")
-  public ResponseEntity<Resource> yaml(@PathVariable String id) throws IOException {
+  public ResponseEntity<Resource> yaml(@PathVariable String id,
+      @RequestHeader(value = "Authorization", required = false) String authorization) throws IOException {
+    requireReadAccess(authorization);
     Map<String, Object> asset = mapAssetService.get(id);
     return fileResponse(mapAssetService.yamlPath(id), String.valueOf(asset.get("yamlName")), String.valueOf(asset.get("yamlSha256")), YAML_MEDIA_TYPE);
   }
 
   @GetMapping("/{id}/pgm")
-  public ResponseEntity<Resource> pgm(@PathVariable String id) throws IOException {
+  public ResponseEntity<Resource> pgm(@PathVariable String id,
+      @RequestHeader(value = "Authorization", required = false) String authorization) throws IOException {
+    requireReadAccess(authorization);
     Map<String, Object> asset = mapAssetService.get(id);
     return fileResponse(mapAssetService.pgmPath(id), String.valueOf(asset.get("pgmName")), String.valueOf(asset.get("pgmSha256")), PGM_MEDIA_TYPE);
   }
@@ -92,5 +103,9 @@ public class MapAssetController {
       .eTag('"' + sha256 + '"')
       .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(filename, StandardCharsets.UTF_8).build().toString())
       .body(resource);
+  }
+
+  private void requireReadAccess(String authorization) {
+    if (!robotBridgeIdMapper.isBridgePlatformRequest(authorization)) currentUser.get();
   }
 }

@@ -20,8 +20,9 @@ import org.springframework.web.client.RestClientResponseException;
 public class RobotBridgeDeploymentClient {
   private final RestClient restClient;
   private final ObjectMapper objectMapper;
+  private final RobotBridgeIdMapper idMapper;
 
-  public RobotBridgeDeploymentClient(RobotProperties properties, ObjectMapper objectMapper) {
+  public RobotBridgeDeploymentClient(RobotProperties properties, ObjectMapper objectMapper, RobotBridgeIdMapper idMapper) {
     if (!StringUtils.hasText(properties.getBridgeAdminToken())) {
       throw new IllegalStateException("app.robot.bridge-admin-token is required in bridge mode");
     }
@@ -37,6 +38,7 @@ public class RobotBridgeDeploymentClient {
       .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getBridgeAdminToken())
       .build();
     this.objectMapper = objectMapper;
+    this.idMapper = idMapper;
   }
 
   @SuppressWarnings("unchecked")
@@ -48,7 +50,7 @@ public class RobotBridgeDeploymentClient {
         .body(Map.class);
       if (body == null) throw RobotBridgeDeploymentException.failed("INVALID_BRIDGE_PAYLOAD", "Bridge 未返回部署结果");
       return new RobotBridgeDeploymentResult(
-        text(body.get("deploymentId")), text(body.get("state")), text(body.get("schemaVersion")), text(body.get("robotId")),
+        text(body.get("deploymentId")), text(body.get("state")), text(body.get("schemaVersion")), idMapper.toPlatformId(text(body.get("robotId"))),
         text(body.get("routeRevisionId")), text(body.get("routeRevisionContentSha256")), text(body.get("routePayloadSha256")),
         text(body.get("routeContentSha256")), text(body.get("mapAssetId")), text(body.get("mapImageSha256")),
         text(body.get("yamlName")), text(body.get("pgmName"))

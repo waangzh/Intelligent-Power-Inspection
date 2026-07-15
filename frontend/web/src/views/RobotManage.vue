@@ -33,8 +33,8 @@
           <el-tag :type="statusType(robot.status)" size="small">{{ platformStatusLabel(robot.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="Bridge 连接">
-          <el-tag :type="bridgeReachable(robot) ? 'success' : 'danger'" size="small">
-            {{ bridgeReachable(robot) ? '已连接' : '未连接' }}
+          <el-tag :type="heartbeatTagType" size="small">
+            {{ heartbeatConnectionLabel }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="巡逻状态">{{ patrolStateLabel(robot.telemetry?.patrolState) }}</el-descriptions-item>
@@ -53,8 +53,9 @@
           </span>
           <span v-else>-</span>
         </el-descriptions-item>
-        <el-descriptions-item label="Bridge 地址" :span="2">{{ robot.telemetry?.bridgeBaseUrl || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="最近同步" :span="2">{{ robot.telemetry?.bridgeSyncedAt ? fmt(robot.telemetry.bridgeSyncedAt) : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="心跳协议" :span="2">{{ heartbeatStatus?.protocolVersion || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="最近心跳" :span="2">{{ fmt(heartbeatStatus?.lastHeartbeatAt) }}</el-descriptions-item>
+        <el-descriptions-item label="Bridge 诊断" :span="2">{{ heartbeatStatus?.diagnosticSummary || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
 
@@ -91,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
@@ -99,14 +100,15 @@ import { resourcesApi } from '@/api/resources'
 import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
 import type { Robot } from '@/types'
+import type { RobotHeartbeatStatus } from '@/types/robotHeartbeat'
 import {
-  bridgeReachable,
   mappingStatusLabel,
   nav2StatusLabel,
   patrolStateLabel,
   PLATFORM_STATUS_LABELS,
   sensorFreshness,
 } from '@/utils/robotStatus'
+import { connectionLabel, heartbeatVisual } from '@/utils/robotHeartbeatStatus'
 
 const robotStore = useRobotStore()
 const siteStore = useSiteStore()
@@ -116,6 +118,9 @@ const selectedRobotId = ref('')
 const bindingDialogVisible = ref(false)
 const bindingSaving = ref(false)
 const bindingSiteId = ref('')
+const heartbeatStatus = ref<RobotHeartbeatStatus>()
+const heartbeatLoading = ref(false)
+const heartbeatLoadFailed = ref(false)
 
 const robot = computed(() => robotStore.getRobotById(selectedRobotId.value))
 
@@ -127,12 +132,29 @@ watch(
   { immediate: true },
 )
 
+let heartbeatRequestId = 0
+
+watch(selectedRobotId, (robotId) => {
+  void loadHeartbeatStatus(robotId)
+}, { immediate: true })
+
+const heartbeatTagType = computed(() => {
+  if (heartbeatStatus.value) return heartbeatVisual(heartbeatStatus.value)
+  return heartbeatLoadFailed.value ? 'danger' : 'info'
+})
+
+const heartbeatConnectionLabel = computed(() => {
+  if (heartbeatLoading.value) return '查询中'
+  if (heartbeatLoadFailed.value || !heartbeatStatus.value) return '状态未知'
+  return heartbeatStatus.value.online ? '已连接' : connectionLabel(heartbeatStatus.value.connectionStatus)
+})
+
 const statusStats = computed(() => {
   const item = robot.value
   const t = item?.telemetry
   return [
     { label: '设备数', value: robotStore.robots.length },
-    { label: 'Bridge', value: item && bridgeReachable(item) ? '在线' : '离线' },
+    { label: 'Bridge', value: item ? heartbeatConnectionLabel.value : '-' },
     { label: '巡逻', value: patrolStateLabel(t?.patrolState) },
     { label: 'Nav2', value: nav2StatusLabel(t?.nav2Status) },
   ]
@@ -149,6 +171,30 @@ function statusType(s: Robot['status']) {
 function platformStatusLabel(s: Robot['status']) {
   return PLATFORM_STATUS_LABELS[s]
 }
+
+async function loadHeartbeatStatus(robotId: string) {
+  const requestId = ++heartbeatRequestId
+  heartbeatStatus.value = undefined
+  heartbeatLoadFailed.value = false
+  if (!robotId) return
+  heartbeatLoading.value = true
+  try {
+    const status = await resourcesApi.getRobotHeartbeatStatus(robotId)
+    if (requestId === heartbeatRequestId) heartbeatStatus.value = status
+  } catch {
+    if (requestId === heartbeatRequestId) heartbeatLoadFailed.value = true
+  } finally {
+    if (requestId === heartbeatRequestId) heartbeatLoading.value = false
+  }
+}
+
+let heartbeatPollTimer: number | undefined
+onMounted(() => {
+  heartbeatPollTimer = window.setInterval(() => void loadHeartbeatStatus(selectedRobotId.value), 15_000)
+})
+onUnmounted(() => {
+  if (heartbeatPollTimer) window.clearInterval(heartbeatPollTimer)
+})
 
 function openBindingDialog() {
   if (!robot.value) return
@@ -191,8 +237,10 @@ async function saveSiteBinding() {
   }
 }
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleString('zh-CN')
+function fmt(iso?: string | null) {
+  if (!iso) return '-'
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false })
 }
 </script>
 

@@ -17,5 +17,9 @@ public interface TaskExecutionRepository extends JpaRepository<TaskExecutionEnti
   @Query("select e from TaskExecutionEntity e where e.taskId = :taskId")
   Optional<TaskExecutionEntity> findByTaskIdForStart(@Param("taskId") String taskId);
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select e from TaskExecutionEntity e where e.executionId = :executionId")
+  Optional<TaskExecutionEntity> findByExecutionIdForUpdate(@Param("executionId") String executionId);
+
   List<TaskExecutionEntity> findByStatusIn(Collection<String> statuses);
 }

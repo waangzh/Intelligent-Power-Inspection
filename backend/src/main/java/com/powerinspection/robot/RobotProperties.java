@@ -1,5 +1,7 @@
 package com.powerinspection.robot;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.robot")
@@ -19,6 +21,10 @@ public class RobotProperties {
   private int bridgeReadTimeoutSeconds = 10;
   private int heartbeatSyncIntervalMs = 3000;
   private int heartbeatTimeoutSeconds = 12;
+  /** 平台 robotId 到 Bridge/Jetson robotId 的显式映射。 */
+  private Map<String, String> bridgeRobotIdMappings = new LinkedHashMap<>();
+  /** 与 Bridge 的 PLATFORM_BEARER_TOKEN 相同，仅用于识别 Bridge 回读部署的请求。 */
+  private String bridgePlatformToken = "";
 
   public String getMode() {
     return mode;
@@ -96,4 +102,10 @@ public class RobotProperties {
   public void setHeartbeatSyncIntervalMs(int heartbeatSyncIntervalMs) { this.heartbeatSyncIntervalMs = heartbeatSyncIntervalMs; }
   public int getHeartbeatTimeoutSeconds() { return heartbeatTimeoutSeconds; }
   public void setHeartbeatTimeoutSeconds(int heartbeatTimeoutSeconds) { this.heartbeatTimeoutSeconds = heartbeatTimeoutSeconds; }
+  public Map<String, String> getBridgeRobotIdMappings() { return bridgeRobotIdMappings; }
+  public void setBridgeRobotIdMappings(Map<String, String> bridgeRobotIdMappings) {
+    this.bridgeRobotIdMappings = bridgeRobotIdMappings == null ? new LinkedHashMap<>() : new LinkedHashMap<>(bridgeRobotIdMappings);
+  }
+  public String getBridgePlatformToken() { return bridgePlatformToken; }
+  public void setBridgePlatformToken(String bridgePlatformToken) { this.bridgePlatformToken = bridgePlatformToken; }
 }

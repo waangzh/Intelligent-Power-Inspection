@@ -23,13 +23,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class TaskController {
   private final TaskService taskService;
   private final TaskExecutionLifecycleService executionLifecycleService;
+  private final TaskExecutionControlService executionControlService;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public TaskController(TaskService taskService, TaskExecutionLifecycleService executionLifecycleService,
+  public TaskController(TaskService taskService, TaskExecutionLifecycleService executionLifecycleService, TaskExecutionControlService executionControlService,
       PermissionService permissionService, CurrentUser currentUser) {
     this.taskService = taskService;
     this.executionLifecycleService = executionLifecycleService;
+    this.executionControlService = executionControlService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
   }
@@ -97,32 +99,45 @@ public class TaskController {
   }
 
   @PostMapping("/{id}/pause")
-  public ApiResponse<Map<String, Object>> pause(@PathVariable String id) {
+  public ResponseEntity<ApiResponse<Map<String, Object>>> pause(@PathVariable String id,
+      @RequestHeader("Idempotency-Key") String idempotencyKey) {
     permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
-    return ApiResponse.ok(taskService.pause(id));
+    if (!executionLifecycleService.hasExecution(id)) return ResponseEntity.ok(ApiResponse.ok(taskService.pause(id)));
+    return accepted(executionControlService.request(id, TaskExecutionControlAction.PAUSE, idempotencyKey, null, currentUser.get()));
   }
 
   @PostMapping("/{id}/resume")
-  public ApiResponse<Map<String, Object>> resume(@PathVariable String id) {
+  public ResponseEntity<ApiResponse<Map<String, Object>>> resume(@PathVariable String id,
+      @RequestHeader("Idempotency-Key") String idempotencyKey) {
     permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
-    return ApiResponse.ok(taskService.resume(id));
+    if (!executionLifecycleService.hasExecution(id)) return ResponseEntity.ok(ApiResponse.ok(taskService.resume(id)));
+    return accepted(executionControlService.request(id, TaskExecutionControlAction.RESUME, idempotencyKey, null, currentUser.get()));
   }
 
   @PostMapping("/{id}/takeover")
-  public ApiResponse<Map<String, Object>> takeover(@PathVariable String id) {
-    permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
-    return ApiResponse.ok(taskService.takeover(id));
+  public ResponseEntity<ApiResponse<Map<String, Object>>> takeover(@PathVariable String id,
+      @RequestHeader("Idempotency-Key") String idempotencyKey, @RequestBody(required = false) Map<String, Object> body) {
+    permissionService.require(currentUser.get(), Permission.TASK_TAKEOVER);
+    if (!executionLifecycleService.hasExecution(id)) return ResponseEntity.ok(ApiResponse.ok(taskService.takeover(id)));
+    String reason = body == null || body.get("reason") == null ? null : String.valueOf(body.get("reason"));
+    return accepted(executionControlService.request(id, TaskExecutionControlAction.TAKEOVER, idempotencyKey, reason, currentUser.get()));
   }
 
   @PostMapping("/{id}/cancel")
-  public ApiResponse<Map<String, Object>> cancel(@PathVariable String id) {
-    permissionService.requireAny(currentUser.get(), Permission.TASK_CONTROL, Permission.TASK_ESTOP);
-    return ApiResponse.ok(taskService.cancel(id));
+  public ResponseEntity<ApiResponse<Map<String, Object>>> cancel(@PathVariable String id,
+      @RequestHeader("Idempotency-Key") String idempotencyKey) {
+    permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
+    if (!executionLifecycleService.hasExecution(id)) return ResponseEntity.ok(ApiResponse.ok(taskService.cancel(id)));
+    return accepted(executionControlService.request(id, TaskExecutionControlAction.CANCEL, idempotencyKey, null, currentUser.get()));
   }
 
   @GetMapping("/{id}/events")
   public ApiResponse<List<Map<String, Object>>> events(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.TASK_VIEW);
     return ApiResponse.ok(taskService.events(id));
+  }
+
+  private ResponseEntity<ApiResponse<Map<String, Object>>> accepted(Map<String, Object> result) {
+    return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.ok(result));
   }
 }

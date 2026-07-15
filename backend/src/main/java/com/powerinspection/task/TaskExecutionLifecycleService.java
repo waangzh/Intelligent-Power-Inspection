@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TaskExecutionLifecycleService {
   private final TaskExecutionRepository executions;
+  private final TaskExecutionControlCommandRepository controlCommands;
   private final RouteRevisionRepository revisions;
   private final RouteDeploymentRepository deployments;
   private final RobotHeartbeatService heartbeatService;
@@ -36,10 +37,11 @@ public class TaskExecutionLifecycleService {
   private final ObjectMapper objectMapper;
   private final RobotProperties robotProperties;
 
-  public TaskExecutionLifecycleService(TaskExecutionRepository executions, RouteRevisionRepository revisions,
+  public TaskExecutionLifecycleService(TaskExecutionRepository executions, TaskExecutionControlCommandRepository controlCommands, RouteRevisionRepository revisions,
       RouteDeploymentRepository deployments, RobotHeartbeatService heartbeatService, DataStoreService dataStore,
       ObjectMapper objectMapper, RobotProperties robotProperties) {
     this.executions = executions;
+    this.controlCommands = controlCommands;
     this.revisions = revisions;
     this.deployments = deployments;
     this.heartbeatService = heartbeatService;
@@ -97,6 +99,8 @@ public class TaskExecutionLifecycleService {
 
   public Map<String, Object> detail(String taskId) { return detail(requireExecution(taskId)); }
 
+  public boolean hasExecution(String taskId) { return executions.existsById(taskId); }
+
   public List<String> nonTerminalExecutionIds() {
     return executions.findByStatusIn(TaskExecutionStatus.NON_TERMINAL).stream().map(TaskExecutionEntity::getExecutionId).toList();
   }
@@ -109,7 +113,7 @@ public class TaskExecutionLifecycleService {
   @Transactional
   public StartCommand claimStartAttempt(String executionId, Instant now) {
     TaskExecutionEntity execution = findByExecutionId(executionId);
-    if (execution == null || !TaskExecutionStatus.STARTING.name().equals(execution.getStatus()) || nonBlank(execution.getStartCommandId())) return null;
+    if (execution == null || !startDeliveryRequired(execution) || nonBlank(execution.getStartCommandId())) return null;
     if (recent(execution.getLastStartAttemptAt(), now)) return null;
     execution.setStartAttemptNo(execution.getStartAttemptNo() + 1);
     execution.setLastStartAttemptAt(now.toString());
@@ -122,7 +126,7 @@ public class TaskExecutionLifecycleService {
   @Transactional
   public void accepted(String executionId, String commandId, Instant now) {
     TaskExecutionEntity execution = requireByExecutionId(executionId);
-    if (!TaskExecutionStatus.STARTING.name().equals(execution.getStatus())) return;
+    if (!startDeliveryRequired(execution)) return;
     if (!nonBlank(commandId)) {
       startFailed(execution, "INVALID_BRIDGE_PAYLOAD", "Bridge 启动回执缺少 commandId", now, false);
       executions.save(execution);
@@ -136,7 +140,7 @@ public class TaskExecutionLifecycleService {
   @Transactional
   public void startFailed(String executionId, String code, String message, Instant now) {
     TaskExecutionEntity execution = requireByExecutionId(executionId);
-    if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus())) startFailed(execution, code, message, now, false);
+    if (startDeliveryRequired(execution)) startFailed(execution, code, message, now, false);
   }
 
   @Transactional
@@ -151,6 +155,17 @@ public class TaskExecutionLifecycleService {
     execution.setLastErrorMessage(safeMessage(message));
     execution.setUpdatedAt(now.toString());
     executions.save(execution);
+    controlCommands.findFirstByExecutionIdAndStatusInOrderByRequestedAtDesc(executionId, List.of(
+      TaskExecutionControlCommandStatus.PENDING_SEND.name(), TaskExecutionControlCommandStatus.SENDING.name(),
+      TaskExecutionControlCommandStatus.QUEUED.name(), TaskExecutionControlCommandStatus.ACKED.name(),
+      TaskExecutionControlCommandStatus.RECONCILING.name())).ifPresent(command -> {
+        command.setStatus(TaskExecutionControlCommandStatus.RECONCILING.name());
+        command.setRecoveryAction("RECONCILE_BEFORE_RETRYING_SAME_REQUEST_ID");
+        command.setResultCode(safeCode(code));
+        command.setResultMessage(safeMessage(message));
+        command.setUpdatedAt(now.toString());
+        controlCommands.save(command);
+      });
   }
 
   @Transactional
@@ -167,7 +182,9 @@ public class TaskExecutionLifecycleService {
     TaskExecutionEntity execution = requireByExecutionId(executionId);
     if (!TaskExecutionStatus.RECOVERING.name().equals(execution.getStatus())) return;
     String previous = execution.getRecoveryStatus();
-    if (!TaskExecutionStatus.STARTING.name().equals(previous) && !TaskExecutionStatus.RUNNING.name().equals(previous)) {
+    if (!List.of(TaskExecutionStatus.STARTING.name(), TaskExecutionStatus.RUNNING.name(), TaskExecutionStatus.PAUSING.name(),
+        TaskExecutionStatus.PAUSED.name(), TaskExecutionStatus.RESUMING.name(), TaskExecutionStatus.CANCELLING.name(),
+        TaskExecutionStatus.TAKEOVER_PENDING.name(), TaskExecutionStatus.MANUAL_TAKEOVER.name()).contains(previous)) {
       previous = TaskExecutionStatus.STARTING.name();
     }
     execution.setStatus(previous);
@@ -204,6 +221,7 @@ public class TaskExecutionLifecycleService {
     result.put("lastErrorCode", item.getLastErrorCode());
     result.put("lastErrorMessage", item.getLastErrorMessage());
     result.put("manualReconciliationRequired", item.isManualReconciliationRequired());
+    controlCommands.findFirstByExecutionIdOrderByRequestedAtDesc(item.getExecutionId()).ifPresent(command -> result.put("latestControl", controlDetail(command)));
     result.put("createdAt", item.getCreatedAt());
     result.put("updatedAt", item.getUpdatedAt());
     return result;
@@ -282,6 +300,33 @@ public class TaskExecutionLifecycleService {
 
   private TaskExecutionEntity requireByExecutionId(String executionId) {
     return executions.findByExecutionId(executionId).orElseThrow(() -> ApiException.notFound("执行实例不存在"));
+  }
+
+  private boolean startDeliveryRequired(TaskExecutionEntity execution) {
+    if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus())) return true;
+    if (!TaskExecutionStatus.CANCELLING.name().equals(execution.getStatus())) return false;
+    return controlCommands.findFirstByExecutionIdAndStatusInOrderByRequestedAtDesc(execution.getExecutionId(), List.of(
+      TaskExecutionControlCommandStatus.PENDING_SEND.name(), TaskExecutionControlCommandStatus.SENDING.name(),
+      TaskExecutionControlCommandStatus.RECONCILING.name())).map(command ->
+        TaskExecutionControlAction.CANCEL.name().equals(command.getAction())
+          && TaskExecutionStatus.STARTING.name().equals(command.getPriorExecutionStatus())).orElse(false);
+  }
+
+  private static Map<String, Object> controlDetail(TaskExecutionControlCommandEntity command) {
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put("action", command.getAction());
+    result.put("requestId", command.getRequestId());
+    result.put("status", command.getStatus());
+    result.put("commandId", command.getCommandId());
+    result.put("takeoverReason", command.getTakeoverReason());
+    result.put("requestedBy", command.getRequestedByName());
+    result.put("requestedAt", command.getRequestedAt());
+    result.put("ackedAt", command.getAckedAt());
+    result.put("confirmedAt", command.getConfirmedAt());
+    result.put("recoveryAction", command.getRecoveryAction());
+    result.put("resultCode", command.getResultCode());
+    result.put("resultMessage", command.getResultMessage());
+    return result;
   }
 
   private String fingerprint(String taskId, TaskExecutionEntity execution) {

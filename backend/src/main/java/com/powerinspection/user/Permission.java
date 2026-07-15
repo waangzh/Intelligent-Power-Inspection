@@ -5,6 +5,7 @@ public enum Permission {
   TASK_CREATE("task:create"),
   TASK_DISPATCH("task:dispatch"),
   TASK_CONTROL("task:control"),
+  TASK_TAKEOVER("task:takeover"),
   TASK_ESTOP("task:estop"),
   SITE_EDIT("site:edit"),
   ROUTE_EDIT("route:edit"),

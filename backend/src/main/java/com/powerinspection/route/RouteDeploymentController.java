@@ -2,6 +2,7 @@ package com.powerinspection.route;
 
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.robot.RobotBridgeIdMapper;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
@@ -21,11 +22,14 @@ public class RouteDeploymentController {
   private final RouteDeploymentService routeDeploymentService;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
+  private final RobotBridgeIdMapper robotBridgeIdMapper;
 
-  public RouteDeploymentController(RouteDeploymentService routeDeploymentService, PermissionService permissionService, CurrentUser currentUser) {
+  public RouteDeploymentController(RouteDeploymentService routeDeploymentService, PermissionService permissionService, CurrentUser currentUser,
+      RobotBridgeIdMapper robotBridgeIdMapper) {
     this.routeDeploymentService = routeDeploymentService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
+    this.robotBridgeIdMapper = robotBridgeIdMapper;
   }
 
   @PostMapping("/route-revisions/{revisionId}/deployments")
@@ -48,10 +52,20 @@ public class RouteDeploymentController {
     return ApiResponse.ok(routeDeploymentService.listByRevision(revisionId));
   }
 
+  @PostMapping("/route-deployments/{deploymentId}/reconcile")
+  public ApiResponse<Map<String, Object>> reconcile(@PathVariable String deploymentId) {
+    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
+    return ApiResponse.ok(routeDeploymentService.reconcile(deploymentId));
+  }
+
   @GetMapping("/route-deployments/{deploymentId}")
-  public ApiResponse<Map<String, Object>> get(@PathVariable String deploymentId) {
-    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
-    return ApiResponse.ok(routeDeploymentService.get(deploymentId));
+  public ApiResponse<Map<String, Object>> get(@PathVariable String deploymentId,
+      @RequestHeader(value = "Authorization", required = false) String authorization) {
+    boolean bridgeRequest = robotBridgeIdMapper.isBridgePlatformRequest(authorization);
+    if (!bridgeRequest) permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    Map<String, Object> deployment = routeDeploymentService.get(deploymentId);
+    return ApiResponse.ok(bridgeRequest
+      ? robotBridgeIdMapper.toBridgeDeploymentView(deployment) : deployment);
   }
 
   private String text(Object value) {

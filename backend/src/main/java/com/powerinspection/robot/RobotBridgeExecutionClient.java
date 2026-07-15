@@ -24,8 +24,9 @@ import org.springframework.web.client.RestClientResponseException;
 public class RobotBridgeExecutionClient {
   private final RestClient restClient;
   private final ObjectMapper objectMapper;
+  private final RobotBridgeIdMapper idMapper;
 
-  public RobotBridgeExecutionClient(RobotProperties properties, ObjectMapper objectMapper) {
+  public RobotBridgeExecutionClient(RobotProperties properties, ObjectMapper objectMapper, RobotBridgeIdMapper idMapper) {
     if (!StringUtils.hasText(properties.getBridgeAdminToken()) || !StringUtils.hasText(properties.getHeartbeatBridgeBaseUrl())) {
       throw new IllegalStateException("Bridge execution client requires server-side bridge configuration");
     }
@@ -38,6 +39,7 @@ public class RobotBridgeExecutionClient {
       .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getBridgeAdminToken())
       .build();
     this.objectMapper = objectMapper;
+    this.idMapper = idMapper;
   }
 
   public RobotBridgeExecutionStartResult start(String executionId, Map<String, Object> request) {
@@ -45,9 +47,14 @@ public class RobotBridgeExecutionClient {
     return new RobotBridgeExecutionStartResult(bool(body.get("accepted")), text(body.get("commandId")), text(body.get("state")), text(body.get("executionId")));
   }
 
+  public RobotBridgeExecutionStartResult control(String executionId, String action, Map<String, Object> request) {
+    Map<String, Object> body = post("/bridge/v1/executions/{executionId}/" + action, executionId, request);
+    return new RobotBridgeExecutionStartResult(bool(body.get("accepted")), text(body.get("commandId")), text(body.get("state")), text(body.get("executionId")));
+  }
+
   public RobotBridgeExecutionSnapshot execution(String executionId) {
     Map<String, Object> body = get("/bridge/v1/executions/{executionId}", executionId);
-    return new RobotBridgeExecutionSnapshot(text(body.get("executionId")), text(body.get("robotId")), text(body.get("deploymentId")),
+    return new RobotBridgeExecutionSnapshot(text(body.get("executionId")), idMapper.toPlatformId(text(body.get("robotId"))), text(body.get("deploymentId")),
       text(body.get("state")), number(body.get("lastEventSequence")), sanitize(text(body.get("lastError"))));
   }
 
@@ -61,6 +68,8 @@ public class RobotBridgeExecutionClient {
       if (!(item instanceof Map<?, ?> map)) throw RobotBridgeExecutionException.unknown("INVALID_BRIDGE_PAYLOAD", "Bridge 事件条目格式无效");
       Map<String, Object> normalized = new LinkedHashMap<>();
       map.forEach((key, nested) -> normalized.put(String.valueOf(key), nested));
+      mapRobotId(normalized, "robot_id");
+      mapRobotId(normalized, "robotId");
       result.add(new RobotBridgeExecutionEvent(Map.copyOf(normalized)));
     }
     return result;
@@ -84,7 +93,7 @@ public class RobotBridgeExecutionClient {
   @SuppressWarnings("unchecked")
   private Map<String, Object> post(String path, String executionId, Map<String, Object> request) {
     try {
-      Map<String, Object> body = restClient.post().uri(path, executionId).body(request).retrieve().body(Map.class);
+      Map<String, Object> body = restClient.post().uri(path, executionId).body(bridgeRequest(request)).retrieve().body(Map.class);
       if (body == null) throw RobotBridgeExecutionException.unknown("INVALID_BRIDGE_PAYLOAD", "Bridge 未返回启动回执");
       return body;
     } catch (RobotBridgeExecutionException ex) {
@@ -103,6 +112,17 @@ public class RobotBridgeExecutionClient {
     return ex.getStatusCode().is4xxClientError()
       ? RobotBridgeExecutionException.explicit(code, message)
       : RobotBridgeExecutionException.unknown(code, message);
+  }
+
+  private Map<String, Object> bridgeRequest(Map<String, Object> request) {
+    Map<String, Object> result = new LinkedHashMap<>(request);
+    mapRobotId(result, "robotId");
+    return result;
+  }
+
+  private void mapRobotId(Map<String, Object> values, String field) {
+    Object robotId = values.get(field);
+    if (robotId != null) values.put(field, idMapper.toBridgeId(String.valueOf(robotId)));
   }
 
   private String errorCode(RestClientResponseException ex, String fallback) {
