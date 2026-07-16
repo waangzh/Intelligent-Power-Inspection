@@ -113,6 +113,19 @@ class TaskExecutionLifecycleServiceTests {
   }
 
   @Test
+  void manualReconciliationFailureCannotBeRetried() {
+    execution.setStatus(TaskExecutionStatus.START_FAILED.name());
+    execution.setManualReconciliationRequired(true);
+    when(executions.findByStartRequestId("retry-start")).thenReturn(Optional.empty());
+
+    ApiException error = assertThrows(ApiException.class, () -> service.start("task-1", "retry-start"));
+
+    assertTrue(error.getMessage().contains("未核对"));
+    assertEquals(TaskExecutionStatus.START_FAILED.name(), execution.getStatus());
+    assertTrue(execution.isManualReconciliationRequired());
+  }
+
+  @Test
   void identicalIdempotencyKeyReturnsThePersistedStartingIntent() {
     execution.setStatus(TaskExecutionStatus.STARTING.name());
     execution.setStartRequestId("start-1");

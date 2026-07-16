@@ -62,6 +62,9 @@ public class TaskExecutionLifecycleService {
       }
       return detail(sameKey);
     }
+    if (execution.isManualReconciliationRequired()) {
+      throw ApiException.conflict("当前执行存在未核对的机器人事件，不能重试；请保留审计记录并创建新的执行任务");
+    }
     if (!startable(execution)) {
       throw ApiException.conflict("当前执行不允许再次启动");
     }
@@ -87,8 +90,11 @@ public class TaskExecutionLifecycleService {
     Map<String, Object> result = detail(execution);
     try {
       StartContext context = requireStartContext(taskId, execution);
-      result.put("eligible", startable(execution));
-      result.put("ineligibleReason", startable(execution) ? null : "执行已不处于 CREATED 或 START_FAILED 状态");
+      boolean eligible = startable(execution) && !execution.isManualReconciliationRequired();
+      result.put("eligible", eligible);
+      result.put("ineligibleReason", eligible ? null : execution.isManualReconciliationRequired()
+        ? "存在未核对的机器人事件，必须保留审计并创建新的执行任务"
+        : "执行已不处于 CREATED 或 START_FAILED 状态");
       result.put("deploymentId", context.deployment().getId());
       result.put("executorRouteId", context.executorRouteId());
       return result;
