@@ -39,7 +39,8 @@ export function mergeManagedRouteFields(
     targets, routes: [route],
     keepout_zones: editable.keepoutZones.map((zone) => ({
       ...(sourceZones.get(zone.id) || {}), id: zone.id, name: zone.name || zone.id, type: 'hard_keepout', enabled: zone.enabled,
-      mask_padding_m: zone.maskPaddingM, polygon: zone.polygon.map((point) => ({ x: point.x, y: point.y })),
+      mask_padding_m: Math.min(mapAsset.resolution, Math.max(0, zone.maskPaddingM ?? mapAsset.resolution)),
+      polygon: zone.polygon.map((point) => ({ x: point.x, y: point.y })),
     })),
     schedules: Array.isArray(base.schedules) ? base.schedules : [],
   } as RouteExecutorDocumentV3

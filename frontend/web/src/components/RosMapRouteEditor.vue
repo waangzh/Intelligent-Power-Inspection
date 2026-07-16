@@ -16,6 +16,7 @@
           <button type="button" :class="{ active: mode === 'start' }" @click="setMode('start')">起点</button>
           <button type="button" :class="{ active: mode === 'target' }" @click="setMode('target')">巡检点</button>
           <button type="button" :class="{ active: mode === 'yaw' }" @click="setMode('yaw')">方向</button>
+          <button type="button" :class="{ active: mode === 'keepout' }" @click="setMode('keepout')">禁行区</button>
           <button type="button" :class="{ active: mode === 'pan' }" @click="setMode('pan')">拖动</button>
         </div>
       </div>
@@ -140,6 +141,70 @@
           </div>
         </el-tab-pane>
 
+        <el-tab-pane label="禁行区" name="keepout">
+          <p class="zone-help">每个禁行区必须是至少 3 个顶点构成的闭合 polygon。选择“禁行区”模式后，在地图点击追加顶点；可直接拖动顶点微调。</p>
+          <div class="tab-toolbar">
+            <el-button size="small" @click="addKeepoutZone">新增禁区</el-button>
+            <el-button size="small" type="danger" plain :disabled="!activeKeepoutZone" @click="deleteActiveZone">删除禁区</el-button>
+          </div>
+
+          <div v-if="keepoutZones.length" class="target-list">
+            <button
+              v-for="zone in keepoutZones"
+              :key="zone.id"
+              type="button"
+              class="target-item"
+              :class="{ selected: activeZoneId === zone.id }"
+              @click="selectZone(zone.id)"
+            >
+              <span class="target-badge">{{ zone.polygon.length }}</span>
+              <span class="target-summary">
+                <strong>{{ zone.name || zone.id }}</strong>
+                <small class="zone-meta">{{ zone.id }} · {{ zone.enabled ? '启用' : '停用' }} · {{ zone.polygon.length }} 顶点</small>
+              </span>
+            </button>
+          </div>
+
+          <template v-if="activeKeepoutZone">
+            <div class="edit-block">
+              <label>名称<el-input :model-value="activeKeepoutZone.name" size="small" @change="onZoneFieldChange('name', $event)" /></label>
+              <div class="grid-2">
+                <label>ID<el-input :model-value="activeKeepoutZone.id" size="small" @change="onZoneFieldChange('id', $event)" /></label>
+                <label>类型<el-input model-value="hard_keepout" size="small" disabled /></label>
+              </div>
+              <el-checkbox :model-value="activeKeepoutZone.enabled" @change="onZoneFieldChange('enabled', $event)">启用禁行区</el-checkbox>
+              <label>边界补偿(m)
+                <el-input-number
+                  :model-value="activeKeepoutZone.maskPaddingM ?? map.resolution"
+                  :min="0"
+                  :max="map.resolution"
+                  :step="map.resolution || 0.001"
+                  size="small"
+                  controls-position="right"
+                  @change="onZoneFieldChange('maskPaddingM', $event ?? map.resolution)"
+                />
+              </label>
+              <p class="zone-help">边界补偿仅用于禁行 polygon 栅格化；最终避让距离仍由 Nav2 InflationLayer 决定。</p>
+              <div class="tab-toolbar">
+                <el-button size="small" :disabled="!activeKeepoutZone.polygon.length" @click="deleteLastZonePoint">删除最后顶点</el-button>
+                <el-button size="small" type="danger" plain :disabled="!activeKeepoutZone.polygon.length" @click="clearZonePoints">清空 polygon</el-button>
+              </div>
+              <div class="zone-points">
+                <div v-for="(point, index) in activeKeepoutZone.polygon" :key="index" class="grid-3">
+                  <label>#<el-input :model-value="String(index + 1)" size="small" disabled /></label>
+                  <label>x<el-input-number :model-value="point.x" size="small" :step="0.001" controls-position="right" @change="updateZonePoint(activeKeepoutZone.id, index, 'x', $event ?? point.x)" /></label>
+                  <label>y<el-input-number :model-value="point.y" size="small" :step="0.001" controls-position="right" @change="updateZonePoint(activeKeepoutZone.id, index, 'y', $event ?? point.y)" /></label>
+                </div>
+              </div>
+            </div>
+          </template>
+          <p class="status">{{ zoneStatus }}</p>
+          <el-divider content-position="left">车体模型</el-divider>
+          <el-checkbox v-model="showFootprint">显示 ros2_DL Nav2 footprint</el-checkbox>
+          <el-checkbox v-model="showFootprintPadding">显示 1cm 安全边界</el-checkbox>
+          <p class="zone-help">点位会以偏心圆柱 16 边形车体轮廓校验占用栅格、未知区和禁行区。</p>
+        </el-tab-pane>
+
         <el-tab-pane label="JSON" name="json">
           <textarea class="json-preview" readonly :value="jsonPreview" />
           <div class="json-actions">
@@ -196,12 +261,17 @@ const {
   form,
   mode,
   targets,
+  keepoutZones,
+  activeZoneId,
   selectedTargetId,
   cursorInfo,
   mapInfo,
   jsonPreview,
   isLegacyDraft,
   targetStatus,
+  zoneStatus,
+  showFootprint,
+  showFootprintPadding,
   setMode,
   fitToScreen,
   zoomIn,
@@ -210,6 +280,7 @@ const {
   applyPgmBuffer,
   importRouteJson,
   exportDocument,
+  validateForExport,
   setMapAssetIdentity,
   onFormFieldChange,
   selectTarget,
@@ -218,7 +289,15 @@ const {
   moveTarget,
   deleteTarget,
   clearTargets,
+  clearRouteAnnotations,
   addTargetAtCenter,
+  addKeepoutZone,
+  selectZone,
+  deleteActiveZone,
+  deleteLastZonePoint,
+  clearZonePoints,
+  updateZoneField,
+  updateZonePoint,
   handleDroppedFiles,
   onMouseDown,
   onWheel,
@@ -228,6 +307,9 @@ const mapLoaded = computed(() => Boolean(map.pixels && map.width && map.height))
 
 const selectedTarget = computed(() =>
   targets.value.find((t) => t.id === selectedTargetId.value) ?? null,
+)
+const activeKeepoutZone = computed(() =>
+  keepoutZones.value.find((zone) => zone.id === activeZoneId.value) ?? null,
 )
 
 function syncForm() {
@@ -304,6 +386,7 @@ async function onMapFilesChange(event: Event) {
   const files = input.files
   if (!files?.length) return
   try {
+    clearRouteAnnotations()
     await handleDroppedFiles(files)
     rememberMapFiles(files)
     await syncMapIdentity()
@@ -320,6 +403,7 @@ async function onPgmChange(event: Event) {
   const file = input.files?.[0]
   if (!file) return
   try {
+    clearRouteAnnotations()
     applyPgmBuffer(await file.arrayBuffer(), file.name)
     rememberMapFiles([file])
     await syncMapIdentity()
@@ -346,6 +430,7 @@ async function onDrop(event: DragEvent) {
   if (event.dataTransfer?.files?.length) {
     try {
       const files = Array.from(event.dataTransfer.files)
+      if (files.some((file) => /\.ya?ml$|\.pgm$/i.test(file.name))) clearRouteAnnotations()
       await handleDroppedFiles(files)
       rememberMapFiles(files)
       await syncMapIdentity()
@@ -368,17 +453,36 @@ function confirmClearTargets() {
 }
 
 async function copyJson() {
+  if (!ensureExportable()) return
   await navigator.clipboard.writeText(jsonPreview.value)
   ElMessage.success('已复制 JSON')
 }
 
 function downloadJson() {
+  if (!ensureExportable()) return
   downloadRouteJson(exportDocument())
+}
+
+function ensureExportable() {
+  const problems = validateForExport()
+  if (!problems.length) return true
+  ElMessage.error(`不能保存或导出路线：${problems.join('；')}`)
+  return false
+}
+
+function onZoneFieldChange(field: 'name' | 'id' | 'enabled' | 'maskPaddingM', value: string | number | boolean) {
+  const zone = activeKeepoutZone.value
+  if (!zone) return
+  try {
+    updateZoneField(zone.id, field, value)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : String(error))
+  }
 }
 
 watch(() => props.mapId, (mapId) => void loadPersistedMap(mapId), { immediate: true })
 
-defineExpose({ exportDocument })
+defineExpose({ exportDocument, validateForExport })
 </script>
 
 <style scoped>
@@ -611,6 +715,28 @@ label {
 
 .status.error {
   color: #f56c6c;
+}
+
+.zone-help {
+  margin: 0 0 12px;
+  color: #7a8895;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.zone-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-points {
+  display: grid;
+  gap: 6px;
+}
+
+.config-tabs :deep(.el-checkbox) {
+  margin: 2px 0;
 }
 
 .json-preview {
