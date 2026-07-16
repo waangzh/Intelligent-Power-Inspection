@@ -1,6 +1,7 @@
 package com.powerinspection.task;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -80,6 +81,35 @@ class TaskExecutionLifecycleServiceTests {
 
     assertThrows(ApiException.class, () -> service.start("task-1", "start-1"));
     assertEquals(TaskExecutionStatus.CREATED.name(), execution.getStatus());
+  }
+
+  @Test
+  void conflictingActiveExecutionRejectsStart() {
+    when(executions.findByStartRequestId("start-1")).thenReturn(Optional.empty());
+    TaskExecutionEntity other = execution(TaskExecutionStatus.RUNNING.name());
+    other.setTaskId("task-2"); other.setExecutionId("exec-2");
+    when(executions.findByRobotIdAndStatusIn("robot-1", TaskExecutionStatus.ACTIVE)).thenReturn(List.of(other));
+
+    ApiException error = assertThrows(ApiException.class, () -> service.start("task-1", "start-1"));
+
+    assertTrue(error.getMessage().contains("活动执行"));
+    assertEquals(TaskExecutionStatus.CREATED.name(), execution.getStatus());
+  }
+
+  @Test
+  void startFailedExecutionCanRetryWithNewRequestId() {
+    execution.setStatus(TaskExecutionStatus.START_FAILED.name());
+    execution.setStartRequestId("failed-start");
+    execution.setStartCommandId("failed-command");
+    when(executions.findByStartRequestId("retry-start")).thenReturn(Optional.empty());
+    when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
+      .thenReturn(List.of(deployment("a".repeat(64))));
+
+    Map<String, Object> result = service.start("task-1", "retry-start");
+
+    assertEquals(TaskExecutionStatus.STARTING.name(), result.get("status"));
+    assertEquals("retry-start", execution.getStartRequestId());
+    assertNull(execution.getStartCommandId());
   }
 
   @Test

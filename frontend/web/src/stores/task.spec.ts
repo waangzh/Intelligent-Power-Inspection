@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import type { InspectionTask, TaskExecution, TaskStartEligibility } from '@/types'
+import type { InspectionTask, RouteRevision, TaskExecution, TaskStartEligibility } from '@/types'
+import type { RouteDeployment } from '@/types/routeDeployment'
 
 vi.mock('@/api/resources', () => ({
   resourcesApi: {
     listTasks: vi.fn(), taskEvents: vi.fn(), listRecords: vi.fn(),
     getTaskExecution: vi.fn(), getTaskStartEligibility: vi.fn(), startTask: vi.fn(),
     pauseTask: vi.fn(), resumeTask: vi.fn(), takeoverTask: vi.fn(), cancelTask: vi.fn(),
+    createTask: vi.fn(),
   },
 }))
 
 import { resourcesApi } from '@/api/resources'
-import { useTaskStore } from '@/stores/task'
+import { latestReadyRevision, useTaskStore } from '@/stores/task'
 
 const task: InspectionTask = {
   id: 'task-1', name: '测试巡检', routeId: 'route-1', robotId: 'robot-1', status: 'CREATED',
@@ -107,5 +109,34 @@ describe('任务执行轮询与启动状态', () => {
 
     expect(resourcesApi.pauseTask).toHaveBeenCalledWith('task-1', expect.any(String))
     expect(store.statusOf(task)).toBe('PAUSING')
+  })
+
+  it('创建真实任务时提交 routeRevisionId 并保存 executionId', async () => {
+    const store = useTaskStore()
+    vi.mocked(resourcesApi.createTask).mockResolvedValue(task)
+    vi.mocked(resourcesApi.getTaskExecution).mockResolvedValue(execution('CREATED'))
+
+    const saved = await store.createTask('测试巡检', 'route-1', 'robot-1', 'rev-1')
+
+    expect(resourcesApi.createTask).toHaveBeenCalledWith(expect.objectContaining({ routeRevisionId: 'rev-1' }))
+    expect(saved.executionId).toBe('exec-1')
+    expect(store.executionFor('task-1')?.status).toBe('CREATED')
+    store.stopExecutionPolling()
+  })
+
+  it('只选择最新且哈希一致的 READY_FOR_ROBOT 修订', () => {
+    const revisions = [1, 2].map((revisionNo) => ({
+      id: `rev-${revisionNo}`, routeId: 'route-1', revisionNo, contentSha256: `${revisionNo}`.repeat(64),
+      mapAssetId: 'map-1', mapImageSha256: 'b'.repeat(64), executorJson: {},
+      validationReport: { valid: true, validatedAt: '2026-07-16T00:00:00Z', issues: [] }, createdAt: '2026-07-16T00:00:00Z',
+    } satisfies RouteRevision))
+    const deployments: RouteDeployment[] = [{
+      id: 'dep-1', routeRevisionId: 'rev-1', robotId: 'robot-1', requestId: 'req-1', state: 'READY_FOR_ROBOT', attemptCount: 1,
+      routeContentSha256: '1'.repeat(64), mapAssetId: 'map-1', mapImageSha256: 'b'.repeat(64),
+      createdAt: '2026-07-16T00:00:00Z', updatedAt: '2026-07-16T00:00:00Z', stateVersion: 1,
+    }]
+
+    expect(latestReadyRevision(revisions, deployments, 'robot-1')?.id).toBe('rev-1')
+    expect(latestReadyRevision(revisions, [{ ...deployments[0], routeContentSha256: 'x'.repeat(64) }], 'robot-1')).toBeUndefined()
   })
 })

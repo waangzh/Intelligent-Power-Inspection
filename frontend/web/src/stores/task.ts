@@ -1,8 +1,21 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
-import type { InspectionRecord, InspectionTask, TaskEvent, TaskExecution, TaskStartEligibility, TaskStatus } from '@/types'
+import type { InspectionRecord, InspectionTask, RouteRevision, TaskEvent, TaskExecution, TaskStartEligibility, TaskStatus } from '@/types'
+import type { RouteDeployment } from '@/types/routeDeployment'
 import { uid } from '@/utils/storage'
+
+export function latestReadyRevision(revisions: RouteRevision[], deployments: RouteDeployment[], robotId: string) {
+  return revisions
+    .filter((revision) => revision.validationReport.valid && deployments.some((deployment) =>
+      deployment.robotId === robotId
+      && deployment.routeRevisionId === revision.id
+      && deployment.state === 'READY_FOR_ROBOT'
+      && deployment.routeContentSha256 === revision.contentSha256
+      && deployment.mapImageSha256 === revision.mapImageSha256,
+    ))
+    .sort((a, b) => b.revisionNo - a.revisionNo)[0]
+}
 
 export const useTaskStore = defineStore('task', () => {
   const tasks = ref<InspectionTask[]>([])
@@ -111,7 +124,7 @@ export const useTaskStore = defineStore('task', () => {
     return tasks.value.find((t) => t.id === id)
   }
 
-  function createTask(name: string, routeId: string, robotId: string) {
+  async function createTask(name: string, routeId: string, robotId: string, routeRevisionId: string) {
     const task: InspectionTask = {
       id: uid('task'),
       name,
@@ -121,10 +134,13 @@ export const useTaskStore = defineStore('task', () => {
       progress: 0,
       currentCheckpointSeq: 0,
       createdAt: new Date().toISOString(),
+      routeRevisionId,
     }
-    tasks.value.unshift(task)
-    void resourcesApi.createTask(task).then(updateLocalTask)
-    return task
+    const saved = await resourcesApi.createTask(task)
+    updateLocalTask(saved)
+    if (saved.executionId) await refreshExecution(saved.id)
+    startExecutionPolling()
+    return saved
   }
 
   function updateTask(id: string, patch: Partial<InspectionTask>) {

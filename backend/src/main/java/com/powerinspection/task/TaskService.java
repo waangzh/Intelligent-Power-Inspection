@@ -11,6 +11,7 @@ import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotProgressSnapshot;
+import com.powerinspection.robot.RobotProperties;
 import com.powerinspection.route.RouteExecutorSupport;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionService;
@@ -61,6 +62,7 @@ public class TaskService {
   private final LocateAnythingGateway locateAnythingGateway;
   private final RouteRevisionService routeRevisionService;
   private final TaskExecutionService taskExecutionService;
+  private final RobotProperties robotProperties;
   private final Random random = new Random();
 
   public TaskService(
@@ -70,7 +72,8 @@ public class TaskService {
       RobotGateway robotGateway,
       LocateAnythingGateway locateAnythingGateway,
       RouteRevisionService routeRevisionService,
-      TaskExecutionService taskExecutionService) {
+      TaskExecutionService taskExecutionService,
+      RobotProperties robotProperties) {
     this.dataStore = dataStore;
     this.alarmService = alarmService;
     this.messagingTemplate = messagingTemplate;
@@ -78,6 +81,7 @@ public class TaskService {
     this.locateAnythingGateway = locateAnythingGateway;
     this.routeRevisionService = routeRevisionService;
     this.taskExecutionService = taskExecutionService;
+    this.robotProperties = robotProperties;
   }
 
   public List<Map<String, Object>> tasks() {
@@ -98,6 +102,9 @@ public class TaskService {
 
   @Transactional
   public Map<String, Object> createTask(Map<String, Object> body) {
+    if (text(body.get("name")) == null || text(body.get("name")).isBlank()) {
+      throw ApiException.badRequest("请填写任务名称");
+    }
     body.putIfAbsent("id", Ids.next("task"));
     body.putIfAbsent("status", "CREATED");
     body.putIfAbsent("progress", 0);
@@ -432,6 +439,9 @@ public class TaskService {
   private RouteRevisionEntity attachRouteRevision(Map<String, Object> task) {
     String revisionId = text(task.get("routeRevisionId"));
     if (revisionId == null || revisionId.isBlank()) {
+      if (robotProperties.isBridgeMode()) {
+        throw ApiException.badRequest("Bridge 模式创建任务必须提供 routeRevisionId");
+      }
       return null;
     }
     RouteRevisionEntity revision = routeRevisionService.require(revisionId);

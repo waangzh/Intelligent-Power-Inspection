@@ -40,15 +40,15 @@ flowchart LR
 | Jetson HTTPS heartbeat、ACK、事件补传、deployment 下载 | 已实现 |
 | Jetson UI Cloud Link 开关与 systemd 单实例 | 已实现 |
 | 协议、前后端、部署和验收文档 | 已完成 |
-| Spring `app.robot.mode=bridge` | 未实现 |
-| Spring 轮询 Bridge events 并更新 Task/STOMP | 未实现 |
-| Vue/小程序真实 Bridge 状态交互 | 等后端接线后验收 |
+| Spring `app.robot.mode=bridge`、execution 与控制 worker | 已实现，待服务器部署 |
+| Spring 轮询 Bridge events 并更新 Task/STOMP | 已实现，待无运动联调 |
+| Vue Web revision-backed 任务与 execution 控制 | 已实现，待浏览器验收 |
 | 公网无运动部署 | 按 acceptance runbook 执行并记录 |
 | 真实路线运动 | 必须等待现场授权 |
 
 ## 当前不能做的事情
 
-- 不能通过现有 `TaskService` 下发真实 route revision；`requireSimulationTask` 仍会拦截。
+- 不能把 `READY_FOR_ROBOT` 当成已创建执行或机器人已开始运动。
 - 不能让浏览器直接调用 `/bridge/v1` 或持有 `BRIDGE_API_TOKEN`。
 - 不能把旧 `HttpRobotGateway/MobileBridgeClient` 当成 Heartbeat Bridge Client。
 - 不能根据 HTTP 202、ACK 或 ROS publish 判定任务已经 RUNNING。
@@ -59,16 +59,16 @@ flowchart LR
 ### 前端同学
 
 1. 阅读 [前端对接](frontend-robot-bridge.md)。
-2. 保持 `http.ts` 与现有 `/api/v1/tasks/*` 路径。
-3. 实现状态文案、按钮矩阵、pending 语义与 REST 恢复。
-4. 等后端提供 Bridge 整合后的 task/robot/event。
+2. 创建任务时提交已部署的 `routeRevisionId`。
+3. 只按 execution 状态展示控制按钮和 pending 语义。
+4. 通过 REST/STOMP 恢复 task/robot/event，不直接访问 Bridge。
 
 ### 后端同学
 
 1. 阅读 [后端对接](backend-robot-bridge.md) 与协议。
-2. 新增独立 `app.robot.mode=bridge`，不复用旧直连 Client。
-3. 接通 deployment sync、dispatch/control 和每秒事件轮询。
-4. 复用 `TaskExecutionEntity`，确保 202 不直接 RUNNING。
+2. 部署 `app.robot.mode=bridge` 与受保护的 Bridge 凭据。
+3. 验证 deployment sync、START/control worker 和事件轮询持续运行。
+4. 使用 `taskId/executionId/commandId/robotId` 串联日志，确保 202 不直接 RUNNING。
 
 ### 运维同学
 

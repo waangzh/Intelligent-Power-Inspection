@@ -62,7 +62,7 @@ public class TaskExecutionLifecycleService {
       }
       return detail(sameKey);
     }
-    if (!TaskExecutionStatus.CREATED.name().equals(execution.getStatus())) {
+    if (!startable(execution)) {
       throw ApiException.conflict("当前执行不允许再次启动");
     }
     StartContext context = requireStartContext(taskId, execution);
@@ -71,6 +71,8 @@ public class TaskExecutionLifecycleService {
     execution.setExecutorRouteId(context.executorRouteId());
     execution.setStartRequestId(idempotencyKey);
     execution.setStartRequestFingerprint(fingerprint);
+    execution.setStartCommandId(null);
+    execution.setLastStartAttemptAt(null);
     execution.setStatus(TaskExecutionStatus.STARTING.name());
     execution.setLastErrorCode(null);
     execution.setLastErrorMessage(null);
@@ -85,8 +87,8 @@ public class TaskExecutionLifecycleService {
     Map<String, Object> result = detail(execution);
     try {
       StartContext context = requireStartContext(taskId, execution);
-      result.put("eligible", TaskExecutionStatus.CREATED.name().equals(execution.getStatus()));
-      result.put("ineligibleReason", TaskExecutionStatus.CREATED.name().equals(execution.getStatus()) ? null : "执行已不处于 CREATED 状态");
+      result.put("eligible", startable(execution));
+      result.put("ineligibleReason", startable(execution) ? null : "执行已不处于 CREATED 或 START_FAILED 状态");
       result.put("deploymentId", context.deployment().getId());
       result.put("executorRouteId", context.executorRouteId());
       return result;
@@ -245,6 +247,9 @@ public class TaskExecutionLifecycleService {
     if (!heartbeat.online() || !RobotConnectionStatus.CONNECTED.name().equals(heartbeat.connectionStatus())) {
       throw ApiException.conflict("机器人离线或 Bridge 当前不可达");
     }
+    boolean occupied = executions.findByRobotIdAndStatusIn(execution.getRobotId(), TaskExecutionStatus.ACTIVE).stream()
+      .anyMatch(item -> !Objects.equals(item.getExecutionId(), execution.getExecutionId()));
+    if (occupied) throw ApiException.conflict("机器人已有冲突的活动执行");
     RouteDeploymentEntity deployment = matchingReadyDeployment(execution, revision);
     return new StartContext(deployment, executorRouteId(revision));
   }
@@ -364,6 +369,10 @@ public class TaskExecutionLifecycleService {
     return result.substring(0, Math.min(500, result.length()));
   }
   private static boolean nonBlank(String value) { return value != null && !value.isBlank(); }
+  private static boolean startable(TaskExecutionEntity execution) {
+    return TaskExecutionStatus.CREATED.name().equals(execution.getStatus())
+      || TaskExecutionStatus.START_FAILED.name().equals(execution.getStatus());
+  }
   private static String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }
   private static boolean equals(Object actual, String expected) { return Objects.equals(text(actual), expected); }
 

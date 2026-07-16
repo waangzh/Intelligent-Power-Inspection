@@ -213,7 +213,7 @@ sha256sum ~/.local/share/ylhb/platform/deployments/deployment-demo/map.pgm
 
 - 必须获得用户现场明确授权；阶段 A-C 全部通过。
 - 急停可用，现场清场，机器人电量/底盘/CAN/雷达/IMU/TF/Nav2/地图/路线均由现场人员确认。
-- Spring `app.robot.mode=bridge` 与事件轮询已经实现；否则不得绕过 Spring 直接创建 START。
+- Spring `app.robot.mode=bridge` 与事件轮询已部署并健康；不得绕过 Spring 直接创建 START。
 
 ### 执行命令
 
