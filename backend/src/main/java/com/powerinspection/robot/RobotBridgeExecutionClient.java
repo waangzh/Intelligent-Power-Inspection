@@ -66,13 +66,17 @@ public class RobotBridgeExecutionClient {
     List<RobotBridgeExecutionEvent> result = new ArrayList<>();
     for (Object item : items) {
       if (!(item instanceof Map<?, ?> map)) throw RobotBridgeExecutionException.unknown("INVALID_BRIDGE_PAYLOAD", "Bridge 事件条目格式无效");
-      Map<String, Object> normalized = new LinkedHashMap<>();
-      map.forEach((key, nested) -> normalized.put(String.valueOf(key), nested));
-      mapRobotId(normalized, "robot_id");
-      mapRobotId(normalized, "robotId");
-      result.add(new RobotBridgeExecutionEvent(Map.copyOf(normalized)));
+      result.add(normalizeEvent(map));
     }
     return result;
+  }
+
+  RobotBridgeExecutionEvent normalizeEvent(Map<?, ?> source) {
+    Map<String, Object> normalized = new LinkedHashMap<>();
+    source.forEach((key, nested) -> normalized.put(String.valueOf(key), nested));
+    mapBridgeRobotIdToPlatform(normalized, "robot_id");
+    mapBridgeRobotIdToPlatform(normalized, "robotId");
+    return new RobotBridgeExecutionEvent(Map.copyOf(normalized));
   }
 
   @SuppressWarnings("unchecked")
@@ -116,13 +120,18 @@ public class RobotBridgeExecutionClient {
 
   private Map<String, Object> bridgeRequest(Map<String, Object> request) {
     Map<String, Object> result = new LinkedHashMap<>(request);
-    mapRobotId(result, "robotId");
+    mapPlatformRobotIdToBridge(result, "robotId");
     return result;
   }
 
-  private void mapRobotId(Map<String, Object> values, String field) {
+  private void mapPlatformRobotIdToBridge(Map<String, Object> values, String field) {
     Object robotId = values.get(field);
     if (robotId != null) values.put(field, idMapper.toBridgeId(String.valueOf(robotId)));
+  }
+
+  private void mapBridgeRobotIdToPlatform(Map<String, Object> values, String field) {
+    Object robotId = values.get(field);
+    if (robotId != null) values.put(field, idMapper.toPlatformId(String.valueOf(robotId)));
   }
 
   private String errorCode(RestClientResponseException ex, String fallback) {
