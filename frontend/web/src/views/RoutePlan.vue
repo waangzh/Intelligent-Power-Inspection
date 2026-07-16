@@ -359,6 +359,11 @@ async function saveDraft() {
     ElMessage.warning('请先在地图上标注路线')
     return
   }
+  const annotationProblems = editorRef.value?.validateForExport() ?? []
+  if (annotationProblems.length) {
+    ElMessage.error(`路线标注未通过安全检查：${annotationProblems.join('；')}`)
+    return
+  }
   if (!route.mapId && !pendingMapFiles.value && !draftState.value?.mapAssetId) {
     ElMessage.warning('请先导入完整的 YAML/PGM 地图')
     return

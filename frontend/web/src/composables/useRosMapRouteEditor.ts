@@ -1,8 +1,7 @@
-import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, triggerRef, watch, type Ref } from 'vue'
 import type { EditableKeepoutZone, EditorMode, MapAssetIdentity, RouteExecutorDocument, RosMapState } from '@/types/routeExecutor'
 import {
   createDefaultMapState,
-  isMapCoordinateInside,
   mapToPixel,
   parsePgm,
   parseYaml,
@@ -19,13 +18,25 @@ import {
   type RouteFormState,
 } from '@/utils/routeExecutorJson'
 import { parseRouteDocument } from '@/utils/route/parseRouteDocument'
+import {
+  applyRouteSafety,
+  calculateRouteSafety,
+  classifyFootprint,
+  classifyMapCoordinate,
+  describeMapClass,
+  transformFootprint,
+  validateAnnotationExport,
+  type MapClass,
+  type RouteSafetyPoint,
+} from '@/utils/route/routeSafety'
 
 type YawTarget = { kind: 'start'; id: null } | { kind: 'target'; id: string }
-type PointHit = { kind: 'start' } | { kind: 'target'; id: string }
+type PointHit = { kind: 'start' } | { kind: 'target'; id: string } | { kind: 'zonePoint'; id: string; index: number }
 type DragState =
   | { type: 'pan'; startX: number; startY: number; ox: number; oy: number }
   | { type: 'start' }
   | { type: 'target'; id: string }
+  | { type: 'zonePoint'; id: string; index: number }
   | { type: 'yaw'; hit: YawTarget; moved: boolean }
 
 export function useRosMapRouteEditor(
@@ -43,9 +54,11 @@ export function useRosMapRouteEditor(
   const mode = ref<EditorMode>('start')
   const targets = shallowRef<RouteExecutorTarget[]>([])
   const keepoutZones = shallowRef<EditableKeepoutZone[]>([])
+  const activeZoneId = ref<string | null>(null)
   const selectedTargetId = ref<string | null>(null)
   const yawTarget = ref<YawTarget>({ kind: 'start', id: null })
   const yawPreview = ref<{ x: number; y: number } | null>(null)
+  const hoverPixel = ref<{ x: number; y: number } | null>(null)
   const drag = ref<DragState | null>(null)
   const nextTargetNo = ref(1)
   const sourceTemplate = shallowRef<RouteExecutorDocument | null>(null)
@@ -54,6 +67,8 @@ export function useRosMapRouteEditor(
   const activeRouteIdSynced = ref(true)
   const cursorInfo = ref('map: -, -')
   const mapInfo = ref('等待加载地图')
+  const showFootprint = ref(true)
+  const showFootprintPadding = ref(true)
 
   const mapBitmapCanvas = document.createElement('canvas')
   let mapBitmapCtx = mapBitmapCanvas.getContext('2d')
@@ -61,19 +76,21 @@ export function useRosMapRouteEditor(
   const jsonPreview = computed<string>(() => JSON.stringify(exportDocument() as unknown, null, 2))
   const isLegacyDraft = computed(() => sourceTemplate.value?.version === 2)
 
-  const outOfBounds = computed(() => {
-    const items: string[] = []
-    if (!isMapCoordinateInside(map, form.startX, form.startY)) items.push('起点')
+  function currentRoutePoints(): RouteSafetyPoint[] {
+    const points: RouteSafetyPoint[] = [{ id: 'start_pose', label: '起点', x: form.startX, y: form.startY, yaw: form.startYaw }]
     targets.value.forEach((target, index) => {
-      if (!isMapCoordinateInside(map, target.x, target.y)) items.push(`#${index + 1}`)
+      points.push({ id: target.id, label: `#${index + 1} ${target.name || target.id}`, x: target.x, y: target.y, yaw: target.yaw })
     })
-    return items
-  })
+    return points
+  }
+
+  const annotationProblems = computed(() => validateAnnotationExport(map, mapIdentity.value.image_sha256, keepoutZones.value, currentRoutePoints()))
+  const routeSafety = computed(() => calculateRouteSafety(map, keepoutZones.value, currentRoutePoints()))
 
   const targetStatus = computed(() => {
-    if (outOfBounds.value.length) {
+    if (annotationProblems.value.length) {
       return {
-        text: `越界提示：${outOfBounds.value.join('、')} 不在当前地图范围内，请换回对应地图或重新标定。`,
+        text: `保存与导出已阻止：${annotationProblems.value.join('；')}`,
         kind: 'error' as const,
       }
     }
@@ -86,6 +103,10 @@ export function useRosMapRouteEditor(
     }
     return { text: `还没有巡检点。当前方向点：${label}。`, kind: 'normal' as const }
   })
+
+  const zoneStatus = computed(() => keepoutZones.value.length
+    ? `共 ${keepoutZones.value.length} 个禁行区，当前 ${activeZoneId.value || '无'}。`
+    : '无禁行区。选择“禁行区”模式后点击地图追加 polygon 顶点。')
 
   function getSelectedYawHit(): YawTarget {
     if (!yawTarget.value || yawTarget.value.kind === 'start') return { kind: 'start', id: null }
@@ -151,6 +172,69 @@ export function useRosMapRouteEditor(
     ctx.restore()
   }
 
+  function colorWithAlpha(hex: string, alpha: number) {
+    const value = Number.parseInt(hex.slice(1), 16)
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`
+  }
+
+  function drawFootprint(ctx: CanvasRenderingContext2D, pose: { x: number; y: number; yaw: number }, color: string, alpha = 0.16): MapClass {
+    const status = classifyFootprint(map, keepoutZones.value, pose)
+    const blocked = status === 'outside' || status === 'occupied' || status === 'keepout'
+    const baseColor = blocked ? '#b42318' : status === 'unknown' ? '#b54708' : color
+    const path = (points: Array<{ x: number; y: number }>) => {
+      ctx.beginPath()
+      ctx.moveTo(points[0].x, points[0].y)
+      for (let index = 1; index < points.length; index += 1) ctx.lineTo(points[index].x, points[index].y)
+      ctx.closePath()
+    }
+    if (showFootprintPadding.value) {
+      path(transformFootprint(pose, true).map((point) => mapToPixel(map, point.x, point.y)))
+      ctx.fillStyle = colorWithAlpha(baseColor, alpha * 0.45)
+      ctx.strokeStyle = colorWithAlpha(baseColor, 0.72)
+      ctx.lineWidth = 1.2 / view.scale
+      ctx.fill()
+      ctx.stroke()
+    }
+    if (showFootprint.value) {
+      path(transformFootprint(pose).map((point) => mapToPixel(map, point.x, point.y)))
+      ctx.fillStyle = colorWithAlpha(baseColor, alpha)
+      ctx.strokeStyle = baseColor
+      ctx.lineWidth = 1.4 / view.scale
+      ctx.fill()
+      ctx.stroke()
+    }
+    return status
+  }
+
+  function drawKeepoutZones(ctx: CanvasRenderingContext2D) {
+    for (const zone of keepoutZones.value) {
+      if (!zone.polygon.length) continue
+      const points = zone.polygon.map((point) => mapToPixel(map, point.x, point.y))
+      ctx.beginPath()
+      ctx.moveTo(points[0].x, points[0].y)
+      for (let index = 1; index < points.length; index += 1) ctx.lineTo(points[index].x, points[index].y)
+      if (points.length >= 3) ctx.closePath()
+      const active = zone.id === activeZoneId.value
+      ctx.fillStyle = zone.enabled ? 'rgba(180, 35, 24, 0.22)' : 'rgba(102, 112, 133, 0.16)'
+      ctx.strokeStyle = active ? '#b42318' : zone.enabled ? '#d92d20' : '#667085'
+      ctx.lineWidth = (active ? 3 : 2) / view.scale
+      if (points.length >= 3) ctx.fill()
+      ctx.stroke()
+      points.forEach((point, index) => {
+        ctx.fillStyle = active ? '#b42318' : '#d92d20'
+        ctx.beginPath()
+        ctx.arc(point.x, point.y, 4 / view.scale, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#111827'
+        ctx.font = `${11 / view.scale}px Microsoft YaHei, sans-serif`
+        ctx.fillText(String(index + 1), point.x + 5 / view.scale, point.y - 5 / view.scale)
+      })
+      ctx.fillStyle = '#111827'
+      ctx.font = `700 ${12 / view.scale}px Microsoft YaHei, sans-serif`
+      ctx.fillText(zone.name || zone.id, points[0].x + 10 / view.scale, points[0].y + 14 / view.scale)
+    }
+  }
+
   function draw() {
     const canvas = canvasRef.value
     const ctx = getCtx()
@@ -173,6 +257,8 @@ export function useRosMapRouteEditor(
       { kind: 'start' as const, x: form.startX, y: form.startY, yaw: form.startYaw },
       ...targets.value.map((target, index) => ({ kind: 'target' as const, order: index + 1, ...target })),
     ]
+
+    drawKeepoutZones(ctx)
 
     if (targets.value.length > 0) {
       ctx.strokeStyle = '#2563eb'
@@ -198,8 +284,10 @@ export function useRosMapRouteEditor(
         yawTarget.value.kind === point.kind &&
         (isStart || yawTarget.value.id === (point as RouteExecutorTarget & { kind: 'target' }).id)
       const selectedTarget = !isStart && selectedTargetId.value === (point as RouteExecutorTarget & { order: number }).id
-      const inside = isMapCoordinateInside(map, point.x, point.y)
-      const color = inside ? (isStart ? '#0f766e' : '#2563eb') : '#b42318'
+      const footprintKind = drawFootprint(ctx, point, isStart ? '#0f766e' : '#2563eb')
+      const blocked = footprintKind === 'outside' || footprintKind === 'occupied' || footprintKind === 'keepout'
+      const unknown = footprintKind === 'unknown'
+      const color = blocked ? '#b42318' : unknown ? '#b54708' : isStart ? '#0f766e' : '#2563eb'
       const radius = isStart ? 8 / view.scale : 7 / view.scale
       if (selectedForYaw || selectedTarget) {
         ctx.strokeStyle = selectedForYaw ? '#f59e0b' : '#0f766e'
@@ -225,10 +313,15 @@ export function useRosMapRouteEditor(
         ctx.textAlign = 'left'
         ctx.textBaseline = 'alphabetic'
       }
-      ctx.fillStyle = inside ? '#111827' : '#b42318'
+      ctx.fillStyle = blocked ? '#b42318' : unknown ? '#b54708' : '#111827'
       ctx.font = `${12 / view.scale}px Microsoft YaHei, sans-serif`
       const label = isStart ? '起点' : `#${(point as { order: number; name: string }).order} ${point.name}`
       ctx.fillText(label, p.x + 10 / view.scale, p.y - 8 / view.scale)
+    }
+
+    if ((mode.value === 'start' || mode.value === 'target') && hoverPixel.value && !drag.value) {
+      const position = pixelToMap(map, hoverPixel.value.x, hoverPixel.value.y)
+      drawFootprint(ctx, { x: position.x, y: position.y, yaw: mode.value === 'start' ? form.startYaw : 0 }, mode.value === 'start' ? '#0f766e' : '#2563eb', 0.1)
     }
 
     if (mode.value === 'yaw' && yawPreview.value) {
@@ -241,6 +334,15 @@ export function useRosMapRouteEditor(
         if (target) origin = mapToPixel(map, target.x, target.y)
       }
       if (origin && yawPreview.value) {
+        const pose = hit.kind === 'start'
+          ? { x: form.startX, y: form.startY, yaw: round3(-Math.atan2(yawPreview.value.y - origin.y, yawPreview.value.x - origin.x)) }
+          : targets.value.find((item) => item.id === hit.id)
+        if (pose) {
+          const nextPose = 'id' in pose
+            ? { x: pose.x, y: pose.y, yaw: round3(-Math.atan2(yawPreview.value.y - origin.y, yawPreview.value.x - origin.x)) }
+            : pose
+          drawFootprint(ctx, nextPose, '#f59e0b', 0.1)
+        }
         ctx.strokeStyle = '#f59e0b'
         ctx.lineWidth = 2 / view.scale
         ctx.setLineDash([6 / view.scale, 4 / view.scale])
@@ -292,6 +394,14 @@ export function useRosMapRouteEditor(
 
   function getPointHit(px: number, py: number): PointHit | null {
     const threshold = 12 / view.scale
+    if (mode.value === 'keepout') {
+      for (const zone of keepoutZones.value) {
+        for (let index = 0; index < zone.polygon.length; index += 1) {
+          const point = mapToPixel(map, zone.polygon[index].x, zone.polygon[index].y)
+          if (Math.hypot(px - point.x, py - point.y) <= threshold) return { kind: 'zonePoint', id: zone.id, index }
+        }
+      }
+    }
     const startP = mapToPixel(map, form.startX, form.startY)
     if (Math.hypot(px - startP.x, py - startP.y) <= threshold) return { kind: 'start' }
     for (const target of targets.value) {
@@ -302,7 +412,7 @@ export function useRosMapRouteEditor(
   }
 
   function pointHitToYaw(hit: PointHit): YawTarget {
-    return hit.kind === 'start' ? { kind: 'start', id: null } : { kind: 'target', id: hit.id }
+    return hit.kind === 'target' ? { kind: 'target', id: hit.id } : { kind: 'start', id: null }
   }
 
   function setStartFromPixel(px: number, py: number) {
@@ -328,6 +438,88 @@ export function useRosMapRouteEditor(
     })
     selectedTargetId.value = id
     yawTarget.value = { kind: 'target', id }
+    emitChange()
+    draw()
+  }
+
+  function activeZone() {
+    return keepoutZones.value.find((zone) => zone.id === activeZoneId.value) ?? null
+  }
+
+  function nextZoneId() {
+    const used = new Set(keepoutZones.value.map((zone) => zone.id))
+    let number = keepoutZones.value.length + 1
+    while (used.has(`keepout_${String(number).padStart(3, '0')}`)) number += 1
+    return `keepout_${String(number).padStart(3, '0')}`
+  }
+
+  function addKeepoutZone() {
+    const id = nextZoneId()
+    keepoutZones.value.push({ id, name: `禁行区${keepoutZones.value.length + 1}`, type: 'hard_keepout', enabled: true, maskPaddingM: map.resolution, polygon: [] })
+    activeZoneId.value = id
+    setMode('keepout')
+    emitChange()
+    draw()
+  }
+
+  function addZonePointFromPixel(px: number, py: number) {
+    if (!activeZoneId.value) addKeepoutZone()
+    const zone = activeZone()
+    if (!zone) return
+    zone.polygon.push(pixelToMap(map, px, py))
+    emitChange()
+    draw()
+  }
+
+  function selectZone(id: string) {
+    if (!keepoutZones.value.some((zone) => zone.id === id)) return
+    activeZoneId.value = id
+    setMode('keepout')
+  }
+
+  function deleteActiveZone() {
+    if (!activeZoneId.value) return
+    keepoutZones.value = keepoutZones.value.filter((zone) => zone.id !== activeZoneId.value)
+    activeZoneId.value = keepoutZones.value[0]?.id ?? null
+    emitChange()
+    draw()
+  }
+
+  function deleteLastZonePoint() {
+    const zone = activeZone()
+    if (!zone) return
+    zone.polygon.pop()
+    emitChange()
+    draw()
+  }
+
+  function clearZonePoints() {
+    const zone = activeZone()
+    if (!zone) return
+    zone.polygon = []
+    emitChange()
+    draw()
+  }
+
+  function updateZoneField(id: string, field: 'name' | 'id' | 'enabled' | 'maskPaddingM', value: string | number | boolean) {
+    const zone = keepoutZones.value.find((item) => item.id === id)
+    if (!zone) return
+    if (field === 'id') {
+      const nextId = String(value).trim()
+      if (!nextId || keepoutZones.value.some((item) => item.id === nextId && item !== zone)) throw new Error('禁行区 ID 必须非空且唯一')
+      if (activeZoneId.value === zone.id) activeZoneId.value = nextId
+      zone.id = nextId
+    } else if (field === 'name') zone.name = String(value)
+    else if (field === 'enabled') zone.enabled = Boolean(value)
+    else zone.maskPaddingM = Math.min(map.resolution, Math.max(0, Number(value) || 0))
+    emitChange()
+    draw()
+  }
+
+  function updateZonePoint(id: string, index: number, axis: 'x' | 'y', value: number) {
+    const point = keepoutZones.value.find((zone) => zone.id === id)?.polygon[index]
+    if (!point) return
+    point[axis] = Number(value)
     emitChange()
     draw()
   }
@@ -385,6 +577,18 @@ export function useRosMapRouteEditor(
     draw()
   }
 
+  function clearRouteAnnotations() {
+    targets.value = []
+    keepoutZones.value = []
+    activeZoneId.value = null
+    selectedTargetId.value = null
+    yawTarget.value = { kind: 'start', id: null }
+    nextTargetNo.value = 1
+    sourceTemplate.value = null
+    emitChange()
+    draw()
+  }
+
   function addTargetAtCenter() {
     const wrap = wrapRef.value
     if (!wrap) return
@@ -396,6 +600,14 @@ export function useRosMapRouteEditor(
 
   function applyYamlText(text: string, fileName?: string) {
     const patch = parseYaml(text)
+    const resolution = patch.resolution
+    if (typeof resolution !== 'number' || !Number.isFinite(resolution) || resolution <= 0) {
+      throw new Error('地图 YAML 缺少有效 resolution，已停止加载以避免沿用旧地图参数。')
+    }
+    if (!patch.origin || patch.origin.length !== 3 || !patch.origin.every(Number.isFinite)) {
+      throw new Error('地图 YAML 缺少有效 origin，必须包含 x、y、yaw 三个有限数。')
+    }
+    if (!patch.image?.trim()) throw new Error('地图 YAML 缺少 image，无法建立路线与地图的身份绑定。')
     const keepsExistingPgm =
       map.pgmName &&
       patch.image &&
@@ -437,12 +649,34 @@ export function useRosMapRouteEditor(
     emitChange()
   }
 
+  function validateImportedMapIdentity(document: RouteExecutorDocument) {
+    if (document.version !== 3) return
+    const routeMap = document.map
+    const valid = routeMap && routeMap.yaml && routeMap.image && Number.isFinite(routeMap.resolution) && routeMap.resolution > 0
+      && Array.isArray(routeMap.origin) && routeMap.origin.length === 3 && routeMap.origin.every(Number.isFinite)
+      && Number.isInteger(routeMap.width) && routeMap.width > 0 && Number.isInteger(routeMap.height) && routeMap.height > 0
+      && /^[0-9a-f]{64}$/.test(routeMap.image_sha256)
+    if (!valid) throw new Error('v3 路线缺少有效地图身份。')
+    if (!map.width || !map.height || !map.pixels) return
+    const currentHash = mapIdentity.value.image_sha256
+    const sameMap = routeMap.yaml === map.yamlName
+      && rosMapImageFileName(routeMap.image).toLowerCase() === rosMapImageFileName(map.pgmName).toLowerCase()
+      && routeMap.resolution === map.resolution
+      && routeMap.width === map.width
+      && routeMap.height === map.height
+      && routeMap.origin.every((value, index) => value === map.origin[index])
+      && (!currentHash || routeMap.image_sha256 === currentHash)
+    if (!sameMap) throw new Error('导入路线不属于当前地图。请加载其对应 YAML/PGM，或在当前地图重新标注起点、巡检点、路线和禁行区。')
+  }
+
   function importRouteJson(input: unknown, emit = true) {
     const doc = parseRouteDocument(input)
+    validateImportedMapIdentity(doc)
     const loaded = loadRouteJson(doc, form)
     sourceTemplate.value = doc
     targets.value = loaded.targets
     keepoutZones.value = loaded.keepoutZones
+    activeZoneId.value = keepoutZones.value[0]?.id ?? null
     nextTargetNo.value = loaded.nextTargetNo
     selectedTargetId.value = targets.value[0]?.id ?? null
     yawTarget.value = selectedTargetId.value
@@ -454,7 +688,12 @@ export function useRosMapRouteEditor(
   }
 
   function exportDocument(): RouteExecutorDocument {
-    return buildRouteJson(form, targets.value, keepoutZones.value, mapIdentity.value, sourceTemplate.value)
+    const document = buildRouteJson(form, targets.value, keepoutZones.value, mapIdentity.value, sourceTemplate.value)
+    return applyRouteSafety(document, routeSafety.value)
+  }
+
+  function validateForExport() {
+    return annotationProblems.value
   }
 
   function setMapAssetIdentity(identity: MapAssetIdentity) {
@@ -463,6 +702,8 @@ export function useRosMapRouteEditor(
   }
 
   function emitChange() {
+    triggerRef(targets)
+    triggerRef(keepoutZones)
     options?.onChange?.(exportDocument())
   }
 
@@ -510,6 +751,7 @@ export function useRosMapRouteEditor(
     const p = canvasToPixel(event.clientX, event.clientY)
     const hit = getPointHit(p.x, p.y)
     if (event.button === 2) {
+      if (hit?.kind === 'zonePoint') return
       setYawFromPointer(hit ? pointHitToYaw(hit) : getSelectedYawHit(), p.x, p.y)
       return
     }
@@ -524,6 +766,12 @@ export function useRosMapRouteEditor(
         setYawFromPointer(yawHit, p.x, p.y)
         drag.value = { type: 'yaw', hit: yawHit, moved: true }
       }
+      return
+    }
+    if (hit?.kind === 'zonePoint') {
+      activeZoneId.value = hit.id
+      drag.value = { type: 'zonePoint', id: hit.id, index: hit.index }
+      draw()
       return
     }
     if (hit && mode.value !== 'pan') {
@@ -548,16 +796,22 @@ export function useRosMapRouteEditor(
       setStartFromPixel(p.x, p.y)
     } else if (mode.value === 'target') {
       addTargetFromPixel(p.x, p.y)
+    } else if (mode.value === 'keepout') {
+      addZonePointFromPixel(p.x, p.y)
     }
   }
 
   function onMouseMove(event: MouseEvent) {
     const p = canvasToPixel(event.clientX, event.clientY)
+    hoverPixel.value = p
     if (map.width) {
       const pos = pixelToMap(map, p.x, p.y)
-      cursorInfo.value = `map: x=${pos.x}, y=${pos.y}`
+      const kind = mode.value === 'start' || mode.value === 'target'
+        ? classifyFootprint(map, keepoutZones.value, { x: pos.x, y: pos.y, yaw: mode.value === 'start' ? form.startYaw : 0 })
+        : classifyMapCoordinate(map, pos.x, pos.y)
+      cursorInfo.value = `map: x=${pos.x}, y=${pos.y} | ${describeMapClass(kind)}`
     }
-    if (mode.value === 'yaw') {
+    if (mode.value === 'yaw' || mode.value === 'start' || mode.value === 'target') {
       yawPreview.value = p
       draw()
     }
@@ -575,6 +829,14 @@ export function useRosMapRouteEditor(
       const pos = pixelToMap(map, p.x, p.y)
       target.x = pos.x
       target.y = pos.y
+      emitChange()
+      draw()
+    } else if (drag.value.type === 'zonePoint') {
+      const zoneDrag = drag.value
+      const zone = keepoutZones.value.find((item) => item.id === zoneDrag.id)
+      const index = zoneDrag.index
+      if (!zone?.polygon[index]) return
+      zone.polygon[index] = pixelToMap(map, p.x, p.y)
       emitChange()
       draw()
     } else if (drag.value.type === 'yaw') {
@@ -649,6 +911,8 @@ export function useRosMapRouteEditor(
     { immediate: true },
   )
 
+  watch([showFootprint, showFootprintPadding], draw)
+
   onMounted(() => {
     resizeCanvas()
     window.addEventListener('resize', resizeCanvas)
@@ -668,12 +932,16 @@ export function useRosMapRouteEditor(
     mode,
     targets,
     keepoutZones,
+    activeZoneId,
     selectedTargetId,
     cursorInfo,
     mapInfo,
     jsonPreview,
     isLegacyDraft,
     targetStatus,
+    zoneStatus,
+    showFootprint,
+    showFootprintPadding,
     setMode,
     fitToScreen,
     zoomIn,
@@ -682,6 +950,7 @@ export function useRosMapRouteEditor(
     applyPgmBuffer,
     importRouteJson,
     exportDocument,
+    validateForExport,
     setMapAssetIdentity,
     onFormFieldChange,
     selectTarget,
@@ -690,7 +959,15 @@ export function useRosMapRouteEditor(
     moveTarget,
     deleteTarget,
     clearTargets,
+    clearRouteAnnotations,
     addTargetAtCenter,
+    addKeepoutZone,
+    selectZone,
+    deleteActiveZone,
+    deleteLastZonePoint,
+    clearZonePoints,
+    updateZoneField,
+    updateZonePoint,
     handleDroppedFiles,
     onMouseDown,
     onWheel,
