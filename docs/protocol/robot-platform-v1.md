@@ -4,12 +4,13 @@
 
 | 项目 | 值 |
 | --- | --- |
-| 协议版本 | `1.0` |
+| 线上 `protocolVersion` | `1.0` |
+| 文档修订号 | `1.0.1` |
 | 适用提交 | Robot `79df249` 及以后；Platform Bridge `c5b16e7` 及以后 |
-| 更新时间 | 2026-07-13 |
-| 稳定性等级 | RC：字段与状态机冻结，部署与业务接线仍需联调 |
+| 更新时间 | 2026-07-16 |
+| 稳定性等级 | RC：源码闭环已实现，待服务器部署与实机验收 |
 | 责任人 | 平台后端、Robot Bridge 与 Jetson 机器人端共同维护 |
-| 单一事实来源 | 两个仓库的 `docs/protocol/robot-platform-v1.md`，核心内容必须逐字一致 |
+| 单一事实来源 | 平台仓库 `docs/protocol/robot-platform-v1.md`；机器人仓库同路径为字节一致副本 |
 
 兼容原则：同一主版本只允许新增可选字段、可选事件和错误码；不得改变既有字段含义、哈希算法、幂等规则或终态语义。消费者必须忽略未知可选字段，生产者不得删除必填字段。破坏性修改必须升级协议版本。
 
@@ -478,23 +479,30 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> CREATED
-    CREATED --> DISPATCHING: START/CANCEL 被领取
-    DISPATCHING --> RUNNING: route_started
-    RUNNING --> PAUSED: route_paused
-    PAUSED --> RUNNING: route_resumed
-    RUNNING --> MANUAL_TAKEOVER: manual_takeover
-    MANUAL_TAKEOVER --> RUNNING: route_resumed
+    CREATED --> STARTING: Spring 接受 START
+    START_FAILED --> STARTING: 用户重试 START
+    STARTING --> RUNNING: route_started
+    RUNNING --> PAUSING: PAUSE 入队
+    PAUSING --> PAUSED: route_paused
+    PAUSED --> RESUMING: RESUME 入队
+    RESUMING --> RUNNING: route_resumed
+    RUNNING --> TAKEOVER_PENDING: TAKEOVER 入队
+    TAKEOVER_PENDING --> MANUAL_TAKEOVER: manual_takeover
+    RUNNING --> CANCELLING: CANCEL 入队
+    PAUSED --> CANCELLING: CANCEL 入队
+    CANCELLING --> CANCELLED: route_canceled
+    STARTING --> START_FAILED: START 确认失败
     RUNNING --> COMPLETED: route_finished
-    DISPATCHING --> FAILED
-    DISPATCHING --> CANCELLED
     RUNNING --> FAILED
-    RUNNING --> CANCELLED
     PAUSED --> FAILED
-    PAUSED --> CANCELLED
-    MANUAL_TAKEOVER --> CANCELLED
+    STARTING --> DISCONNECTED: Bridge 不可达
+    RUNNING --> DISCONNECTED: Bridge 不可达
+    DISCONNECTED --> RECOVERING: 开始对账
+    RECOVERING --> STARTING: 恢复原状态
+    RECOVERING --> RUNNING: 恢复原状态
 ```
 
-合法迁移仅限图示与当前 Store 转移表。`COMPLETED/FAILED/CANCELLED` 为吸收终态，不允许回到 RUNNING。`PAUSED → COMPLETED`、`MANUAL_TAKEOVER → COMPLETED/FAILED` 等未列迁移当前非法；如业务需要，必须先升级合同和实现，不得只在前端猜测。
+Spring 平台状态包括 `CREATED/STARTING/RUNNING/PAUSING/PAUSED/RESUMING/CANCELLING/TAKEOVER_PENDING/MANUAL_TAKEOVER/COMPLETED/START_FAILED/FAILED/CANCELLED/DISCONNECTED/RECOVERING`。Bridge 内部 `DISPATCHING` 对应 Spring 的 `STARTING` 或控制等待态。`COMPLETED/FAILED/CANCELLED` 为吸收终态，不允许回到 RUNNING；`START_FAILED` 只允许由用户显式重试 START。
 
 ## 10. 事件与 sequence
 
@@ -556,7 +564,63 @@ stateDiagram-v2
 
 ## 14. 当前实现边界
 
-- Spring Boot 尚未实现 `app.robot.mode=bridge`，真实路线任务仍被 `requireSimulationTask` 拦截；本协议不代表平台业务调度已经接通。
+- Spring Boot 已实现 `app.robot.mode=bridge`、不可变 execution 快照、启动资格校验、Bridge START/控制投递、事件轮询与状态映射；仍需部署到服务器并完成无运动与现场实机验收。
 - Bridge 管理 API 返回原始 JSON，Spring 必须在服务端适配并继续向前端返回 `ApiResponse`。
 - `HttpRobotGateway/MobileBridgeClient` 是旧 Jetson `/api/debug` 局域网直连模式，不能复用为 Heartbeat Bridge Client。
-- 在 Spring 完成 Bridge Client、事件轮询和状态映射之前，不得从公网创建 START 命令。
+- `READY_FOR_ROBOT` 只表示 Bridge 已缓存并校验路线与地图，不表示已创建 execution、已入队 START、机器人已领取命令或 ROS 已开始运动。
+
+## 15. 浏览器到 Spring 业务 API
+
+浏览器只访问 Spring `/api/v1`，所有成功响应继续使用平台 `ApiResponse` 包装。Bridge 模式下：
+
+| 接口 | 要求 | 成功语义 |
+| --- | --- | --- |
+| `POST /api/v1/tasks` | `name`、`robotId`、`routeRevisionId` 必填；可选 `routeId` 必须与 revision 所属路线一致 | 同事务创建 Task 与不可变 `TaskExecution`，初始 `CREATED`，响应含 `executionId` |
+| `GET /api/v1/tasks/{taskId}/start-eligibility` | 校验 robot CONNECTED、部署 READY、身份/哈希/active route 一致、无冲突活动 execution | `eligible=true` 才可请求启动 |
+| `POST /api/v1/tasks/{taskId}/start` | 必须带 `Idempotency-Key` | HTTP `202`，Spring 已接受启动意图并等待 worker 向 Bridge 入队 |
+| `POST /api/v1/tasks/{taskId}/pause` | execution 为 `RUNNING` | HTTP `202`，进入 `PAUSING` |
+| `POST /api/v1/tasks/{taskId}/resume` | execution 为 `PAUSED` | HTTP `202`，进入 `RESUMING` |
+| `POST /api/v1/tasks/{taskId}/takeover` | execution 为 `RUNNING`，带接管原因 | HTTP `202`，进入 `TAKEOVER_PENDING` |
+| `POST /api/v1/tasks/{taskId}/cancel` | execution 为 `RUNNING` 或 `PAUSED` | HTTP `202`，进入 `CANCELLING` |
+
+旧式 `/dispatch` 仅保留给 simulation/legacy 任务，不用于绑定 `routeRevisionId` 的 Bridge 任务。所有 `202` 都只表示请求已接受或命令已入队；只有 Jetson ACK、ROS publish 和对应真实事件逐级出现后，才能确认后续阶段。
+
+## 16. 端到端时序
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Spring
+    participant Bridge
+    participant Jetson
+    participant ROS
+    Browser->>Spring: POST /tasks (routeRevisionId)
+    Spring-->>Browser: Task + executionId (CREATED)
+    Browser->>Spring: GET start-eligibility
+    Spring->>Bridge: 查询 heartbeat/deployment
+    Spring-->>Browser: eligible=true
+    Browser->>Spring: POST /start + Idempotency-Key
+    Spring-->>Browser: 202 STARTING
+    Spring->>Bridge: POST execution/start
+    Bridge-->>Spring: 202 QUEUED + commandId
+    Jetson->>Bridge: heartbeat 拉取 START
+    Jetson->>Bridge: ACK RECEIVED
+    Jetson->>ROS: 发布云端巡逻命令
+    ROS-->>Jetson: route_started / progress / terminal event
+    Jetson->>Bridge: events/batch
+    Spring->>Bridge: 轮询 execution/events
+    Spring-->>Browser: STOMP execution 状态与事件
+```
+
+兼容策略：新增可选字段、可选事件和错误码保持 `protocolVersion: "1.0"`；删除必填字段、改变字段含义、幂等语义或终态语义等破坏性变更才升级到 `2.0`。
+
+## 17. 双仓同步与发布检查
+
+协议修改只在平台主文件完成，然后显式传入机器人仓库路径：
+
+```bash
+./scripts/sync_robot_protocol.sh --write <robot-repo-root>
+./scripts/sync_robot_protocol.sh --check <robot-repo-root>
+```
+
+`--check` 使用 `cmp` 只读比较并打印两份文件的 SHA-256；`--write` 才会覆盖机器人副本。每次协议修改必须同时提交主协议、机器人同步副本及两边受影响的接口/状态/验收文档；发布记录保存脚本输出的两条 SHA-256。

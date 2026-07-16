@@ -1,0 +1,26 @@
+[Unit]
+Description=Power Inspection Spring Boot Backend
+After=network-online.target mysql.service robot-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=powerinspection
+Group=powerinspection
+WorkingDirectory=/var/lib/power-inspection
+EnvironmentFile=/etc/power-inspection/backend.env
+ExecStart=/usr/bin/java -Xms128m -Xmx512m -jar /opt/power-inspection/current/backend/power-inspection-backend.jar --spring.config.additional-location=file:/etc/power-inspection/application.yml
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=143
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=power-inspection-backend
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/power-inspection
+
+[Install]
+WantedBy=multi-user.target

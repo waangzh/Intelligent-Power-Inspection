@@ -28,7 +28,7 @@ public class SecurityConfig {
       .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .authorizeHttpRequests(auth -> auth
         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/ws/**", "/model-files/**").permitAll()
+        .requestMatchers("/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/register", "/ws/**", "/model-files/**").permitAll()
         .requestMatchers("/h2-console/**").permitAll()
         .requestMatchers(HttpMethod.GET,
           "/api/v1/route-deployments/*", "/api/v1/route-revisions/*",

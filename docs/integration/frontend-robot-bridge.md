@@ -60,12 +60,16 @@ GET /api/v1/route-deployments/{deploymentId}
 ### 3.2 任务控制
 
 ```text
-POST /api/v1/tasks/{id}/dispatch
+POST /api/v1/tasks
+GET  /api/v1/tasks/{id}/start-eligibility
+POST /api/v1/tasks/{id}/start
 POST /api/v1/tasks/{id}/pause
 POST /api/v1/tasks/{id}/resume
 POST /api/v1/tasks/{id}/takeover
 POST /api/v1/tasks/{id}/cancel
 ```
+
+Bridge 模式创建任务必须提交 `name`、`robotId`、`routeRevisionId`。若同时提交 `routeId`，它必须与 revision 所属路线一致。只有最新、已发布且对所选机器人存在 `READY_FOR_ROBOT` 部署的 revision 才应出现在创建表单中；没有可用版本时禁用创建并引导用户先发布和同步部署。
 
 控制接口成功只代表平台接受了请求或命令已入队，不代表机器人已经达到目标状态。
 
@@ -84,13 +88,14 @@ robot online 只从上述 Spring 资源读取，不调用 `GET /bridge/v1/robots
 
 | Task status | 建议文案 | 说明 |
 | --- | --- | --- |
-| `CREATED` | 待下发 | 尚未创建 START command |
-| `DISPATCHED` | 下发中 | 已入队/租约/ACK/ROS publish 中任一阶段，尚未确认 route_started |
+| `CREATED` | 待启动 | 尚未创建 START command |
+| `STARTING` | 启动请求中 | Spring/Bridge 已接受，尚未确认 route_started |
 | `RUNNING` | 巡检中 | 已收到真实 route_started |
 | `PAUSED` | 已暂停 | 已收到真实 route_paused |
 | `MANUAL_TAKEOVER` | 人工接管 | 已收到真实 manual_takeover |
 | `COMPLETED` | 已完成 | 终态 |
 | `FAILED` | 执行失败 | 终态，展示错误 |
+| `START_FAILED` | 启动失败 | 可重新核验资格并显式重试 |
 | `CANCELLED` | 已取消 | 终态 |
 
 不要新增前端 `QUEUED/LEASED/ACKED/APPLIED` 页面主状态；这些是后端/设备投递细节，可在管理员诊断区展示，但不能替代 Task status。
@@ -99,8 +104,9 @@ robot online 只从上述 Spring 资源读取，不调用 `GET /bridge/v1/robots
 
 | 状态 | 下发 | 暂停 | 恢复 | 接管 | 取消 |
 | --- | --- | --- | --- | --- | --- |
-| `CREATED` | 允许 | 禁止 | 禁止 | 禁止 | 禁止或按产品规则删除 |
-| `DISPATCHED` | 禁止 | 禁止 | 禁止 | 禁止 | 允许 |
+| `CREATED` | 启动 | 禁止 | 禁止 | 禁止 | 禁止 |
+| `START_FAILED` | 重试启动 | 禁止 | 禁止 | 禁止 | 禁止 |
+| `STARTING` | 禁止 | 禁止 | 禁止 | 禁止 | 禁止 |
 | `RUNNING` | 禁止 | 允许 | 禁止 | 允许 | 允许 |
 | `PAUSED` | 禁止 | 禁止 | 允许 | 禁止 | 允许 |
 | `MANUAL_TAKEOVER` | 禁止 | 禁止 | 允许 | 禁止 | 允许 |
@@ -112,7 +118,7 @@ robot online 只从上述 Spring 资源读取，不调用 `GET /bridge/v1/robots
 
 ## 6. 关键交互语义
 
-- dispatch 返回成功：提示“命令已进入队列，正在下发”，保持 `DISPATCHED`。
+- start 返回 `202`：提示“命令已接受，等待机器人确认”，保持 `STARTING`。
 - 只有收到 `RUNNING` 才显示“巡检中”并启动运行时长展示。
 - pause 返回成功：提示“暂停命令已发送”，按钮进入 pending；等待 `PAUSED`。
 - resume/takeover/cancel 同理，等待目标状态或错误事件。

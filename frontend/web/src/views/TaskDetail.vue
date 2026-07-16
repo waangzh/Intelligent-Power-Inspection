@@ -4,7 +4,7 @@
       <template #actions>
         <TaskStatusTag :status="taskStore.statusOf(task)" />
         <el-button
-          v-if="can('task:dispatch') && execution && taskStore.statusOf(task) === 'CREATED'"
+          v-if="can('task:dispatch') && execution && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(task))"
           type="primary"
           :disabled="!eligibility?.eligible"
           :title="startDisabledReason"
@@ -41,6 +41,7 @@
             <el-descriptions-item label="开始时间">{{ task.startedAt ? fmt(task.startedAt) : '-' }}</el-descriptions-item>
           </el-descriptions>
           <el-descriptions v-if="execution" :column="2" border size="small" style="margin-top: 12px">
+            <el-descriptions-item label="执行 ID">{{ execution.executionId }}</el-descriptions-item>
             <el-descriptions-item label="路线修订">{{ execution.routeRevisionId }}</el-descriptions-item>
             <el-descriptions-item label="部署 ID">{{ execution.deploymentId || '-' }}</el-descriptions-item>
             <el-descriptions-item label="当前目标">{{ execution.currentTargetId || '-' }}</el-descriptions-item>
@@ -49,7 +50,7 @@
             <el-descriptions-item label="地图哈希">{{ shortHash(execution.mapImageSha256) }}</el-descriptions-item>
           </el-descriptions>
           <el-alert
-            v-if="execution && taskStore.statusOf(task) === 'CREATED'"
+            v-if="execution && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(task))"
             :title="startDisabledReason || '部署 READY_FOR_ROBOT 且身份、路线哈希、地图哈希一致后才允许启动'"
             :type="eligibility?.eligible ? 'success' : 'warning'"
             :closable="false"
