@@ -1,5 +1,14 @@
 /** 检测项类型 */
-export type { MapAsset, MapAssetFiles, MapAssetUploadFiles, MapAssetUploadInput } from './mapAsset'
+export type {
+  MapAsset,
+  MapAssetFiles,
+  MapAssetQuery,
+  MapAssetReviewInput,
+  MapAssetSource,
+  MapAssetStatus,
+  MapAssetUploadFiles,
+  MapAssetUploadInput,
+} from './mapAsset'
 
 export type DetectionType =
   | 'PERSON'

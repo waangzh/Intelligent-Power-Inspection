@@ -11,6 +11,8 @@ import type {
   TaskStartEligibility,
   ManualDetectionResponse,
   MapAsset,
+  MapAssetQuery,
+  MapAssetReviewInput,
   Robot,
   Route,
   RouteRevision,
@@ -37,6 +39,7 @@ import type {
 import type { WorkOrder, WorkOrderReviewInput, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
 import type { RobotHeartbeatStatus, RobotHeartbeatStatusPage, RobotHeartbeatStatusQuery } from '@/types/robotHeartbeat'
+import { buildMapAssetQuery } from '@/utils/mapAssetReview'
 
 export const resourcesApi = {
   listSites: () => http.get<Site[]>('/sites'),
@@ -73,10 +76,13 @@ export const resourcesApi = {
     http.delete<void>(`/routes/${routeId}/checkpoints/${checkpointId}`),
 
   uploadMapAsset: (form: FormData) => http.postForm<MapAsset>('/map-assets', form),
+  listMapAssets: (query: MapAssetQuery = {}) => http.get<MapAsset[]>(`/map-assets${buildMapAssetQuery(query)}`),
   getMapAsset: (id: string) => http.get<MapAsset>(`/map-assets/${id}`),
   getMapAssetYaml: (id: string) => http.get<Blob>(`/map-assets/${id}/yaml`),
   getMapAssetPgm: (id: string) => http.get<Blob>(`/map-assets/${id}/pgm`),
   removeMapAsset: (id: string) => http.delete<void>(`/map-assets/${id}`),
+  reviewMapAsset: (id: string, input: MapAssetReviewInput) =>
+    http.post<MapAsset>(`/map-assets/${encodeURIComponent(id)}/review`, input),
 
   listTasks: () => http.get<InspectionTask[]>('/tasks'),
   createTask: (task: InspectionTask) => http.post<InspectionTask>('/tasks', task),
