@@ -112,6 +112,7 @@ public class RouteDeploymentService {
       dto.put("robotId", deployment.getRobotId());
       dto.put("requestId", deployment.getRequestId());
       dto.put("state", deployment.getState());
+      dto.put("stateLabel", RouteDeploymentState.displayLabelOf(deployment.getState()));
       dto.put("attemptNo", deployment.getAttemptNo());
       dto.put("attemptCount", deployment.getAttemptNo());
       dto.put("lastAttemptAt", deployment.getLastAttemptAt());

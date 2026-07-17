@@ -153,9 +153,9 @@
           </el-select>
         </el-form-item>
         <el-form-item label="可部署版本" required>
-          <el-input :model-value="readyRevision ? `第 ${readyRevision.revisionNo} 版（${readyRevision.id}）` : ''" placeholder="暂无 READY_FOR_ROBOT 版本" disabled />
+          <el-input :model-value="readyRevision ? `第 ${readyRevision.revisionNo} 版（${readyRevision.id}）` : ''" :placeholder="`暂无${readyDeploymentLabel}版本`" disabled />
         </el-form-item>
-        <el-alert v-if="!revisionLoading && form.routeId && !readyRevision" title="该路线没有已发布且 READY_FOR_ROBOT 的版本，请先发布路线并同步部署" type="warning" :closable="false" show-icon />
+        <el-alert v-if="!revisionLoading && form.routeId && !readyRevision" :title="`该路线没有已发布且${readyDeploymentLabel}的版本，请先发布路线并同步部署`" type="warning" :closable="false" show-icon />
         <el-form-item label="执行机器人">
           <el-input :model-value="defaultRobotLabel" disabled />
         </el-form-item>
@@ -182,6 +182,9 @@ import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { latestReadyRevision, useTaskStore } from '@/stores/task'
 import type { InspectionTask, RouteRevision } from '@/types'
+import { DEPLOYMENT_STATE_LABELS } from '@/utils/routeDeployment'
+
+const readyDeploymentLabel = DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT
 
 const router = useRouter()
 const { can, canAny } = usePermission()
@@ -265,7 +268,7 @@ async function submitTask() {
     return
   }
   if (!readyRevision.value) {
-    ElMessage.warning('请先发布路线并同步到 READY_FOR_ROBOT')
+    ElMessage.warning(`请先发布路线并同步到${readyDeploymentLabel}`)
     return
   }
   try {
