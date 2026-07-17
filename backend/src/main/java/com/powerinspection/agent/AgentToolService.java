@@ -9,7 +9,9 @@ import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.notification.NotificationService;
 import com.powerinspection.user.UserEntity;
-import com.powerinspection.workorder.WorkOrderService;
+import com.powerinspection.workorder.ConversionSource;
+import com.powerinspection.workorder.CreateWorkOrderFromAlarmRequest;
+import com.powerinspection.workorder.WorkOrderCommandService;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,13 +23,13 @@ public class AgentToolService {
   private final DataStoreService dataStore;
   private final LocateAnythingGateway locateAnythingGateway;
   private final NotificationService notificationService;
-  private final WorkOrderService workOrderService;
+  private final WorkOrderCommandService workOrderCommandService;
 
-  public AgentToolService(DataStoreService dataStore, LocateAnythingGateway locateAnythingGateway, NotificationService notificationService, WorkOrderService workOrderService) {
+  public AgentToolService(DataStoreService dataStore, LocateAnythingGateway locateAnythingGateway, NotificationService notificationService, WorkOrderCommandService workOrderCommandService) {
     this.dataStore = dataStore;
     this.locateAnythingGateway = locateAnythingGateway;
     this.notificationService = notificationService;
-    this.workOrderService = workOrderService;
+    this.workOrderCommandService = workOrderCommandService;
   }
 
   public Map<String, Object> queryTask(String taskId) {
@@ -176,17 +178,12 @@ public class AgentToolService {
     if (hasText(title)) overrides.put("title", title);
     if (hasText(description)) overrides.put("description", description);
     if (hasText(priority)) overrides.put("priority", priority);
-    Map<String, Object> result = workOrderService.createFromAlarm(alarmId, "AGENT", user, text(payload.get("assigneeName")), overrides);
-    if (hasText(text(payload.get("agentActionId")))) {
-      result.put("agentActionId", text(payload.get("agentActionId")));
-    }
-    if (hasText(text(payload.get("agentIdempotencyKey")))) {
-      result.put("agentIdempotencyKey", text(payload.get("agentIdempotencyKey")));
-    }
-    if (hasText(text(payload.get("taskId")))) {
-      result.put("taskId", text(payload.get("taskId")));
-    }
-    return result;
+    CreateWorkOrderFromAlarmRequest request = CreateWorkOrderFromAlarmRequest.fromMap(overrides);
+    request.setAssigneeName(text(payload.get("assigneeName")));
+    request.setAgentActionId(text(payload.get("agentActionId")));
+    request.setAgentIdempotencyKey(text(payload.get("agentIdempotencyKey")));
+    request.setTaskId(text(payload.get("taskId")));
+    return workOrderCommandService.createFromAlarm(alarmId, ConversionSource.AGENT, user, request);
   }
 
   public Map<String, Object> pushNotification(Map<String, Object> payload) {

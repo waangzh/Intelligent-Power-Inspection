@@ -3,6 +3,7 @@ package com.powerinspection.data;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.JsonStore;
 import com.powerinspection.common.PageResult;
+import com.powerinspection.domain.DomainProjectionSync;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -10,6 +11,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -20,10 +22,15 @@ import org.springframework.stereotype.Service;
 public class DataStoreService {
   private final DataRecordRepository repository;
   private final JsonStore jsonStore;
+  private final DomainProjectionSync domainProjectionSync;
 
-  public DataStoreService(DataRecordRepository repository, JsonStore jsonStore) {
+  public DataStoreService(
+      DataRecordRepository repository,
+      JsonStore jsonStore,
+      @Lazy DomainProjectionSync domainProjectionSync) {
     this.repository = repository;
     this.jsonStore = jsonStore;
+    this.domainProjectionSync = domainProjectionSync;
   }
 
   public List<Map<String, Object>> list(String category) {
@@ -142,6 +149,7 @@ public class DataStoreService {
     record.setPayload(jsonStore.stringify(payload));
     record.setUpdatedAt(now);
     repository.save(record);
+    domainProjectionSync.upsert(category, payload);
     return payload;
   }
 
@@ -156,6 +164,7 @@ public class DataStoreService {
   @Transactional
   public void delete(String category, String id) {
     repository.deleteByCategoryAndRecordId(category, id);
+    domainProjectionSync.delete(category, id);
   }
 
   @Transactional
@@ -165,7 +174,7 @@ public class DataStoreService {
       .filter(item -> value.equals(string(item.get(field))))
       .map(item -> string(item.get("id")))
       .filter(id -> id != null && !id.isBlank())
-      .forEach(id -> repository.deleteByCategoryAndRecordId(category, id));
+      .forEach(id -> delete(category, id));
   }
 
   public boolean exists(String category, String id) {
