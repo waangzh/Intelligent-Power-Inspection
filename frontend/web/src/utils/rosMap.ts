@@ -22,7 +22,6 @@ function parseScalar(valueStr: string): unknown {
       .slice(1, -1)
       .split(',')
       .map((part) => Number(part.trim()))
-      .filter((n) => Number.isFinite(n))
   }
   if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value)
   return value
@@ -50,6 +49,10 @@ export function parseYaml(text: string): Partial<RosMapState> {
       const listItems: number[] = []
       while (i < lines.length) {
         const nextLine = lines[i].split('#')[0]
+        if (!nextLine.trim()) {
+          i += 1
+          continue
+        }
         const itemMatch = nextLine.match(/^\s*-\s*(-?\d+(?:\.\d+)?)\s*$/)
         if (!itemMatch) break
         listItems.push(Number(itemMatch[1]))
@@ -64,9 +67,9 @@ export function parseYaml(text: string): Partial<RosMapState> {
 
   const patch: Partial<RosMapState> = {}
   if (typeof config.resolution === 'number') patch.resolution = config.resolution
-  if (Array.isArray(config.origin) && config.origin.length >= 2) {
+  if (Array.isArray(config.origin) && config.origin.length >= 3 && config.origin.slice(0, 3).every(Number.isFinite)) {
     const o = config.origin as number[]
-    patch.origin = [Number(o[0]), Number(o[1]), Number(o[2] ?? 0)]
+    patch.origin = [Number(o[0]), Number(o[1]), Number(o[2])]
   }
   if (typeof config.negate === 'number') patch.negate = config.negate
   if (typeof config.occupied_thresh === 'number') patch.occupiedThresh = config.occupied_thresh

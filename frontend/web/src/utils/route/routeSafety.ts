@@ -188,5 +188,9 @@ function segmentsIntersect(a: { x: number; y: number }, b: { x: number; y: numbe
   const cdA = cross(c, d, a)
   const cdB = cross(c, d, b)
   const onSegment = (p: typeof a, q: typeof a, r: typeof a) => Math.abs(cross(p, q, r)) <= EPSILON && r.x >= Math.min(p.x, q.x) - EPSILON && r.x <= Math.max(p.x, q.x) + EPSILON && r.y >= Math.min(p.y, q.y) - EPSILON && r.y <= Math.max(p.y, q.y) + EPSILON
-  return abC * abD < -EPSILON || cdA * cdB < -EPSILON || onSegment(a, b, c) || onSegment(a, b, d) || onSegment(c, d, a) || onSegment(c, d, b)
+  return (abC * abD < -EPSILON && cdA * cdB < -EPSILON)
+    || onSegment(a, b, c)
+    || onSegment(a, b, d)
+    || onSegment(c, d, a)
+    || onSegment(c, d, b)
 }
