@@ -21,27 +21,7 @@ class BridgeError(Exception):
 
 
 def canonical(value):
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-
-def valid_event(event, robot_id):
-    required_text = ("robot_id", "boot_id", "event", "execution_id", "deployment_id", "request_id", "command_id", "occurred_at")
-    if not isinstance(event, dict) or str(event.get("schema_version") or "") != "1.0":
-        return False
-    if any(not isinstance(event.get(field), str) or not event[field].strip() for field in required_text):
-        return False
-    if event["robot_id"] != robot_id:
-        return False
-    sequence = event.get("sequence")
-    if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence <= 0:
-        return False
-    try:
-        occurred_at = datetime.fromisoformat(event["occurred_at"].replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    if occurred_at.tzinfo is None:
-        return False
-    return "payload" not in event or isinstance(event["payload"], dict)
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
 
 def safe_name(value, suffix):
@@ -249,18 +229,13 @@ def create_app() -> FastAPI:
 
     @app.post("/robot-api/v1/events/batch")
     async def event_batch(request: Request):
-        try:
-            body = await request.json()
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise BridgeError("INVALID_REQUEST", "invalid events payload") from exc
-        if not isinstance(body, dict):
-            raise BridgeError("INVALID_REQUEST", "invalid events payload")
+        body = await request.json()
         robot_id = token_robot(request, body)
         events = body.get("events")
-        if not isinstance(events, list) or len(events) > 100:
-            raise BridgeError("INVALID_REQUEST", "events must be a list of at most 100")
-        if any(not valid_event(event, robot_id) for event in events):
-            raise BridgeError("INVALID_REQUEST", "each event must contain the complete protocol v1 identity")
+        if not isinstance(events, list) or len(events) > 100 or any(str(event.get("robot_id") or event.get("robotId") or robot_id) != robot_id for event in events if isinstance(event, dict)):
+            raise BridgeError("INVALID_REQUEST", "events must be a robot-owned list of at most 100")
+        if any(not isinstance(event, dict) for event in events):
+            raise BridgeError("INVALID_REQUEST", "event must be an object")
         return {"acceptedThroughSequence": store.accept_events(robot_id, events)}
 
     @app.get("/robot-api/v1/deployments/{deployment_id}/{asset}")

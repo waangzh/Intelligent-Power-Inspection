@@ -24,7 +24,7 @@ describe('路线部署管理端', () => {
   })
 
   it('展示部署状态并只轮询尚未有确定结果的状态', () => {
-    expect(DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT).toBe('Bridge 已就绪，待机器人领取任务')
+    expect(DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT).toBe('等待机器人领取')
     expect(shouldPollDeployment('PENDING')).toBe(true)
     expect(shouldPollDeployment('UNKNOWN')).toBe(true)
     expect(shouldPollDeployment('FAILED')).toBe(false)

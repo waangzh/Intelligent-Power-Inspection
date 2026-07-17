@@ -1,73 +1,13 @@
 import type { UserRole } from '@/types/auth'
 
-export type Permission =
-  | 'task:view'
-  | 'task:create'
-  | 'task:dispatch'
-  | 'task:control'
-  | 'task:takeover'
-  | 'task:estop'
-  | 'site:edit'
-  | 'route:edit'
-  | 'alarm:ack'
-  | 'robot:manage'
-  | 'detection:manage'
-  | 'user:manage'
-  | 'record:export'
-  | 'workorder:view'
-  | 'workorder:create'
-  | 'workorder:process'
-  | 'workorder:review'
-  | 'alarm:policy'
-  | 'agent:view'
-  | 'agent:run'
-  | 'agent:approve'
-  | 'agent:admin'
+export type { Permission } from '@/generated/permissions'
+export { PERMISSION_VALUES } from '@/generated/permissions'
+
+import type { Permission } from '@/generated/permissions'
 
 export interface AccessRule {
   permission?: Permission
   roles?: UserRole[]
-}
-
-/** 管理员：系统治理与流程审批，不执行一线巡检调度 */
-const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  ADMIN: [
-    'task:view',
-    'task:estop',
-    'site:edit',
-    'route:edit',
-    'robot:manage',
-    'detection:manage',
-    'user:manage',
-    'record:export',
-    'workorder:view',
-    'workorder:create',
-    'workorder:review',
-    'alarm:policy',
-    'agent:view',
-    'agent:run',
-    'agent:approve',
-    'agent:admin',
-  ],
-  /** 调度员：值班运维，负责任务执行与告警现场处置 */
-  DISPATCHER: [
-    'task:view',
-    'task:create',
-    'task:dispatch',
-    'task:control',
-    'task:takeover',
-    'site:edit',
-    'route:edit',
-    'alarm:ack',
-    'record:export',
-    'workorder:view',
-    'workorder:process',
-    'agent:view',
-    'agent:run',
-    'agent:approve',
-  ],
-  /** 观察员：只读监督，无写操作 */
-  VIEWER: ['task:view'],
 }
 
 export function canAccessByRole(role: UserRole | undefined, allowedRoles?: UserRole[]): boolean {
@@ -75,24 +15,28 @@ export function canAccessByRole(role: UserRole | undefined, allowedRoles?: UserR
   return !!role && allowedRoles.includes(role)
 }
 
-export function canAccess(role: UserRole | undefined, rule?: AccessRule): boolean {
+export function hasPermission(permissions: Permission[] | undefined, permission: Permission): boolean {
+  if (!permissions?.length) return false
+  return permissions.includes(permission)
+}
+
+export function hasAnyPermission(permissions: Permission[] | undefined, values: Permission[]): boolean {
+  return values.some((p) => hasPermission(permissions, p))
+}
+
+export function canAccess(
+  permissions: Permission[] | undefined,
+  role: UserRole | undefined,
+  rule?: AccessRule,
+): boolean {
   if (!rule) return true
   if (rule.roles?.length && !canAccessByRole(role, rule.roles)) {
     return false
   }
-  if (rule.permission && !hasPermission(role, rule.permission)) {
+  if (rule.permission && !hasPermission(permissions, rule.permission)) {
     return false
   }
   return true
-}
-
-export function hasPermission(role: UserRole | undefined, permission: Permission): boolean {
-  if (!role) return false
-  return ROLE_PERMISSIONS[role].includes(permission)
-}
-
-export function hasAnyPermission(role: UserRole | undefined, permissions: Permission[]): boolean {
-  return permissions.some((p) => hasPermission(role, p))
 }
 
 export const ROLE_SUMMARIES: Record<UserRole, { title: string; scope: string }> = {

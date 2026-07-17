@@ -61,10 +61,10 @@
         <task-status-tag status="{{item.status}}" />
       </view>
       <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1a5fb4" />
-      <view class="task-actions" wx:if="{{canControl}}">
-        <button wx:if="{{item.status==='RUNNING'}}" size="mini" bindtap="pauseTask" data-id="{{item.id}}">暂停</button>
-        <button wx:if="{{item.status==='PAUSED'}}" size="mini" type="primary" bindtap="resumeTask" data-id="{{item.id}}">恢复</button>
-        <button wx:if="{{item.status==='RUNNING'}}" size="mini" type="warn" bindtap="takeoverTask" data-id="{{item.id}}">接管</button>
+      <view class="task-actions" wx:if="{{canControl || canTakeover}}">
+        <button wx:if="{{canControl && item.status==='RUNNING'}}" size="mini" bindtap="pauseTask" data-id="{{item.id}}">暂停</button>
+        <button wx:if="{{canControl && item.status==='PAUSED'}}" size="mini" type="primary" bindtap="resumeTask" data-id="{{item.id}}">恢复</button>
+        <button wx:if="{{canTakeover && item.status==='RUNNING'}}" size="mini" type="warn" bindtap="takeoverTask" data-id="{{item.id}}">接管</button>
         <button size="mini" bindtap="goDetail" data-id="{{item.id}}">详情</button>
       </view>
     </view>

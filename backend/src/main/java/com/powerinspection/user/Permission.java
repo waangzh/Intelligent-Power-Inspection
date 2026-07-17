@@ -18,6 +18,7 @@ public enum Permission {
   WORKORDER_CREATE("workorder:create"),
   WORKORDER_PROCESS("workorder:process"),
   WORKORDER_REVIEW("workorder:review"),
+  ALARM_POLICY("alarm:policy"),
   AGENT_VIEW("agent:view"),
   AGENT_RUN("agent:run"),
   AGENT_APPROVE("agent:approve"),

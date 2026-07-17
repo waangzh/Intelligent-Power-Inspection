@@ -9,7 +9,7 @@ export interface DeploymentEligibility {
 export const DEPLOYMENT_STATE_LABELS: Record<RouteDeploymentState, string> = {
   PENDING: '待同步',
   INSTALLING: '同步中',
-  READY_FOR_ROBOT: 'Bridge 已就绪，待机器人领取任务',
+  READY_FOR_ROBOT: '等待机器人领取',
   FAILED: '同步失败',
   UNKNOWN: '待对账',
 }

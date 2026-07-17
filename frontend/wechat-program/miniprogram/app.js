@@ -1,9 +1,11 @@
 const api = require('./services/index')
+const apiConfig = require('./config/api')
 const { countWorkOrderBadge } = require('./utils/work-order-badge')
 
 App({
   globalData: {
     user: null,
+    permissions: [],
     unreadNotifications: 0,
     unackAlarms: 0,
     pendingWorkOrders: 0,
@@ -11,15 +13,32 @@ App({
   },
 
   onLaunch() {
+    if (apiConfig.useMock) {
+      console.warn('[power-inspection] 演示模式 useMock=true：数据来自本地 wx.storage，非真实后端')
+    }
     this.restoreSession()
   },
 
   restoreSession() {
     const session = api.getSession()
     if (session) {
-      this.globalData.user = session.user
-      this.refreshBadges()
+      this.applySession(session)
+      if (!apiConfig.useMock) {
+        api.refreshMe().then((fresh) => {
+          if (fresh) this.applySession(fresh)
+        }).catch(() => {})
+      }
     }
+  },
+
+  applySession(session) {
+    if (!session?.user || !Array.isArray(session.permissions) || !session.permissions.length) {
+      this.clearUser()
+      return
+    }
+    this.globalData.user = session.user
+    this.globalData.permissions = session.permissions
+    this.refreshBadges()
   },
 
   registerTabBar(component) {
@@ -41,7 +60,7 @@ App({
       ])
       this.globalData.unreadNotifications = ntf.filter((n) => !n.read).length
       this.globalData.unackAlarms = alarms.filter((a) => !a.acknowledged).length
-      this.globalData.pendingWorkOrders = countWorkOrderBadge(orders, user)
+      this.globalData.pendingWorkOrders = countWorkOrderBadge(orders, user, this.globalData.permissions)
       this.applyTabBarBadges()
     } catch (e) {
       console.warn('refreshBadges', e)
@@ -88,14 +107,26 @@ App({
   },
 
   setUser(user) {
+    const session = api.getSession()
+    if (!session || session.user?.id !== user?.id) {
+      this.clearUser()
+      return
+    }
     this.globalData.user = user
     this.refreshBadges()
     const tabBar = this.globalData.tabBarComponent
     if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
   },
 
+  setSession(session) {
+    this.applySession(session)
+    const tabBar = this.globalData.tabBarComponent
+    if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
+  },
+
   clearUser() {
     this.globalData.user = null
+    this.globalData.permissions = []
     this.globalData.unreadNotifications = 0
     this.globalData.unackAlarms = 0
     this.globalData.pendingWorkOrders = 0
@@ -115,12 +146,14 @@ App({
 
   requirePermission(permission, roles) {
     const { hasPermission, canAccessByRole } = require('./utils/permission.js')
-    const role = this.globalData.user && this.globalData.user.role
+    const user = this.globalData.user
+    const role = user && user.role
+    const permissions = this.globalData.permissions
     if (roles && roles.length && !canAccessByRole(role, roles)) {
       wx.redirectTo({ url: '/pages/forbidden/index' })
       return false
     }
-    if (permission && !hasPermission(role, permission)) {
+    if (permission && !hasPermission(permissions, permission)) {
       wx.redirectTo({ url: '/pages/forbidden/index' })
       return false
     }

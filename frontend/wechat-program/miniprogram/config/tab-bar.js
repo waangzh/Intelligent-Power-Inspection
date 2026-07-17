@@ -88,8 +88,8 @@ function isNativeTabPage(url) {
   return NATIVE_TAB_PATHS.some((p) => path === p || path.endsWith(p.replace(/^\//, '')))
 }
 
-function getTabList(role) {
-  if (role && hasPermission(role, 'workorder:view')) return TAB_LIST_WORKORDER
+function getTabList(permissions, role) {
+  if (hasPermission(permissions, 'workorder:view')) return TAB_LIST_WORKORDER
   return TAB_LIST_VIEWER
 }
 

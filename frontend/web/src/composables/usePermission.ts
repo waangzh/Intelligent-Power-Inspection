@@ -5,14 +5,15 @@ import { hasPermission, hasAnyPermission, type Permission } from '@/utils/permis
 export function usePermission() {
   const authStore = useAuthStore()
   const role = computed(() => authStore.user?.role)
+  const permissions = computed(() => authStore.permissions)
 
   function can(permission: Permission) {
-    return hasPermission(role.value, permission)
+    return hasPermission(permissions.value, permission)
   }
 
-  function canAny(...permissions: Permission[]) {
-    return hasAnyPermission(role.value, permissions)
+  function canAny(...values: Permission[]) {
+    return hasAnyPermission(permissions.value, values)
   }
 
-  return { role, can, canAny }
+  return { role, permissions, can, canAny }
 }

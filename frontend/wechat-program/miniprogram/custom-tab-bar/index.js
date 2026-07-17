@@ -21,7 +21,7 @@ Component({
     initTabBar() {
       const app = getApp()
       const user = app.globalData.user
-      const list = getTabList(user?.role)
+      const list = getTabList(app.globalData.permissions, user?.role)
       this.setData({ list })
       if (app.registerTabBar) app.registerTabBar(this)
       if (app.applyTabBarBadges) app.applyTabBarBadges()

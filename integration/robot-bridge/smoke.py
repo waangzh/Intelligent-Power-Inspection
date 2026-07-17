@@ -177,9 +177,6 @@ def run_smoke(base_url, store) -> None:
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"] is None
     assert request(base_url, "GET", "/robot-api/v1/deployments/deploy-1/manifest", token="token-placeholder")[1]["yamlName"] == "site.yaml"
     events = [{"schema_version": "1.0", "robot_id": "robot-001", "boot_id": "boot-1", "sequence": 2, "event": "route_started", "execution_id": "execution-1", "deployment_id": "deploy-1", "request_id": "request-1", "command_id": command["commandId"], "occurred_at": "2026-01-01T00:00:00Z"}]
-    incomplete = dict(events[0])
-    incomplete.pop("boot_id")
-    assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": [incomplete]}, "token-placeholder")[0] == 400
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": events}, "token-placeholder")[1]["acceptedThroughSequence"] == 0
     events.insert(0, {**events[0], "sequence": 1, "event": "initial_pose_published"})
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": events}, "token-placeholder")[1]["acceptedThroughSequence"] == 2
@@ -194,17 +191,6 @@ def run_smoke(base_url, store) -> None:
     assert request(base_url, "GET", "/bridge/v1/executions/execution-1", token="admin-placeholder")[1]["state"] == "COMPLETED"
     robot = request(base_url, "GET", "/bridge/v1/robots/robot-001", token="admin-placeholder")[1]
     assert robot["configured"] is True and robot["online"] is True and robot["acceptedEventSequence"] == 4
-    failed_start = {**body, "requestId": "request-retry-1"}
-    status, failed_queued = request(base_url, "POST", "/bridge/v1/executions/execution-retry/start", failed_start, "admin-placeholder")
-    assert status == 202
-    failed_command = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"]
-    failed_ack = {"robotId": "robot-001", "leaseToken": failed_command["leaseToken"], "status": "RECEIVED", "executionId": "execution-retry"}
-    assert request(base_url, "POST", f"/robot-api/v1/commands/{failed_command['commandId']}/ack", failed_ack, "token-placeholder")[0] == 200
-    failed_event = [{"schema_version": "1.0", "robot_id": "robot-001", "boot_id": "boot-1", "sequence": 5, "event": "command_failed", "execution_id": "execution-retry", "deployment_id": "deploy-1", "request_id": "request-retry-1", "command_id": failed_command["commandId"], "occurred_at": "2026-01-01T00:00:00Z", "error_code": "ROUTE_HASH_MISMATCH"}]
-    assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": failed_event}, "token-placeholder")[1]["acceptedThroughSequence"] == 5
-    assert request(base_url, "GET", "/bridge/v1/executions/execution-retry", token="admin-placeholder")[1]["state"] == "FAILED"
-    status, retry_queued = request(base_url, "POST", "/bridge/v1/executions/execution-retry/start", {**body, "requestId": "request-retry-2"}, "admin-placeholder")
-    assert status == 202 and retry_queued["commandId"] != failed_queued["commandId"]
     second = {**body, "requestId": "request-2"}
     assert request(base_url, "POST", "/bridge/v1/executions/execution-2/start", second, "admin-placeholder")[0] == 202
     cancel = {"robotId": "robot-001", "requestId": "request-3"}

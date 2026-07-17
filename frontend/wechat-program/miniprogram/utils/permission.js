@@ -1,22 +1,6 @@
-const ROLE_PERMISSIONS = {
-  ADMIN: [
-    'task:view', 'task:create', 'task:dispatch', 'task:control',
-    'site:edit', 'route:edit', 'alarm:ack', 'robot:manage',
-    'detection:manage', 'user:manage', 'record:export',
-    'workorder:view', 'workorder:create', 'workorder:review',
-    'alarm:policy',
-  ],
-  DISPATCHER: [
-    'task:view', 'task:create', 'task:dispatch', 'task:control',
-    'site:edit', 'route:edit', 'alarm:ack', 'record:export',
-    'workorder:view', 'workorder:process',
-  ],
-  VIEWER: ['task:view'],
-}
-
-function hasPermission(role, permission) {
-  if (!role) return false
-  return (ROLE_PERMISSIONS[role] || []).includes(permission)
+function hasPermission(permissions, permission) {
+  if (!permissions?.length) return false
+  return permissions.includes(permission)
 }
 
 function canAccessByRole(role, allowedRoles) {
@@ -24,11 +8,40 @@ function canAccessByRole(role, allowedRoles) {
   return !!role && allowedRoles.includes(role)
 }
 
-function canAccess(role, rule) {
+function canAccess(permissions, role, rule) {
   if (!rule) return true
   if (rule.roles && rule.roles.length && !canAccessByRole(role, rule.roles)) return false
-  if (rule.permission && !hasPermission(role, rule.permission)) return false
+  if (rule.permission && !hasPermission(permissions, rule.permission)) return false
   return true
 }
 
-module.exports = { hasPermission, canAccessByRole, canAccess, ROLE_PERMISSIONS }
+function canControlTask(permissions) {
+  return hasPermission(permissions, 'task:control')
+}
+
+function canTakeoverTask(permissions) {
+  return hasPermission(permissions, 'task:takeover')
+}
+
+function canCancelTask(permissions) {
+  return hasPermission(permissions, 'task:control') || hasPermission(permissions, 'task:estop')
+}
+
+function isEmergencyCancel(permissions) {
+  return hasPermission(permissions, 'task:estop') && !hasPermission(permissions, 'task:control')
+}
+
+function cancelTaskLabel(permissions) {
+  return isEmergencyCancel(permissions) ? '急停' : '取消'
+}
+
+module.exports = {
+  hasPermission,
+  canAccessByRole,
+  canAccess,
+  canControlTask,
+  canTakeoverTask,
+  canCancelTask,
+  isEmergencyCancel,
+  cancelTaskLabel,
+}

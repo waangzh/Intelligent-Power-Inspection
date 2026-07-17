@@ -1,5 +1,11 @@
 const api = require('../../../services/index')
-const { hasPermission } = require('../../../utils/permission')
+const {
+  hasPermission,
+  canControlTask,
+  canTakeoverTask,
+  canCancelTask,
+  cancelTaskLabel,
+} = require('../../../utils/permission')
 
 const EVENT_LABELS = {
   DISPATCH: '下发', ARRIVE: '到点', INSPECT: '采集', DETECT: '检测',
@@ -27,6 +33,9 @@ Page({
     taskAlarms: [],
     canDispatch: false,
     canControl: false,
+    canTakeover: false,
+    canCancel: false,
+    cancelLabel: '取消',
   },
 
   onLoad(options) {
@@ -38,9 +47,13 @@ Page({
     if (!app.requireAuth()) return
     if (!app.requirePermission('task:view')) return
     const user = app.globalData.user
+    const perms = app.globalData.permissions
     this.setData({
-      canDispatch: hasPermission(user.role, 'task:dispatch'),
-      canControl: hasPermission(user.role, 'task:control'),
+      canDispatch: hasPermission(perms, 'task:dispatch'),
+      canControl: canControlTask(perms),
+      canTakeover: canTakeoverTask(perms),
+      canCancel: canCancelTask(perms),
+      cancelLabel: cancelTaskLabel(perms),
     })
     if (this.data.taskId) this.load()
   },
@@ -95,9 +108,10 @@ Page({
     })
   },
   async cancel() {
+    const isEstop = this.data.cancelLabel === '急停'
     wx.showModal({
-      title: '取消任务',
-      content: '确认取消？',
+      title: isEstop ? '远程急停' : '取消任务',
+      content: isEstop ? '确认对该任务执行远程急停？' : '确认取消？',
       success: async (r) => { if (r.confirm) { await api.cancelTask(this.data.taskId); this.load() } },
     })
   },

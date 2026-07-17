@@ -3,6 +3,7 @@ package com.powerinspection.auth;
 import com.powerinspection.auth.AuthDtos.ChangePasswordRequest;
 import com.powerinspection.auth.AuthDtos.LoginRequest;
 import com.powerinspection.auth.AuthDtos.LoginResponse;
+import com.powerinspection.auth.AuthDtos.MeResponse;
 import com.powerinspection.auth.AuthDtos.ProfileRequest;
 import com.powerinspection.auth.AuthDtos.RegisterRequest;
 import com.powerinspection.common.ApiResponse;
@@ -21,10 +22,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
   private final AuthService authService;
+  private final UserAccessService userAccessService;
   private final CurrentUser currentUser;
 
-  public AuthController(AuthService authService, CurrentUser currentUser) {
+  public AuthController(AuthService authService, UserAccessService userAccessService, CurrentUser currentUser) {
     this.authService = authService;
+    this.userAccessService = userAccessService;
     this.currentUser = currentUser;
   }
 
@@ -44,8 +47,8 @@ public class AuthController {
   }
 
   @GetMapping("/me")
-  public ApiResponse<UserDto> me() {
-    return ApiResponse.ok(UserDto.from(currentUser.get()));
+  public ApiResponse<MeResponse> me() {
+    return ApiResponse.ok(userAccessService.me(currentUser.get()));
   }
 
   @PatchMapping("/me")

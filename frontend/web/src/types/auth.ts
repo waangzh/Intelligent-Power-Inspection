@@ -68,5 +68,24 @@ export interface RegisterForm {
 export interface AuthSession {
   token: string
   user: User
+  permissions: string[]
+  scopes?: AuthScopes
+  features?: AuthFeatures
   expiresAt?: number
+}
+
+export interface AuthScopes {
+  siteIds: string[]
+}
+
+export interface AuthFeatures {
+  robotRegistration: boolean
+  agentEnabled: boolean
+}
+
+export interface MeResponse {
+  user: User
+  permissions: string[]
+  scopes?: AuthScopes
+  features?: AuthFeatures
 }

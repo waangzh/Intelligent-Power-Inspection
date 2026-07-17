@@ -183,13 +183,9 @@ class Store:
                 execution = db.execute("SELECT * FROM executions WHERE execution_id=?", (execution_id,)).fetchone()
                 if execution and (execution["robot_id"] != robot_id or execution["deployment_id"] != deployment_id):
                     return None, "EXECUTION_CONFLICT"
-                previous_start = db.execute("SELECT state FROM commands WHERE execution_id=? AND command_type='START' ORDER BY created_at DESC LIMIT 1", (execution_id,)).fetchone()
+                previous_start = db.execute("SELECT request_id FROM commands WHERE execution_id=? AND command_type='START' LIMIT 1", (execution_id,)).fetchone()
                 if previous_start:
-                    if execution["state"] != "FAILED" or previous_start["state"] not in {"FAILED", "REJECTED"}:
-                        return None, "EXECUTION_CONFLICT"
-                    # START_FAILED may be retried with a new requestId. Keep the global
-                    # event cursor intact so late events can never be reassigned.
-                    db.execute("UPDATE executions SET state='CREATED',last_error='',updated_at=? WHERE execution_id=?", (stamp, execution_id))
+                    return None, "EXECUTION_CONFLICT"
                 db.execute("INSERT OR IGNORE INTO executions(execution_id,robot_id,deployment_id,state,updated_at) VALUES (?,?,?,?,?)", (execution_id, robot_id, deployment_id, "CREATED", stamp))
             else:
                 execution = db.execute("SELECT * FROM executions WHERE execution_id=?", (execution_id,)).fetchone()
@@ -268,8 +264,7 @@ class Store:
         command_id = str(event.get("command_id") or "")
         if not execution_id or not command_id or row["execution_robot_id"] != robot_id or row["execution_deployment_id"] != deployment_id:
             raise StoreConflict("EVENT_OWNERSHIP_CONFLICT", "event execution does not belong to robot/deployment")
-        if (row["command_robot_id"] != robot_id or row["command_execution_id"] != execution_id
-                or row["command_deployment_id"] != deployment_id or row["command_request_id"] != str(event.get("request_id") or "")):
+        if row["command_robot_id"] != robot_id or row["command_execution_id"] != execution_id or row["command_deployment_id"] != deployment_id:
             raise StoreConflict("EVENT_OWNERSHIP_CONFLICT", "event command does not belong to execution")
         event_type = str(event.get("event") or "")
         expected = COMMAND_RESULT_EVENTS.get(row["command_type"])
@@ -290,7 +285,7 @@ class Store:
                 if sequence <= 0:
                     raise StoreConflict("INVALID_EVENT", "event sequence must be positive")
                 command_id = str(event.get("command_id") or "")
-                row = db.execute("SELECT e.robot_id AS execution_robot_id,e.deployment_id AS execution_deployment_id,c.robot_id AS command_robot_id,c.execution_id AS command_execution_id,c.deployment_id AS command_deployment_id,c.request_id AS command_request_id,c.command_type FROM executions e LEFT JOIN commands c ON c.command_id=? WHERE e.execution_id=?", (command_id, str(event.get("execution_id") or ""))).fetchone()
+                row = db.execute("SELECT e.robot_id AS execution_robot_id,e.deployment_id AS execution_deployment_id,c.robot_id AS command_robot_id,c.execution_id AS command_execution_id,c.deployment_id AS command_deployment_id,c.command_type FROM executions e LEFT JOIN commands c ON c.command_id=? WHERE e.execution_id=?", (command_id, str(event.get("execution_id") or ""))).fetchone()
                 if not row:
                     raise StoreConflict("EVENT_OWNERSHIP_CONFLICT", "event execution was not found")
                 self._validate_event(row, event, robot_id)

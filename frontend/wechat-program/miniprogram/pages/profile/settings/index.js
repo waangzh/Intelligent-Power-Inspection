@@ -22,13 +22,29 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/profile/settings/index')) return
     const user = app.globalData.user
-    this.setData({ canManagePolicy: hasPermission(user.role, 'alarm:policy') })
-    this.refreshPolicyRows()
+    const perms = app.globalData.permissions
+    this.setData({ canManagePolicy: hasPermission(perms, 'alarm:policy') })
     this.load()
   },
 
-  refreshPolicyRows() {
-    this.setData({ policyRows: alarmPolicy.getPolicyRows() })
+  async refreshPolicyRows(rules) {
+    let policyRules = rules
+    if (!policyRules) {
+      try {
+        const policy = await api.getAlarmWorkOrderPolicy()
+        policyRules = policy.rules
+      } catch (e) {
+        policyRules = alarmPolicy.loadPolicy()
+      }
+    }
+    const { ALARM_SEVERITY_LABELS } = require('../../../utils/constants')
+    const rows = alarmPolicy.POLICY_ROWS.map((row) => ({
+      ...row,
+      label: ALARM_SEVERITY_LABELS[row.severity],
+      mode: policyRules[row.severity],
+      sevType: row.severity === 'CRITICAL' ? 'danger' : row.severity === 'HIGH' ? 'warning' : 'info',
+    }))
+    this.setData({ policyRows: rows })
   },
 
   async load() {
@@ -44,6 +60,7 @@ Page({
         siteIndex: siteIndex >= 0 ? siteIndex : 0,
         siteLabel,
       })
+      if (this.data.canManagePolicy) await this.refreshPolicyRows()
     } catch (e) {
       wx.showToast({ title: e.message || '加载失败', icon: 'none' })
     }
@@ -78,10 +95,16 @@ Page({
     api.savePreferences(prefs)
   },
 
-  setPolicyMode(e) {
+  async setPolicyMode(e) {
     const { severity, mode } = e.currentTarget.dataset
-    alarmPolicy.setMode(severity, mode)
-    this.refreshPolicyRows()
-    wx.showToast({ title: '策略已更新', icon: 'success' })
+    try {
+      const current = await api.getAlarmWorkOrderPolicy()
+      const rules = { ...current.rules, [severity]: mode }
+      const updated = await api.updateAlarmWorkOrderPolicy(rules)
+      await this.refreshPolicyRows(updated.rules)
+      wx.showToast({ title: '策略已更新', icon: 'success' })
+    } catch (err) {
+      wx.showToast({ title: err.message || '保存失败', icon: 'none' })
+    }
   },
 })
