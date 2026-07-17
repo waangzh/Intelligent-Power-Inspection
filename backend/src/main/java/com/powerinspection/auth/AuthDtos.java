@@ -5,6 +5,8 @@ import com.powerinspection.user.UserPreferencesDto;
 import com.powerinspection.user.UserRole;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.util.List;
+import java.util.Map;
 
 public final class AuthDtos {
   private AuthDtos() {
@@ -23,7 +25,22 @@ public final class AuthDtos {
   ) {
   }
 
-  public record LoginResponse(String token, UserDto user, Long expiresAt) {
+  public record MeResponse(
+    UserDto user,
+    List<String> permissions,
+    Map<String, Object> scopes,
+    Map<String, Object> features
+  ) {
+  }
+
+  public record LoginResponse(
+    String token,
+    UserDto user,
+    List<String> permissions,
+    Map<String, Object> scopes,
+    Map<String, Object> features,
+    Long expiresAt
+  ) {
   }
 
   public record ProfileRequest(String displayName, String phone, String bio, String avatarUrl) {

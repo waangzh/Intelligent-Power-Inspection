@@ -26,7 +26,7 @@ export const menuGroups: MenuGroup[] = [
   {
     title: '运维中心',
     items: [
-      { path: '/workorders', label: '工单管理', icon: 'Tickets', permission: 'task:dispatch' },
+      { path: '/workorders', label: '工单管理', icon: 'Tickets', permission: 'workorder:view' },
       { path: '/notifications', label: '消息中心', icon: 'Message' },
       { path: '/agents', label: '巡检研判助手', icon: 'Connection', permission: 'agent:view' },
     ],

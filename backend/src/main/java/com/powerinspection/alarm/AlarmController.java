@@ -65,7 +65,7 @@ public class AlarmController {
 
   @PutMapping("/work-order-policy")
   public ApiResponse<Map<String, Object>> updateWorkOrderPolicy(@RequestBody Map<String, Object> body) {
-    permissionService.require(currentUser.get(), Permission.USER_MANAGE);
+    permissionService.require(currentUser.get(), Permission.ALARM_POLICY);
     return ApiResponse.ok(policyService.update(body, currentUser.get()));
   }
 

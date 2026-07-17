@@ -65,14 +65,15 @@ Page({
     if (!app.requirePermission('workorder:view')) return
     syncTabBar(this)
     const user = app.globalData.user
+    const perms = app.globalData.permissions
     const isAdmin = user.role === 'ADMIN'
     const isDispatcher = user.role === 'DISPATCHER'
     this.setData({
       user,
       isDispatcher,
-      canCreate: hasPermission(user.role, 'workorder:create'),
-      canProcess: hasPermission(user.role, 'workorder:process'),
-      canReview: hasPermission(user.role, 'workorder:review'),
+      canCreate: hasPermission(perms, 'workorder:create'),
+      canProcess: hasPermission(perms, 'workorder:process'),
+      canReview: hasPermission(perms, 'workorder:review'),
       pageDesc: isAdmin
         ? '告警转工单与复核'
         : '接单大厅抢单、现场处置与提交复核',
@@ -83,7 +84,8 @@ Page({
 
   async load() {
     const user = this.data.user || getApp().globalData.user
-    const canCreate = workOrderPerm.canCreateWorkOrder(user)
+    const perms = getApp().globalData.permissions
+    const canCreate = workOrderPerm.canCreateWorkOrder(user, perms)
     let pendingAlarms = []
     if (canCreate) {
       const alarmsBefore = await api.getAlarms()
@@ -118,9 +120,9 @@ Page({
       })
       return {
         ...enriched,
-        canClaim: workOrderPerm.canClaimOrder(o, user),
-        canSubmitReview: workOrderPerm.canSubmitReview(o, user),
-        canConfirmReview: workOrderPerm.canConfirmReview(o, user),
+        canClaim: workOrderPerm.canClaimOrder(o, user, perms),
+        canSubmitReview: workOrderPerm.canSubmitReview(o, user, perms),
+        canConfirmReview: workOrderPerm.canConfirmReview(o, user, perms),
       }
     })
 
@@ -177,7 +179,8 @@ Page({
   async claim(e) {
     const id = e.currentTarget.dataset.id
     const order = this.data.orders.find((o) => o.id === id)
-    if (!workOrderPerm.canClaimOrder(order, this.data.user)) {
+    const perms = getApp().globalData.permissions
+    if (!workOrderPerm.canClaimOrder(order, this.data.user, perms)) {
       wx.showToast({ title: '无法接单', icon: 'none' })
       return
     }
@@ -197,7 +200,8 @@ Page({
   openResolve(e) {
     const id = e.currentTarget.dataset.id
     const order = this.data.orders.find((o) => o.id === id)
-    if (!workOrderPerm.canSubmitReview(order, this.data.user)) {
+    const perms = getApp().globalData.permissions
+    if (!workOrderPerm.canSubmitReview(order, this.data.user, perms)) {
       wx.showToast({ title: '仅接单调度员可提交复核', icon: 'none' })
       return
     }
@@ -272,7 +276,8 @@ Page({
   openReview(e) {
     const id = e.currentTarget.dataset.id
     const order = this.data.orders.find((o) => o.id === id)
-    if (!workOrderPerm.canConfirmReview(order, this.data.user)) {
+    const perms = getApp().globalData.permissions
+    if (!workOrderPerm.canConfirmReview(order, this.data.user, perms)) {
       wx.showToast({ title: '仅管理员可确认复核', icon: 'none' })
       return
     }

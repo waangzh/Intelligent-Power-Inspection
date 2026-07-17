@@ -1,0 +1,83 @@
+# AUTO-GENERATED — 权限码 OpenAPI 片段（由 backend Permission.java 生成）
+components:
+  schemas:
+    PermissionCode:
+      type: string
+      description: 权限码，权威定义见 backend Permission 枚举
+      enum:
+        - agent:admin
+        - agent:approve
+        - agent:run
+        - agent:view
+        - alarm:ack
+        - alarm:policy
+        - detection:manage
+        - record:export
+        - robot:manage
+        - route:edit
+        - site:edit
+        - task:control
+        - task:create
+        - task:dispatch
+        - task:estop
+        - task:takeover
+        - task:view
+        - user:manage
+        - workorder:create
+        - workorder:process
+        - workorder:review
+        - workorder:view
+    AuthScopes:
+      type: object
+      properties:
+        siteIds:
+          type: array
+          items:
+            type: string
+    AuthFeatures:
+      type: object
+      properties:
+        robotRegistration:
+          type: boolean
+        agentEnabled:
+          type: boolean
+    MeResponse:
+      type: object
+      required:
+        - user
+        - permissions
+      properties:
+        user:
+          type: object
+          description: UserDto
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        scopes:
+          $ref: '#/components/schemas/AuthScopes'
+        features:
+          $ref: '#/components/schemas/AuthFeatures'
+    LoginResponse:
+      type: object
+      required:
+        - token
+        - user
+        - permissions
+      properties:
+        token:
+          type: string
+        user:
+          type: object
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        scopes:
+          $ref: '#/components/schemas/AuthScopes'
+        features:
+          $ref: '#/components/schemas/AuthFeatures'
+        expiresAt:
+          type: integer
+          format: int64
+          nullable: true

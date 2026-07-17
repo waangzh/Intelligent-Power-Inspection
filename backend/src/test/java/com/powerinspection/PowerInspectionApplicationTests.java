@@ -62,18 +62,23 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.username").value("admin"))
-      .andExpect(jsonPath("$.data.role").value("ADMIN"));
+      .andExpect(jsonPath("$.data.user.username").value("admin"))
+      .andExpect(jsonPath("$.data.user.role").value("ADMIN"))
+      .andExpect(jsonPath("$.data.permissions").isArray())
+      .andExpect(jsonPath("$.data.permissions[?(@ == 'workorder:view')]").exists())
+      .andExpect(jsonPath("$.data.permissions[?(@ == 'task:dispatch')]").doesNotExist());
 
     mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.username").value("dispatcher"))
-      .andExpect(jsonPath("$.data.role").value("DISPATCHER"));
+      .andExpect(jsonPath("$.data.user.username").value("dispatcher"))
+      .andExpect(jsonPath("$.data.user.role").value("DISPATCHER"))
+      .andExpect(jsonPath("$.data.permissions[?(@ == 'task:dispatch')]").exists());
 
     mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(viewerToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.username").value("viewer"))
-      .andExpect(jsonPath("$.data.role").value("VIEWER"));
+      .andExpect(jsonPath("$.data.user.username").value("viewer"))
+      .andExpect(jsonPath("$.data.user.role").value("VIEWER"))
+      .andExpect(jsonPath("$.data.permissions.length()").value(1));
 
     mockMvc.perform(get("/api/v1/users").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())

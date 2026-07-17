@@ -33,7 +33,7 @@ Page({
     this.setData({ loading: true })
     try {
       const session = await api.login(username, password, remember)
-      getApp().setUser(session.user)
+      getApp().setSession(session)
       wx.showToast({ title: '登录成功' })
       const url = this.data.redirect || getRoleLandingPath(session.user.role)
       if (isTabPage(url)) {
