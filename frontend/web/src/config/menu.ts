@@ -36,6 +36,7 @@ export const menuGroups: MenuGroup[] = [
     items: [
       { path: '/sites', label: '站点管理', icon: 'OfficeBuilding', permission: 'site:edit' },
       { path: '/routes', label: '巡检规划', icon: 'MapLocation', permission: 'route:edit' },
+      { path: '/robot-map-review', label: '机器人建图审核', icon: 'Checked' },
       { path: '/tasks', label: '任务调度', icon: 'VideoPlay', permission: 'task:view' },
     ],
   },
