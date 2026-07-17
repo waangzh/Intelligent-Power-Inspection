@@ -78,7 +78,7 @@ export type RouteExecutorDocument = RouteExecutorDocumentV2 | RouteExecutorDocum
 
 export interface EditableRoutePoint extends Pose2D { name: string; publishInitialPose: boolean; covX: number; covY: number; covYaw: number }
 export interface EditableTarget extends Pose2D { id: string; name: string; taskDuration: number }
-export interface EditableKeepoutZone { id: string; name: string; type: 'hard_keepout'; enabled: boolean; maskPaddingM: number; polygon: Array<{ x: number; y: number }> }
+export interface EditableKeepoutZone { id: string; name: string; type: 'hard_keepout'; enabled: boolean; maskPaddingM?: number; polygon: Array<{ x: number; y: number }> }
 export interface EditableRouteDraft {
   sourceTemplate: RouteExecutorDocument | null
   requiresConversion: boolean
@@ -121,10 +121,11 @@ export interface PersistedRouteDraftReport extends Omit<RouteDraftValidationRepo
 }
 
 /** 兼容地图画布的轻量状态，不属于执行 JSON。 */
-export type EditorMode = 'start' | 'target' | 'yaw' | 'pan'
+export type EditorMode = 'start' | 'target' | 'yaw' | 'keepout' | 'pan'
 export interface RosMapState {
   width: number; height: number; pixels: Uint8Array | null; yamlName: string; pgmName: string
   image: string; resolution: number; origin: [number, number, number]; negate: number
+  occupiedThresh: number; freeThresh: number
 }
 
 export interface RouteMapSnapshot {
