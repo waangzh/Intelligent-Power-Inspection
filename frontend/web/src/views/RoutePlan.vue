@@ -80,9 +80,24 @@
                 {{ draftValidation.publishable ? '允许发布' : draftValidation.valid ? '不可发布' : '存在错误' }}
               </el-tag>
             </div>
-            <small v-if="draftValidation.checkedAt" class="checked-at">最近校验：{{ draftValidation.checkedAt }}</small>
+            <small v-if="draftValidation.checkedAt" class="checked-at">最近校验：{{ formatTime(draftValidation.checkedAt) }}</small>
           </template>
-          <el-empty v-if="!draftValidation.issues.length" description="未发现校验问题" :image-size="48" />
+          <div
+            v-if="!draftValidation.issues.length"
+            class="validation-summary"
+            :class="{ 'is-publishable': draftValidation.publishable }"
+            role="status"
+          >
+            <el-icon><CircleCheckFilled v-if="draftValidation.publishable" /><WarningFilled v-else /></el-icon>
+            <div>
+              <strong>{{ draftValidation.publishable ? '检查已通过' : '当前不可发布' }}</strong>
+              <span>
+                {{ draftValidation.publishable
+                  ? '草稿结构与地图身份校验通过，可创建路线修订。'
+                  : '未发现字段错误，但草稿或地图身份状态不满足发布条件，请重新保存草稿。' }}
+              </span>
+            </div>
+          </div>
           <ul v-else class="validation-issues">
             <li v-for="issue in draftValidation.issues" :key="`${issue.severity}:${issue.code}:${issue.jsonPointer}`">
               <el-tag size="small" :type="issue.severity === 'ERROR' ? 'danger' : 'warning'">{{ issue.severity }}</el-tag>
@@ -727,6 +742,14 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
   margin-top: 16px;
 }
 
+.validation-panel :deep(.el-card__header) {
+  padding-block: 12px;
+}
+
+.validation-panel :deep(.el-card__body) {
+  padding-block: 12px;
+}
+
 .deployment-panel {
   margin-top: 16px;
 }
@@ -881,9 +904,49 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 
 .checked-at {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: #909399;
   font-weight: 400;
+}
+
+.validation-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #f3d19e;
+  border-radius: 6px;
+  color: #b88230;
+  background: #fdf6ec;
+}
+
+.validation-summary.is-publishable {
+  border-color: #d1edc4;
+  color: #529b2e;
+  background: #f0f9eb;
+}
+
+.validation-summary > .el-icon {
+  flex: 0 0 auto;
+  font-size: 22px;
+}
+
+.validation-summary strong,
+.validation-summary span {
+  display: block;
+}
+
+.validation-summary strong {
+  color: #303133;
+  font-size: 14px;
+}
+
+.validation-summary span {
+  margin-top: 2px;
+  color: #606266;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .validation-issues {
