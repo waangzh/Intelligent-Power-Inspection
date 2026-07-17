@@ -51,7 +51,7 @@
           </el-descriptions>
           <el-alert
             v-if="execution && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(task))"
-            :title="startDisabledReason || '部署 READY_FOR_ROBOT 且身份、路线哈希、地图哈希一致后才允许启动'"
+            :title="startDisabledReason || `部署为${DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT}且身份、路线哈希、地图哈希一致后才允许启动`"
             :type="eligibility?.eligible ? 'success' : 'warning'"
             :closable="false"
             show-icon
@@ -138,6 +138,7 @@ import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
 import type { TaskEvent } from '@/types'
+import { DEPLOYMENT_STATE_LABELS } from '@/utils/routeDeployment'
 
 const router = useRouter()
 const routeParam = useRoute()

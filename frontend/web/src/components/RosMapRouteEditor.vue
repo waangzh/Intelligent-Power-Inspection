@@ -25,6 +25,7 @@
         <canvas
           ref="canvasRef"
           @mousedown="onMouseDown"
+          @mouseleave="onMouseLeave"
           @wheel="onWheel"
           @contextmenu.prevent
         />
@@ -300,6 +301,7 @@ const {
   updateZonePoint,
   handleDroppedFiles,
   onMouseDown,
+  onMouseLeave,
   onWheel,
 } = editor
 
@@ -430,13 +432,16 @@ async function onDrop(event: DragEvent) {
   if (event.dataTransfer?.files?.length) {
     try {
       const files = Array.from(event.dataTransfer.files)
-      if (files.some((file) => /\.ya?ml$|\.pgm$/i.test(file.name))) clearRouteAnnotations()
-      await handleDroppedFiles(files)
-      rememberMapFiles(files)
-      await syncMapIdentity()
-      if (files.some((file) => /\.ya?ml$|\.pgm$/i.test(file.name))) {
+      const mapFiles = files.filter((file) => /\.ya?ml$|\.pgm$/i.test(file.name))
+      const routeFiles = files.filter((file) => /\.json$/i.test(file.name))
+      if (mapFiles.length) clearRouteAnnotations()
+      await handleDroppedFiles(mapFiles)
+      rememberMapFiles(mapFiles)
+      if (mapFiles.length) await syncMapIdentity()
+      for (const file of routeFiles) importRouteJson(JSON.parse(await file.text()))
+      if (mapFiles.length) {
         ElMessage.success(mapLoaded.value ? '地图文件已导入' : `YAML 已导入，请继续选择 ${map.image}`)
-      } else if (files.some((file) => /\.json$/i.test(file.name))) {
+      } else if (routeFiles.length) {
         ElMessage.success('路线 JSON 已导入')
       }
     } catch (error) {

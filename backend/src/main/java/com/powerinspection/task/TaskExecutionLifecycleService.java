@@ -260,7 +260,8 @@ public class TaskExecutionLifecycleService {
     for (RouteDeploymentEntity deployment : candidates) {
       if (summaryMatches(deployment, execution, revision)) return deployment;
     }
-    throw ApiException.conflict("不存在身份与路线/地图哈希均一致的 READY_FOR_ROBOT 部署");
+    throw ApiException.conflict("不存在身份与路线/地图哈希均一致的「"
+      + RouteDeploymentState.READY_FOR_ROBOT.displayLabel() + "」部署");
   }
 
   private boolean summaryMatches(RouteDeploymentEntity deployment, TaskExecutionEntity execution, RouteRevisionEntity revision) {
