@@ -196,6 +196,10 @@ class RouteRevisionControllerTests {
         .header("Idempotency-Key", "pause-route-revision"))
       .andExpect(status().isConflict());
 
+    mockMvc.perform(delete("/api/v1/tasks/task_route_revision")
+        .header("Authorization", bearer(token)))
+      .andExpect(status().isOk());
+
     mockMvc.perform(delete("/api/v1/routes/{id}", routeId)
         .header("Authorization", bearer(token)))
       .andExpect(status().isOk());

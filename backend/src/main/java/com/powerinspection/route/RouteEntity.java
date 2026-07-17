@@ -16,7 +16,7 @@ import java.util.Set;
 public class RouteEntity {
   private static final Set<String> KNOWN = Set.of(
     "id", "siteId", "name", "mapId", "status", "executor", "executorJson",
-    "checkpoints", "createdAt", "updatedAt"
+    "checkpoints", "version", "createdAt", "updatedAt"
   );
 
   @Id

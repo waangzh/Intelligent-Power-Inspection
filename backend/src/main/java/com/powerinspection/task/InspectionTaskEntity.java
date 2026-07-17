@@ -14,10 +14,11 @@ import java.util.Set;
 @Entity
 @Table(name = "inspection_tasks")
 public class InspectionTaskEntity {
+  private static final Set<String> ACTIVE = Set.of("DISPATCHED", "RUNNING", "PAUSED", "MANUAL_TAKEOVER");
   private static final Set<String> KNOWN = Set.of(
     "id", "name", "siteId", "routeId", "robotId", "routeRevisionId", "executionId",
     "status", "progress", "currentCheckpointSeq", "startedAt", "completedAt",
-    "createdAt", "updatedAt"
+    "activeRobotKey", "version", "createdAt", "updatedAt"
   );
 
   @Id
@@ -44,6 +45,8 @@ public class InspectionTaskEntity {
   private String startedAt;
   @Column(name = "completed_at")
   private String completedAt;
+  @Column(name = "active_robot_key")
+  private String activeRobotKey;
   @Column(name = "extra_json", columnDefinition = "LONGTEXT")
   private String extraJson;
   @Column(name = "created_at", nullable = false)
@@ -72,6 +75,7 @@ public class InspectionTaskEntity {
     currentCheckpointSeq = integer(map.get("currentCheckpointSeq"), 0);
     startedAt = text(map.get("startedAt"));
     completedAt = text(map.get("completedAt"));
+    activeRobotKey = ACTIVE.contains(status) && robotId != null && !robotId.isBlank() ? robotId : null;
     extraJson = EntityPayloadCodec.extraJson(map, KNOWN);
     createdAt = first(map.get("createdAt"), Instant.now().toString());
     updatedAt = first(map.get("updatedAt"), createdAt);

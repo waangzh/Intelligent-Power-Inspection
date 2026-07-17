@@ -133,7 +133,7 @@ public class SeedDataInitializer implements ApplicationRunner {
   private boolean isDemoRecordId(String id) {
     if (id == null || id.isBlank()) return false;
     if (List.of(
-      "area_demo_", "robot_demo_", "route_demo_", "task_demo_", "evt_demo_", "alarm_demo_",
+      "area_demo_", "robot_demo_", "route_demo_", "task_demo_", "task_hist_demo_", "evt_demo_", "alarm_demo_",
       "record_demo_", "wo_demo_", "ntf_demo_", "agent_session_demo_", "agent_run_demo_",
       "agent_ev_demo_", "agent_act_demo_", "wo_alarm_alarm_demo_"
     ).stream().anyMatch(id::startsWith)) {
@@ -255,13 +255,47 @@ public class SeedDataInitializer implements ApplicationRunner {
       "createdAt", minutesAgo(95), "note", "等待现场值班员确认主变 A 相温升告警"
     ));
     insertIfMissing(DataCategory.TASK, map(
-      "id", "task_demo_planned", "name", "城东主变区晚间例行巡检", "routeId", "route_demo_001", "robotId", "robot_001",
+      "id", "task_demo_planned", "name", "城东主变区晚间例行巡检", "routeId", "route_demo_001",
+      "robotId", robotProperties.getRobotId(),
       "status", "CREATED", "progress", 0, "currentCheckpointSeq", 0, "createdAt", minutesAgo(18)
     ));
     insertIfMissing(DataCategory.TASK, map(
-      "id", "task_demo_cancelled", "name", "城西电容器组专项巡检", "routeId", "route_demo_002", "robotId", "robot_003",
+      "id", "task_demo_cancelled", "name", "城西电容器组专项巡检", "routeId", "route_demo_002", "robotId", "robot_demo_006",
       "status", "CANCELLED", "progress", 15, "currentCheckpointSeq", 0, "createdAt", daysAgo(1), "completedAt", hoursAgo(22),
       "note", "受雷雨天气影响取消，已改期"
+    ));
+    // Historical completed tasks referenced by demo records/alarms (satisfy FK integrity when present).
+    insertIfMissing(DataCategory.TASK, map(
+      "id", "task_hist_demo_001", "name", "城东主变区例行巡检", "routeId", "route_demo_001", "robotId", "robot_demo_007",
+      "status", "COMPLETED", "progress", 100, "createdAt", daysAgo(1), "completedAt", daysAgo(1)
+    ));
+    insertIfMissing(DataCategory.TASK, map(
+      "id", "task_hist_demo_002", "name", "城西开关室日常巡检", "routeId", "route_demo_002", "robotId", "robot_demo_006",
+      "status", "COMPLETED", "progress", 100, "createdAt", daysAgo(2), "completedAt", daysAgo(2)
+    ));
+    insertIfMissing(DataCategory.TASK, map(
+      "id", "task_hist_demo_003", "name", "城东 GIS 专项巡检", "routeId", "route_demo_001", "robotId", "robot_demo_007",
+      "status", "COMPLETED", "progress", 100, "createdAt", daysAgo(3), "completedAt", daysAgo(3)
+    ));
+    insertIfMissing(DataCategory.TASK, map(
+      "id", "task_hist_demo_004", "name", "500kV 户外设备巡检", "routeId", "route_demo_003", "robotId", "robot_demo_005",
+      "status", "COMPLETED", "progress", 100, "createdAt", daysAgo(4), "completedAt", daysAgo(4)
+    ));
+    insertIfMissing(DataCategory.TASK, map(
+      "id", "task_hist_demo_005", "name", "开关室夜间巡检", "routeId", "route_demo_002", "robotId", "robot_demo_004",
+      "status", "COMPLETED", "progress", 100, "createdAt", daysAgo(5), "completedAt", daysAgo(5)
+    ));
+    insertIfMissing(DataCategory.TASK, map(
+      "id", "task_hist_demo_006", "name", "城东安全专项巡检", "routeId", "route_demo_001", "robotId", robotProperties.getRobotId(),
+      "status", "COMPLETED", "progress", 100, "createdAt", daysAgo(6), "completedAt", daysAgo(6)
+    ));
+    insertIfMissing(DataCategory.TASK, map(
+      "id", "task_hist_demo_007", "name", "避雷器例行巡检", "routeId", "route_demo_003", "robotId", "robot_demo_007",
+      "status", "COMPLETED", "progress", 100, "createdAt", daysAgo(7), "completedAt", daysAgo(7)
+    ));
+    insertIfMissing(DataCategory.TASK, map(
+      "id", "task_hist_demo_008", "name", "城东主变区历史巡检", "routeId", "route_demo_001", "robotId", robotProperties.getRobotId(),
+      "status", "COMPLETED", "progress", 100, "createdAt", daysAgo(7), "completedAt", daysAgo(7)
     ));
 
     event("evt_demo_001", "task_demo_active", "DISPATCH", "任务已下发至巡检机器人 D4", null, null, minutesAgo(42));
@@ -334,31 +368,48 @@ public class SeedDataInitializer implements ApplicationRunner {
   }
 
   private void seedDemoWorkOrders() {
-    insertIfMissing(DataCategory.WORK_ORDER, map(
+    // CRITICAL auto-conversion may already create wo_alarm_{alarmId}; skip duplicate alarm links.
+    insertWorkOrderIfAlarmFree(map(
       "id", "wo_demo_001", "alarmId", "alarm_demo_002", "title", "主变 A 相过热热点紧急复核", "description", "立即安排现场人员复核红外热点及温升数据。", "locationDescription", "城南 500kV 变电站 / 户外主变区 / 1# 主变 A 相 / 接线区域",
-      "status", "PROCESSING", "priority", "URGENT", "assigneeId", "user_dispatcher", "assigneeName", "张调度",
+      "source", "AUTO", "status", "PROCESSING", "priority", "URGENT", "assigneeId", "user_dispatcher", "assigneeName", "张调度",
       "createdById", "user_admin", "createdByName", "系统管理员", "createdAt", minutesAgo(14), "updatedAt", minutesAgo(6)
     ));
-    insertIfMissing(DataCategory.WORK_ORDER, map(
+    insertWorkOrderIfAlarmFree(map(
       "id", "wo_demo_002", "alarmId", "alarm_demo_003", "title", "主变渗油痕迹现场检查", "description", "检查主变底部油位、密封件与地面油迹。", "locationDescription", "城南 500kV 变电站 / 户外主变区 / 1# 主变 A 相 / 本体底部",
       "source", "MANUAL", "status", "REVIEW", "priority", "HIGH", "assigneeName", "王运维", "createdById", "user_dispatcher", "createdByName", "张调度",
       "resolution", "现场未发现持续渗漏，已清洁油迹并安排 24 小时复测。", "review", map("conclusion", "PARTIALLY_RESOLVED", "onsiteFinding", "复核主变本体底部、油位计和密封件，未发现持续渗漏。", "handlingMeasures", "已清洁历史油迹并完成油位复测，当前读数正常。", "followUpPlan", "安排 24 小时后复测油位与地面油迹。", "submittedById", "user_dispatcher", "submittedByName", "王运维", "submittedAt", hoursAgo(2)), "createdAt", hoursAgo(5), "updatedAt", hoursAgo(2)
     ));
-    insertIfMissing(DataCategory.WORK_ORDER, map(
+    insertWorkOrderIfAlarmFree(map(
       "id", "wo_demo_003", "alarmId", "alarm_demo_005", "title", "GIS 刀闸状态核验", "description", "核对调度指令、刀闸位置与二次信号。", "locationDescription", "城东 GIS 设备区 / GIS 刀闸 / 二次端子箱",
-      "status", "CLOSED", "priority", "HIGH", "assigneeName", "陈检修", "createdById", "user_dispatcher", "createdByName", "张调度",
+      "source", "MANUAL", "status", "CLOSED", "priority", "HIGH", "assigneeName", "陈检修", "createdById", "user_dispatcher", "createdByName", "张调度",
       "resolution", "二次辅助接点误报，已完成更换并验证。", "createdAt", daysAgo(2), "updatedAt", daysAgo(1), "closedAt", daysAgo(1)
     ));
-    insertIfMissing(DataCategory.WORK_ORDER, map(
+    insertWorkOrderIfAlarmFree(map(
       "id", "wo_demo_004", "alarmId", "alarm_demo_007", "title", "绝缘子异物清理", "description", "安排现场人员清理绝缘子附近悬挂异物。", "locationDescription", "城西 110kV 变电站 / 开关室 / 母线桥接区 / 绝缘子附近",
-      "status", "PENDING", "priority", "MEDIUM", "assigneeName", "李运维", "createdById", "user_dispatcher", "createdByName", "张调度",
+      "source", "MANUAL", "status", "PENDING", "priority", "MEDIUM", "assigneeName", "李运维", "createdById", "user_dispatcher", "createdByName", "张调度",
       "createdAt", daysAgo(4), "updatedAt", daysAgo(4)
     ));
-    insertIfMissing(DataCategory.WORK_ORDER, map(
+    insertWorkOrderIfAlarmFree(map(
       "id", "wo_demo_policy_history", "alarmId", "alarm_demo_policy_history", "title", "历史告警工单", "description", "【测试】用于验证缺少转单来源时的“已有工单”展示。",
-      "status", "CLOSED", "priority", "MEDIUM", "assigneeName", "陈检修", "createdById", "user_dispatcher", "createdByName", "张调度",
+      "source", "MANUAL", "status", "CLOSED", "priority", "MEDIUM", "assigneeName", "陈检修", "createdById", "user_dispatcher", "createdByName", "张调度",
       "createdAt", daysAgo(7), "updatedAt", daysAgo(6), "closedAt", daysAgo(6)
     ));
+  }
+
+  private void insertWorkOrderIfAlarmFree(Map<String, Object> item) {
+    String id = String.valueOf(item.get("id"));
+    if (dataStore.exists(DataCategory.WORK_ORDER, id)) {
+      return;
+    }
+    Object alarmId = item.get("alarmId");
+    if (alarmId != null) {
+      boolean alarmTaken = dataStore.list(DataCategory.WORK_ORDER).stream()
+        .anyMatch(order -> String.valueOf(alarmId).equals(String.valueOf(order.get("alarmId"))));
+      if (alarmTaken) {
+        return;
+      }
+    }
+    dataStore.upsert(DataCategory.WORK_ORDER, item);
   }
 
   private void seedDemoNotifications() {

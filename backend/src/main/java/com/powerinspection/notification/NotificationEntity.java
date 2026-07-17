@@ -15,7 +15,7 @@ import java.util.Set;
 @Table(name = "notifications")
 public class NotificationEntity {
   private static final Set<String> KNOWN = Set.of(
-    "id", "userId", "type", "title", "content", "link", "read", "createdAt", "updatedAt"
+    "id", "userId", "type", "title", "content", "link", "read", "version", "createdAt", "updatedAt"
   );
 
   @Id
