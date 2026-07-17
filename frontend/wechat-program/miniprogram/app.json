@@ -17,15 +17,15 @@
     "pages/profile/settings/index"
   ],
   "window": {
-    "navigationBarBackgroundColor": "#0d2137",
+    "navigationBarBackgroundColor": "#071e42",
     "navigationBarTitleText": "电力智能巡检",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#f0f4f8"
+    "backgroundColor": "#f5f8fc"
   },
   "tabBar": {
     "custom": true,
-    "color": "#6b7c93",
-    "selectedColor": "#1a5fb4",
+    "color": "#6f8099",
+    "selectedColor": "#1768f2",
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [
@@ -42,10 +42,10 @@
         "selectedIconPath": "assets/tabbar/tasks-active.png"
       },
       {
-        "pagePath": "pages/monitor/index",
-        "text": "监控",
-        "iconPath": "assets/tabbar/monitor.png",
-        "selectedIconPath": "assets/tabbar/monitor-active.png"
+        "pagePath": "pages/alarms/index",
+        "text": "告警",
+        "iconPath": "assets/tabbar/alarms.png",
+        "selectedIconPath": "assets/tabbar/alarms-active.png"
       },
       {
         "pagePath": "pages/tasks/index",

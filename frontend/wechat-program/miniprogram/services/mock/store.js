@@ -27,7 +27,7 @@ const KEYS = {
   slamMaps: 'pi_slam_maps',
 }
 
-const AVATAR_COLORS = ['#1a5fb4', '#67c23a', '#e6a23c', '#f56c6c', '#909399', '#626aef']
+const AVATAR_COLORS = ['#1768f2', '#12b76a', '#ff8a00', '#f04438', '#6f8099', '#626aef']
 
 function getAvatarColor(s) {
   let hash = 0
