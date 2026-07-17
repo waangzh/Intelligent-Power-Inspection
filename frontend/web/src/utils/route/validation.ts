@@ -81,5 +81,13 @@ function polygonSelfIntersects(points: Array<{ x: number; y: number }>) {
 function segmentsIntersect(a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }, d: { x: number; y: number }) {
   const cross = (p: typeof a, q: typeof a, r: typeof a) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)
   const abC = cross(a, b, c); const abD = cross(a, b, d); const cdA = cross(c, d, a); const cdB = cross(c, d, b)
-  return abC * abD < 0 && cdA * cdB < 0
+  const epsilon = 1e-9
+  const onSegment = (p: typeof a, q: typeof a, r: typeof a) => Math.abs(cross(p, q, r)) <= epsilon
+    && r.x >= Math.min(p.x, q.x) - epsilon && r.x <= Math.max(p.x, q.x) + epsilon
+    && r.y >= Math.min(p.y, q.y) - epsilon && r.y <= Math.max(p.y, q.y) + epsilon
+  return (abC * abD < -epsilon && cdA * cdB < -epsilon)
+    || onSegment(a, b, c)
+    || onSegment(a, b, d)
+    || onSegment(c, d, a)
+    || onSegment(c, d, b)
 }
