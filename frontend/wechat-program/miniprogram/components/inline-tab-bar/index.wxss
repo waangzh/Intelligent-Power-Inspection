@@ -1,3 +1,5 @@
+@import '../../config/theme.wxss';
+
 .tab-bar {
   position: fixed;
   bottom: 0;
@@ -7,7 +9,7 @@
   background: #ffffff;
   display: flex;
   padding-bottom: env(safe-area-inset-bottom);
-  border-top: 1rpx solid #e4e9f0;
+  border-top: 1rpx solid var(--pi-border);
   z-index: 9999;
 }
 
@@ -28,12 +30,12 @@
 
 .tab-text {
   font-size: 10px;
-  color: #6b7c93;
+  color: var(--pi-muted);
   margin-top: 2px;
 }
 
 .tab-bar-item.active .tab-text {
-  color: #1a5fb4;
+  color: var(--pi-primary);
 }
 
 .tab-badge {
@@ -44,7 +46,7 @@
   height: 16px;
   line-height: 16px;
   padding: 0 4px;
-  background: #f56c6c;
+  background: var(--pi-danger);
   color: #fff;
   font-size: 10px;
   text-align: center;

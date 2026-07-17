@@ -60,7 +60,7 @@
         <text class="task-name" bindtap="goDetail" data-id="{{item.id}}">{{item.name}}</text>
         <task-status-tag status="{{item.status}}" />
       </view>
-      <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1a5fb4" />
+      <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1768f2" />
       <view class="task-actions" wx:if="{{canControl || canTakeover}}">
         <button wx:if="{{canControl && item.status==='RUNNING'}}" size="mini" bindtap="pauseTask" data-id="{{item.id}}">暂停</button>
         <button wx:if="{{canControl && item.status==='PAUSED'}}" size="mini" type="primary" bindtap="resumeTask" data-id="{{item.id}}">恢复</button>

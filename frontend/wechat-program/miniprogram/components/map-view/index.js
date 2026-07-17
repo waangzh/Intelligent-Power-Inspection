@@ -38,7 +38,7 @@ Component({
             latitude: cp.position.lat,
             longitude: cp.position.lng,
             title: cp.name,
-            label: { content: String(cp.seq), color: '#fff', bgColor: '#e6a23c', padding: 4, borderRadius: 8 },
+            label: { content: String(cp.seq), color: '#fff', bgColor: '#ff8a00', padding: 4, borderRadius: 8 },
             width: 24,
             height: 24,
             cpId: cp.id,
@@ -53,7 +53,7 @@ Component({
           longitude: robot.lng,
           width: 28,
           height: 28,
-          label: { content: '机', color: '#fff', bgColor: '#67c23a', padding: 6, borderRadius: 14 },
+          label: { content: '机', color: '#fff', bgColor: '#12b76a', padding: 6, borderRadius: 14 },
         })
       }
 
@@ -61,7 +61,7 @@ Component({
       if (route && route.path && route.path.length > 1) {
         polyline.push({
           points: route.path.map((p) => ({ latitude: p.lat, longitude: p.lng })),
-          color: '#1a5fb4',
+          color: '#1768f2',
           width: 4,
           arrowLine: true,
         })
@@ -70,8 +70,8 @@ Component({
       const polygons = areas.map((a, i) => ({
         points: (a.polygon || []).map((p) => ({ latitude: p.lat, longitude: p.lng })),
         strokeWidth: 2,
-        strokeColor: '#1a5fb488',
-        fillColor: '#1a5fb422',
+        strokeColor: '#1768f288',
+        fillColor: '#1768f222',
       }))
 
       this.setData({

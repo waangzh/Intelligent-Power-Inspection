@@ -1,7 +1,7 @@
 <view class="chart">
   <view class="chart-bars" wx:if="{{type==='bar'}}">
     <view class="bar-item" wx:for="{{normalized}}" wx:key="label">
-      <view class="bar" style="height: {{item.pct}}%; background: {{item.color || '#1a5fb4'}}"></view>
+      <view class="bar" style="height: {{item.pct}}%; background: {{item.color || '#1768f2'}}"></view>
       <text class="bar-label">{{item.label}}</text>
       <text class="bar-val">{{item.value}}</text>
     </view>

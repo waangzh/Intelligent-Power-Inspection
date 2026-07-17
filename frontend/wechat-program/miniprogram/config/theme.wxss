@@ -1,6 +1,26 @@
 page {
-  --pi-primary: #1a5fb4;
-  --pi-bg: #f0f4f8;
-  --pi-sidebar: #0d2137;
-  --pi-card-shadow: 0 4rpx 24rpx rgba(13, 33, 55, 0.08);
+  --pi-primary: #1768f2;
+  --pi-primary-dark: #102a56;
+  --pi-primary-soft: #eef4fc;
+  --pi-bg: #f5f8fc;
+  --pi-bg-muted: #eef2f7;
+  --pi-sidebar: #071e42;
+  --pi-text: #102a56;
+  --pi-muted: #6f8099;
+  --pi-muted-light: #91a0b5;
+  --pi-border: #e4ebf4;
+  --pi-border-soft: #edf2f8;
+  --pi-border-strong: #dfe7f1;
+  --pi-card-radius: 28rpx;
+  --pi-success: #12b76a;
+  --pi-success-soft: #ecfdf3;
+  --pi-warning: #ff8a00;
+  --pi-warning-soft: #fff4e5;
+  --pi-danger: #f04438;
+  --pi-danger-soft: #fef3f2;
+  --pi-info-soft: #f4f6f8;
+  --pi-card-shadow: 0 6rpx 20rpx rgba(28, 57, 102, 0.07);
+  --pi-primary-hover: #3a82f5;
+  --pi-accent-gold: #ffd700;
+  --pi-accent-cyan: #64b5ff;
 }

@@ -1,4 +1,4 @@
-.page-header { margin-bottom: 24rpx; }
-.title-row { display: flex; justify-content: space-between; align-items: center; }
-.title { font-size: 36rpx; font-weight: 600; color: #1a2b3c; }
-.desc { font-size: 24rpx; color: #6b7c93; margin-top: 8rpx; display: block; }
+@import '../../config/theme.wxss';
+
+.title { font-size: 36rpx; font-weight: 700; color: var(--pi-text); }
+.desc { font-size: 24rpx; color: var(--pi-muted); margin-top: 8rpx; display: block; }

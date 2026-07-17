@@ -7,7 +7,7 @@ Component({
     seed: String,
     size: { type: Number, value: 80 },
   },
-  data: { color: '#1a5fb4', initials: '?', fontSize: 32 },
+  data: { color: '#1768f2', initials: '?', fontSize: 32 },
   observers: {
     'displayName, seed, avatarUrl'() { this.update() },
   },

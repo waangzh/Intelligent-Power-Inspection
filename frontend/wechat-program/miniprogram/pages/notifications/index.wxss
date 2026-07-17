@@ -1,6 +1,6 @@
 .toolbar { display: flex; justify-content: space-between; align-items: center; }
 .toolbar-right { display: flex; gap: 24rpx; }
-.filter-btn, .link { color: #1a5fb4; font-size: 26rpx; }
-.ntf-item.unread { border-left: 6rpx solid #1a5fb4; }
+.filter-btn, .link { color: var(--pi-primary); font-size: 26rpx; }
+.ntf-item.unread { border-left: 6rpx solid var(--pi-primary); }
 .ntf-title { font-weight: 500; margin: 8rpx 0; }
 .ntf-actions { margin-top: 8rpx; }
