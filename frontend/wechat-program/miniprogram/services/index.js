@@ -4,6 +4,25 @@ const mock = require('./mock/store')
 const { uid, loadFromStorage } = require('../utils/storage')
 const { ROUTE_DETECTIONS, CHECKPOINT_DETECTIONS } = require('../utils/constants')
 const { createEmptyRosRoute } = require('../utils/ros-route')
+const { buildLocationFromAlarm, resolutionSummary, normalizeWorkOrder } = require('../utils/work-order')
+const workOrderPerm = require('../utils/work-order-permission')
+
+function currentUser() {
+  const session = getSession()
+  if (!session?.user) throw new Error('未登录')
+  return session.user
+}
+
+function sessionPermissions() {
+  return getSession()?.permissions || []
+}
+
+async function getWorkOrderById(id) {
+  const orders = await getWorkOrders()
+  const order = orders.find((o) => o.id === id)
+  if (!order) throw new Error('工单不存在')
+  return order
+}
 
 function useMock() {
   return apiConfig.useMock
@@ -26,9 +45,32 @@ async function register(form) {
   return http.post('/auth/register', form)
 }
 
+function normalizeSession(session) {
+  if (!session?.user) return null
+  if (!Array.isArray(session.permissions) || !session.permissions.length) return null
+  return session
+}
+
 function getSession() {
-  if (useMock()) return mock.getSession()
-  return wx.getStorageSync('pi_session') || null
+  if (useMock()) return normalizeSession(mock.getSession())
+  return normalizeSession(wx.getStorageSync('pi_session') || null)
+}
+
+async function refreshMe() {
+  if (useMock()) return getSession()
+  const session = getSession()
+  if (!session?.token) return null
+  const data = await http.get('/auth/me')
+  const next = {
+    ...session,
+    user: data.user,
+    permissions: data.permissions || [],
+    scopes: data.scopes,
+    features: data.features,
+  }
+  if (!next.permissions.length) return null
+  wx.setStorageSync('pi_session', next)
+  return next
 }
 
 function logout() {
@@ -63,6 +105,23 @@ async function listUsers() {
     return mock.getState().users
   }
   return http.get('/users')
+}
+
+async function notifyWorkOrderByRole(role, title, content, excludeUserId) {
+  const users = await listUsers()
+  users
+    .filter((u) => u.role === role && u.id !== excludeUserId)
+    .forEach((u) => {
+      if (useMock()) {
+        mock.pushNotification(u.id, 'WORKORDER', title, content, '/pages/workorders/index')
+      }
+    })
+}
+
+async function uploadWorkOrderPhoto(filePath) {
+  const { persistPhoto } = require('../utils/work-order-photo')
+  if (useMock()) return persistPhoto(filePath)
+  return filePath
 }
 
 async function updateUserRole(userId, role) {
@@ -371,13 +430,64 @@ async function acknowledgeAllAlarms() {
   await http.post('/alarms/ack-all')
 }
 
-// ==================== Work Orders ====================
-async function getWorkOrders() {
-  if (useMock()) return mock.getState().workOrders
-  return http.get('/work-orders')
+// ==================== Alarm Work Order Policy ====================
+async function getAlarmWorkOrderPolicy() {
+  if (useMock()) {
+    const alarmPolicy = require('../utils/alarm-policy')
+    return { id: 'default', rules: alarmPolicy.loadPolicy() }
+  }
+  return http.get('/alarms/work-order-policy')
 }
 
-async function createWorkOrderFromAlarm(alarm, creator) {
+async function updateAlarmWorkOrderPolicy(rules) {
+  if (useMock()) {
+    const alarmPolicy = require('../utils/alarm-policy')
+    alarmPolicy.savePolicy(rules)
+    return { id: 'default', rules: alarmPolicy.loadPolicy() }
+  }
+  return http.put('/alarms/work-order-policy', { rules })
+}
+
+// ==================== Work Orders ====================
+async function patchWorkOrderQuiet(id, patch) {
+  if (useMock()) {
+    const orders = mock.getState().workOrders
+    const idx = orders.findIndex((o) => o.id === id)
+    if (idx < 0) return
+    orders[idx] = { ...orders[idx], ...patch, updatedAt: new Date().toISOString() }
+    mock.save(mock.KEYS.workOrders, orders)
+    return orders[idx]
+  }
+  return http.patch(`/work-orders/${id}`, patch)
+}
+
+async function getWorkOrders() {
+  let raw
+  if (useMock()) raw = mock.getState().workOrders
+  else raw = await http.get('/work-orders')
+
+  const normalized = raw.map(normalizeWorkOrder)
+  await Promise.all(
+    normalized.map(async (order) => {
+      const original = raw.find((o) => o.id === order.id)
+      if (!original || original.status === order.status) return
+      try {
+        await patchWorkOrderQuiet(order.id, { status: order.status })
+      } catch (e) {
+        // 修复历史脏数据失败时忽略，界面已按归一化结果展示
+      }
+    }),
+  )
+  return normalized
+}
+
+async function createWorkOrderFromAlarm(alarm, creator, options = {}) {
+  const sessionUser = currentUser()
+  if (creator?.id && creator.id !== sessionUser.id) throw new Error('用户身份不一致')
+  workOrderPerm.assertCanCreateWorkOrder(sessionUser, sessionPermissions())
+  const creatorName = sessionUser.displayName || sessionUser.name || '系统'
+  const sites = useMock() ? mock.getState().sites : await getSites()
+  const location = buildLocationFromAlarm(alarm, sites[0])
   if (useMock()) {
     const orders = mock.getState().workOrders
     if (orders.some((o) => o.alarmId === alarm.id)) throw new Error('该告警已有关联工单')
@@ -387,25 +497,81 @@ async function createWorkOrderFromAlarm(alarm, creator) {
       id: uid('wo'),
       title: `告警处置：${alarm.message.slice(0, 24)}`,
       description: alarm.message,
-      locationDescription: [alarm.routeName, alarm.checkpointName].filter(Boolean).join(' / '),
       alarmId: alarm.id,
       status: 'PENDING',
       priority,
-      assigneeName: creator.name,
-      createdById: creator.id,
-      createdByName: creator.name,
+      createdById: sessionUser.id,
+      createdByName: creatorName,
+      location,
+      autoConverted: !!options.autoConverted,
       createdAt: now,
       updatedAt: now,
     }
     orders.unshift(order)
     mock.save(mock.KEYS.workOrders, orders)
-    mock.pushNotification(creator.id, 'WORKORDER', '工单已创建', order.title, '/pages/workorders/index')
+    await notifyWorkOrderByRole('DISPATCHER', '新工单待接单', order.title, sessionUser.id)
     return order
   }
-  return http.post(`/work-orders/from-alarm/${alarm.id}`, { assigneeName: creator.displayName || creator.name })
+  const created = await http.post(`/work-orders/from-alarm/${alarm.id}`, {
+    autoConverted: !!options.autoConverted,
+  })
+  return created
+}
+
+async function tryAutoConvertPendingAlarms(alarms, creator) {
+  if (!useMock()) return
+  const alarmPolicy = require('../utils/alarm-policy')
+  if (!creator || !workOrderPerm.canCreateWorkOrder(creator, sessionPermissions())) return
+  const policy = alarmPolicy.loadPolicy()
+  let orders = await getWorkOrders()
+  const linked = new Set(orders.filter((o) => o.alarmId).map((o) => o.alarmId))
+  for (const alarm of alarms) {
+    if (linked.has(alarm.id)) continue
+    if (!alarmPolicy.shouldAutoConvert(alarm.severity, policy)) continue
+    try {
+      await createWorkOrderFromAlarm(alarm, creator, { autoConverted: true })
+      linked.add(alarm.id)
+      if (!alarm.acknowledged) await acknowledgeAlarm(alarm.id)
+    } catch (e) {
+      // 已转工单或创建失败时跳过
+    }
+  }
+}
+
+async function claimWorkOrder(id) {
+  const user = currentUser()
+  const order = await getWorkOrderById(id)
+  workOrderPerm.assertCanClaimOrder(order, user, sessionPermissions())
+
+  const now = new Date().toISOString()
+  const assigneeName = user.displayName || user.name || '调度员'
+  const patch = {
+    assigneeId: user.id,
+    assigneeName,
+    status: 'PROCESSING',
+    claimedAt: now,
+    updatedAt: now,
+  }
+
+  if (useMock()) {
+    const orders = mock.getState().workOrders
+    const idx = orders.findIndex((o) => o.id === id)
+    if (idx < 0) throw new Error('工单不存在')
+    if (!workOrderPerm.canClaimOrder(orders[idx], user, sessionPermissions())) {
+      throw new Error('无法接单，可能已被他人抢走')
+    }
+    orders[idx] = { ...orders[idx], ...patch }
+    mock.save(mock.KEYS.workOrders, orders)
+    return orders[idx]
+  }
+
+  return http.post(`/work-orders/${id}/claim`)
 }
 
 async function updateWorkOrderStatus(id, status, extra = {}) {
+  const user = currentUser()
+  const order = await getWorkOrderById(id)
+  workOrderPerm.assertStatusTransition(order, status, user, sessionPermissions())
   if (useMock()) {
     const orders = mock.getState().workOrders
     const idx = orders.findIndex((o) => o.id === id)
@@ -415,7 +581,48 @@ async function updateWorkOrderStatus(id, status, extra = {}) {
     mock.save(mock.KEYS.workOrders, orders)
     return orders[idx]
   }
-  return http.patch(`/work-orders/${id}/status`, { status, ...extra })
+  return http.patch(`/work-orders/${id}`, { status, ...extra })
+}
+
+async function submitWorkOrderResolution(id, form) {
+  const user = currentUser()
+  const submitter = user.displayName || user.name || '调度员'
+  const fullForm = {
+    ...form,
+    submittedAt: new Date().toISOString(),
+    submittedBy: submitter,
+  }
+  const order = await updateWorkOrderStatus(id, 'REVIEW', {
+    resolution: resolutionSummary(fullForm),
+    resolutionForm: fullForm,
+  })
+  if (useMock()) {
+    await notifyWorkOrderByRole('ADMIN', '工单待复核', order.title || '有新的现场处理记录', user.id)
+  }
+  return order
+}
+
+async function submitWorkOrderReview(id, form) {
+  const user = currentUser()
+  const reviewer = user.displayName || user.name || '管理员'
+  const fullForm = {
+    ...form,
+    reviewedAt: new Date().toISOString(),
+    reviewedBy: reviewer,
+  }
+  const status = form.result === 'PASS' ? 'CLOSED' : 'PROCESSING'
+  const order = await getWorkOrderById(id)
+  const updated = await updateWorkOrderStatus(id, status, { reviewForm: fullForm })
+  if (useMock() && form.result === 'REJECT' && order.assigneeId) {
+    mock.pushNotification(
+      order.assigneeId,
+      'WORKORDER',
+      '工单已退回',
+      order.title || '请重新现场处理',
+      '/pages/workorders/index',
+    )
+  }
+  return updated
 }
 
 // ==================== Robots ====================
@@ -528,6 +735,7 @@ module.exports = {
   login,
   register,
   getSession,
+  refreshMe,
   logout,
   updateProfile,
   changePassword,
@@ -565,9 +773,16 @@ module.exports = {
   getAlarms,
   acknowledgeAlarm,
   acknowledgeAllAlarms,
+  getAlarmWorkOrderPolicy,
+  updateAlarmWorkOrderPolicy,
   getWorkOrders,
   createWorkOrderFromAlarm,
+  tryAutoConvertPendingAlarms,
+  claimWorkOrder,
+  uploadWorkOrderPhoto,
   updateWorkOrderStatus,
+  submitWorkOrderResolution,
+  submitWorkOrderReview,
   getRobots,
   addRobot,
   removeRobot,

@@ -1,4 +1,6 @@
 const api = require('../../../services/index')
+const { getRoleLandingPath } = require('../../../utils/role-landing')
+const { isTabPage } = require('../../../config/tab-bar')
 
 Page({
   data: { username: '', password: '', remember: true, loading: false, redirect: '' },
@@ -31,10 +33,10 @@ Page({
     this.setData({ loading: true })
     try {
       const session = await api.login(username, password, remember)
-      getApp().setUser(session.user)
+      getApp().setSession(session)
       wx.showToast({ title: '登录成功' })
-      const url = this.data.redirect || '/pages/dashboard/index'
-      if (url.includes('pages/dashboard') || url.includes('pages/monitor') || url.includes('pages/alarms') || url.includes('pages/tasks') || url.includes('pages/profile')) {
+      const url = this.data.redirect || getRoleLandingPath(session.user.role)
+      if (isTabPage(url)) {
         wx.switchTab({ url: url.split('?')[0] })
       } else {
         wx.redirectTo({ url })

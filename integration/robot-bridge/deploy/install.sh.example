@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE_DIR=${1:-$(cd "$(dirname "$0")/.." && pwd)}
+COMMIT=${2:-$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || basename "$SOURCE_DIR")}
+RELEASE_DIR=/opt/robot-bridge/releases/$COMMIT
+
+id -u robotbridge >/dev/null 2>&1 || useradd --system --home /var/lib/robot-bridge --shell /usr/sbin/nologin robotbridge
+install -d -o robotbridge -g robotbridge -m 750 /opt/robot-bridge/releases /var/lib/robot-bridge
+install -d -o root -g robotbridge -m 750 /etc/robot-bridge
+
+if [[ -e /opt/robot-bridge/current && ! -L /opt/robot-bridge/current ]]; then
+  echo 'legacy /opt/robot-bridge/current directory must be migrated to releases before install' >&2
+  exit 1
+fi
+if [[ -e "$RELEASE_DIR" ]]; then
+  echo "release already exists: $RELEASE_DIR" >&2
+  exit 1
+fi
+install -d -o robotbridge -g robotbridge -m 750 "$RELEASE_DIR/app"
+install -o robotbridge -g robotbridge -m 640 "$SOURCE_DIR"/app/*.py "$RELEASE_DIR/app/"
+install -o robotbridge -g robotbridge -m 640 "$SOURCE_DIR/requirements.txt" "$RELEASE_DIR/requirements.txt"
+
+test -x /opt/robot-bridge/venv/bin/python || python3 -m venv /opt/robot-bridge/venv
+/opt/robot-bridge/venv/bin/pip install -r "$RELEASE_DIR/requirements.txt"
+/opt/robot-bridge/venv/bin/python -m compileall "$RELEASE_DIR/app"
+
+if [[ ! -e /etc/robot-bridge/robot-bridge.env ]]; then
+  install -o root -g robotbridge -m 640 "$SOURCE_DIR/.env.example" /etc/robot-bridge/robot-bridge.env
+fi
+install -m 644 "$SOURCE_DIR/deploy/robot-bridge.service" /etc/systemd/system/robot-bridge.service
+ln -sfn "$RELEASE_DIR" /opt/robot-bridge/current
+systemctl daemon-reload
+
+configured=true
+for key in ROBOT_AUTH_TOKENS_JSON BRIDGE_API_TOKEN PLATFORM_BASE_URL PLATFORM_BEARER_TOKEN ROBOT_BRIDGE_STORAGE_PATH; do
+  grep -Eq "^${key}=.+" /etc/robot-bridge/robot-bridge.env || configured=false
+done
+if grep -q 'token-placeholder' /etc/robot-bridge/robot-bridge.env || [[ "$configured" != true ]]; then
+  echo 'robot-bridge release installed; configure protected env before starting'
+else
+  systemctl enable --now robot-bridge.service
+fi

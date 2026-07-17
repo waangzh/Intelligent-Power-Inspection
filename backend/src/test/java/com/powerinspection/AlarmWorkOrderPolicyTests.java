@@ -73,6 +73,21 @@ class AlarmWorkOrderPolicyTests {
   }
 
   @Test
+  void defaultCriticalAlarmUsesAutomaticConversion() {
+    Map<String, Object> alarm = alarmService.create(alarm("alarm_policy_default_critical", "CRITICAL"));
+
+    assertThat(alarm)
+      .containsEntry("workOrderModeApplied", "AUTO")
+      .containsEntry("workOrderConversionStatus", "SUCCEEDED")
+      .containsEntry("acknowledged", false);
+    assertThat(workOrderService.findByAlarmId("alarm_policy_default_critical"))
+      .containsEntry("id", "wo_alarm_alarm_policy_default_critical")
+      .containsEntry("priority", "URGENT")
+      .containsEntry("source", "AUTO")
+      .containsEntry("createdById", "system");
+  }
+
+  @Test
   void lowAlarmWaitsForManualConversionAndKeepsLowPriority() throws Exception {
     saveDefaultPolicy(login("admin", "Admin@123"));
 

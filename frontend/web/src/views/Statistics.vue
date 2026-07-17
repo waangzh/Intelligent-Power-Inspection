@@ -1,126 +1,99 @@
 <template>
-  <div class="statistics-page pi-page">
+  <div>
     <PageHeader
       title="统计分析"
       description="巡检任务、告警与设备运行趋势"
       :breadcrumbs="[{ label: '数据中心' }, { label: '统计分析' }]"
     />
 
-    <el-row :gutter="16" class="metric-grid">
-      <el-col v-for="(kpi, index) in kpis" :key="kpi.label" :xs="24" :sm="12" :lg="6">
-        <el-card class="metric-card" :class="`metric-${kpiMetas[index].tone}`" shadow="never">
-          <div class="metric-icon" aria-hidden="true">
-            <el-icon :size="27"><component :is="kpiMetas[index].icon" /></el-icon>
-          </div>
-          <div class="metric-content">
-            <div class="kpi-line">
-              <strong class="kpi-value">{{ kpi.value }}</strong>
-              <span class="kpi-label">{{ kpi.label }}</span>
-            </div>
-            <div class="kpi-trend" :class="kpi.up ? 'up' : 'down'">
-              <el-icon><component :is="kpi.up ? 'Top' : 'Bottom'" /></el-icon>
-              <span>{{ kpi.trend }}</span>
+    <el-row :gutter="12" class="statistics-kpis">
+      <el-col :xs="24" :sm="12" :lg="6" v-for="(kpi, index) in kpis" :key="kpi.label">
+        <el-card :class="['stat-card', `kpi-card-${index}`]" shadow="never">
+          <div class="kpi-inner">
+            <div class="kpi-icon"><el-icon><component :is="kpiIcons[index]" /></el-icon></div>
+            <div>
+              <div class="kpi-value">{{ kpi.value }}</div>
+              <div class="kpi-label">{{ kpi.label }}</div>
+              <div class="kpi-trend" :class="kpi.up ? 'up' : 'down'">{{ kpi.trend }}</div>
             </div>
           </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" class="section-row">
+    <el-row :gutter="12" class="statistics-primary">
       <el-col :xs="24" :lg="13">
-        <el-card class="chart-panel" shadow="never">
-          <template #header>
-            <div class="panel-heading">
-              <span>近 7 日告警趋势</span>
-              <el-tag size="small" effect="plain">近 7 天</el-tag>
-            </div>
-          </template>
-          <ChartCard :option="alarmTrendOption" :height="248" />
+        <el-card class="analytics-card" shadow="never">
+          <template #header>近 7 日告警趋势</template>
+          <ChartCard :option="alarmTrendOption" :height="280" />
         </el-card>
       </el-col>
       <el-col :xs="24" :lg="11">
-        <el-card class="chart-panel" shadow="never">
+        <el-card class="analytics-card task-completion-card" shadow="never">
           <template #header>任务完成率</template>
-          <div class="gauge-wrap">
-            <ChartCard :option="taskGaugeOption" :height="248" />
-            <el-tag class="gauge-status" type="success" size="small" effect="light">
-              {{ completionRate >= 80 ? '进度良好' : completionRate >= 50 ? '稳步推进' : '需要关注' }}
-            </el-tag>
-          </div>
+          <TaskCompletionGauge
+            :percentage="completionRate"
+            :completed="completedTasks"
+            :total="totalTasks"
+            :status-label="taskProgressStatus.label"
+            :status-tone="taskProgressStatus.tone"
+          />
         </el-card>
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" class="section-row">
-      <el-col :xs="24" :md="12" :xl="8">
-        <el-card class="chart-panel compact-panel" shadow="never">
+    <el-row :gutter="12" class="statistics-secondary">
+      <el-col :xs="24" :md="8">
+        <el-card class="analytics-card" shadow="never">
           <template #header>告警类型分布</template>
-          <ChartCard :option="alarmTypeOption" :height="225" />
-          <div class="panel-foot">共 {{ alarmStore.alarms.length }} 条告警记录</div>
+          <ChartCard :option="alarmTypeOption" :height="280" />
         </el-card>
       </el-col>
-      <el-col :xs="24" :md="12" :xl="8">
-        <el-card class="chart-panel compact-panel" shadow="never">
+      <el-col :xs="24" :md="8">
+        <el-card class="analytics-card" shadow="never">
           <template #header>告警级别分布</template>
-          <ChartCard :option="severityOption" :height="225" />
-          <div class="panel-foot">按严重程度统计当前告警</div>
+          <ChartCard :option="severityOption" :height="280" />
         </el-card>
       </el-col>
-      <el-col :xs="24" :md="24" :xl="8">
-        <el-card class="chart-panel compact-panel battery-panel" shadow="never">
-          <template #header>机器人电量</template>
-          <div v-if="robotStore.robots.length" class="battery-list">
-            <div v-for="robot in robotStore.robots" :key="robot.id" class="battery-item">
-              <span class="robot-icon" :class="robot.status === 'OFFLINE' ? 'is-offline' : ''">
-                <el-icon><Cpu /></el-icon>
-              </span>
-              <span class="robot-name">{{ robot.name }}</span>
-              <el-progress
-                class="battery-progress"
-                :percentage="robot.battery"
-                :stroke-width="7"
-                :show-text="false"
-                :color="batteryColor(robot.battery)"
-              />
-              <strong class="battery-value">{{ robot.battery }}%</strong>
-              <el-tag :type="robot.status === 'OFFLINE' ? 'info' : 'success'" size="small" effect="light">
-                {{ robot.status === 'OFFLINE' ? '离线' : '在线' }}
-              </el-tag>
+      <el-col :xs="24" :md="8">
+        <el-card class="analytics-card robot-health-card" shadow="never">
+          <template #header>机器人运行状态</template>
+          <div v-if="robotHealthRows.length" class="robot-health-list">
+            <div v-for="robot in robotHealthRows" :key="robot.id" class="robot-health-row">
+              <div class="robot-health-avatar" :class="robot.tone"><el-icon><Cpu /></el-icon></div>
+              <span class="robot-health-name">{{ robot.name }}</span>
+              <el-progress :percentage="robot.score" :show-text="false" :color="robot.color" />
+              <strong>{{ robot.score }}%</strong>
+              <el-tag :type="robot.online ? 'success' : 'info'" size="small">{{ robot.online ? '在线' : '离线' }}</el-tag>
             </div>
           </div>
           <div v-else class="empty-hint">暂无机器人数据</div>
-          <div class="panel-foot">{{ onlineRobotCount }} / {{ robotStore.robots.length }} 在线</div>
+          <div class="robot-health-footer">{{ robotHealthRows.filter((robot) => robot.online).length }} / {{ robotHealthRows.length }} 在线</div>
         </el-card>
       </el-col>
     </el-row>
 
-    <div class="analysis-strip">
-      <span class="analysis-icon"><el-icon><Opportunity /></el-icon></span>
-      <strong>分析结论</strong>
-      <span class="analysis-copy">{{ analysisSummary }}</span>
-      <span class="analysis-time"><el-icon><Clock /></el-icon> 数据实时汇总</span>
-    </div>
-
-    <div class="more-heading">
-      <div>
-        <strong>更多运营统计</strong>
-        <span>保留原有站点与任务状态分析能力</span>
-      </div>
-    </div>
-    <el-row :gutter="16" class="more-grid">
+    <el-row :gutter="12" class="statistics-details">
       <el-col :xs="24" :lg="12">
-        <el-card class="chart-panel" shadow="never">
+        <el-card class="analytics-card" shadow="never">
           <template #header>各站点巡检次数</template>
-          <ChartCard :option="siteBarOption" :height="280" />
+          <ChartCard :option="siteBarOption" :height="300" />
         </el-card>
       </el-col>
       <el-col :xs="24" :lg="12">
-        <el-card class="chart-panel" shadow="never">
+        <el-card class="analytics-card" shadow="never">
           <template #header>任务状态堆叠对比</template>
-          <ChartCard :option="taskStackOption" :height="280" />
+          <ChartCard :option="taskStackOption" :height="300" />
         </el-card>
       </el-col>
     </el-row>
+
+    <div class="analysis-summary">
+      <el-icon><Opportunity /></el-icon>
+      <strong>分析结论</strong>
+      <span>本周系统运行稳定，建议持续关注告警趋势与任务执行状态。</span>
+      <time>数据统计时间：{{ new Date().toLocaleString('zh-CN') }}</time>
+    </div>
   </div>
 </template>
 
@@ -128,6 +101,7 @@
 import { computed } from 'vue'
 import ChartCard from '@/components/ChartCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import TaskCompletionGauge from '@/components/TaskCompletionGauge.vue'
 import { useAnalytics } from '@/composables/useAnalytics'
 import { useAlarmStore } from '@/stores/alarm'
 import { useRobotStore } from '@/stores/robot'
@@ -138,97 +112,30 @@ const taskStore = useTaskStore()
 const alarmStore = useAlarmStore()
 const robotStore = useRobotStore()
 const { kpis, weeklyAlarmCounts, siteInspectionCounts, completionRate, completedTasks, totalTasks } = useAnalytics()
+const kpiIcons = ['Tickets', 'Bell', 'DataAnalysis', 'Cpu']
 
-const kpiMetas = [
-  { icon: 'Tickets', tone: 'blue' },
-  { icon: 'Warning', tone: 'orange' },
-  { icon: 'PieChart', tone: 'teal' },
-  { icon: 'Cpu', tone: 'blue' },
-]
-
-const onlineRobotCount = computed(() => robotStore.robots.filter((robot) => robot.status !== 'OFFLINE').length)
-const analysisSummary = computed(() => {
-  const alarmText = alarmStore.unacknowledgedCount
-    ? `当前有 ${alarmStore.unacknowledgedCount} 条告警待确认`
-    : '当前无未确认告警'
-  const progressText = completionRate.value >= 80
-    ? '任务完成率良好'
-    : completionRate.value >= 50
-      ? '任务正在稳步推进'
-      : '任务完成进度需要关注'
-  return `${alarmText}；${progressText}，请继续保持巡检计划执行并关注设备运行状态。`
+const taskProgressStatus = computed(() => {
+  if (totalTasks.value === 0) return { label: '暂无任务', tone: 'neutral' }
+  if (completionRate.value >= 60) return { label: '进度良好', tone: 'good' }
+  if (completionRate.value >= 30) return { label: '持续推进', tone: 'watch' }
+  return { label: '需要关注', tone: 'alert' }
 })
-
-function batteryColor(percentage: number) {
-  if (percentage >= 60) return '#16b86a'
-  if (percentage >= 30) return '#ff9d16'
-  return '#ff5733'
-}
 
 const alarmTrendOption = computed(() => ({
   tooltip: { trigger: 'axis' },
-  legend: { top: 0, left: 0, data: ['告警数量（次）'], textStyle: { color: '#64748b', fontSize: 11 } },
-  grid: { left: 34, right: 16, top: 38, bottom: 28 },
+  grid: { left: 40, right: 20, top: 30, bottom: 30 },
   xAxis: {
     type: 'category',
     data: ['6天前', '5天前', '4天前', '3天前', '2天前', '昨天', '今天'],
-    boundaryGap: false,
-    axisLine: { lineStyle: { color: '#dfe6ef' } },
-    axisTick: { show: false },
-    axisLabel: { color: '#6f7e94', fontSize: 11 },
   },
-  yAxis: {
-    type: 'value',
-    minInterval: 1,
-    axisLine: { show: false },
-    axisTick: { show: false },
-    axisLabel: { color: '#6f7e94', fontSize: 11 },
-    splitLine: { lineStyle: { color: '#e8edf4', type: 'dashed' } },
-  },
+  yAxis: { type: 'value', minInterval: 1 },
   series: [{
-    name: '告警数量（次）',
     type: 'line',
     smooth: true,
-    symbol: 'circle',
-    symbolSize: 7,
     data: weeklyAlarmCounts.value,
-    areaStyle: { opacity: 0.08, color: '#ff8a00' },
-    itemStyle: { color: '#ff8a00', borderColor: '#fff', borderWidth: 2 },
-    lineStyle: { width: 2.5, color: '#ff8a00' },
-  }],
-}))
-
-const taskGaugeOption = computed(() => ({
-  series: [{
-    type: 'gauge',
-    startAngle: 205,
-    endAngle: -25,
-    min: 0,
-    max: 100,
-    splitNumber: 4,
-    center: ['50%', '64%'],
-    radius: '88%',
-    progress: { show: true, width: 14, roundCap: true, itemStyle: { color: '#2468f2' } },
-    axisLine: { lineStyle: { width: 14, color: [[1, '#e8edf5']] }, roundCap: true },
-    axisTick: { show: false },
-    splitLine: { show: false },
-    axisLabel: {
-      distance: -42,
-      color: '#718096',
-      fontSize: 10,
-      formatter: (value: number) => `${value}%`,
-    },
-    pointer: { show: false },
-    title: { offsetCenter: [0, '30%'], color: '#718096', fontSize: 12 },
-    detail: {
-      valueAnimation: true,
-      color: '#10213d',
-      fontSize: 31,
-      fontWeight: 700,
-      offsetCenter: [0, '-2%'],
-      formatter: '{value}%',
-    },
-    data: [{ value: completionRate.value, name: `已完成 ${completedTasks.value} / ${totalTasks.value} 项` }],
+    areaStyle: { opacity: 0.2, color: '#e6a23c' },
+    itemStyle: { color: '#e6a23c' },
+    lineStyle: { width: 3 },
   }],
 }))
 
@@ -241,15 +148,11 @@ const alarmTypeOption = computed(() => {
   const data = Object.entries(counts).map(([name, value]) => ({ name, value }))
   return {
     tooltip: { trigger: 'item' },
-    color: ['#3478f6', '#ff9f1a', '#27b6ad', '#8b5cf6', '#ef5b5b'],
-    legend: { right: 4, top: 'center', orient: 'vertical', type: 'scroll', itemWidth: 8, itemHeight: 8, textStyle: { color: '#64748b', fontSize: 11 } },
+    legend: { bottom: 0, type: 'scroll' },
     series: [{
       type: 'pie',
-      radius: ['48%', '72%'],
-      center: ['30%', '50%'],
-      avoidLabelOverlap: true,
-      label: { show: false },
-      itemStyle: { borderColor: '#fff', borderWidth: 2 },
+      radius: ['35%', '60%'],
+      roseType: 'area',
       data: data.length ? data : [{ name: '暂无数据', value: 1 }],
     }],
   }
@@ -257,47 +160,50 @@ const alarmTypeOption = computed(() => {
 
 const severityOption = computed(() => ({
   tooltip: { trigger: 'axis' },
-  grid: { left: 34, right: 12, top: 24, bottom: 28 },
-  xAxis: {
-    type: 'category',
-    data: Object.values(ALARM_SEVERITY_LABELS),
-    axisLine: { lineStyle: { color: '#dfe6ef' } },
-    axisTick: { show: false },
-    axisLabel: { color: '#6f7e94', fontSize: 11 },
-  },
-  yAxis: {
-    type: 'value',
-    minInterval: 1,
-    axisLine: { show: false },
-    axisTick: { show: false },
-    axisLabel: { color: '#6f7e94', fontSize: 11 },
-    splitLine: { lineStyle: { color: '#e8edf4', type: 'dashed' } },
-  },
+  grid: { left: 50, right: 20, top: 20, bottom: 30 },
+  xAxis: { type: 'category', data: Object.values(ALARM_SEVERITY_LABELS) },
+  yAxis: { type: 'value', minInterval: 1 },
   series: [{
     type: 'bar',
     data: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((s) =>
       alarmStore.alarms.filter((a) => a.severity === s).length,
     ),
     itemStyle: {
-      color: (params: { dataIndex: number }) => ['#ff5733', '#ff9d16', '#2468f2', '#12b8aa'][params.dataIndex],
-      borderRadius: [4, 4, 0, 0],
+      color: (params: { dataIndex: number }) => ['#f56c6c', '#e6a23c', '#409eff', '#909399'][params.dataIndex],
     },
-    label: { show: true, position: 'top', color: '#40516b', fontWeight: 600 },
-    barMaxWidth: 34,
+    barWidth: 36,
   }],
+}))
+
+const robotHealthRows = computed(() => robotStore.robots.map((robot, index) => {
+  const telemetry = robot.telemetry
+  const online = robot.status !== 'OFFLINE'
+  const score = !online
+    ? 0
+    : telemetry?.bridgeReachable === false
+      ? 45
+      : telemetry?.nav2Status === 'running' || telemetry?.patrolState === 'running'
+        ? 92
+        : 78
+  return {
+    id: robot.id,
+    name: robot.name,
+    online,
+    score,
+    color: online ? (index === 1 ? '#ff9700' : '#33b947') : '#a6b4c5',
+    tone: `robot-tone-${index % 3}`,
+  }
 }))
 
 const siteBarOption = computed(() => ({
   tooltip: { trigger: 'axis' },
-  grid: { left: 42, right: 18, top: 24, bottom: 40 },
+  grid: { left: 50, right: 20, top: 20, bottom: 40 },
   xAxis: {
     type: 'category',
     data: siteInspectionCounts.value.map((s) => s.site.name.replace('变电站', '')),
-    axisLabel: { rotate: 15, color: '#6f7e94' },
-    axisLine: { lineStyle: { color: '#dfe6ef' } },
-    axisTick: { show: false },
+    axisLabel: { rotate: 15 },
   },
-  yAxis: { type: 'value', minInterval: 1, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#e8edf4', type: 'dashed' } } },
+  yAxis: { type: 'value', minInterval: 1 },
   series: [{
     type: 'bar',
     data: siteInspectionCounts.value.map((s) => s.count),
@@ -306,11 +212,10 @@ const siteBarOption = computed(() => ({
         type: 'linear',
         x: 0, y: 0, x2: 0, y2: 1,
         colorStops: [
-          { offset: 0, color: '#2468f2' },
-          { offset: 1, color: '#69a2ff' },
+          { offset: 0, color: '#1a5fb4' },
+          { offset: 1, color: '#4a9eff' },
         ],
       },
-      borderRadius: [5, 5, 0, 0],
     },
     barWidth: 36,
   }],
@@ -326,16 +231,16 @@ const taskStackOption = computed(() => {
   ]
   return {
     tooltip: { trigger: 'axis' },
-    legend: { top: 0, textStyle: { color: '#64748b' } },
+    legend: { top: 0 },
     grid: { left: 50, right: 20, top: 40, bottom: 30 },
-    xAxis: { type: 'category', data: ['当前任务'], axisLine: { lineStyle: { color: '#dfe6ef' } }, axisTick: { show: false }, axisLabel: { color: '#6f7e94' } },
-    yAxis: { type: 'value', minInterval: 1, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#e8edf4', type: 'dashed' } } },
+    xAxis: { type: 'category', data: ['当前任务'] },
+    yAxis: { type: 'value', minInterval: 1 },
     series: statuses.map((s) => ({
       name: s.label,
       type: 'bar',
       stack: 'total',
       data: [taskStore.tasks.filter((t) => t.status === s.key).length],
-      itemStyle: { color: s.color, borderRadius: 3 },
+      itemStyle: { color: s.color },
       barWidth: 60,
     })),
   }
@@ -343,307 +248,227 @@ const taskStackOption = computed(() => {
 </script>
 
 <style scoped>
-.metric-grid > .el-col,
-.section-row > .el-col,
-.more-grid > .el-col {
-  margin-bottom: 16px;
+.statistics-kpis,
+.statistics-primary,
+.statistics-secondary,
+.statistics-details {
+  margin-top: 12px;
 }
 
-.metric-card {
+.statistics-kpis :deep(.el-card) {
+  min-height: 96px;
+  overflow: hidden;
   position: relative;
-  min-height: 116px;
+  isolation: isolate;
+  border-color: #e1eaf7;
+  background: linear-gradient(135deg, #fff 0%, #f5f9ff 100%);
 }
 
-.metric-card::after {
+.statistics-kpis :deep(.el-card)::after {
   position: absolute;
-  right: -24px;
-  bottom: -34px;
-  width: 110px;
-  height: 110px;
-  border-radius: 28px;
+  z-index: -1;
+  right: -28px;
+  bottom: -56px;
+  width: 145px;
+  height: 145px;
   content: '';
-  opacity: 0.7;
-  transform: rotate(45deg);
+  opacity: 0.5;
+  background: linear-gradient(135deg, transparent 50%, #dceaff 50%);
+  transform: rotate(-16deg);
 }
 
-:deep(.metric-card .el-card__body) {
+.kpi-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   position: relative;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  min-height: 114px;
-  padding: 18px 20px;
 }
 
-.metric-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 54px;
-  width: 54px;
-  height: 54px;
+.kpi-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
   border-radius: 14px;
+  color: #1768f2;
+  background: #e6efff;
+  font-size: 27px;
 }
 
-.metric-blue .metric-icon {
-  color: var(--pi-primary);
-  background: var(--pi-primary-soft);
-}
-
-.metric-blue::after {
-  background: linear-gradient(135deg, transparent, #edf4ff);
-}
-
-.metric-orange .metric-icon {
-  color: var(--pi-warning);
-  background: var(--pi-warning-soft);
-}
-
-.metric-orange::after {
-  background: linear-gradient(135deg, transparent, #fff4e5);
-}
-
-.metric-teal .metric-icon {
-  color: var(--pi-info);
-  background: var(--pi-info-soft);
-}
-
-.metric-teal::after {
-  background: linear-gradient(135deg, transparent, #e9faf8);
-}
-
-.metric-content {
-  min-width: 0;
-}
-
-.kpi-line {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
+.kpi-card-1 :deep(.kpi-icon) { color: #f47a1c; background: #fff1e5; }
+.kpi-card-2 :deep(.kpi-icon) { color: #08a99a; background: #e5f8f4; }
+.kpi-card-3 :deep(.kpi-icon) { color: #1768f2; background: #e7f0ff; }
+.statistics-kpis :deep(.kpi-card-1) { border-color: #f6e4d1; background: linear-gradient(135deg, #fff 0%, #fff7ef 100%); }
+.statistics-kpis :deep(.kpi-card-2) { border-color: #dbeeea; background: linear-gradient(135deg, #fff 0%, #f1fbf8 100%); }
+.statistics-kpis :deep(.kpi-card-3) { border-color: #dde9fa; background: linear-gradient(135deg, #fff 0%, #f3f8ff 100%); }
+.statistics-kpis :deep(.kpi-card-1)::after { background: linear-gradient(135deg, transparent 50%, #ffe7d1 50%); }
+.statistics-kpis :deep(.kpi-card-2)::after { background: linear-gradient(135deg, transparent 50%, #d9f4ee 50%); }
+.statistics-kpis :deep(.kpi-card-3)::after { background: linear-gradient(135deg, transparent 50%, #dceaff 50%); }
 
 .kpi-value {
+  font-size: 26px;
+  font-weight: 700;
   color: var(--pi-text);
-  font-size: 29px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 750;
   line-height: 1;
 }
 
 .kpi-label {
-  color: var(--pi-text-regular);
-  font-size: 13px;
+  color: var(--pi-muted);
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 .kpi-trend {
-  display: flex;
-  align-items: center;
-  gap: 3px;
   font-size: 12px;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .kpi-trend.up {
-  color: var(--pi-success);
+  color: #67c23a;
 }
 
 .kpi-trend.down {
-  color: var(--pi-warning);
+  color: #f56c6c;
 }
 
-.section-row {
-  margin-top: 0;
-}
-
-.chart-panel {
+.analytics-card {
   height: 100%;
 }
 
-.panel-heading {
+.task-completion-card :deep(.el-card__header) {
+  padding: 18px 20px 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.task-completion-card :deep(.el-card__body) {
+  padding: 0 20px 28px;
+}
+
+.robot-health-card :deep(.el-card__body) {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  min-height: 280px;
+  flex-direction: column;
 }
 
-.gauge-wrap {
-  position: relative;
-}
-
-.gauge-status {
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-:deep(.compact-panel .el-card__body) {
-  padding-bottom: 12px;
-}
-
-.panel-foot {
-  min-height: 24px;
-  margin: 0 -18px -12px;
-  padding: 8px 18px 0;
-  color: var(--pi-text-muted);
-  border-top: 1px solid var(--pi-divider);
-  font-size: 11px;
-}
-
-.battery-list {
-  min-height: 225px;
-  padding: 6px 0;
-}
-
-.battery-item {
+.robot-health-list {
   display: grid;
-  grid-template-columns: 30px minmax(94px, 1fr) minmax(90px, 1.4fr) 44px auto;
+  gap: 15px;
+  padding: 8px 0 12px;
+}
+
+.robot-health-row {
+  display: grid;
+  grid-template-columns: 30px minmax(78px, 1fr) minmax(60px, 1.4fr) 35px 42px;
   align-items: center;
-  gap: 10px;
-  min-height: 58px;
-  border-bottom: 1px solid var(--pi-divider);
-}
-
-.battery-item:last-child {
-  border-bottom: 0;
-}
-
-.robot-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--pi-primary);
-  border-radius: 50%;
-  background: var(--pi-primary-soft);
-}
-
-.robot-icon.is-offline {
-  color: #8b97a9;
-  background: #f0f2f5;
-}
-
-.robot-name {
-  overflow: hidden;
-  color: var(--pi-text-regular);
+  gap: 8px;
+  color: #536a85;
   font-size: 12px;
+}
+
+.robot-health-avatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 10px;
+  color: #1768f2;
+  background: #e7f0ff;
+  font-size: 17px;
+}
+
+.robot-tone-1 { color: #f48016; background: #fff0df; }
+.robot-tone-2 { color: #09a99c; background: #e0f8f4; }
+
+.robot-health-name {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.battery-progress {
-  width: 100%;
+.robot-health-row strong {
+  color: #405873;
+  text-align: right;
 }
 
-.battery-value {
-  color: var(--pi-text);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+.robot-health-row :deep(.el-progress-bar__outer) {
+  background: #eaf0f7;
 }
 
-.analysis-strip {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  margin-bottom: 22px;
-  padding: 9px 14px;
-  color: var(--pi-text-regular);
-  border: 1px solid #dce8f7;
-  border-radius: 10px;
-  background: linear-gradient(90deg, #f5f9ff, #fff);
-  box-shadow: var(--pi-shadow-card);
-  font-size: 12px;
-}
-
-.analysis-icon {
-  display: inline-flex;
-  align-items: center;
+.robot-health-row :deep(.el-tag) {
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  color: #fff;
-  border-radius: 8px;
-  background: var(--pi-primary);
+  padding-inline: 5px;
 }
 
-.analysis-strip strong {
-  color: var(--pi-primary-dark);
-  white-space: nowrap;
+.robot-health-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f6;
+  color: #90a0b5;
+  font-size: 11px;
 }
 
-.analysis-time {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--pi-text-muted);
-  white-space: nowrap;
-}
-
-.more-heading {
-  margin-bottom: 12px;
-}
-
-.more-heading div {
+.analysis-summary {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.more-heading strong {
-  color: var(--pi-text);
-  font-size: 15px;
-}
-
-.more-heading span {
-  color: var(--pi-text-muted);
+  align-items: center;
+  min-height: 44px;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid #dce8fb;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #f3f8ff, #fff);
+  color: #5d708a;
   font-size: 12px;
 }
 
-@media (max-width: 1199px) {
-  .analysis-strip {
-    grid-template-columns: auto auto 1fr;
-  }
+.analysis-summary > .el-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 7px;
+  color: #fff;
+  background: #1768f2;
+}
 
-  .analysis-time {
-    display: none;
+.analysis-summary strong {
+  color: #1768f2;
+}
+
+.analysis-summary time {
+  margin-left: auto;
+  color: #8493a8;
+  white-space: nowrap;
+}
+
+@media (max-width: 991px) {
+  .statistics-primary :deep(.el-col),
+  .statistics-secondary :deep(.el-col),
+  .statistics-details :deep(.el-col) {
+    margin-bottom: 12px;
   }
 }
 
-@media (max-width: 767px) {
-  .metric-card {
-    min-height: 102px;
-  }
-
-  :deep(.metric-card .el-card__body) {
-    min-height: 100px;
-  }
-
-  .analysis-strip {
-    grid-template-columns: auto 1fr;
-  }
-
-  .analysis-copy {
-    grid-column: 1 / -1;
-    line-height: 1.6;
-  }
-
-  .battery-item {
-    grid-template-columns: 30px minmax(80px, 1fr) minmax(80px, 1.2fr) 40px;
-  }
-
-  .battery-item .el-tag {
-    display: none;
-  }
-
-  .more-heading div {
+@media (max-width: 640px) {
+  .analysis-summary {
     align-items: flex-start;
-    flex-direction: column;
-    gap: 3px;
+    flex-wrap: wrap;
+  }
+
+  .analysis-summary time {
+    width: 100%;
+    margin-left: 32px;
+    white-space: normal;
+  }
+
+  .robot-health-row {
+    grid-template-columns: 30px minmax(0, 1fr) 82px 34px;
+  }
+
+  .robot-health-row :deep(.el-tag) {
+    display: none;
   }
 }
 </style>

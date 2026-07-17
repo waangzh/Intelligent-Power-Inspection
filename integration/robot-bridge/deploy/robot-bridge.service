@@ -1,0 +1,19 @@
+[Unit]
+Description=Outbound Robot Heartbeat Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=robotbridge
+Group=robotbridge
+WorkingDirectory=/opt/robot-bridge/current
+EnvironmentFile=/etc/robot-bridge/robot-bridge.env
+ExecCondition=/bin/sh -c 'test -n "$ROBOT_AUTH_TOKENS_JSON" && test -n "$BRIDGE_API_TOKEN" && test -n "$PLATFORM_BASE_URL" && test -n "$PLATFORM_BEARER_TOKEN" && test -n "$ROBOT_BRIDGE_STORAGE_PATH"'
+ExecStart=/opt/robot-bridge/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001
+Restart=always
+RestartSec=3
+UMask=0027
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

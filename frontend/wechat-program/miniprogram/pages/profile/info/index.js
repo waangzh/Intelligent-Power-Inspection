@@ -1,5 +1,7 @@
 const api = require('../../../services/index')
 const { profileMenuItems } = require('../../../config/menu')
+const { syncTabBar } = require('../../../utils/tab-page')
+const { isTabPage } = require('../../../config/tab-bar')
 const { ROLE_LABELS } = require('../../../utils/constants')
 
 Page({
@@ -16,6 +18,7 @@ Page({
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/profile/info/index')) return
+    syncTabBar(this)
     const user = app.globalData.user
     this.setData({
       user,
@@ -66,7 +69,7 @@ Page({
 
   go(e) {
     const url = e.currentTarget.dataset.url
-    if (url.includes('profile/info')) wx.switchTab({ url })
+    if (isTabPage(url)) wx.switchTab({ url })
     else wx.navigateTo({ url })
   },
 

@@ -7,6 +7,12 @@ export function mergeManagedRouteFields(
   mapAsset: MapAssetIdentity,
 ): RouteExecutorDocumentV3 {
   const base = (sourceTemplate ? cloneJson(sourceTemplate) : {}) as Partial<RouteExecutorDocumentV3>
+  if (sourceTemplate && sourceTemplate.routes.length !== 1) {
+    throw new Error('路线编辑器仅支持包含一条 route 的文件')
+  }
+  if (sourceTemplate && (!Array.isArray(sourceTemplate.schedules) || sourceTemplate.schedules.length !== 0)) {
+    throw new Error('路线编辑器不支持非空 schedules，已拒绝覆盖以避免数据丢失')
+  }
   const sourceTargets = new Map((Array.isArray(base.targets) ? base.targets : []).map((target) => [target.id, target]))
   const sourceZones = new Map((Array.isArray(base.keepout_zones) ? base.keepout_zones : []).map((zone) => [zone.id, zone]))
   const pose = { x: editable.start.x, y: editable.start.y, yaw: editable.start.yaw }
@@ -33,8 +39,9 @@ export function mergeManagedRouteFields(
     targets, routes: [route],
     keepout_zones: editable.keepoutZones.map((zone) => ({
       ...(sourceZones.get(zone.id) || {}), id: zone.id, name: zone.name || zone.id, type: 'hard_keepout', enabled: zone.enabled,
-      mask_padding_m: zone.maskPaddingM, polygon: zone.polygon.map((point) => ({ x: point.x, y: point.y })),
+      mask_padding_m: Math.min(mapAsset.resolution, Math.max(0, zone.maskPaddingM ?? mapAsset.resolution)),
+      polygon: zone.polygon.map((point) => ({ x: point.x, y: point.y })),
     })),
-    schedules: [],
+    schedules: Array.isArray(base.schedules) ? base.schedules : [],
   } as RouteExecutorDocumentV3
 }

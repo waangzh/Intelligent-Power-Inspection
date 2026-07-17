@@ -10,6 +10,7 @@ import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,12 +27,14 @@ public class RobotController extends CrudSupport {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
   private final SimpMessagingTemplate messagingTemplate;
+  private final RobotProperties robotProperties;
 
-  public RobotController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, SimpMessagingTemplate messagingTemplate) {
+  public RobotController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, SimpMessagingTemplate messagingTemplate, RobotProperties robotProperties) {
     super(dataStore);
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.messagingTemplate = messagingTemplate;
+    this.robotProperties = robotProperties;
   }
 
   @GetMapping
@@ -47,9 +50,11 @@ public class RobotController extends CrudSupport {
   @PostMapping
   public ApiResponse<Map<String, Object>> createRobot(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
+    if (!robotProperties.isAllowRegistration()) {
+      throw ApiException.badRequest("当前为单机器人管理模式，不支持注册新机器人");
+    }
     validateSite(body.get("siteId"));
-    body.putIfAbsent("status", "ONLINE");
-    body.putIfAbsent("battery", 100);
+    body.putIfAbsent("status", "OFFLINE");
     Map<String, Object> robot = create(DataCategory.ROBOT, "robot", body);
     publishRobot(robot);
     return ApiResponse.ok(robot);
@@ -59,7 +64,15 @@ public class RobotController extends CrudSupport {
   public ApiResponse<Map<String, Object>> updateRobot(@PathVariable String id, @RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
     if (body.containsKey("siteId")) {
-      validateSite(body.get("siteId"));
+      String requestedSiteId = text(body.get("siteId"));
+      if (requestedSiteId == null) {
+        throw ApiException.badRequest("机器人必须绑定到一个有效站点");
+      }
+      validateSite(requestedSiteId);
+      Map<String, Object> current = dataStore.get(DataCategory.ROBOT, id);
+      if (!Objects.equals(text(current.get("siteId")), requestedSiteId)) {
+        ensureRobotNotBusy(id, "变更绑定站点");
+      }
     }
     Map<String, Object> robot = update(DataCategory.ROBOT, id, body);
     publishRobot(robot);
@@ -69,7 +82,10 @@ public class RobotController extends CrudSupport {
   @DeleteMapping("/{id}")
   public ApiResponse<Void> deleteRobot(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
-    ensureRobotNotBusy(id);
+    if (!robotProperties.isAllowRegistration()) {
+      throw ApiException.badRequest("当前为单机器人管理模式，不支持删除机器人");
+    }
+    ensureRobotNotBusy(id, "删除");
     delete(DataCategory.ROBOT, id);
     return ApiResponse.ok();
   }
@@ -88,11 +104,16 @@ public class RobotController extends CrudSupport {
     }
   }
 
-  private void ensureRobotNotBusy(String robotId) {
+  private String text(Object value) {
+    if (value == null || value.toString().isBlank() || "null".equals(value.toString())) return null;
+    return value.toString();
+  }
+
+  private void ensureRobotNotBusy(String robotId, String operation) {
     boolean active = dataStore.list(DataCategory.TASK).stream()
       .anyMatch(task -> robotId.equals(String.valueOf(task.get("robotId"))) && isActiveStatus(String.valueOf(task.get("status"))));
     if (active) {
-      throw ApiException.badRequest("机器人正在执行任务，不能删除");
+      throw ApiException.badRequest("机器人正在执行任务，不能" + operation);
     }
   }
 

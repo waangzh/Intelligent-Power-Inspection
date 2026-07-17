@@ -59,7 +59,7 @@ const router = createRouter({
           path: 'workorders',
           name: 'WorkOrders',
           component: () => import('@/views/WorkOrderManage.vue'),
-          meta: { title: '工单管理', requiresAuth: true, permission: 'task:dispatch', breadcrumbs: [{ label: '运维中心' }, { label: '工单管理' }] },
+          meta: { title: '工单管理', requiresAuth: true, permission: 'workorder:view', breadcrumbs: [{ label: '运维中心' }, { label: '工单管理' }] },
         },
         {
           path: 'notifications',
@@ -102,6 +102,18 @@ const router = createRouter({
           name: 'Robots',
           component: () => import('@/views/RobotManage.vue'),
           meta: { title: '机器人管理', requiresAuth: true, permission: 'robot:manage', breadcrumbs: [{ label: '资产感知' }, { label: '机器人管理' }] },
+        },
+        {
+          path: 'robot-map-review',
+          name: 'RobotMapReview',
+          component: () => import('@/views/RobotMapReview.vue'),
+          meta: { title: '机器人建图审核', requiresAuth: true, breadcrumbs: [{ label: '巡检业务' }, { label: '机器人建图审核' }] },
+        },
+        {
+          path: 'robots/status',
+          name: 'RobotStatus',
+          component: () => import('@/views/RobotStatus.vue'),
+          meta: { title: '机器人在线状态', requiresAuth: true, permission: 'robot:manage', breadcrumbs: [{ label: '资产感知' }, { label: '机器人在线状态' }] },
         },
         {
           path: 'detection',
@@ -172,6 +184,12 @@ const router = createRouter({
           meta: { title: '无权限', requiresAuth: true },
         },
       ],
+    },
+    {
+      path: '/bigscreen',
+      name: 'BigScreen',
+      component: () => import('@/views/BigScreen.vue'),
+      meta: { title: '集控大屏', requiresAuth: true },
     },
   ],
 })

@@ -9,7 +9,7 @@ page {
 
 .container {
   padding: 24rpx;
-  padding-bottom: 40rpx;
+  padding-bottom: 120rpx;
 }
 
 .card {

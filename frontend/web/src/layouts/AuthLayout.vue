@@ -106,9 +106,10 @@
           <el-icon :size="36" color="#ffd700"><Lightning /></el-icon>
         </div>
         <h1>电力智能巡检平台</h1>
-        <p class="auth-slogan">LocateAnything · 智能巡检</p>
+        <p class="auth-slogan">LocateAnything · ROS 建图 · 智能巡检</p>
         <div class="auth-tags">
           <span class="tag-pill">视觉检测</span>
+          <span class="tag-pill">三维感知</span>
           <span class="tag-pill">自主巡检</span>
         </div>
       </div>

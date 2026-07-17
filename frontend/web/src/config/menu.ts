@@ -26,7 +26,7 @@ export const menuGroups: MenuGroup[] = [
   {
     title: '运维中心',
     items: [
-      { path: '/workorders', label: '工单管理', icon: 'Tickets', permission: 'task:dispatch' },
+      { path: '/workorders', label: '工单管理', icon: 'Tickets', permission: 'workorder:view' },
       { path: '/notifications', label: '消息中心', icon: 'Message' },
       { path: '/agents', label: '巡检研判助手', icon: 'Connection', permission: 'agent:view' },
     ],
@@ -36,6 +36,7 @@ export const menuGroups: MenuGroup[] = [
     items: [
       { path: '/sites', label: '站点管理', icon: 'OfficeBuilding', permission: 'site:edit' },
       { path: '/routes', label: '巡检规划', icon: 'MapLocation', permission: 'route:edit' },
+      { path: '/robot-map-review', label: '机器人建图审核', icon: 'Checked' },
       { path: '/tasks', label: '任务调度', icon: 'VideoPlay', permission: 'task:view' },
     ],
   },

@@ -1,4 +1,15 @@
 /** 检测项类型 */
+export type {
+  MapAsset,
+  MapAssetFiles,
+  MapAssetQuery,
+  MapAssetReviewInput,
+  MapAssetSource,
+  MapAssetStatus,
+  MapAssetUploadFiles,
+  MapAssetUploadInput,
+} from './mapAsset'
+
 export type DetectionType =
   | 'PERSON'
   | 'HELMET'
@@ -35,20 +46,38 @@ export const DETECTION_LABELS: Record<DetectionType, string> = {
 export type TaskStatus =
   | 'CREATED'
   | 'DISPATCHED'
+  | 'STARTING'
   | 'RUNNING'
+  | 'PAUSING'
   | 'PAUSED'
+  | 'RESUMING'
+  | 'CANCELLING'
+  | 'TAKEOVER_PENDING'
   | 'MANUAL_TAKEOVER'
   | 'COMPLETED'
   | 'CANCELLED'
+  | 'START_FAILED'
+  | 'FAILED'
+  | 'DISCONNECTED'
+  | 'RECOVERING'
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   CREATED: '已创建',
   DISPATCHED: '已下发',
+  STARTING: '启动中',
   RUNNING: '执行中',
+  PAUSING: '暂停请求中',
   PAUSED: '已暂停',
+  RESUMING: '恢复请求中',
+  CANCELLING: '取消请求中',
+  TAKEOVER_PENDING: '人工接管请求中',
   MANUAL_TAKEOVER: '人工接管',
   COMPLETED: '已完成',
   CANCELLED: '已取消',
+  START_FAILED: '启动失败',
+  FAILED: '执行失败',
+  DISCONNECTED: '机器人断联',
+  RECOVERING: '执行恢复中',
 }
 
 export type AlarmSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
@@ -72,6 +101,9 @@ export const ALARM_SEVERITY_LABELS: Record<AlarmSeverity, string> = {
 export interface LatLng {
   lat: number
   lng: number
+  x?: number
+  y?: number
+  yaw?: number
 }
 
 export interface Site {
@@ -80,6 +112,9 @@ export interface Site {
   address: string
   description: string
   center: LatLng
+  lingbotMapId?: string
+  /** 设备端建图是否已上传（由设备推送地图数据后标记） */
+  deviceMapUploaded?: boolean
   createdAt: string
 }
 
@@ -117,37 +152,41 @@ export interface Route {
   path: LatLng[]
   routeDetections: DetectionItem[]
   checkpoints: Checkpoint[]
-  mapMode: '2d' | '3d' | 'ros2d'
-  /** Persisted ROS map asset referenced by this route. */
-  mapId?: string | null
+  mapMode: '2d' | '3d'
+  /** 关联的 ROS 地图资产 ID（/api/v1/map-assets） */
+  mapId?: string
   /** ROS map route executor JSON (version 2). */
   executorJson?: import('@/types/routeExecutor').RouteExecutorDocument | null
   createdAt: string
 }
 
-export interface MapAsset {
-  id: string
-  siteId: string
-  status: 'AVAILABLE'
-  yamlName: string
-  pgmName: string
-  image: string
-  resolution: number
-  origin: [number, number, number]
-  negate: number
-  width: number
-  height: number
-  yamlSize: number
-  pgmSize: number
-  yamlSha256: string
-  pgmSha256: string
-  createdAt: string
-  updatedAt: string
+export interface RobotPose {
+  frame?: string
+  x: number
+  y: number
+  yaw: number
 }
 
-export interface MapAssetFiles {
-  yaml: File
-  pgm: File
+export interface RobotTelemetry {
+  bridgeBaseUrl?: string
+  bridgeReachable?: boolean
+  bridgeSyncedAt?: string
+  online?: boolean
+  canStatus?: string
+  zlacStatus?: string
+  taskStatus?: string
+  systemMode?: string
+  mappingStatus?: 'running' | 'not_running'
+  nav2Status?: 'running' | 'not_running'
+  patrolState?: string
+  patrolExecutorRunning?: boolean
+  patrolMessage?: string
+  activeRouteId?: string
+  activeTargetId?: string
+  lastOdomAgeSec?: number | null
+  lastScanAgeSec?: number | null
+  velocity?: { linear_x: number; angular_z: number }
+  pose?: RobotPose
 }
 
 export interface RouteRevision {
@@ -174,12 +213,12 @@ export interface Robot {
   model: string
   serialNo: string
   siteId?: string
-  status: 'ONLINE' | 'OFFLINE' | 'BUSY' | 'CHARGING'
-  battery: number
-  position?: LatLng
+  status: 'ONLINE' | 'OFFLINE' | 'BUSY'
+  position?: LatLng & { x?: number; y?: number; yaw?: number }
   currentTaskId?: string
   firmware?: string
   lastOnlineAt?: string
+  telemetry?: RobotTelemetry
 }
 
 export interface TaskEvent {
@@ -202,6 +241,51 @@ export interface DetectionTemplate {
   createdAt: string
 }
 
+export type LingBotMapStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+export type LingBotMapInputKind = 'video' | 'image_sequence'
+export type LingBotMapOutputProfile = 'preview' | 'viewer-ready' | 'rendered-video' | 'predictions'
+
+export interface LingBotMapArtifacts {
+  pointCloudUrl?: string
+  meshUrl?: string
+  trajectoryUrl?: string
+  previewVideoUrl?: string
+  metadataUrl?: string
+}
+
+export interface LingBotMapJob {
+  id: string
+  siteId: string
+  siteName: string
+  name: string
+  status: LingBotMapStatus
+  progress: number
+  pointCount: number
+  videoCount: number
+  inputKind?: LingBotMapInputKind
+  videoUrl?: string
+  imageFolderUrl?: string
+  fps?: number
+  stride?: number
+  keyframeInterval?: number
+  windowSize?: number
+  outputProfile?: LingBotMapOutputProfile
+  maskSky?: boolean
+  externalJobId?: string
+  frameCount?: number
+  mapId?: string
+  artifacts?: LingBotMapArtifacts
+  errorMessage?: string
+  createdAt: string
+  completedAt?: string
+}
+
+export interface LingBotVideoUploadResponse {
+  videoUrl: string
+  filename: string
+  size: number
+}
+
 export interface InspectionTask {
   id: string
   name: string
@@ -213,6 +297,52 @@ export interface InspectionTask {
   startedAt?: string
   completedAt?: string
   createdAt: string
+  routeRevisionId?: string
+  executionId?: string
+  routeContentSha256?: string
+  mapImageSha256?: string
+}
+
+export interface TaskExecution {
+  taskId: string
+  executionId: string
+  routeRevisionId: string
+  robotId: string
+  deploymentId?: string | null
+  executorRouteId?: string | null
+  routeContentSha256: string
+  mapImageSha256: string
+  status: TaskStatus
+  currentTargetId?: string | null
+  progress: number
+  lastRobotSequence: number
+  lastEventAt?: string | null
+  lastErrorCode?: string | null
+  lastErrorMessage?: string | null
+  manualReconciliationRequired: boolean
+  latestControl?: TaskExecutionControl | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TaskExecutionControl {
+  action: 'PAUSE' | 'RESUME' | 'TAKEOVER' | 'CANCEL'
+  requestId: string
+  status: 'PENDING_SEND' | 'SENDING' | 'QUEUED' | 'ACKED' | 'RECONCILING' | 'CONFIRMED' | 'FAILED'
+  commandId?: string | null
+  takeoverReason?: string | null
+  requestedBy?: string | null
+  requestedAt?: string | null
+  ackedAt?: string | null
+  confirmedAt?: string | null
+  recoveryAction?: string | null
+  resultCode?: string | null
+  resultMessage?: string | null
+}
+
+export interface TaskStartEligibility extends TaskExecution {
+  eligible: boolean
+  ineligibleReason?: string | null
 }
 
 export interface Alarm {

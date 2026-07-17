@@ -4,6 +4,34 @@ export type WorkOrderPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
 
 export type WorkOrderReviewConclusion = 'RESOLVED' | 'PARTIALLY_RESOLVED' | 'UNRESOLVED' | 'FALSE_ALARM'
 
+export interface WorkOrderLocation {
+  siteName?: string
+  routeName?: string
+  checkpointName?: string
+  areaName?: string
+  address?: string
+}
+
+export interface WorkOrderResolutionForm {
+  faultType: string
+  handlingMethod: string
+  replacedParts?: string
+  testResult: string
+  remarks?: string
+  submittedAt: string
+  submittedBy: string
+}
+
+export interface WorkOrderReviewForm {
+  result: 'PASS' | 'REJECT'
+  comment: string
+  reviewedAt: string
+  reviewedBy: string
+}
+
+export const FAULT_TYPE_OPTIONS = ['设备故障', '线路故障', '通信故障', '环境异常', '其他']
+export const HANDLING_METHOD_OPTIONS = ['现场处置', '更换部件', '参数调整', '转人工处理', '其他']
+
 export const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
   PENDING: '待处理',
   PROCESSING: '处理中',
@@ -48,12 +76,16 @@ export interface WorkOrder {
   status: WorkOrderStatus
   priority: WorkOrderPriority
   locationDescription?: string
+  location?: WorkOrderLocation
+  autoConverted?: boolean
   assigneeId?: string
   assigneeName?: string
   createdById: string
   createdByName: string
   resolution?: string
+  resolutionForm?: WorkOrderResolutionForm
   review?: WorkOrderReview
+  reviewForm?: WorkOrderReviewForm
   createdAt: string
   updatedAt: string
   closedAt?: string

@@ -17,9 +17,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.data.DataCategory;
+import com.powerinspection.data.DataStoreService;
 import com.powerinspection.task.TaskService;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,9 +31,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @ActiveProfiles("test")
+@TestPropertySource(properties = {
+  "app.robot.mode=simulation",
+  "app.robot.allow-registration=false"
+})
 @SpringBootTest
 @AutoConfigureMockMvc
 class PowerInspectionApplicationTests {
@@ -43,6 +51,9 @@ class PowerInspectionApplicationTests {
   @Autowired
   TaskService taskService;
 
+  @Autowired
+  DataStoreService dataStore;
+
   @Test
   void defaultUsersCanLoginAndRolePermissionsAreEnforced() throws Exception {
     String adminToken = login("admin", "Admin@123");
@@ -51,18 +62,23 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.username").value("admin"))
-      .andExpect(jsonPath("$.data.role").value("ADMIN"));
+      .andExpect(jsonPath("$.data.user.username").value("admin"))
+      .andExpect(jsonPath("$.data.user.role").value("ADMIN"))
+      .andExpect(jsonPath("$.data.permissions").isArray())
+      .andExpect(jsonPath("$.data.permissions[?(@ == 'workorder:view')]").exists())
+      .andExpect(jsonPath("$.data.permissions[?(@ == 'task:dispatch')]").doesNotExist());
 
     mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.username").value("dispatcher"))
-      .andExpect(jsonPath("$.data.role").value("DISPATCHER"));
+      .andExpect(jsonPath("$.data.user.username").value("dispatcher"))
+      .andExpect(jsonPath("$.data.user.role").value("DISPATCHER"))
+      .andExpect(jsonPath("$.data.permissions[?(@ == 'task:dispatch')]").exists());
 
     mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(viewerToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.username").value("viewer"))
-      .andExpect(jsonPath("$.data.role").value("VIEWER"));
+      .andExpect(jsonPath("$.data.user.username").value("viewer"))
+      .andExpect(jsonPath("$.data.user.role").value("VIEWER"))
+      .andExpect(jsonPath("$.data.permissions.length()").value(1));
 
     mockMvc.perform(get("/api/v1/users").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
@@ -83,11 +99,24 @@ class PowerInspectionApplicationTests {
         .content(json("id", "task_viewer_denied", "name", "viewer denied")))
       .andExpect(status().isForbidden())
       .andExpect(jsonPath("$.message").value("无权限访问"));
+
+    mockMvc.perform(post("/api/v1/tasks")
+        .header("Authorization", bearer(adminToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("id", "task_admin_denied", "name", "admin denied")))
+      .andExpect(status().isForbidden())
+      .andExpect(jsonPath("$.message").value("无权限访问"));
+
+    mockMvc.perform(post("/api/v1/alarms/alarm_seed_003/ack").header("Authorization", bearer(adminToken)))
+      .andExpect(status().isForbidden())
+      .andExpect(jsonPath("$.message").value("无权限访问"));
   }
 
   @Test
   void dispatcherCanCreateAndDispatchTask() throws Exception {
     String token = login("dispatcher", "Disp@123");
+    String routeId = "route_task_dispatch_test";
+    ensureTestRoute(routeId);
 
     mockMvc.perform(get("/api/v1/sites").header("Authorization", bearer(token)))
       .andExpect(status().isOk())
@@ -97,7 +126,7 @@ class PowerInspectionApplicationTests {
       {
         "id":"task_test_001",
         "name":"接口测试巡检",
-        "routeId":"route_demo_001",
+        "routeId":"route_task_dispatch_test",
         "robotId":"robot_001",
         "status":"CREATED",
         "progress":0,
@@ -117,12 +146,13 @@ class PowerInspectionApplicationTests {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("DISPATCHED"));
 
-    mockMvc.perform(post("/api/v1/tasks/task_test_001/cancel").header("Authorization", bearer(token)))
+    mockMvc.perform(post("/api/v1/tasks/task_test_001/cancel").header("Authorization", bearer(token)).header("Idempotency-Key", "cancel-task-test-001"))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("CANCELLED"));
 
     mockMvc.perform(delete("/api/v1/tasks/task_test_001").header("Authorization", bearer(token)))
       .andExpect(status().isOk());
+    dataStore.delete(DataCategory.ROUTE, routeId);
   }
 
   @Test
@@ -260,24 +290,23 @@ class PowerInspectionApplicationTests {
     mockMvc.perform(post("/api/v1/robots")
         .header("Authorization", bearer(adminToken))
         .contentType(MediaType.APPLICATION_JSON)
-        .content(json("id", "robot_test_api", "name", "接口测试机器人", "model", "TestBot", "serialNo", "TB-001", "siteId", "site_test_api", "status", "ONLINE", "battery", 88)))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.id").value("robot_test_api"));
+        .content(json("id", "robot_test_api", "name", "接口测试机器人", "model", "TestBot", "serialNo", "TB-001", "siteId", "site_test_api", "status", "ONLINE")))
+      .andExpect(status().isBadRequest());
 
-    mockMvc.perform(get("/api/v1/robots/robot_test_api").header("Authorization", bearer(adminToken)))
+    mockMvc.perform(get("/api/v1/robots/robot_001").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.name").value("接口测试机器人"));
+      .andExpect(jsonPath("$.data.id").value("robot_001"));
 
-    mockMvc.perform(get("/api/v1/robots/robot_test_api/telemetry").header("Authorization", bearer(adminToken)))
+    mockMvc.perform(get("/api/v1/robots/robot_001/telemetry").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("ONLINE"));
+      .andExpect(jsonPath("$.data.id").value("robot_001"));
 
-    mockMvc.perform(patch("/api/v1/robots/robot_test_api")
+    mockMvc.perform(patch("/api/v1/robots/robot_001")
         .header("Authorization", bearer(adminToken))
         .contentType(MediaType.APPLICATION_JSON)
-        .content(json("battery", 77)))
+        .content(json("firmware", "ROS2-test")))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.battery").value(77));
+      .andExpect(jsonPath("$.data.firmware").value("ROS2-test"));
 
     mockMvc.perform(post("/api/v1/detection-templates")
         .header("Authorization", bearer(adminToken))
@@ -299,8 +328,8 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(delete("/api/v1/detection-templates/tpl_test_api").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk());
-    mockMvc.perform(delete("/api/v1/robots/robot_test_api").header("Authorization", bearer(adminToken)))
-      .andExpect(status().isOk());
+    mockMvc.perform(delete("/api/v1/robots/robot_001").header("Authorization", bearer(adminToken)))
+      .andExpect(status().isBadRequest());
     mockMvc.perform(delete("/api/v1/routes/route_test_api/checkpoints/cp_test_api").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk());
     mockMvc.perform(delete("/api/v1/routes/route_test_api").header("Authorization", bearer(dispatcherToken)))
@@ -315,6 +344,15 @@ class PowerInspectionApplicationTests {
   void taskAlarmWorkOrderRecordNotificationApisWork() throws Exception {
     String dispatcherToken = login("dispatcher", "Disp@123");
     String adminToken = login("admin", "Admin@123");
+    String routeId = "route_task_flow_test";
+    ensureTestRoute(routeId);
+    seedFlowAlarm("alarm_flow_001", "HIGH");
+    seedFlowAlarm("alarm_flow_002", "HIGH");
+    seedFlowAlarm("alarm_flow_003", "HIGH");
+    dataStore.upsert(DataCategory.NOTIFICATION, map(
+      "id", "ntf_flow_admin", "userId", "user_admin", "type", "SYSTEM", "title", "测试通知",
+      "content", "用于验证通知读取状态", "read", false, "link", "/dashboard"
+    ));
 
     mockMvc.perform(post("/api/v1/tasks")
         .header("Authorization", bearer(dispatcherToken))
@@ -322,7 +360,7 @@ class PowerInspectionApplicationTests {
         .content(json(
           "id", "task_flow_api",
           "name", "完整流程巡检",
-          "routeId", "route_demo_001",
+          "routeId", routeId,
           "robotId", "robot_001",
           "status", "CREATED",
           "progress", 96,
@@ -367,19 +405,28 @@ class PowerInspectionApplicationTests {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
 
-    mockMvc.perform(post("/api/v1/alarms/alarm_seed_001/ack").header("Authorization", bearer(dispatcherToken)))
+    mockMvc.perform(post("/api/v1/alarms/alarm_flow_001/ack").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.acknowledged").value(true));
 
     mockMvc.perform(post("/api/v1/alarms/ack-all").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk());
 
-    String workOrderId = postAndReadId("/api/v1/work-orders/from-alarm/alarm_seed_003", dispatcherToken, json("assigneeName", "张调度"));
+    String workOrderId = postAndReadId("/api/v1/work-orders/from-alarm/alarm_flow_003", adminToken, "{}");
 
     mockMvc.perform(get("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.alarmId").value("alarm_seed_003"))
+      .andExpect(jsonPath("$.data.alarmId").value("alarm_flow_003"))
+      .andExpect(jsonPath("$.data.status").value("PENDING"))
       .andExpect(jsonPath("$.data.locationDescription").value("电容器组巡检"));
+
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.assigneeName").value("张调度"))
+      .andExpect(jsonPath("$.data.status").value("PROCESSING"));
+
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isBadRequest());
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId)
         .header("Authorization", bearer(dispatcherToken))
@@ -387,20 +434,6 @@ class PowerInspectionApplicationTests {
         .content(json("priority", "LOW")))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.priority").value("LOW"));
-
-    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/assign")
-        .header("Authorization", bearer(dispatcherToken))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("assigneeName", "李观察")))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.assigneeName").value("李观察"));
-
-    mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
-        .header("Authorization", bearer(dispatcherToken))
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("status", "PROCESSING")))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("PROCESSING"));
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
         .header("Authorization", bearer(dispatcherToken))
@@ -431,24 +464,67 @@ class PowerInspectionApplicationTests {
       .andExpect(jsonPath("$.data.review.submittedByName").value("张调度"));
 
     mockMvc.perform(patch("/api/v1/work-orders/" + workOrderId + "/status")
-        .header("Authorization", bearer(dispatcherToken))
+        .header("Authorization", bearer(adminToken))
         .contentType(MediaType.APPLICATION_JSON)
         .content(json("status", "CLOSED")))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.closedAt", not(blankOrNullString())));
 
+    mockMvc.perform(post("/api/v1/work-orders/from-alarm/alarm_flow_002").header("Authorization", bearer(dispatcherToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{}"))
+      .andExpect(status().isForbidden());
+
+    mockMvc.perform(post("/api/v1/work-orders/" + workOrderId + "/claim").header("Authorization", bearer(adminToken)))
+      .andExpect(status().isForbidden());
+
     mockMvc.perform(get("/api/v1/notifications").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
 
-    mockMvc.perform(patch("/api/v1/notifications/ntf_seed_admin/read").header("Authorization", bearer(adminToken)))
+    mockMvc.perform(patch("/api/v1/notifications/ntf_flow_admin/read").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.read").value(true));
 
-    mockMvc.perform(delete("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(dispatcherToken)))
+    mockMvc.perform(delete("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk());
     mockMvc.perform(delete("/api/v1/tasks/task_flow_api").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk());
+    dataStore.delete(DataCategory.ROUTE, routeId);
+  }
+
+  private void ensureTestRoute(String routeId) {
+    if (dataStore.find(DataCategory.ROUTE, routeId) != null) return;
+    dataStore.upsert(DataCategory.ROUTE, map(
+      "id", routeId,
+      "siteId", "site_001",
+      "name", "任务流程测试路线",
+      "path", List.of(
+        map("lat", 30.2741, "lng", 120.1551),
+        map("lat", 30.2744, "lng", 120.1554)
+      ),
+      "checkpoints", List.of()
+    ));
+  }
+
+  private void seedFlowAlarm(String id, String severity) {
+    dataStore.upsert(DataCategory.ALARM, map(
+      "id", id,
+      "taskId", "task_flow_api",
+      "routeName", "电容器组巡检",
+      "type", "FIRE",
+      "severity", severity,
+      "message", "流程测试告警 " + id,
+      "acknowledged", false
+    ));
+  }
+
+  private Map<String, Object> map(Object... values) {
+    Map<String, Object> item = new LinkedHashMap<>();
+    for (int index = 0; index + 1 < values.length; index += 2) {
+      item.put(String.valueOf(values[index]), values[index + 1]);
+    }
+    return item;
   }
 
   private String login(String username, String password) throws Exception {

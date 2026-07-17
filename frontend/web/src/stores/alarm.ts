@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
-import type { Alarm, AlarmSeverity, AlarmWorkOrderPolicy, Checkpoint, DetectionType, InspectionTask } from '@/types'
+import type { Alarm, AlarmSeverity, AlarmWorkOrderMode, AlarmWorkOrderPolicy, Checkpoint, DetectionType, InspectionTask } from '@/types'
 import { DETECTION_LABELS } from '@/types'
+import { useAuthStore } from '@/stores/auth'
+import { useWorkOrderStore } from '@/stores/workOrder'
+import { hasPermission } from '@/utils/permission'
 import { uid } from '@/utils/storage'
 
 const ROUTE_ALARM_TYPES: DetectionType[] = ['PERSON', 'HELMET', 'FIRE', 'OBSTACLE']
@@ -22,29 +25,40 @@ export const useAlarmStore = defineStore('alarm', () => {
   const alarms = ref<Alarm[]>([])
   const workOrderPolicy = ref<AlarmWorkOrderPolicy>({
     id: 'default',
-    rules: { LOW: 'MANUAL', MEDIUM: 'MANUAL', HIGH: 'MANUAL', CRITICAL: 'AUTO' },
+    rules: { CRITICAL: 'AUTO', HIGH: 'AUTO', MEDIUM: 'MANUAL', LOW: 'MANUAL' },
   })
 
   const unacknowledgedCount = computed(() => alarms.value.filter((a) => !a.acknowledged).length)
 
   async function load() {
-    const [alarmItems, policy] = await Promise.all([
-      resourcesApi.listAlarms(),
-      resourcesApi.getAlarmWorkOrderPolicy(),
-    ])
-    alarms.value = alarmItems
-    workOrderPolicy.value = policy
+    alarms.value = await resourcesApi.listAlarms()
+    try {
+      workOrderPolicy.value = await resourcesApi.getAlarmWorkOrderPolicy()
+    } catch {
+      // 无法读取策略时继续使用默认规则，告警列表不受影响。
+    }
+    await tryAutoConvertPending()
   }
 
-  async function saveWorkOrderPolicy(rules: AlarmWorkOrderPolicy['rules']) {
-    workOrderPolicy.value = await resourcesApi.updateAlarmWorkOrderPolicy({ rules })
-    return workOrderPolicy.value
+  async function tryAutoConvertForAlarm(alarm: Alarm) {
+    const workOrderStore = useWorkOrderStore()
+    const authStore = useAuthStore()
+    const user = authStore.user
+    if (!user || !hasPermission(authStore.permissions, 'workorder:create')) return
+    if (workOrderStore.getByAlarmId(alarm.id)) return
+    if (workOrderPolicy.value.rules[alarm.severity] !== 'AUTO') return
+    try {
+      await workOrderStore.createFromAlarm(alarm, { id: user.id, name: user.displayName }, { autoConverted: true })
+      if (!alarm.acknowledged) acknowledge(alarm.id)
+    } catch {
+      // 已转工单或接口失败时忽略
+    }
   }
 
-  async function retryWorkOrder(id: string) {
-    const alarm = await resourcesApi.retryAlarmWorkOrder(id)
-    updateLocalAlarm(alarm)
-    return alarm
+  async function tryAutoConvertPending() {
+    for (const alarm of alarms.value) {
+      await tryAutoConvertForAlarm(alarm)
+    }
   }
 
   function addAlarm(partial: Omit<Alarm, 'id' | 'createdAt' | 'acknowledged'>) {
@@ -120,6 +134,18 @@ export const useAlarmStore = defineStore('alarm', () => {
     const idx = alarms.value.findIndex((a) => a.id === alarm.id)
     if (idx >= 0) alarms.value[idx] = alarm
     else alarms.value.unshift(alarm)
+    void tryAutoConvertForAlarm(alarm)
+  }
+
+  async function retryWorkOrder(id: string) {
+    const updated = await resourcesApi.retryAlarmWorkOrder(id)
+    updateLocalAlarm(updated)
+    return updated
+  }
+
+  async function saveWorkOrderPolicy(rules: Record<AlarmSeverity, AlarmWorkOrderMode>) {
+    workOrderPolicy.value = await resourcesApi.updateAlarmWorkOrderPolicy({ rules })
+    return workOrderPolicy.value
   }
 
   return {
@@ -127,13 +153,13 @@ export const useAlarmStore = defineStore('alarm', () => {
     workOrderPolicy,
     unacknowledgedCount,
     load,
-    saveWorkOrderPolicy,
-    retryWorkOrder,
     addAlarm,
     acknowledge,
     acknowledgeAll,
     maybeGenerateRouteAlarm,
     maybeGenerateCheckpointAlarm,
+    retryWorkOrder,
+    saveWorkOrderPolicy,
     applyRemoteAlarm: updateLocalAlarm,
   }
 })

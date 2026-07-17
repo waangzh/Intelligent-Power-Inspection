@@ -7,40 +7,45 @@
 1. 安装 [微信开发者工具](https://developers.weixin.qq.com/miniprogram/dev/devtools/download.html)
 2. 导入本项目目录：`frontend/wechat-program`
 3. AppID 可使用测试号（`project.config.json` 中 `touristappid`）
-4. 编译运行
+4. 启动后端（见仓库根目录 README）
+5. 编译运行（**默认对接真实后端**）
 
-## 演示模式（默认）
+## 对接共用后端（默认）
 
-`miniprogram/config/api.js`：
+`miniprogram/config/api.js` 默认 `useMock: false`，请求 `http://localhost:8080/api/v1`。
 
-```javascript
-useMock: true   // 无需后端，数据存在 wx.storage
+开发阶段在微信开发者工具中：详情 → 本地设置 → 勾选「不校验合法域名」。
+
+## 演示模式（无后端时）
+
+复制本地配置示例并启用 Mock：
+
+```bash
+cp miniprogram/config/api.local.example.js miniprogram/config/api.local.js
 ```
 
-演示账号与 web 端相同：`admin` / `Admin@123` 等。
+`api.local.js` 已加入 `.gitignore`，不会提交到 Git。演示账号与 web 端相同：`admin` / `Admin@123` 等。
 
-## 对接共用后端
+## 权限
 
-1. 启动后端（与 web 端相同地址）
-2. 修改配置：
+运行时权限来自后端 `/auth/login`、`/auth/me` 返回的 `permissions[]`。Mock 演示登录使用 `miniprogram/generated/permissions.js`（由 backend codegen 生成，勿手工维护）。
 
-```javascript
-// miniprogram/config/api.js
-baseUrl: 'http://localhost:8080/api/v1',
-useMock: false,
+仓库根目录校验三端一致性：
+
+```bash
+npm run permissions:check
 ```
-
-3. 开发阶段在微信开发者工具中关闭域名校验
 
 ## 目录结构
 
 ```text
 wechat-program/
 ├─ docs/API.md              # 接口文档
+├─ scripts/                 # 本地校验脚本
 ├─ project.config.json
 └─ miniprogram/
    ├─ app.js / app.json
-   ├─ config/               # api、menu、theme
+   ├─ config/               # api、api.local.example、menu、theme
    ├─ services/             # 业务层（mock + HTTP）
    ├─ utils/                 # request、permission、analytics
    ├─ components/            # page-header、user-avatar 等
@@ -52,14 +57,8 @@ wechat-program/
 | 模块 | 页面 |
 |------|------|
 | 认证 | 登录、注册 |
-| Tab 栏 | 总览、监控、告警、任务、我的 |
-| 运维中心 | 工单、消息 |
-| 巡检业务 | 站点、路线、任务详情 |
-| 资产感知 | 机器人、检测策略 |
-| 数据中心 | 巡检记录、统计分析 |
-| 系统管理 | 用户管理、个人中心 |
-
-更多功能入口：**我的 → 全部功能** 或 **总览 → 更多**
+| Tab 栏 | 总览、监控、告警（含工单入口）、任务、我的 |
+| 个人中心 | 我的信息、头像、安全、记录、设置、消息中心 |
 
 ## 接口文档
 
@@ -71,4 +70,5 @@ wechat-program/
 |------|------|
 | 3D 地图 | 小程序简化为 2D / 列表展示 |
 | 数据存储 | mock 模式用 wx.storage，与 web localStorage 不互通 |
-| 共用后端 | `useMock: false` 后两端数据一致 |
+| Agent 模块 | 小程序暂未实现 Agent 页面 |
+| 共用后端 | 默认 `useMock: false`，两端数据一致 |

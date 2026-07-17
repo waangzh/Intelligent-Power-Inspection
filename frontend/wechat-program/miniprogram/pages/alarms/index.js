@@ -1,5 +1,6 @@
 const api = require('../../services/index')
 const { hasPermission } = require('../../utils/permission')
+const { syncTabBar } = require('../../utils/tab-page')
 const { ALARM_SEVERITY_LABELS, DETECTION_LABELS } = require('../../utils/constants')
 
 const SEVERITY_OPTIONS = [
@@ -23,17 +24,16 @@ Page({
     stats: { total: 0, unack: 0, critical: 0, high: 0, medium: 0 },
     severityChart: [],
     canAck: false,
-    canWorkOrder: false,
-    workOrderAlarmIds: {},
   },
 
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/alarms/index')) return
+    syncTabBar(this)
     const user = app.globalData.user
+    const perms = app.globalData.permissions
     this.setData({
-      canAck: hasPermission(user.role, 'alarm:ack'),
-      canWorkOrder: hasPermission(user.role, 'task:dispatch'),
+      canAck: hasPermission(perms, 'alarm:ack'),
     })
     this.load()
     app.refreshBadges()
@@ -41,16 +41,22 @@ Page({
 
   async load() {
     try {
-      const [alarms, orders] = await Promise.all([api.getAlarms(), api.getWorkOrders()])
-      const workOrderAlarmIds = {}
-      orders.forEach((o) => { if (o.alarmId) workOrderAlarmIds[o.alarmId] = true })
+      const [alarms, orders] = await Promise.all([
+        api.getAlarms(),
+        api.getWorkOrders().catch(() => []),
+      ])
+      const workOrderByAlarm = {}
+      orders.forEach((o) => {
+        if (o.alarmId) workOrderByAlarm[o.alarmId] = o
+      })
       const enriched = alarms.map((a) => ({
         ...a,
         severityLabel: ALARM_SEVERITY_LABELS[a.severity],
         typeLabel: DETECTION_LABELS[a.type] || a.type,
         sevType: a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info',
         time: a.createdAt ? a.createdAt.slice(0, 16).replace('T', ' ') : '',
-        hasWorkOrder: !!workOrderAlarmIds[a.id],
+        hasWorkOrder: !!workOrderByAlarm[a.id],
+        workOrderLabel: workOrderByAlarm[a.id]?.autoConverted ? '已自动转工单' : '已关联工单',
       }))
       const stats = {
         total: enriched.length,
@@ -68,7 +74,6 @@ Page({
         alarms: enriched,
         stats,
         severityChart,
-        workOrderAlarmIds,
         selected: this.data.selected || enriched[0] || null,
       })
       this.applyFilter()
@@ -126,23 +131,6 @@ Page({
         getApp().refreshBadges()
       },
     })
-  },
-
-  async createWorkOrder(e) {
-    const id = e.currentTarget.dataset.id
-    const alarm = this.data.alarms.find((a) => a.id === id)
-    if (!alarm || alarm.hasWorkOrder) return
-    try {
-      await api.createWorkOrderFromAlarm(alarm, getApp().globalData.user)
-      wx.showToast({ title: '工单已创建' })
-      this.load()
-    } catch (err) {
-      wx.showToast({ title: err.message || '创建失败', icon: 'none' })
-    }
-  },
-
-  goWorkOrders() {
-    wx.navigateTo({ url: '/pages/workorders/index' })
   },
 
   stop() {},

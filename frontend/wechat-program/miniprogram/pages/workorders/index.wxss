@@ -1,24 +1,31 @@
 .stat-item.sel { border: 2rpx solid #1a5fb4; }
+.scope-grid { margin-bottom: 12rpx; }
 .wo-title { font-weight: 600; }
 .wo-desc { margin: 8rpx 0; font-size: 26rpx; color: #606266; }
 .wo-actions { display: flex; gap: 12rpx; margin-top: 12rpx; }
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 99; }
-.modal-panel { width: 86%; background: #fff; border-radius: 20rpx; padding: 32rpx; max-height: 80vh; overflow-y: auto; }
-.detail-row { display: flex; justify-content: space-between; gap: 20rpx; padding: 8rpx 0; }
-.detail-row-block { display: block; }
-.detail-row-block .muted { display: block; margin-bottom: 6rpx; }
-.location-value { display: inline-block; padding: 4rpx 10rpx; color: #174f84; background: #edf5fc; border-radius: 6rpx; line-height: 1.5; }
-.detail-desc { margin: 16rpx 0; color: #606266; }
-.review-record { margin: 20rpx 0; padding: 20rpx; background: #f5f9fc; border: 1rpx solid #dbe8f3; border-left: 6rpx solid #1a5fb4; border-radius: 8rpx; }
-.review-record-title { display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: #1d2939; }
-.review-conclusion { padding: 3rpx 12rpx; color: #237804; background: #f6ffed; border-radius: 20rpx; font-size: 24rpx; }
-.review-meta { margin-top: 8rpx; color: #7a8795; font-size: 24rpx; }
-.review-field { margin-top: 16rpx; color: #344054; font-size: 26rpx; line-height: 1.65; }
-.review-field > text { display: block; margin-bottom: 4rpx; color: #64748b; font-size: 24rpx; }
-.review-form-intro { margin: 16rpx 0; padding: 14rpx 16rpx; color: #476072; font-size: 25rpx; line-height: 1.6; background: #f4f8fb; border-left: 6rpx solid #1a5fb4; }
-.form-field { margin-top: 20rpx; }
-.field-label { margin-bottom: 10rpx; color: #344054; font-size: 27rpx; font-weight: 600; }
-.required { color: #d03050; }
-.picker-value { padding: 18rpx 16rpx; color: #303133; background: #fff; border: 1rpx solid #e4e9f0; border-radius: 8rpx; }
-.review-textarea { width: 100%; min-height: 150rpx; margin: 0; padding: 16rpx; border: 1rpx solid #e4e9f0; border-radius: 8rpx; box-sizing: border-box; }
-.form-actions { display: flex; gap: 16rpx; justify-content: flex-end; }
+.modal-panel { width: 86%; background: #fff; border-radius: 20rpx; padding: 32rpx; max-height: 80vh; overflow-y: auto; box-sizing: border-box; }
+.detail-panel .detail-row { display: flex; justify-content: space-between; gap: 16rpx; padding: 8rpx 0; align-items: flex-start; }
+.detail-panel .detail-row text:last-child { text-align: right; flex: 1; }
+.detail-desc-inline { color: #606266; line-height: 1.5; }
+.section-title { margin: 20rpx 0 8rpx; font-size: 28rpx; font-weight: 600; color: #303133; }
+.form-panel .form-item { margin-bottom: 20rpx; }
+.form-label { display: block; font-size: 26rpx; color: #606266; margin-bottom: 10rpx; }
+.form-item.required .form-label::before { content: '*'; color: #f56c6c; margin-right: 4rpx; }
+.form-picker, .form-input { width: 100%; border: 1rpx solid #e4e9f0; border-radius: 8rpx; padding: 16rpx; box-sizing: border-box; font-size: 26rpx; color: #303133; }
+.form-picker { color: #606266; }
+.form-textarea { width: 100%; border: 1rpx solid #e4e9f0; border-radius: 8rpx; padding: 16rpx; min-height: 120rpx; box-sizing: border-box; font-size: 26rpx; }
+.review-modes { display: flex; gap: 12rpx; }
+.mode-chip { flex: 1; text-align: center; padding: 14rpx 20rpx; background: #f0f4f8; border-radius: 8rpx; font-size: 24rpx; color: #606266; }
+.mode-chip.on { background: #1a5fb4; color: #fff; }
+.form-actions { display: flex; gap: 16rpx; justify-content: flex-end; margin-top: 8rpx; }
+.pending-item { padding: 16rpx 0; border-bottom: 1rpx solid #f0f2f5; }
+.pending-item:last-child { border-bottom: none; }
+.pending-msg { margin: 8rpx 0; font-size: 26rpx; color: #303133; }
+.pending-actions { margin-top: 12rpx; }
+.photo-hint { display: block; font-size: 22rpx; color: #909399; margin-bottom: 12rpx; }
+.photo-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.photo-item { position: relative; }
+.photo-thumb { width: 160rpx; height: 160rpx; border-radius: 12rpx; background: #f0f4f8; }
+.photo-remove { position: absolute; top: -8rpx; right: -8rpx; width: 36rpx; height: 36rpx; line-height: 32rpx; text-align: center; background: #f56c6c; color: #fff; border-radius: 50%; font-size: 28rpx; }
+.photo-add { width: 160rpx; height: 160rpx; border: 2rpx dashed #c0c4cc; border-radius: 12rpx; display: flex; align-items: center; justify-content: center; font-size: 56rpx; color: #909399; }

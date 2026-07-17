@@ -1,73 +1,81 @@
-import type { RosMapState } from '@/types/routeExecutor'
-import { parseDocument } from 'yaml'
+import type { RouteMapSnapshot, RosMapState } from '@/types/routeExecutor'
 
 export function round3(value: number): number {
   return Math.round(Number(value) * 1000) / 1000
 }
 
-export function parseYaml(text: string): Partial<RosMapState> {
-  if (text.length > 1024 * 1024) {
-    throw new Error('YAML 文件过大，最大支持 1 MB。')
-  }
-
-  const document = parseDocument(text, { prettyErrors: true, strict: true, uniqueKeys: true })
-  if (document.errors.length) {
-    throw new Error(`YAML 解析失败：${document.errors[0].message}`)
-  }
-
-  let value: unknown
-  try {
-    value = document.toJS({ maxAliasCount: 0 })
-  } catch (error) {
-    throw new Error(`YAML 解析失败：${error instanceof Error ? error.message : String(error)}`)
-  }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('YAML 根节点必须是地图配置对象。')
-  }
-
-  const config = value as Record<string, unknown>
-  const image = typeof config.image === 'string' ? config.image.trim() : ''
-  const resolution = Number(config.resolution)
-  const origin = config.origin
-  if (!image) throw new Error('YAML 缺少有效的 image 字段。')
-  if (!/\.pgm$/i.test(image)) throw new Error('当前地图编辑器只支持 YAML 引用 PGM 图像。')
-  if (!Number.isFinite(resolution) || resolution <= 0) {
-    throw new Error('YAML 的 resolution 必须是大于 0 的数字。')
-  }
-  if (!Array.isArray(origin) || origin.length !== 3 || origin.some((item) => !Number.isFinite(Number(item)))) {
-    throw new Error('YAML 的 origin 必须包含 3 个有效数字。')
-  }
-
-  const negateValue = config.negate ?? 0
-  const negate = typeof negateValue === 'boolean' ? Number(negateValue) : Number(negateValue)
-  if (negate !== 0 && negate !== 1) throw new Error('YAML 的 negate 只能是 0、1、false 或 true。')
-
-  for (const key of ['free_thresh', 'occupied_thresh'] as const) {
-    if (config[key] === undefined) continue
-    const threshold = Number(config[key])
-    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
-      throw new Error(`YAML 的 ${key} 必须是 0 到 1 之间的数字。`)
-    }
-  }
-  if (config.free_thresh !== undefined && config.occupied_thresh !== undefined) {
-    if (Number(config.free_thresh) >= Number(config.occupied_thresh)) {
-      throw new Error('YAML 的 free_thresh 必须小于 occupied_thresh。')
-    }
-  }
-  if (config.mode !== undefined && !['trinary', 'scale', 'raw'].includes(String(config.mode))) {
-    throw new Error('YAML 的 mode 只能是 trinary、scale 或 raw。')
-  }
-
-  return {
-    image,
-    resolution,
-    origin: [Number(origin[0]), Number(origin[1]), Number(origin[2])],
-    negate,
-  }
+/** 将 YAML 中可能带目录的 image 值归一化为 PGM 文件名。 */
+export function rosMapImageFileName(image: string): string {
+  return image.trim().replace(/\\/g, '/').split('/').pop() || ''
 }
 
-export function rosMapImageFileName(image: string): string {
-  return image.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? ''
+function parseScalar(valueStr: string): unknown {
+  const value = valueStr.trim()
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1)
+  }
+  if (value.startsWith('[') && value.endsWith(']')) {
+    return value
+      .slice(1, -1)
+      .split(',')
+      .map((part) => Number(part.trim()))
+  }
+  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value)
+  return value
+}
+
+/** 解析 ROS map_server 的 YAML（支持单行与多行列表 origin） */
+export function parseYaml(text: string): Partial<RosMapState> {
+  const config: Record<string, unknown> = {}
+  const lines = text.split(/\r?\n/)
+  let i = 0
+
+  while (i < lines.length) {
+    const rawLine = lines[i]
+    const line = rawLine.split('#')[0].trim()
+    i += 1
+    if (!line) continue
+
+    const match = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/)
+    if (!match) continue
+
+    const key = match[1]
+    const valueStr = match[2].trim()
+
+    if (valueStr === '' || valueStr === '|' || valueStr === '>') {
+      const listItems: number[] = []
+      while (i < lines.length) {
+        const nextLine = lines[i].split('#')[0]
+        if (!nextLine.trim()) {
+          i += 1
+          continue
+        }
+        const itemMatch = nextLine.match(/^\s*-\s*(-?\d+(?:\.\d+)?)\s*$/)
+        if (!itemMatch) break
+        listItems.push(Number(itemMatch[1]))
+        i += 1
+      }
+      if (listItems.length) config[key] = listItems
+      continue
+    }
+
+    config[key] = parseScalar(valueStr)
+  }
+
+  const patch: Partial<RosMapState> = {}
+  if (typeof config.resolution === 'number') patch.resolution = config.resolution
+  if (Array.isArray(config.origin) && config.origin.length >= 3 && config.origin.slice(0, 3).every(Number.isFinite)) {
+    const o = config.origin as number[]
+    patch.origin = [Number(o[0]), Number(o[1]), Number(o[2])]
+  }
+  if (typeof config.negate === 'number') patch.negate = config.negate
+  if (typeof config.occupied_thresh === 'number') patch.occupiedThresh = config.occupied_thresh
+  if (typeof config.free_thresh === 'number') patch.freeThresh = config.free_thresh
+  if (typeof config.image === 'string') patch.image = config.image
+  return patch
 }
 
 function readAsciiToken(bytes: Uint8Array, indexRef: { index: number }): string {
@@ -96,15 +104,9 @@ export function parsePgm(buffer: ArrayBuffer): Pick<RosMapState, 'width' | 'heig
   const width = Number(readAsciiToken(bytes, indexRef))
   const height = Number(readAsciiToken(bytes, indexRef))
   const maxVal = Number(readAsciiToken(bytes, indexRef))
+  while (indexRef.index < bytes.length && bytes[indexRef.index] <= 32) indexRef.index += 1
   if (magic !== 'P5' || !width || !height || maxVal <= 0 || maxVal > 255) {
     throw new Error('只支持 8-bit P5 PGM 地图。')
-  }
-  if (bytes[indexRef.index] === 13 && bytes[indexRef.index + 1] === 10) {
-    indexRef.index += 2
-  } else if (bytes[indexRef.index] <= 32) {
-    indexRef.index += 1
-  } else {
-    throw new Error('PGM 文件头与像素数据之间缺少分隔符。')
   }
   const expected = width * height
   const pixels = bytes.slice(indexRef.index, indexRef.index + expected)
@@ -135,7 +137,7 @@ export function pixelToMap(map: RosMapState, px: number, py: number) {
 export function isMapCoordinateInside(map: RosMapState, x: number, y: number): boolean {
   if (!map.width || !map.height) return true
   const p = mapToPixel(map, x, y)
-  return p.x >= 0 && p.x <= map.width && p.y >= 0 && p.y <= map.height
+  return p.x >= 0 && p.x < map.width && p.y >= 0 && p.y < map.height
 }
 
 export function createDefaultMapState(): RosMapState {
@@ -149,6 +151,8 @@ export function createDefaultMapState(): RosMapState {
     resolution: 0.05,
     origin: [-2.89, -6.37, 0],
     negate: 0,
+    occupiedThresh: 0.65,
+    freeThresh: 0.25,
   }
 }
 
@@ -170,4 +174,45 @@ export function rebuildMapBitmap(map: RosMapState, canvas: HTMLCanvasElement): I
   }
   ctx.putImageData(img, 0, 0)
   return img
+}
+
+export function encodeMapSnapshot(map: RosMapState): RouteMapSnapshot | undefined {
+  if (!map.pixels || !map.width || !map.height) return undefined
+  const chunkSize = 0x8000
+  const parts: string[] = []
+  for (let i = 0; i < map.pixels.length; i += chunkSize) {
+    const slice = map.pixels.subarray(i, i + chunkSize)
+    parts.push(String.fromCharCode(...slice))
+  }
+  return {
+    width: map.width,
+    height: map.height,
+    resolution: map.resolution,
+    origin: [...map.origin] as [number, number, number],
+    negate: map.negate,
+    pgm_base64: btoa(parts.join('')),
+  }
+}
+
+export function decodeMapSnapshot(snapshot: RouteMapSnapshot): Partial<RosMapState> {
+  const binary = atob(snapshot.pgm_base64)
+  const pixels = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) pixels[i] = binary.charCodeAt(i)
+  return {
+    width: snapshot.width,
+    height: snapshot.height,
+    pixels,
+    resolution: snapshot.resolution,
+    origin: snapshot.origin,
+    negate: snapshot.negate,
+    image: 'saved_map.pgm',
+    yamlName: '',
+    pgmName: 'saved_map.pgm',
+  }
+}
+
+export function rosCoordFromLatLng(pos: { lat: number; lng: number; x?: number; y?: number; yaw?: number }) {
+  const x = Number.isFinite(pos.x) ? pos.x! : pos.lng
+  const y = Number.isFinite(pos.y) ? pos.y! : pos.lat
+  return { x, y, yaw: pos.yaw ?? 0 }
 }

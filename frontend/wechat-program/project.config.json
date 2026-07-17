@@ -4,8 +4,8 @@
     "ignore": [],
     "include": [
       {
-        "type": "file",
-        "value": "assets/maps/site_001/map.txt"
+        "value": "assets/maps/site_001/map.txt",
+        "type": "file"
       }
     ]
   },

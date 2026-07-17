@@ -61,7 +61,7 @@
 | 任务调度 | 巡检任务创建、下发、暂停/恢复、接管/取消、执行事件流 |
 | 告警处置 | 多级告警生成、确认、转工单，支持自动/人工转换 |
 | 巡检处置 Agent | Plan-Act-Observe 编排、只读工具调用、人工提问闭环、Policy 引擎、受控 Action 执行 |
-| 工单流转 | 从告警创建、指派、状态跟踪 |
+| 工单流转 | 从告警创建、调度员抢单接单、现场处置与管理员复核 |
 | AI 检测 | LocateAnything 视觉检测服务、手动上传异步检测 |
 | 通知中心 | 实时推送、已读管理、Agent 处置通知 |
 | 记录导出 | 巡检记录查询与 Excel 导出 |
@@ -184,7 +184,7 @@ mvn spring-boot:run
 
 ### 方式三：微信小程序
 
-用微信开发者工具打开 `frontend/wechat-program/`，默认使用 mock 数据。接入真实后端时修改 `miniprogram/config/api.js` 设置 `useMock: false`。
+用微信开发者工具打开 `frontend/wechat-program/`，默认对接真实后端。无后端演示时复制 `miniprogram/config/api.local.example.js` 为 `api.local.js` 并设置 `useMock: true`。
 
 ### 方式四：Python AI 服务联调
 
@@ -289,18 +289,23 @@ Web / 小程序
 
 ## 权限点
 
-```text
-agent:view  agent:run  agent:approve  agent:admin
-task:view  task:create  task:dispatch  task:control
-site:edit  route:edit  alarm:ack  robot:manage
-detection:manage  user:manage  record:export
+权限以 **后端 `Permission` 枚举 + `PermissionService`** 为唯一事实来源。登录后 `/auth/login`、`/auth/me` 返回 `permissions[]`；Web 与小程序运行时只使用该数组，不再内置角色矩阵。
+
+静态类型与 Mock 演示数据由 codegen 生成：
+
+```bash
+npm run permissions:generate   # 从 backend 生成 manifest / TS / JS / OpenAPI 片段
+npm run permissions:check      # 校验 backend ↔ shared/generated ↔ Web ↔ 小程序
 ```
 
-| 角色 | 权限范围 |
-| --- | --- |
-| `ADMIN` | 全部 |
-| `DISPATCHER` | Agent 查看/运行/审批，任务/站点/路线/告警/记录 |
-| `VIEWER` | 基础查看 |
+生成物路径：
+
+- `shared/generated/permissions.json`
+- `shared/generated/openapi-permissions.yaml`
+- `frontend/web/src/generated/permissions.ts`
+- `frontend/wechat-program/miniprogram/generated/permissions.js`
+
+OpenAPI 文档（含权限 enum）：后端启动后访问 `/swagger-ui.html`。
 
 ## API 与实时推送
 
@@ -330,7 +335,8 @@ WebSocket/STOMP 端点 `ws://localhost:8080/ws`，主要 topic：
 | MySQL 启动 | `mvn spring-boot:run` |
 | 前端开发 | `cd frontend/web && npm install && npm run dev` |
 | 前端构建 | `npm run build` |
-| Python 测试 | `python -m pytest tests` |
+| 权限校验 | `npm run permissions:check` |
+| 权限 codegen | `npm run permissions:generate` |
 | 启动 AI 服务 | `uvicorn app:app --host 0.0.0.0 --port 9001` |
 
 ## 常见问题

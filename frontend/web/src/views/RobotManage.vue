@@ -2,16 +2,17 @@
   <div>
     <PageHeader
       title="机器人管理"
-      description="注册、绑定站点与运行状态监控"
+      description="机器人资产、站点绑定与运行状态管理"
       :breadcrumbs="[{ label: '资产感知' }, { label: '机器人管理' }]"
-    >
-      <template #actions>
-        <el-button v-if="can('robot:manage')" type="primary" @click="dialogVisible = true">
-          <el-icon><Plus /></el-icon>
-          注册机器人
-        </el-button>
-      </template>
-    </PageHeader>
+    />
+
+    <div class="page-actions">
+      <el-select v-if="robotStore.robots.length > 1" v-model="selectedRobotId" class="robot-select" aria-label="选择机器人">
+        <el-option v-for="item in robotStore.robots" :key="item.id" :label="item.name" :value="item.id" />
+      </el-select>
+      <el-button :disabled="!robot" @click="openBindingDialog">重新绑定站点</el-button>
+      <el-button type="primary" @click="router.push('/robots/status')">查看在线状态</el-button>
+    </div>
 
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6" v-for="s in statusStats" :key="s.label">
@@ -22,119 +23,248 @@
       </el-col>
     </el-row>
 
-    <el-card shadow="never">
-      <el-table :data="robotStore.robots" size="small">
-        <el-table-column prop="name" label="名称" min-width="130" />
-        <el-table-column prop="model" label="型号" width="120" />
-        <el-table-column prop="serialNo" label="序列号" width="150" />
-        <el-table-column label="绑定站点" width="150">
-          <template #default="{ row }">{{ siteName(row.siteId) }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="电量" width="130">
-          <template #default="{ row }">
-            <el-progress :percentage="row.battery" :stroke-width="8" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="firmware" label="固件" width="90" />
-        <el-table-column label="最后在线" width="160">
-          <template #default="{ row }">{{ row.lastOnlineAt ? fmt(row.lastOnlineAt) : '-' }}</template>
-        </el-table-column>
-        <el-table-column v-if="can('robot:manage')" label="操作" width="80">
-          <template #default="{ row }">
-            <el-button text type="danger" size="small" @click="remove(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <el-card v-if="robot" shadow="never">
+      <el-descriptions :column="2" border size="small">
+        <el-descriptions-item label="名称">{{ robot.name }}</el-descriptions-item>
+        <el-descriptions-item label="型号">{{ robot.model }}</el-descriptions-item>
+        <el-descriptions-item label="序列号">{{ robot.serialNo }}</el-descriptions-item>
+        <el-descriptions-item label="绑定站点">{{ siteName(robot.siteId) }}</el-descriptions-item>
+        <el-descriptions-item label="平台状态">
+          <el-tag :type="statusType(robot.status)" size="small">{{ platformStatusLabel(robot.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="Bridge 连接">
+          <el-tag :type="heartbeatTagType" size="small">
+            {{ heartbeatConnectionLabel }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="巡逻状态">{{ patrolStateLabel(robot.telemetry?.patrolState) }}</el-descriptions-item>
+        <el-descriptions-item label="系统模式">{{ robot.telemetry?.systemMode || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="建图状态">{{ mappingStatusLabel(robot.telemetry?.mappingStatus) }}</el-descriptions-item>
+        <el-descriptions-item label="Nav2 状态">{{ nav2StatusLabel(robot.telemetry?.nav2Status) }}</el-descriptions-item>
+        <el-descriptions-item label="CAN 状态">{{ robot.telemetry?.canStatus || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="底盘状态">{{ robot.telemetry?.zlacStatus || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="里程计">{{ sensorFreshness(robot.telemetry?.lastOdomAgeSec) }}</el-descriptions-item>
+        <el-descriptions-item label="雷达">{{ sensorFreshness(robot.telemetry?.lastScanAgeSec) }}</el-descriptions-item>
+        <el-descriptions-item label="位姿" :span="2">
+          <span v-if="robot.telemetry?.pose">
+            x={{ robot.telemetry.pose.x.toFixed(2) }},
+            y={{ robot.telemetry.pose.y.toFixed(2) }},
+            yaw={{ robot.telemetry.pose.yaw.toFixed(2) }}
+          </span>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="心跳协议" :span="2">{{ heartbeatStatus?.protocolVersion || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="最近心跳" :span="2">{{ fmt(heartbeatStatus?.lastHeartbeatAt) }}</el-descriptions-item>
+        <el-descriptions-item label="Bridge 诊断" :span="2">{{ heartbeatStatus?.diagnosticSummary || '-' }}</el-descriptions-item>
+      </el-descriptions>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="注册机器人" width="480px">
-      <el-form :model="form" label-width="90px">
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="型号"><el-input v-model="form.model" /></el-form-item>
-        <el-form-item label="序列号"><el-input v-model="form.serialNo" /></el-form-item>
-        <el-form-item label="绑定站点">
-          <el-select v-model="form.siteId" style="width: 100%">
-            <el-option v-for="s in siteStore.sites" :key="s.id" :label="s.name" :value="s.id" />
+    <el-dialog v-model="bindingDialogVisible" title="重新绑定机器人站点" width="480px" :close-on-click-modal="false">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        title="仅空闲机器人可以重新绑定；执行中、暂停或人工接管的任务会被服务端拒绝。"
+        style="margin-bottom: 16px"
+      />
+      <el-form label-width="96px">
+        <el-form-item label="机器人">
+          <span>{{ robot?.name || '-' }}</span>
+        </el-form-item>
+        <el-form-item label="当前站点">
+          <span>{{ robot ? siteName(robot.siteId) : '-' }}</span>
+        </el-form-item>
+        <el-form-item label="新绑定站点" required>
+          <el-select v-model="bindingSiteId" placeholder="请选择站点" style="width: 100%">
+            <el-option v-for="site in siteStore.sites" :key="site.id" :label="site.name" :value="site.id" />
           </el-select>
         </el-form-item>
       </el-form>
+      <p class="binding-hint">重新绑定只改变平台中的站点归属，不会修改 Bridge 地址、设备身份或历史巡检记录。</p>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submit">注册</el-button>
+        <el-button :disabled="bindingSaving" @click="bindingDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="bindingSaving" @click="saveSiteBinding">确认重新绑定</el-button>
       </template>
     </el-dialog>
+
+    <el-empty v-if="!robot" description="未找到机器人设备" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
-import { usePermission } from '@/composables/usePermission'
+import { resourcesApi } from '@/api/resources'
 import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
 import type { Robot } from '@/types'
+import type { RobotHeartbeatStatus } from '@/types/robotHeartbeat'
+import {
+  mappingStatusLabel,
+  nav2StatusLabel,
+  patrolStateLabel,
+  PLATFORM_STATUS_LABELS,
+  sensorFreshness,
+} from '@/utils/robotStatus'
+import { connectionLabel, heartbeatVisual } from '@/utils/robotHeartbeatStatus'
 
 const robotStore = useRobotStore()
 const siteStore = useSiteStore()
-const { can } = usePermission()
-const dialogVisible = ref(false)
-const form = reactive({ name: '', model: '', serialNo: '', siteId: siteStore.sites[0]?.id ?? '' })
+const router = useRouter()
 
-const statusStats = computed(() => [
-  { label: '总数', value: robotStore.robots.length },
-  { label: '在线', value: robotStore.robots.filter((r) => r.status === 'ONLINE').length },
-  { label: '任务中', value: robotStore.robots.filter((r) => r.status === 'BUSY').length },
-  { label: '充电中', value: robotStore.robots.filter((r) => r.status === 'CHARGING').length },
-])
+const selectedRobotId = ref('')
+const bindingDialogVisible = ref(false)
+const bindingSaving = ref(false)
+const bindingSiteId = ref('')
+const heartbeatStatus = ref<RobotHeartbeatStatus>()
+const heartbeatLoading = ref(false)
+const heartbeatLoadFailed = ref(false)
+
+const robot = computed(() => robotStore.getRobotById(selectedRobotId.value))
+
+watch(
+  () => robotStore.robots.map((item) => item.id),
+  (ids) => {
+    if (!ids.includes(selectedRobotId.value)) selectedRobotId.value = ids[0] ?? ''
+  },
+  { immediate: true },
+)
+
+let heartbeatRequestId = 0
+
+watch(selectedRobotId, (robotId) => {
+  void loadHeartbeatStatus(robotId)
+}, { immediate: true })
+
+const heartbeatTagType = computed(() => {
+  if (heartbeatStatus.value) return heartbeatVisual(heartbeatStatus.value)
+  return heartbeatLoadFailed.value ? 'danger' : 'info'
+})
+
+const heartbeatConnectionLabel = computed(() => {
+  if (heartbeatLoading.value) return '查询中'
+  if (heartbeatLoadFailed.value || !heartbeatStatus.value) return '状态未知'
+  return heartbeatStatus.value.online ? '已连接' : connectionLabel(heartbeatStatus.value.connectionStatus)
+})
+
+const statusStats = computed(() => {
+  const item = robot.value
+  const t = item?.telemetry
+  return [
+    { label: '设备数', value: robotStore.robots.length },
+    { label: 'Bridge', value: item ? heartbeatConnectionLabel.value : '-' },
+    { label: '巡逻', value: patrolStateLabel(t?.patrolState) },
+    { label: 'Nav2', value: nav2StatusLabel(t?.nav2Status) },
+  ]
+})
 
 function siteName(id?: string) {
   return id ? siteStore.getSiteById(id)?.name ?? '-' : '未绑定'
 }
 
 function statusType(s: Robot['status']) {
-  return { ONLINE: 'success', BUSY: 'warning', CHARGING: 'info', OFFLINE: 'danger' }[s] as 'success' | 'warning' | 'info' | 'danger'
+  return { ONLINE: 'success', BUSY: 'warning', OFFLINE: 'danger' }[s] as 'success' | 'warning' | 'danger'
 }
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleString('zh-CN')
+function platformStatusLabel(s: Robot['status']) {
+  return PLATFORM_STATUS_LABELS[s]
 }
 
-function submit() {
-  if (!form.name || !form.model) {
-    ElMessage.warning('请填写完整信息')
+async function loadHeartbeatStatus(robotId: string) {
+  const requestId = ++heartbeatRequestId
+  heartbeatStatus.value = undefined
+  heartbeatLoadFailed.value = false
+  if (!robotId) return
+  heartbeatLoading.value = true
+  try {
+    const status = await resourcesApi.getRobotHeartbeatStatus(robotId)
+    if (requestId === heartbeatRequestId) heartbeatStatus.value = status
+  } catch {
+    if (requestId === heartbeatRequestId) heartbeatLoadFailed.value = true
+  } finally {
+    if (requestId === heartbeatRequestId) heartbeatLoading.value = false
+  }
+}
+
+let heartbeatPollTimer: number | undefined
+onMounted(() => {
+  heartbeatPollTimer = window.setInterval(() => void loadHeartbeatStatus(selectedRobotId.value), 15_000)
+})
+onUnmounted(() => {
+  if (heartbeatPollTimer) window.clearInterval(heartbeatPollTimer)
+})
+
+function openBindingDialog() {
+  if (!robot.value) return
+  bindingSiteId.value = robot.value.siteId || ''
+  bindingDialogVisible.value = true
+}
+
+async function saveSiteBinding() {
+  const currentRobot = robot.value
+  if (!currentRobot) return
+  if (!bindingSiteId.value) {
+    ElMessage.warning('请选择目标站点')
     return
   }
-  robotStore.addRobot({
-    name: form.name,
-    model: form.model,
-    serialNo: form.serialNo || `SN-${Date.now()}`,
-    siteId: form.siteId,
-    status: 'OFFLINE',
-    battery: 100,
-    firmware: 'v1.0.0',
-    lastOnlineAt: new Date().toISOString(),
-  })
-  dialogVisible.value = false
-  ElMessage.success('机器人已注册')
+  if (bindingSiteId.value === currentRobot.siteId) {
+    ElMessage.info('机器人已绑定到该站点')
+    bindingDialogVisible.value = false
+    return
+  }
+  const targetSiteName = siteName(bindingSiteId.value)
+  try {
+    await ElMessageBox.confirm(
+      `确认将“${currentRobot.name}”从“${siteName(currentRobot.siteId)}”重新绑定到“${targetSiteName}”吗？`,
+      '确认重新绑定',
+      { type: 'warning', confirmButtonText: '确认绑定', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  bindingSaving.value = true
+  try {
+    const updated = await resourcesApi.updateRobot(currentRobot.id, { siteId: bindingSiteId.value })
+    robotStore.applyRemoteRobot(updated)
+    bindingDialogVisible.value = false
+    ElMessage.success(`已绑定到${targetSiteName}`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error && error.message ? error.message : '重新绑定失败，请稍后重试')
+  } finally {
+    bindingSaving.value = false
+  }
 }
 
-function remove(id: string) {
-  ElMessageBox.confirm('确定删除？', '确认', { type: 'warning' })
-    .then(() => {
-      robotStore.removeRobot(id)
-      ElMessage.success('已删除')
-    })
-    .catch(() => {})
+function fmt(iso?: string | null) {
+  if (!iso) return '-'
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false })
 }
 </script>
 
 <style scoped>
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  margin: -8px 0 16px;
+}
+
+.robot-select {
+  width: min(280px, 42vw);
+  margin-right: auto;
+}
+
+.binding-hint {
+  margin: 0;
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .mini-stat .val {
   font-size: 24px;
   font-weight: 700;
@@ -145,5 +275,17 @@ function remove(id: string) {
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .page-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .robot-select {
+    width: 100%;
+    margin-right: 0;
+  }
 }
 </style>

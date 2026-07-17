@@ -13,11 +13,20 @@ const tagType = computed(() => {
   const map: Record<TaskStatus, '' | 'success' | 'warning' | 'info' | 'danger'> = {
     CREATED: 'info',
     DISPATCHED: 'info',
+    STARTING: 'warning',
     RUNNING: 'success',
+    PAUSING: 'warning',
     PAUSED: 'warning',
+    RESUMING: 'warning',
+    CANCELLING: 'warning',
+    TAKEOVER_PENDING: 'warning',
     MANUAL_TAKEOVER: 'danger',
     COMPLETED: 'success',
     CANCELLED: 'info',
+    START_FAILED: 'danger',
+    FAILED: 'danger',
+    DISCONNECTED: 'warning',
+    RECOVERING: 'warning',
   }
   return map[props.status]
 })

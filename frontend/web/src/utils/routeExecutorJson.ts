@@ -9,8 +9,8 @@ export interface RouteFormState {
   failurePolicy: 'abort_and_return_home' | 'abort'; returnToStart: boolean; loopEnabled: boolean; loopWait: number; maxCycles: number
 }
 
-export function createDefaultRouteForm(routeId = 'route_patrol_001'): RouteFormState {
-  return formFromDraft(createEditableRouteDraft({ defaultRouteId: routeId }))
+export function createDefaultRouteForm(routeId = 'route_patrol_001', routeName?: string): RouteFormState {
+  return formFromDraft(createEditableRouteDraft({ defaultRouteId: routeId, defaultRouteName: routeName }))
 }
 
 export function loadRouteJson(route: RouteExecutorDocument, form: RouteFormState): { targets: RouteExecutorTarget[]; keepoutZones: EditableKeepoutZone[]; nextTargetNo: number } {
@@ -45,6 +45,15 @@ export function buildRouteJson(
     yaml: '', image: '', resolution: 0, origin: [0, 0, 0], width: 0, height: 0, image_sha256: '0'.repeat(64),
   }
   return mergeManagedRouteFields(sourceTemplate, draftFromForm(form, targets, keepoutZones, sourceTemplate), resolvedMap)
+}
+
+export function withPlatformRouteName(doc: RouteExecutorDocument, routeName: string): RouteExecutorDocument {
+  const normalizedName = routeName.trim()
+  if (!normalizedName || !doc.routes[0] || doc.routes[0].name === normalizedName) return doc
+  return {
+    ...doc,
+    routes: [{ ...doc.routes[0], name: normalizedName }],
+  }
 }
 
 export function downloadRouteJson(doc: RouteExecutorDocument, filename?: string) {

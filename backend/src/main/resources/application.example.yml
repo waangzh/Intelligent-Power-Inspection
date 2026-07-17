@@ -1,4 +1,5 @@
 server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
   port: 8080
 
 spring:
@@ -49,3 +50,22 @@ app:
     poll-interval-ms: ${APP_ROBOT_POLL_MS:2000}
     timeout-seconds: ${APP_ROBOT_TIMEOUT_SECONDS:5}
     token: ${APP_ROBOT_BRIDGE_TOKEN:}
+    # Bridge 管理面只允许 Spring 服务端访问；Token 不得下发到浏览器或机器人。
+    heartbeat-bridge-base-url: ${ROBOT_BRIDGE_BASE_URL:http://127.0.0.1:8001}
+    bridge-admin-token: ${ROBOT_BRIDGE_ADMIN_TOKEN:}
+    bridge-connect-timeout-seconds: ${ROBOT_BRIDGE_CONNECT_TIMEOUT_SECONDS:3}
+    bridge-read-timeout-seconds: ${ROBOT_BRIDGE_READ_TIMEOUT_SECONDS:10}
+    heartbeat-sync-interval-ms: ${ROBOT_HEARTBEAT_SYNC_INTERVAL_MS:3000}
+    heartbeat-timeout-seconds: ${ROBOT_HEARTBEAT_TIMEOUT_SECONDS:12}
+    # 平台 ID 与设备 ID 不一致时在此映射；平台数据库仍保留 robot_001。
+    bridge-robot-id-mappings:
+      robot_001: ${APP_ROBOT_BRIDGE_ID_ROBOT_001:robot-001}
+    # 设置为 Robot Bridge 的 PLATFORM_BEARER_TOKEN，使部署回读响应使用 Bridge ID。
+    bridge-platform-token: ${ROBOT_BRIDGE_PLATFORM_TOKEN:}
+  route-deployment:
+    worker-delay-ms: ${ROUTE_DEPLOYMENT_WORKER_DELAY_MS:3000}
+    worker-initial-delay-ms: ${ROUTE_DEPLOYMENT_WORKER_INITIAL_DELAY_MS:5000}
+    worker-batch-size: ${ROUTE_DEPLOYMENT_WORKER_BATCH_SIZE:10}
+    max-attempts: ${ROUTE_DEPLOYMENT_MAX_ATTEMPTS:5}
+    initial-backoff-seconds: ${ROUTE_DEPLOYMENT_INITIAL_BACKOFF_SECONDS:5}
+    max-backoff-seconds: ${ROUTE_DEPLOYMENT_MAX_BACKOFF_SECONDS:300}

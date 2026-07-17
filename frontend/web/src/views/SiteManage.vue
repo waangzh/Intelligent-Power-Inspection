@@ -21,6 +21,12 @@
           >
             <el-table-column prop="name" label="站点名称" />
             <el-table-column prop="address" label="地址" show-overflow-tooltip />
+            <el-table-column label="设备建图" width="110">
+              <template #default="{ row }">
+                <el-tag v-if="row.deviceMapUploaded || row.lingbotMapId" type="success" size="small">已上传</el-tag>
+                <el-tag v-else type="info" size="small">待上传</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
                 <el-button v-if="can('site:edit')" text type="primary" size="small" @click.stop="openSiteDialog(row)">编辑</el-button>
@@ -76,6 +82,11 @@
         </el-form-item>
         <el-form-item label="中心经度">
           <el-input-number v-model="siteForm.center.lng" :step="0.0001" :precision="4" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="设备建图">
+          <el-tag :type="siteForm.deviceMapUploaded ? 'success' : 'info'" size="small">
+            {{ siteForm.deviceMapUploaded ? '设备端已上传地图' : '等待设备端推送地图数据' }}
+          </el-tag>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -139,6 +150,7 @@ const siteForm = reactive({
   address: '',
   description: '',
   center: { lat: 30.2741, lng: 120.1551 },
+  deviceMapUploaded: false,
 })
 
 const areaForm = reactive({ name: '' })
@@ -159,6 +171,7 @@ function openSiteDialog(site?: Site) {
       address: site.address,
       description: site.description,
       center: { ...site.center },
+      deviceMapUploaded: Boolean(site.deviceMapUploaded || site.lingbotMapId),
     })
   } else {
     Object.assign(siteForm, {
@@ -166,6 +179,7 @@ function openSiteDialog(site?: Site) {
       address: '',
       description: '',
       center: { lat: 30.2741, lng: 120.1551 },
+      deviceMapUploaded: false,
     })
   }
   siteDialogVisible.value = true
@@ -182,6 +196,7 @@ function saveSite() {
       address: siteForm.address,
       description: siteForm.description,
       center: { ...siteForm.center },
+      deviceMapUploaded: siteForm.deviceMapUploaded,
     })
     ElMessage.success('站点已更新')
   } else {
@@ -190,6 +205,7 @@ function saveSite() {
       address: siteForm.address,
       description: siteForm.description,
       center: { ...siteForm.center },
+      deviceMapUploaded: siteForm.deviceMapUploaded,
     })
     currentSite.value = site
     ElMessage.success('站点已创建')

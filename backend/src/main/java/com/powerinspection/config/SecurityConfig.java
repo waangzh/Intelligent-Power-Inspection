@@ -28,8 +28,12 @@ public class SecurityConfig {
       .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .authorizeHttpRequests(auth -> auth
         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/ws/**", "/model-files/**").permitAll()
+        .requestMatchers("/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/register", "/ws/**", "/model-files/**").permitAll()
+        .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-map-assets").permitAll()
         .requestMatchers("/h2-console/**").permitAll()
+        .requestMatchers(HttpMethod.GET,
+          "/api/v1/route-deployments/*", "/api/v1/route-revisions/*",
+          "/api/v1/map-assets/*", "/api/v1/map-assets/*/yaml", "/api/v1/map-assets/*/pgm").permitAll()
         .anyRequest().authenticated()
       )
       .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
@@ -44,7 +48,11 @@ public class SecurityConfig {
   @Bean
   CorsConfigurationSource corsConfigurationSource(CorsProperties corsProperties) {
     CorsConfiguration config = new CorsConfiguration();
-    config.setAllowedOrigins(corsProperties.getAllowedOrigins());
+    if (!corsProperties.getAllowedOriginPatterns().isEmpty()) {
+      config.setAllowedOriginPatterns(corsProperties.getAllowedOriginPatterns());
+    } else {
+      config.setAllowedOrigins(corsProperties.getAllowedOrigins());
+    }
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
     config.setExposedHeaders(List.of("Authorization"));

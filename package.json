@@ -1,0 +1,9 @@
+{
+  "name": "power-inspection",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "permissions:generate": "node scripts/permissions/generate.mjs",
+    "permissions:check": "node scripts/permissions/check.mjs"
+  }
+}

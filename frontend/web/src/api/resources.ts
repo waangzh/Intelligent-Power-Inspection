@@ -7,14 +7,20 @@ import type {
   DetectionTemplate,
   InspectionRecord,
   InspectionTask,
+  TaskExecution,
+  TaskStartEligibility,
   ManualDetectionResponse,
   MapAsset,
+  MapAssetQuery,
+  MapAssetReviewInput,
   Robot,
   Route,
   RouteRevision,
   TaskEvent,
 } from '@/types'
+import type { RouteDeployment } from '@/types/routeDeployment'
 import type { AppNotification, NotificationType } from '@/types/notification'
+import type { PersistedRouteDraftReport, RouteDraftValidationReport, RouteExecutorDocument } from '@/types/routeExecutor'
 import type {
   AgentAction,
   AgentActionDecisionRequest,
@@ -32,6 +38,8 @@ import type {
 } from '@/types/agent'
 import type { WorkOrder, WorkOrderReviewInput, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
+import type { RobotHeartbeatStatus, RobotHeartbeatStatusPage, RobotHeartbeatStatusQuery } from '@/types/robotHeartbeat'
+import { buildMapAssetQuery } from '@/utils/mapAssetReview'
 
 export const resourcesApi = {
   listSites: () => http.get<Site[]>('/sites'),
@@ -48,6 +56,17 @@ export const resourcesApi = {
   removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
   listRouteRevisions: (routeId: string) => http.get<RouteRevision[]>(`/routes/${routeId}/revisions`),
   createRouteRevision: (routeId: string) => http.post<RouteRevision>(`/routes/${routeId}/revisions`),
+  listRouteDeployments: (revisionId: string) => http.get<RouteDeployment[]>(`/route-revisions/${encodeURIComponent(revisionId)}/deployments`),
+  createRouteDeployment: (revisionId: string, robotId: string, idempotencyKey: string) =>
+    http.post<RouteDeployment>(`/route-revisions/${encodeURIComponent(revisionId)}/deployments`, { robotId }, { 'Idempotency-Key': idempotencyKey }),
+  getRouteDeployment: (deploymentId: string) => http.get<RouteDeployment>(`/route-deployments/${encodeURIComponent(deploymentId)}`),
+  reconcileRouteDeployment: (deploymentId: string) => http.post<RouteDeployment>(`/route-deployments/${encodeURIComponent(deploymentId)}/reconcile`),
+  validateRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, mapAssetId?: string) =>
+    http.post<RouteDraftValidationReport>(`/routes/${routeId}/draft:validate`, { executorJson, mapAssetId }),
+  getRouteDraft: (routeId: string) => http.get<PersistedRouteDraftReport>(`/routes/${routeId}/draft`),
+  getRouteDraftCheck: (routeId: string) => http.get<PersistedRouteDraftReport>(`/routes/${routeId}/draft:check`),
+  saveRouteDraft: (routeId: string, executorJson: RouteExecutorDocument, expectedVersion?: number, mapAssetId?: string) =>
+    http.put<PersistedRouteDraftReport>(`/routes/${routeId}/draft`, { executorJson, expectedVersion, mapAssetId }),
   getRouteRevision: (revisionId: string) => http.get<RouteRevision>(`/route-revisions/${revisionId}`),
   addCheckpoint: (routeId: string, checkpoint: Checkpoint) =>
     http.post<Checkpoint>(`/routes/${routeId}/checkpoints`, checkpoint),
@@ -57,18 +76,29 @@ export const resourcesApi = {
     http.delete<void>(`/routes/${routeId}/checkpoints/${checkpointId}`),
 
   uploadMapAsset: (form: FormData) => http.postForm<MapAsset>('/map-assets', form),
+  listMapAssets: (query: MapAssetQuery = {}) => http.get<MapAsset[]>(`/map-assets${buildMapAssetQuery(query)}`),
   getMapAsset: (id: string) => http.get<MapAsset>(`/map-assets/${id}`),
   getMapAssetYaml: (id: string) => http.get<Blob>(`/map-assets/${id}/yaml`),
   getMapAssetPgm: (id: string) => http.get<Blob>(`/map-assets/${id}/pgm`),
   removeMapAsset: (id: string) => http.delete<void>(`/map-assets/${id}`),
+  reviewMapAsset: (id: string, input: MapAssetReviewInput) =>
+    http.post<MapAsset>(`/map-assets/${encodeURIComponent(id)}/review`, input),
 
   listTasks: () => http.get<InspectionTask[]>('/tasks'),
   createTask: (task: InspectionTask) => http.post<InspectionTask>('/tasks', task),
   dispatchTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/dispatch`),
-  pauseTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/pause`),
-  resumeTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/resume`),
-  takeoverTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/takeover`),
-  cancelTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/cancel`),
+  getTaskExecution: (id: string) => http.get<TaskExecution>(`/tasks/${encodeURIComponent(id)}/execution`),
+  getTaskStartEligibility: (id: string) => http.get<TaskStartEligibility>(`/tasks/${encodeURIComponent(id)}/start-eligibility`),
+  startTask: (id: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/start`, undefined, { 'Idempotency-Key': idempotencyKey }),
+  pauseTask: (id: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/pause`, undefined, { 'Idempotency-Key': idempotencyKey }),
+  resumeTask: (id: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/resume`, undefined, { 'Idempotency-Key': idempotencyKey }),
+  takeoverTask: (id: string, reason: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/takeover`, { reason }, { 'Idempotency-Key': idempotencyKey }),
+  cancelTask: (id: string, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/cancel`, undefined, { 'Idempotency-Key': idempotencyKey }),
   taskEvents: (id: string) => http.get<TaskEvent[]>(`/tasks/${id}/events`),
   listRecords: () => http.get<InspectionRecord[]>('/records'),
   exportRecords: () => http.post<Blob>('/records/export'),
@@ -82,17 +112,28 @@ export const resourcesApi = {
   retryAlarmWorkOrder: (id: string) => http.post<Alarm>(`/alarms/${id}/retry-work-order`),
 
   listWorkOrders: () => http.get<WorkOrder[]>('/work-orders'),
-  createWorkOrderFromAlarm: (alarmId: string, assigneeName?: string) =>
-    http.post<WorkOrder>(`/work-orders/from-alarm/${alarmId}`, { assigneeName }),
-  updateWorkOrderStatus: (id: string, status: WorkOrderStatus, extra?: { review?: WorkOrderReviewInput }) =>
-    http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
-  assignWorkOrder: (id: string, assigneeName: string) =>
-    http.patch<WorkOrder>(`/work-orders/${id}/assign`, { assigneeName }),
+  createWorkOrderFromAlarm: (alarmId: string) =>
+    http.post<WorkOrder>(`/work-orders/from-alarm/${alarmId}`, {}),
+  claimWorkOrder: (id: string) => http.post<WorkOrder>(`/work-orders/${id}/claim`),
+  updateWorkOrderStatus: (
+    id: string,
+    status: WorkOrderStatus,
+    extra?: { resolution?: string; review?: WorkOrderReviewInput },
+  ) => http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
 
   listRobots: () => http.get<Robot[]>('/robots'),
   createRobot: (robot: Robot) => http.post<Robot>('/robots', robot),
   updateRobot: (id: string, patch: Partial<Robot>) => http.patch<Robot>(`/robots/${id}`, patch),
   removeRobot: (id: string) => http.delete<void>(`/robots/${id}`),
+  listRobotHeartbeatStatus: (query: RobotHeartbeatStatusQuery = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined) params.set(key, String(value))
+    })
+    const suffix = params.size ? `?${params.toString()}` : ''
+    return http.get<RobotHeartbeatStatusPage>(`/robots/status${suffix}`)
+  },
+  getRobotHeartbeatStatus: (robotId: string) => http.get<RobotHeartbeatStatus>(`/robots/${encodeURIComponent(robotId)}/status`),
 
   listDetectionTemplates: () => http.get<DetectionTemplate[]>('/detection-templates'),
   createDetectionTemplate: (template: DetectionTemplate) =>

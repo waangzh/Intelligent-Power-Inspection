@@ -3,7 +3,7 @@
 
   <view class="card">
     <view class="card-title flex-between">
-      <text>地图实时追踪 · {{selected.name || '选择机器人'}}</text>
+      <text>地图实时追踪 · {{selected.name || '巡检机器人'}}</text>
     </view>
     <map-view center="{{mapCenter}}" route="{{activeRoute}}" robotPosition="{{robotPos}}" />
   </view>
@@ -17,22 +17,22 @@
   <view class="card" wx:if="{{selected}}">
     <view class="card-title">遥测数据</view>
     <view class="telemetry-grid">
-      <view class="telemetry-item"><text class="telemetry-value">{{selected.battery}}%</text><text class="telemetry-label">电量</text></view>
       <view class="telemetry-item"><text class="telemetry-value">{{selected.statusLabel}}</text><text class="telemetry-label">状态</text></view>
       <view class="telemetry-item"><text class="telemetry-value">{{selected.model}}</text><text class="telemetry-label">型号</text></view>
       <view class="telemetry-item"><text class="telemetry-value">{{selected.firmware || '-'}}</text><text class="telemetry-label">固件</text></view>
+      <view class="telemetry-item"><text class="telemetry-value">{{selected.currentTaskName}}</text><text class="telemetry-label">当前任务</text></view>
     </view>
     <view class="muted">序列号 {{selected.serialNo}} · 当前任务 {{selected.currentTaskName}}</view>
   </view>
 
-  <view class="card">
-    <view class="card-title">全部机器人</view>
+  <view class="card" wx:if="{{robots.length}}">
+    <view class="card-title">机器人</view>
     <view class="robot-item {{selectedId===item.id?'active':''}}" wx:for="{{robots}}" wx:key="id" bindtap="selectRobot" data-id="{{item.id}}">
       <view class="flex-between">
         <text>{{item.name}}</text>
         <text class="tag tag-{{item.statusType}}">{{item.statusLabel}}</text>
       </view>
-      <view class="muted">任务：{{item.currentTaskName}} · 电量 {{item.battery}}%</view>
+      <view class="muted">任务：{{item.currentTaskName}}</view>
     </view>
   </view>
 </view>

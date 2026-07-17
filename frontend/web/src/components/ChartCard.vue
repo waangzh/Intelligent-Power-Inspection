@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 const props = defineProps<{
   option: Record<string, unknown>
@@ -26,11 +26,11 @@ function onResize() {
 
 onMounted(() => {
   render()
+  window.addEventListener('resize', onResize)
   if (chartEl.value) {
-    resizeObserver = new ResizeObserver(onResize)
+    resizeObserver = new ResizeObserver(() => chart?.resize())
     resizeObserver.observe(chartEl.value)
   }
-  window.addEventListener('resize', onResize)
 })
 
 onUnmounted(() => {
@@ -41,7 +41,7 @@ onUnmounted(() => {
   chart = null
 })
 
-watch(() => props.option, render, { deep: true })
+watch(() => props.option, () => nextTick(render), { deep: true })
 </script>
 
 <style scoped>

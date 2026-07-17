@@ -1,13 +1,31 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
-import type { InspectionRecord, InspectionTask, TaskEvent, TaskStatus } from '@/types'
+import type { InspectionRecord, InspectionTask, RouteRevision, TaskEvent, TaskExecution, TaskStartEligibility, TaskStatus } from '@/types'
+import type { RouteDeployment } from '@/types/routeDeployment'
 import { uid } from '@/utils/storage'
+
+export function latestReadyRevision(revisions: RouteRevision[], deployments: RouteDeployment[], robotId: string) {
+  return revisions
+    .filter((revision) => revision.validationReport.valid && deployments.some((deployment) =>
+      deployment.robotId === robotId
+      && deployment.routeRevisionId === revision.id
+      && deployment.state === 'READY_FOR_ROBOT'
+      && deployment.routeContentSha256 === revision.contentSha256
+      && deployment.mapImageSha256 === revision.mapImageSha256,
+    ))
+    .sort((a, b) => b.revisionNo - a.revisionNo)[0]
+}
 
 export const useTaskStore = defineStore('task', () => {
   const tasks = ref<InspectionTask[]>([])
   const records = ref<InspectionRecord[]>([])
   const events = ref<TaskEvent[]>([])
+  const executions = ref<Record<string, TaskExecution>>({})
+  const startEligibility = ref<Record<string, TaskStartEligibility>>({})
+  const controlInFlight = ref<Record<string, boolean>>({})
+  const controlRequestKeys = ref<Record<string, { action: string; key: string }>>({})
+  let executionPollTimer: ReturnType<typeof setInterval> | undefined
 
   async function load() {
     await loadDynamic()
@@ -19,6 +37,81 @@ export const useTaskStore = defineStore('task', () => {
     const taskEvents = await Promise.all(tasks.value.map((task) => resourcesApi.taskEvents(task.id).catch(() => [])))
     events.value = taskEvents.flat()
     records.value = await resourcesApi.listRecords().catch(() => records.value)
+    await refreshExecutions()
+    startExecutionPolling()
+  }
+
+  async function refreshExecution(taskId: string) {
+    const [execution, eligibility] = await Promise.all([
+      resourcesApi.getTaskExecution(taskId).catch(() => null),
+      resourcesApi.getTaskStartEligibility(taskId).catch(() => null),
+    ])
+    if (execution) executions.value = { ...executions.value, [taskId]: execution }
+    if (eligibility) startEligibility.value = { ...startEligibility.value, [taskId]: eligibility }
+    return execution
+  }
+
+  async function refreshExecutions() {
+    await Promise.all(tasks.value.filter((task) => task.executionId).map((task) => refreshExecution(task.id)))
+  }
+
+  function startExecutionPolling() {
+    if (executionPollTimer || !tasks.value.some((task) => task.executionId)) return
+    executionPollTimer = setInterval(() => { void refreshExecutions() }, 2000)
+  }
+
+  function stopExecutionPolling() {
+    if (!executionPollTimer) return
+    clearInterval(executionPollTimer)
+    executionPollTimer = undefined
+  }
+
+  async function startInspection(taskId: string) {
+    const execution = await resourcesApi.startTask(taskId, uid('start'))
+    executions.value = { ...executions.value, [taskId]: execution }
+    await refreshExecution(taskId)
+    startExecutionPolling()
+    return execution
+  }
+
+  async function controlInspection(taskId: string, action: 'PAUSE' | 'RESUME' | 'TAKEOVER' | 'CANCEL', reason?: string) {
+    if (controlInFlight.value[taskId]) return executionFor(taskId)
+    const current = controlRequestKeys.value[taskId]
+    const key = current?.action === action ? current.key : uid('control')
+    controlRequestKeys.value = { ...controlRequestKeys.value, [taskId]: { action, key } }
+    controlInFlight.value = { ...controlInFlight.value, [taskId]: true }
+    try {
+      const execution = await ({
+        PAUSE: () => resourcesApi.pauseTask(taskId, key),
+        RESUME: () => resourcesApi.resumeTask(taskId, key),
+        TAKEOVER: () => resourcesApi.takeoverTask(taskId, reason ?? '', key),
+        CANCEL: () => resourcesApi.cancelTask(taskId, key),
+      }[action])()
+      executions.value = { ...executions.value, [taskId]: execution }
+      await refreshExecution(taskId)
+      startExecutionPolling()
+      return execution
+    } finally {
+      controlInFlight.value = { ...controlInFlight.value, [taskId]: false }
+    }
+  }
+
+  // 兼容其他页面的快捷操作；执行快照仍以轮询的真实事件结果为准。
+  function pause(taskId: string) { void controlInspection(taskId, 'PAUSE') }
+  function resume(taskId: string) { void controlInspection(taskId, 'RESUME') }
+  function takeover(taskId: string) { void controlInspection(taskId, 'TAKEOVER', '页面快捷人工接管') }
+  function cancel(taskId: string) { void controlInspection(taskId, 'CANCEL') }
+
+  function executionFor(taskId: string) {
+    return executions.value[taskId]
+  }
+
+  function eligibilityFor(taskId: string) {
+    return startEligibility.value[taskId]
+  }
+
+  function statusOf(task: InspectionTask): TaskStatus {
+    return executionFor(task.id)?.status ?? task.status
   }
 
   function getEventsByTask(taskId: string) {
@@ -31,7 +124,7 @@ export const useTaskStore = defineStore('task', () => {
     return tasks.value.find((t) => t.id === id)
   }
 
-  function createTask(name: string, routeId: string, robotId: string) {
+  async function createTask(name: string, routeId: string, robotId: string, routeRevisionId: string) {
     const task: InspectionTask = {
       id: uid('task'),
       name,
@@ -41,10 +134,13 @@ export const useTaskStore = defineStore('task', () => {
       progress: 0,
       currentCheckpointSeq: 0,
       createdAt: new Date().toISOString(),
+      routeRevisionId,
     }
-    tasks.value.unshift(task)
-    void resourcesApi.createTask(task).then(updateLocalTask)
-    return task
+    const saved = await resourcesApi.createTask(task)
+    updateLocalTask(saved)
+    if (saved.executionId) await refreshExecution(saved.id)
+    startExecutionPolling()
+    return saved
   }
 
   function updateTask(id: string, patch: Partial<InspectionTask>) {
@@ -83,37 +179,9 @@ export const useTaskStore = defineStore('task', () => {
     void resourcesApi.dispatchTask(id).then(updateLocalTask)
   }
 
-  function pause(id: string) {
-    if (tasks.value.find((t) => t.id === id)?.status === 'RUNNING') {
-      setStatusLocal(id, 'PAUSED')
-      void resourcesApi.pauseTask(id).then(updateLocalTask)
-    }
-  }
-
-  function resume(id: string) {
-    const task = tasks.value.find((t) => t.id === id)
-    if (task && (task.status === 'PAUSED' || task.status === 'MANUAL_TAKEOVER')) {
-      setStatusLocal(id, 'RUNNING')
-      void resourcesApi.resumeTask(id).then(updateLocalTask)
-    }
-  }
-
-  function cancel(id: string) {
-    setStatusLocal(id, 'CANCELLED')
-    void resourcesApi.cancelTask(id).then(updateLocalTask)
-  }
-
-  function takeover(id: string) {
-    const task = tasks.value.find((t) => t.id === id)
-    if (task?.status === 'RUNNING') {
-      setStatusLocal(id, 'MANUAL_TAKEOVER')
-      void resourcesApi.takeoverTask(id).then(updateLocalTask)
-    }
-  }
-
   function getActiveTask() {
     return tasks.value.find((t) =>
-      ['DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER'].includes(t.status),
+      ['DISPATCHED', 'STARTING', 'RUNNING', 'PAUSING', 'PAUSED', 'RESUMING', 'CANCELLING', 'TAKEOVER_PENDING', 'MANUAL_TAKEOVER', 'DISCONNECTED', 'RECOVERING'].includes(statusOf(t)),
     )
   }
 
@@ -150,15 +218,27 @@ export const useTaskStore = defineStore('task', () => {
     tasks,
     records,
     events,
+    executions,
+    startEligibility,
     load,
     loadDynamic,
+    refreshExecution,
+    refreshExecutions,
+    startExecutionPolling,
+    stopExecutionPolling,
+    startInspection,
+    controlInspection,
+    controlInFlight,
+    executionFor,
+    eligibilityFor,
+    statusOf,
     createTask,
     updateTask,
     dispatch,
     pause,
     resume,
-    cancel,
     takeover,
+    cancel,
     getActiveTask,
     getTaskById,
     getEventsByTask,

@@ -21,6 +21,10 @@ public class RouteDeploymentEntity {
   private String state;
   @Column(name = "attempt_no", nullable = false)
   private int attemptNo;
+  @Column(name = "last_attempt_at")
+  private String lastAttemptAt;
+  @Column(name = "next_reconcile_at")
+  private String nextReconcileAt;
   @Column(name = "remote_summary_json", columnDefinition = "LONGTEXT")
   private String remoteSummaryJson;
   @Column(name = "error_code")
@@ -46,6 +50,10 @@ public class RouteDeploymentEntity {
   public void setState(String state) { this.state = state; }
   public int getAttemptNo() { return attemptNo; }
   public void setAttemptNo(int attemptNo) { this.attemptNo = attemptNo; }
+  public String getLastAttemptAt() { return lastAttemptAt; }
+  public void setLastAttemptAt(String lastAttemptAt) { this.lastAttemptAt = lastAttemptAt; }
+  public String getNextReconcileAt() { return nextReconcileAt; }
+  public void setNextReconcileAt(String nextReconcileAt) { this.nextReconcileAt = nextReconcileAt; }
   public String getRemoteSummaryJson() { return remoteSummaryJson; }
   public void setRemoteSummaryJson(String remoteSummaryJson) { this.remoteSummaryJson = remoteSummaryJson; }
   public String getErrorCode() { return errorCode; }
@@ -56,4 +64,5 @@ public class RouteDeploymentEntity {
   public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
   public String getUpdatedAt() { return updatedAt; }
   public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
+  public long getVersion() { return version; }
 }
