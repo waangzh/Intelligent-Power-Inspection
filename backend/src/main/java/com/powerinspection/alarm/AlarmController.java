@@ -1,6 +1,8 @@
 package com.powerinspection.alarm;
 
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.security.CurrentUser;
@@ -39,9 +41,19 @@ public class AlarmController {
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> alarms() {
+  public ApiResponse<PageResult<Map<String, Object>>> alarms(ListQuery query) {
     permissionService.require(currentUser.get(), Permission.TASK_VIEW);
-    return ApiResponse.ok(dataStore.list(DataCategory.ALARM));
+    return ApiResponse.ok(dataStore.page(
+      DataCategory.ALARM, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(),
+      query.filters("siteId", "routeId", "robotId", "status", "severity", "acknowledged", "type")
+    ));
+  }
+
+  @GetMapping("/{id}")
+  public ApiResponse<Map<String, Object>> alarm(@PathVariable String id) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(dataStore.get(DataCategory.ALARM, id));
   }
 
   @PostMapping("/{id}/ack")

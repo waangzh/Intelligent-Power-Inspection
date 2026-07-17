@@ -8,7 +8,7 @@ export const useDetectionStore = defineStore('detection', () => {
   const templates = ref<DetectionTemplate[]>([])
 
   async function load() {
-    templates.value = await resourcesApi.listDetectionTemplates()
+    templates.value = (await resourcesApi.listDetectionTemplates({ size: 50 })).items
   }
 
   function addTemplate(tpl: Omit<DetectionTemplate, 'id' | 'createdAt'>) {

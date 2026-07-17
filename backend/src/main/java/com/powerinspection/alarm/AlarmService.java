@@ -1,5 +1,6 @@
 package com.powerinspection.alarm;
 
+import com.powerinspection.common.ResourceChangeEvent;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.notification.NotificationService;
@@ -69,7 +70,7 @@ public class AlarmService {
   }
 
   private void publish(Map<String, Object> alarm) {
-    messagingTemplate.convertAndSend("/topic/alarms", alarm);
+    messagingTemplate.convertAndSend("/topic/alarms", ResourceChangeEvent.updated("alarm", alarm.get("id")));
   }
 
   private String text(Object value) {

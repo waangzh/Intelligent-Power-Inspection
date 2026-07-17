@@ -9,7 +9,7 @@ export const useNotificationStore = defineStore('notification', () => {
   const unreadCount = computed(() => items.value.filter((n) => !n.read).length)
 
   async function load() {
-    items.value = await resourcesApi.listNotifications()
+    items.value = (await resourcesApi.listNotifications({ size: 30 })).items
   }
 
   function push(

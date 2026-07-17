@@ -22,6 +22,10 @@ const task: InspectionTask = {
   routeContentSha256: 'a'.repeat(64), mapImageSha256: 'b'.repeat(64),
 }
 
+function taskPage(items: InspectionTask[]) {
+  return { items, total: items.length, page: 0, size: 50, hasMore: false }
+}
+
 function execution(status: TaskExecution['status'] = 'STARTING'): TaskExecution {
   return {
     taskId: 'task-1', executionId: 'exec-1', routeRevisionId: 'rev-1', robotId: 'robot-1', deploymentId: 'dep-1', executorRouteId: 'route-1',
@@ -39,7 +43,7 @@ describe('任务执行轮询与启动状态', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    vi.mocked(resourcesApi.listTasks).mockResolvedValue([task])
+    vi.mocked(resourcesApi.listTasks).mockResolvedValue(taskPage([task]))
     vi.mocked(resourcesApi.taskEvents).mockResolvedValue([])
     vi.mocked(resourcesApi.listRecords).mockResolvedValue([])
     vi.mocked(resourcesApi.getTaskExecution).mockResolvedValue(execution())
@@ -51,6 +55,7 @@ describe('任务执行轮询与启动状态', () => {
     vi.mocked(resourcesApi.startTask).mockResolvedValue(execution('STARTING'))
 
     await store.loadDynamic()
+    await store.refreshExecution('task-1')
     await store.startInspection('task-1')
 
     expect(resourcesApi.startTask).toHaveBeenCalledWith('task-1', expect.any(String))
@@ -63,6 +68,7 @@ describe('任务执行轮询与启动状态', () => {
     const store = useTaskStore()
 
     await store.loadDynamic()
+    await store.refreshExecution('task-1')
 
     expect(store.eligibilityFor('task-1')?.eligible).toBe(false)
     expect(store.eligibilityFor('task-1')?.ineligibleReason).toContain(DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT)
@@ -70,7 +76,7 @@ describe('任务执行轮询与启动状态', () => {
   })
 
   it('不轮询未绑定执行快照的模拟任务', async () => {
-    vi.mocked(resourcesApi.listTasks).mockResolvedValue([{ ...task, executionId: undefined, routeRevisionId: undefined }])
+    vi.mocked(resourcesApi.listTasks).mockResolvedValue(taskPage([{ ...task, executionId: undefined, routeRevisionId: undefined }]))
     const store = useTaskStore()
 
     await store.loadDynamic()

@@ -3,6 +3,8 @@ package com.powerinspection.workorder;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.common.Ids;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.notification.NotificationService;
@@ -49,9 +51,12 @@ public class WorkOrderController {
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> orders() {
+  public ApiResponse<PageResult<Map<String, Object>>> orders(ListQuery query) {
     permissionService.require(currentUser.get(), Permission.WORKORDER_VIEW);
-    return ApiResponse.ok(dataStore.list(DataCategory.WORK_ORDER));
+    return ApiResponse.ok(dataStore.page(
+      DataCategory.WORK_ORDER, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(), query.filters("status", "siteId", "type")
+    ));
   }
 
   @GetMapping("/{id}")

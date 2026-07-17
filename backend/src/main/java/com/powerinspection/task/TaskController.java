@@ -1,6 +1,8 @@
 package com.powerinspection.task;
 
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
@@ -37,9 +39,9 @@ public class TaskController {
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> tasks() {
+  public ApiResponse<PageResult<Map<String, Object>>> tasks(ListQuery query) {
     permissionService.require(currentUser.get(), Permission.TASK_VIEW);
-    return ApiResponse.ok(taskService.tasks());
+    return ApiResponse.ok(taskService.tasks(query));
   }
 
   @GetMapping("/active")

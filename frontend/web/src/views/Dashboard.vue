@@ -102,7 +102,7 @@
       <el-col :xs="24" :lg="11">
         <el-card shadow="never" class="trend-card">
           <template #header>
-            <div class="card-head"><span>近 7 日告警趋势</span><el-tag type="warning" effect="light">本周告警 {{ alarmStore.alarms.length }} 条</el-tag></div>
+            <div class="card-head"><span>近 7 日告警趋势</span><el-tag type="warning" effect="light">告警总计 {{ overview?.counts.alarms ?? 0 }} 条</el-tag></div>
           </template>
           <ChartCard :option="alarmChart" :height="210" />
         </el-card>
@@ -151,13 +151,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { resourcesApi } from '@/api/resources'
 import ChartCard from '@/components/ChartCard.vue'
 import Map2D from '@/components/Map2D.vue'
 import TaskStatusTag from '@/components/TaskStatusTag.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
-import { useAnalytics } from '@/composables/useAnalytics'
 import { usePermission } from '@/composables/usePermission'
 import { useAlarmStore } from '@/stores/alarm'
 import { useAuthStore } from '@/stores/auth'
@@ -165,21 +165,26 @@ import { useRobotStore } from '@/stores/robot'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
+import { setPageRealtimeResources } from '@/stores/bootstrap'
 import type { Robot } from '@/types'
+import type { DashboardOverview } from '@/types/pagination'
 import { nav2StatusLabel, patrolStateLabel } from '@/utils/robotStatus'
 
 const router = useRouter()
 const { can } = usePermission()
 const authStore = useAuthStore()
-const { weeklyAlarmCounts, completionRate } = useAnalytics()
 const siteStore = useSiteStore()
 const routeStore = useRouteStore()
 const taskStore = useTaskStore()
 const robotStore = useRobotStore()
 const alarmStore = useAlarmStore()
+const overview = ref<DashboardOverview | null>(null)
+let refreshTimer: ReturnType<typeof setTimeout> | undefined
 const statIcons = ['OfficeBuilding', 'MapLocation', 'Tickets', 'Bell']
-const completedTaskCount = computed(() => taskStore.tasks.filter((task) => task.status === 'COMPLETED').length)
-const totalTaskCount = computed(() => taskStore.tasks.length)
+const completedTaskCount = computed(() => overview.value?.counts.completedTasks ?? 0)
+const totalTaskCount = computed(() => overview.value?.counts.tasks ?? 0)
+const completionRate = computed(() => overview.value?.rates.taskCompletion ?? 0)
+const weeklyAlarmCounts = computed(() => overview.value?.weeklyAlarmCounts ?? Array(7).fill(0))
 
 const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
 watch(
@@ -191,6 +196,12 @@ watch(
   },
   { immediate: true },
 )
+watch(selectedSiteId, (siteId) => {
+  if (!siteId) return
+  void resourcesApi.listAreas({ siteId, size: 100 }).then((page) => {
+    siteStore.areas = page.items
+  })
+}, { immediate: true })
 const activeSite = computed(() => siteStore.getSiteById(selectedSiteId.value))
 const displayRoute = computed(() => {
   const active = taskStore.getActiveTask()
@@ -210,10 +221,10 @@ const greeting = computed(() => {
 })
 
 const stats = computed(() => [
-  { label: '站点数量', value: siteStore.sites.length, trend: `覆盖 ${siteStore.sites.length} 座变电站`, up: true },
-  { label: '巡检路线', value: routeStore.routes.length, trend: `共 ${routeStore.routes.length} 条路线`, up: true },
-  { label: '进行中任务', value: taskStore.tasks.filter((t) => ['RUNNING', 'PAUSED', 'MANUAL_TAKEOVER'].includes(t.status)).length, trend: '实时更新', up: true },
-  { label: '未确认告警', value: alarmStore.unacknowledgedCount, trend: alarmStore.unacknowledgedCount ? '需及时处理' : '暂无待处理', up: !alarmStore.unacknowledgedCount },
+  { label: '站点数量', value: overview.value?.counts.sites ?? 0, trend: `覆盖 ${overview.value?.counts.sites ?? 0} 座变电站`, up: true },
+  { label: '巡检路线', value: overview.value?.counts.routes ?? 0, trend: `共 ${overview.value?.counts.routes ?? 0} 条路线`, up: true },
+  { label: '进行中任务', value: overview.value?.counts.activeTasks ?? 0, trend: '实时更新', up: true },
+  { label: '未确认告警', value: overview.value?.counts.unacknowledgedAlarms ?? 0, trend: (overview.value?.counts.unacknowledgedAlarms ?? 0) ? '需及时处理' : '暂无待处理', up: !(overview.value?.counts.unacknowledgedAlarms ?? 0) },
 ])
 
 const schedule = computed(() => {
@@ -265,31 +276,43 @@ const healthChart = computed(() => ({
     type: 'bar',
     barWidth: 34,
     data: ['CRITICAL', 'HIGH', 'MEDIUM'].map((severity, index) => ({
-      value: alarmStore.alarms.filter((alarm) => alarm.severity === severity).length,
+      value: overview.value?.alarmSeverity[severity as keyof DashboardOverview['alarmSeverity']] ?? 0,
       itemStyle: { color: ['#1768f2', '#12b76a', '#ff7a00'][index], borderRadius: [4, 4, 0, 0] },
     })),
     label: { show: true, position: 'top', color: '#315272', fontWeight: 700 },
   }],
 }))
 
-const robotOnlineRate = computed(() => {
-  if (!robotStore.robots.length) return 0
-  return Math.round((robotStore.robots.filter((robot) => robot.status !== 'OFFLINE').length / robotStore.robots.length) * 100)
-})
-
-const alarmHandledRate = computed(() => {
-  if (!alarmStore.alarms.length) return 100
-  return Math.round((alarmStore.alarms.filter((alarm) => alarm.acknowledged).length / alarmStore.alarms.length) * 100)
-})
+const robotOnlineRate = computed(() => overview.value?.rates.robotOnline ?? 0)
+const alarmHandledRate = computed(() => overview.value?.rates.alarmHandled ?? 100)
 
 function robotName(id: string) {
   return robotStore.getRobotById(id)?.name ?? id
 }
 
-const recentAlarms = computed(() => alarmStore.alarms.slice(0, 5))
-const activeTasks = computed(() =>
-  taskStore.tasks.filter((t) => ['DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER'].includes(t.status)),
-)
+const recentAlarms = computed(() => overview.value?.recentAlarms ?? [])
+const activeTasks = computed(() => overview.value?.activeTaskItems ?? [])
+
+async function loadOverview() {
+  const data = await resourcesApi.getDashboardOverview()
+  overview.value = data
+  siteStore.sites = data.siteItems
+  robotStore.robots = data.robotItems
+  taskStore.tasks = data.activeTaskItems
+  alarmStore.alarms = data.recentAlarms
+  const routeIds = [...new Set(data.activeTaskItems.map((task) => task.routeId))]
+  await Promise.allSettled(routeIds.map((id) => routeStore.loadOne(id)))
+}
+
+function scheduleOverviewRefresh() {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => { void loadOverview() }, 300)
+}
+
+onMounted(async () => {
+  await loadOverview()
+  setPageRealtimeResources(['task', 'robot', 'alarm'], scheduleOverviewRefresh)
+})
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString('zh-CN')

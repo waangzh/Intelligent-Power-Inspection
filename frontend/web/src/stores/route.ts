@@ -26,8 +26,14 @@ function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
 export const useRouteStore = defineStore('route', () => {
   const routes = shallowRef<Route[]>([])
 
-  async function load() {
-    routes.value = await resourcesApi.listRoutes()
+  async function load(siteId?: string) {
+    routes.value = (await resourcesApi.listRoutes({ size: 50, siteId })).items
+  }
+
+  async function loadOne(id: string) {
+    const route = await resourcesApi.getRoute(id)
+    updateLocalRoute(route)
+    return route
   }
 
   async function createRoute(siteId: string, name: string, description = '') {
@@ -148,6 +154,7 @@ export const useRouteStore = defineStore('route', () => {
   function updateLocalRoute(route: Route) {
     const idx = routes.value.findIndex((r) => r.id === route.id)
     if (idx >= 0) routes.value = routes.value.map((item) => (item.id === route.id ? route : item))
+    else routes.value = [route, ...routes.value]
   }
 
   function updateLocalCheckpoint(routeId: string, checkpoint: Checkpoint) {
@@ -162,6 +169,7 @@ export const useRouteStore = defineStore('route', () => {
   return {
     routes,
     load,
+    loadOne,
     createRoute,
     updateRoute,
     removeRoute,

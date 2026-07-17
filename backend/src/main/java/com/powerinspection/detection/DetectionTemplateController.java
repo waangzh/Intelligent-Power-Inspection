@@ -2,6 +2,8 @@ package com.powerinspection.detection;
 
 import com.powerinspection.business.CrudSupport;
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.security.CurrentUser;
@@ -31,8 +33,9 @@ public class DetectionTemplateController extends CrudSupport {
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> templates() {
-    return ApiResponse.ok(list(DataCategory.DETECTION_TEMPLATE));
+  public ApiResponse<PageResult<Map<String, Object>>> templates(ListQuery query) {
+    permissionService.require(currentUser.get(), Permission.DETECTION_MANAGE);
+    return ApiResponse.ok(page(DataCategory.DETECTION_TEMPLATE, query, "type", "enabled"));
   }
 
   @GetMapping("/{id}")

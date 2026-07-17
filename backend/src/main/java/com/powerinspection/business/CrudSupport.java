@@ -1,6 +1,8 @@
 package com.powerinspection.business;
 
 import com.powerinspection.common.Ids;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataStoreService;
 import java.time.Instant;
 import java.util.List;
@@ -15,6 +17,13 @@ public abstract class CrudSupport {
 
   protected List<Map<String, Object>> list(String category) {
     return dataStore.list(category);
+  }
+
+  protected PageResult<Map<String, Object>> page(String category, ListQuery query, String... filters) {
+    return dataStore.page(
+      category, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(), query.filters(filters)
+    );
   }
 
   protected Map<String, Object> create(String category, String prefix, Map<String, Object> body) {

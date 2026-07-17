@@ -49,7 +49,7 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
   }))
 
   async function load() {
-    const raw = await resourcesApi.listWorkOrders()
+    const raw = (await resourcesApi.listWorkOrders({ size: 50 })).items
     const normalized = raw.map(normalizeWorkOrder)
     orders.value = normalized
 

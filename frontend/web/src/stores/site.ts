@@ -8,10 +8,19 @@ export const useSiteStore = defineStore('site', () => {
   const sites = ref<Site[]>([])
   const areas = ref<Area[]>([])
 
-  async function load() {
-    const [remoteSites, remoteAreas] = await Promise.all([resourcesApi.listSites(), resourcesApi.listAreas()])
-    sites.value = remoteSites
-    areas.value = remoteAreas
+  async function load(siteId?: string) {
+    const [remoteSites, remoteAreas] = await Promise.all([
+      resourcesApi.listSites({ size: 50 }),
+      resourcesApi.listAreas({ size: 100, siteId }),
+    ])
+    sites.value = remoteSites.items
+    areas.value = remoteAreas.items
+  }
+
+  async function loadOne(id: string) {
+    const site = await resourcesApi.getSite(id)
+    updateLocalSite(site)
+    return site
   }
 
   function addSite(site: Omit<Site, 'id' | 'createdAt'>) {
@@ -62,6 +71,7 @@ export const useSiteStore = defineStore('site', () => {
   function updateLocalSite(site: Site) {
     const idx = sites.value.findIndex((s) => s.id === site.id)
     if (idx >= 0) sites.value[idx] = site
+    else sites.value.unshift(site)
   }
 
   function updateLocalArea(area: Area) {
@@ -73,6 +83,7 @@ export const useSiteStore = defineStore('site', () => {
     sites,
     areas,
     load,
+    loadOne,
     addSite,
     updateSite,
     removeSite,

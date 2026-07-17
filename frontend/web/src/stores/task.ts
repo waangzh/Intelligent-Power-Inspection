@@ -33,12 +33,15 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function loadDynamic() {
-    tasks.value = await resourcesApi.listTasks()
-    const taskEvents = await Promise.all(tasks.value.map((task) => resourcesApi.taskEvents(task.id).catch(() => [])))
-    events.value = taskEvents.flat()
-    records.value = await resourcesApi.listRecords().catch(() => records.value)
-    await refreshExecutions()
+    tasks.value = (await resourcesApi.listTasks({ size: 50 })).items
+  }
+
+  async function loadOne(taskId: string) {
+    const task = await resourcesApi.getTask(taskId)
+    updateLocalTask(task)
+    await Promise.allSettled([refreshEvents(taskId), refreshExecution(taskId)])
     startExecutionPolling()
+    return task
   }
 
   async function refreshExecution(taskId: string) {
@@ -198,6 +201,10 @@ export const useTaskStore = defineStore('task', () => {
     ]
   }
 
+  async function refreshEvents(taskId: string) {
+    replaceEvents(taskId, await resourcesApi.taskEvents(taskId))
+  }
+
   function applyRemoteTaskEvent(event: TaskEvent) {
     const idx = events.value.findIndex((item) => item.id === event.id)
     if (idx >= 0) events.value[idx] = event
@@ -206,12 +213,6 @@ export const useTaskStore = defineStore('task', () => {
 
   function applyRemoteTask(task: InspectionTask) {
     updateLocalTask(task)
-    void resourcesApi.taskEvents(task.id).then((nextEvents) => replaceEvents(task.id, nextEvents))
-    if (task.status === 'COMPLETED') {
-      void resourcesApi.listRecords().then((nextRecords) => {
-        records.value = nextRecords
-      })
-    }
   }
 
   return {
@@ -222,6 +223,7 @@ export const useTaskStore = defineStore('task', () => {
     startEligibility,
     load,
     loadDynamic,
+    loadOne,
     refreshExecution,
     refreshExecutions,
     startExecutionPolling,
@@ -242,6 +244,7 @@ export const useTaskStore = defineStore('task', () => {
     getActiveTask,
     getTaskById,
     getEventsByTask,
+    refreshEvents,
     applyRemoteTask,
     applyRemoteTaskEvent,
   }

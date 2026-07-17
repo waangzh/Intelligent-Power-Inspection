@@ -31,7 +31,7 @@ export const useAlarmStore = defineStore('alarm', () => {
   const unacknowledgedCount = computed(() => alarms.value.filter((a) => !a.acknowledged).length)
 
   async function load() {
-    alarms.value = await resourcesApi.listAlarms()
+    alarms.value = (await resourcesApi.listAlarms({ size: 50 })).items
     try {
       workOrderPolicy.value = await resourcesApi.getAlarmWorkOrderPolicy()
     } catch {

@@ -7,8 +7,14 @@ import { uid } from '@/utils/storage'
 export const useRobotStore = defineStore('robot', () => {
   const robots = ref<Robot[]>([])
 
-  async function load() {
-    robots.value = await resourcesApi.listRobots()
+  async function load(siteId?: string) {
+    robots.value = (await resourcesApi.listRobots({ size: 50, siteId })).items
+  }
+
+  async function loadOne(id: string) {
+    const robot = await resourcesApi.getRobot(id)
+    updateLocalRobot(robot)
+    return robot
   }
 
   function updateRobot(id: string, patch: Partial<Robot>) {
@@ -45,5 +51,5 @@ export const useRobotStore = defineStore('robot', () => {
     else robots.value.unshift(robot)
   }
 
-  return { robots, load, updateRobot, setPosition, getRobotById, addRobot, removeRobot, applyRemoteRobot: updateLocalRobot }
+  return { robots, load, loadOne, updateRobot, setPosition, getRobotById, addRobot, removeRobot, applyRemoteRobot: updateLocalRobot }
 })

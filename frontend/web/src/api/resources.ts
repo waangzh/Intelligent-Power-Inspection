@@ -40,17 +40,21 @@ import type { WorkOrder, WorkOrderReviewInput, WorkOrderStatus } from '@/types/w
 import type { Site } from '@/types'
 import type { RobotHeartbeatStatus, RobotHeartbeatStatusPage, RobotHeartbeatStatusQuery } from '@/types/robotHeartbeat'
 import { buildMapAssetQuery } from '@/utils/mapAssetReview'
+import type { DashboardOverview, ListQuery, PageResult } from '@/types/pagination'
+import { listQueryString } from '@/types/pagination'
 
 export const resourcesApi = {
-  listSites: () => http.get<Site[]>('/sites'),
+  listSites: (query: ListQuery = {}) => http.get<PageResult<Site>>(`/sites${listQueryString(query)}`),
+  getSite: (id: string) => http.get<Site>(`/sites/${encodeURIComponent(id)}`),
   createSite: (site: Site) => http.post<Site>('/sites', site),
   updateSite: (id: string, patch: Partial<Site>) => http.patch<Site>(`/sites/${id}`, patch),
   removeSite: (id: string) => http.delete<void>(`/sites/${id}`),
-  listAreas: () => http.get<Area[]>('/sites/areas'),
+  listAreas: (query: ListQuery = {}) => http.get<PageResult<Area>>(`/sites/areas${listQueryString(query)}`),
   createArea: (area: Area) => http.post<Area>(`/sites/${area.siteId}/areas`, area),
   removeArea: (id: string) => http.delete<void>(`/sites/areas/${id}`),
 
-  listRoutes: () => http.get<Route[]>('/routes'),
+  listRoutes: (query: ListQuery = {}) => http.get<PageResult<Route>>(`/routes${listQueryString(query)}`),
+  getRoute: (id: string) => http.get<Route>(`/routes/${encodeURIComponent(id)}`),
   createRoute: (route: Route) => http.post<Route>('/routes', route),
   updateRoute: (id: string, patch: Partial<Route>) => http.patch<Route>(`/routes/${id}`, patch),
   removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
@@ -84,7 +88,8 @@ export const resourcesApi = {
   reviewMapAsset: (id: string, input: MapAssetReviewInput) =>
     http.post<MapAsset>(`/map-assets/${encodeURIComponent(id)}/review`, input),
 
-  listTasks: () => http.get<InspectionTask[]>('/tasks'),
+  listTasks: (query: ListQuery = {}) => http.get<PageResult<InspectionTask>>(`/tasks${listQueryString(query)}`),
+  getTask: (id: string) => http.get<InspectionTask>(`/tasks/${encodeURIComponent(id)}`),
   createTask: (task: InspectionTask) => http.post<InspectionTask>('/tasks', task),
   dispatchTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/dispatch`),
   getTaskExecution: (id: string) => http.get<TaskExecution>(`/tasks/${encodeURIComponent(id)}/execution`),
@@ -103,7 +108,8 @@ export const resourcesApi = {
   listRecords: () => http.get<InspectionRecord[]>('/records'),
   exportRecords: () => http.post<Blob>('/records/export'),
 
-  listAlarms: () => http.get<Alarm[]>('/alarms'),
+  listAlarms: (query: ListQuery = {}) => http.get<PageResult<Alarm>>(`/alarms${listQueryString(query)}`),
+  getAlarm: (id: string) => http.get<Alarm>(`/alarms/${encodeURIComponent(id)}`),
   acknowledgeAlarm: (id: string) => http.post<Alarm>(`/alarms/${id}/ack`),
   acknowledgeAllAlarms: () => http.post<Alarm[]>('/alarms/ack-all'),
   getAlarmWorkOrderPolicy: () => http.get<AlarmWorkOrderPolicy>('/alarms/work-order-policy'),
@@ -111,7 +117,8 @@ export const resourcesApi = {
     http.put<AlarmWorkOrderPolicy>('/alarms/work-order-policy', policy),
   retryAlarmWorkOrder: (id: string) => http.post<Alarm>(`/alarms/${id}/retry-work-order`),
 
-  listWorkOrders: () => http.get<WorkOrder[]>('/work-orders'),
+  listWorkOrders: (query: ListQuery = {}) => http.get<PageResult<WorkOrder>>(`/work-orders${listQueryString(query)}`),
+  getWorkOrder: (id: string) => http.get<WorkOrder>(`/work-orders/${encodeURIComponent(id)}`),
   createWorkOrderFromAlarm: (alarmId: string) =>
     http.post<WorkOrder>(`/work-orders/from-alarm/${alarmId}`, {}),
   claimWorkOrder: (id: string) => http.post<WorkOrder>(`/work-orders/${id}/claim`),
@@ -121,7 +128,8 @@ export const resourcesApi = {
     extra?: { resolution?: string; review?: WorkOrderReviewInput },
   ) => http.patch<WorkOrder>(`/work-orders/${id}/status`, { status, ...extra }),
 
-  listRobots: () => http.get<Robot[]>('/robots'),
+  listRobots: (query: ListQuery = {}) => http.get<PageResult<Robot>>(`/robots${listQueryString(query)}`),
+  getRobot: (id: string) => http.get<Robot>(`/robots/${encodeURIComponent(id)}`),
   createRobot: (robot: Robot) => http.post<Robot>('/robots', robot),
   updateRobot: (id: string, patch: Partial<Robot>) => http.patch<Robot>(`/robots/${id}`, patch),
   removeRobot: (id: string) => http.delete<void>(`/robots/${id}`),
@@ -135,14 +143,16 @@ export const resourcesApi = {
   },
   getRobotHeartbeatStatus: (robotId: string) => http.get<RobotHeartbeatStatus>(`/robots/${encodeURIComponent(robotId)}/status`),
 
-  listDetectionTemplates: () => http.get<DetectionTemplate[]>('/detection-templates'),
+  listDetectionTemplates: (query: ListQuery = {}) => http.get<PageResult<DetectionTemplate>>(`/detection-templates${listQueryString(query)}`),
+  getDetectionTemplate: (id: string) => http.get<DetectionTemplate>(`/detection-templates/${encodeURIComponent(id)}`),
   createDetectionTemplate: (template: DetectionTemplate) =>
     http.post<DetectionTemplate>('/detection-templates', template),
   removeDetectionTemplate: (id: string) => http.delete<void>(`/detection-templates/${id}`),
   manualLocateDetection: (form: FormData) => http.postForm<ManualDetectionResponse>(`/detections/manual`, form),
   getManualLocateDetection: (requestId: string) => http.get<ManualDetectionResponse>(`/detections/manual/${requestId}`),
 
-  listNotifications: () => http.get<AppNotification[]>('/notifications'),
+  listNotifications: (query: ListQuery = {}) => http.get<PageResult<AppNotification>>(`/notifications${listQueryString(query)}`),
+  getNotification: (id: string) => http.get<AppNotification>(`/notifications/${encodeURIComponent(id)}`),
   markNotificationRead: (id: string) => http.patch<AppNotification>(`/notifications/${id}/read`),
   markAllNotificationsRead: () => http.patch<AppNotification[]>('/notifications/read-all'),
   removeNotification: (id: string) => http.delete<void>(`/notifications/${id}`),
@@ -162,6 +172,8 @@ export const resourcesApi = {
     read: false,
     createdAt: new Date().toISOString(),
   }),
+
+  getDashboardOverview: () => http.get<DashboardOverview>('/dashboard/overview'),
 
   listAgentSessions: () => http.get<AgentSession[]>('/agents/sessions'),
   createAgentSession: (body: CreateAgentSessionRequest) => http.post<AgentSession>('/agents/sessions', body),

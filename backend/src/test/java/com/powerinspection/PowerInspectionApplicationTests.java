@@ -120,7 +120,8 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/sites").header("Authorization", bearer(token)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].id").exists());
+      .andExpect(jsonPath("$.data.items[0].id").exists())
+      .andExpect(jsonPath("$.data.total", greaterThanOrEqualTo(1)));
 
     String body = """
       {
@@ -403,7 +404,7 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/alarms").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
+      .andExpect(jsonPath("$.data.items.length()", greaterThanOrEqualTo(1)));
 
     mockMvc.perform(post("/api/v1/alarms/alarm_flow_001/ack").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
@@ -480,7 +481,7 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/notifications").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
+      .andExpect(jsonPath("$.data.items.length()", greaterThanOrEqualTo(1)));
 
     mockMvc.perform(patch("/api/v1/notifications/ntf_flow_admin/read").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
