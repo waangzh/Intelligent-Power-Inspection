@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class DetectionPrompt(BaseModel):
     type: str
+    displayLabel: str | None = None
     prompt: str | None = None
     threshold: float | None = 0.75
 
@@ -35,5 +36,6 @@ class LocateCheckpointResponse(BaseModel):
     provider: str = "locate-anything"
     modelVersion: str = "mock-locate-anything"
     status: Literal["SUCCEEDED", "FAILED"] = "SUCCEEDED"
+    resultImageUrl: str | None = None
     findings: list[LocateFinding] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

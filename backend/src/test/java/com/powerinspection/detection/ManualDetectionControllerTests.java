@@ -1,8 +1,10 @@
 package com.powerinspection.detection;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -13,10 +15,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.model.LocateAnythingFinding;
 import com.powerinspection.model.LocateAnythingGateway;
+import com.powerinspection.model.LocateAnythingRequest;
+import com.powerinspection.model.LocateAnythingResult;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,7 +35,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 @ActiveProfiles("test")
-@SpringBootTest
+@SpringBootTest(properties = "app.model.locate-anything.input-file-base-url=http://127.0.0.1:18080/model-files/")
 @AutoConfigureMockMvc
 class ManualDetectionControllerTests {
   @Autowired
@@ -41,21 +49,21 @@ class ManualDetectionControllerTests {
 
   @Test
   void manualDetectionUploadsImageAndReturnsAsyncJobThenModelFindings() throws Exception {
-    given(locateAnythingGateway.detectCheckpoint(any())).willReturn(List.of(new LocateAnythingFinding(
+    given(locateAnythingGateway.detectCheckpoint(any())).willReturn(new LocateAnythingResult(List.of(new LocateAnythingFinding(
       "SWITCH",
       "红色刀闸开关",
       0.88,
       List.of(12, 20, 120, 160),
       "abnormal",
-      "http://127.0.0.1:9001/files/annotated/manual_0.jpg",
+      null,
       Map.of("rawAnswer", "<box><100><100><500><500></box>")
-    )));
+    )), List.of("模型输出已截断"), null));
 
     MockMultipartFile image = new MockMultipartFile(
       "image",
       "switch.jpg",
       MediaType.IMAGE_JPEG_VALUE,
-      new byte[] {1, 2, 3, 4}
+      testImage()
     );
     MockMultipartFile detections = new MockMultipartFile(
       "detections",
@@ -76,16 +84,33 @@ class ManualDetectionControllerTests {
       .andReturn()
       .getResponse()
       .getContentAsString(StandardCharsets.UTF_8);
-    String requestId = objectMapper.readTree(created).path("data").path("requestId").asText();
+    JsonNode createdData = objectMapper.readTree(created).path("data");
+    String requestId = createdData.path("requestId").asText();
+    assertThat(createdData.path("inputImageUrl").asText()).doesNotContain("127.0.0.1:18080");
 
     JsonNode finished = awaitJob(requestId, token);
+    ArgumentCaptor<LocateAnythingRequest> requestCaptor = ArgumentCaptor.forClass(LocateAnythingRequest.class);
+    verify(locateAnythingGateway).detectCheckpoint(requestCaptor.capture());
+    LocateAnythingRequest modelRequest = requestCaptor.getValue();
+    assertThat(modelRequest.imageUrl())
+      .startsWith("http://127.0.0.1:18080/model-files/locate-anything/uploads/");
+    assertThat(modelRequest.imageWidth()).isEqualTo(4);
+    assertThat(modelRequest.imageHeight()).isEqualTo(3);
     mockMvc.perform(get("/api/v1/detections/manual/" + requestId).header("Authorization", bearer(token)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("SUCCEEDED"))
-      .andExpect(jsonPath("$.data.resultImageUrl").value("http://127.0.0.1:9001/files/annotated/manual_0.jpg"))
+      .andExpect(jsonPath("$.data.inputImageUrl", containsString("/model-files/locate-anything/uploads/")))
       .andExpect(jsonPath("$.data.findings[0].type").value("SWITCH"))
-      .andExpect(jsonPath("$.data.findings[0].bbox[0]").value(12));
-    org.assertj.core.api.Assertions.assertThat(finished.path("status").asText()).isEqualTo("SUCCEEDED");
+      .andExpect(jsonPath("$.data.findings[0].bbox[0]").value(12))
+      .andExpect(jsonPath("$.data.warnings[0]").value("模型输出已截断"));
+    assertThat(finished.path("status").asText()).isEqualTo("SUCCEEDED");
+  }
+
+  private byte[] testImage() throws Exception {
+    BufferedImage image = new BufferedImage(4, 3, BufferedImage.TYPE_INT_RGB);
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    ImageIO.write(image, "jpg", output);
+    return output.toByteArray();
   }
 
   private JsonNode awaitJob(String requestId, String token) throws Exception {

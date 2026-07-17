@@ -13,15 +13,13 @@ public class MockLocateAnythingGateway implements LocateAnythingGateway {
   private final Random random = new Random();
 
   @Override
-  public List<LocateAnythingFinding> detectCheckpoint(LocateAnythingRequest request) {
+  public LocateAnythingResult detectCheckpoint(LocateAnythingRequest request) {
     if (random.nextDouble() > 0.55 || request.detections() == null) {
-      return List.of();
+      return new LocateAnythingResult(List.of(), List.of(), null);
     }
-    List<Map<String, Object>> enabled = request.detections().stream()
-      .filter(item -> Boolean.TRUE.equals(item.get("enabled")))
-      .toList();
+    List<Map<String, Object>> enabled = DetectionItems.enabled(request.detections());
     if (enabled.isEmpty()) {
-      return List.of();
+      return new LocateAnythingResult(List.of(), List.of(), null);
     }
 
     Map<String, Object> detection = enabled.get(random.nextInt(enabled.size()));
@@ -34,15 +32,15 @@ public class MockLocateAnythingGateway implements LocateAnythingGateway {
     rawResult.put("model", "LocateAnything");
     rawResult.put("inputImageUrl", request.imageUrl());
 
-    return List.of(new LocateAnythingFinding(
+    return new LocateAnythingResult(List.of(new LocateAnythingFinding(
       type,
       prompt,
       0.75 + random.nextDouble() * 0.2,
       List.of(80, 60, 320, 220),
-      "abnormal",
+      text(detection.get("displayLabel")),
       imageUrl,
       rawResult
-    ));
+    )), List.of(), imageUrl);
   }
 
   private String text(Object value) {

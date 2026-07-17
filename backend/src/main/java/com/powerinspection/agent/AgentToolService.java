@@ -6,6 +6,8 @@ import com.powerinspection.data.DataStoreService;
 import com.powerinspection.model.LocateAnythingFinding;
 import com.powerinspection.model.LocateAnythingGateway;
 import com.powerinspection.model.LocateAnythingRequest;
+import com.powerinspection.model.LocateAnythingResult;
+import com.powerinspection.model.DetectionItems;
 import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.notification.NotificationService;
 import com.powerinspection.user.UserEntity;
@@ -132,9 +134,10 @@ public class AgentToolService {
       }
       LocateRequestParts parts = locateRequestParts(taskContext, alarm);
       try {
-        List<LocateAnythingFinding> findings = locateAnythingGateway.detectCheckpoint(
-          new LocateAnythingRequest(parts.task(), parts.route(), parts.checkpoint(), imageUrl, parts.detections())
+        LocateAnythingResult result = locateAnythingGateway.detectCheckpoint(
+          new LocateAnythingRequest(parts.task(), parts.route(), parts.checkpoint(), imageUrl, null, null, parts.detections())
         );
+        List<LocateAnythingFinding> findings = result.findings();
         if (findings.isEmpty()) {
           items.add(map(
             "title", "LocateAnything 未发现新增异常",
@@ -217,7 +220,7 @@ public class AgentToolService {
       checkpoint = map("id", "agent_checkpoint", "name", firstText(alarm.get("checkpointName"), "Alarm Image"));
     }
     List<Map<String, Object>> detections = checkpoint.get("detections") instanceof List<?> list
-      ? (List<Map<String, Object>>) list
+      ? DetectionItems.enabled((List<Map<String, Object>>) list)
       : List.of(map("type", firstText(alarm.get("type"), "FOREIGN_OBJECT"), "prompt", text(alarm.get("message")), "threshold", 0.75, "enabled", true));
     return new LocateRequestParts(task, route, checkpoint, detections);
   }

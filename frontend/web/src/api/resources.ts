@@ -146,8 +146,10 @@ export const resourcesApi = {
 
   listDetectionTemplates: (query: ListQuery = {}) => http.get<PageResult<DetectionTemplate>>(`/detection-templates${listQueryString(query)}`),
   getDetectionTemplate: (id: string) => http.get<DetectionTemplate>(`/detection-templates/${encodeURIComponent(id)}`),
-  createDetectionTemplate: (template: DetectionTemplate) =>
+  createDetectionTemplate: (template: Omit<DetectionTemplate, 'id' | 'createdAt'>) =>
     http.post<DetectionTemplate>('/detection-templates', template),
+  updateDetectionTemplate: (id: string, patch: Partial<DetectionTemplate>) =>
+    http.patch<DetectionTemplate>(`/detection-templates/${id}`, patch),
   removeDetectionTemplate: (id: string) => http.delete<void>(`/detection-templates/${id}`),
   manualLocateDetection: (form: FormData) => http.postForm<ManualDetectionResponse>(`/detections/manual`, form),
   getManualLocateDetection: (requestId: string) => http.get<ManualDetectionResponse>(`/detections/manual/${requestId}`),

@@ -6,7 +6,7 @@
       :breadcrumbs="[{ label: '资产感知' }, { label: '检测策略' }]"
     >
       <template #actions>
-        <el-button v-if="can('detection:manage')" type="primary" @click="dialogVisible = true">
+        <el-button v-if="can('detection:manage')" type="primary" @click="openCreateTemplate">
           <el-icon><Plus /></el-icon>
           新建模板
         </el-button>
@@ -75,31 +75,38 @@
               show-icon
               :closable="false"
             />
+            <el-alert
+              v-for="(warning, index) in manualResult.warnings"
+              :key="`${index}:${warning}`"
+              :title="warning"
+              type="warning"
+              show-icon
+              :closable="false"
+            />
             <el-progress
               v-if="manualResult.status === 'RUNNING'"
               :percentage="100"
               :indeterminate="true"
               :duration="3"
             />
-            <div class="image-compare">
+            <div v-if="manualResult.resultImageUrl" class="result-image">
               <figure>
-                <figcaption>原图</figcaption>
-                <img :src="previewUrl || manualResult.inputImageUrl" alt="原图" />
-              </figure>
-              <figure>
-                <figcaption>标注图</figcaption>
-                <img v-if="manualResult.resultImageUrl" :src="manualResult.resultImageUrl" alt="标注结果图" />
-                <div v-else class="no-result">模型未返回标注图</div>
+                <figcaption>检测结果（所有目标已合并标注）</figcaption>
+                <img :src="manualResult.resultImageUrl" alt="合并标注结果图" />
               </figure>
             </div>
+            <div v-else-if="manualResult.status === 'RUNNING'" class="result-image">
+              <figure>
+                <figcaption>待检测原图</figcaption>
+                <img :src="previewUrl || manualResult.inputImageUrl" alt="待检测原图" />
+              </figure>
+            </div>
+            <el-empty v-else-if="manualResult.status === 'SUCCEEDED'" description="模型未定位到目标" :image-size="56" />
             <el-table :data="manualResult.findings" size="small" border>
               <el-table-column label="类型" width="110">
                 <template #default="{ row }: { row: LocateAnythingFinding }">{{ DETECTION_LABELS[row.type] || row.type }}</template>
               </el-table-column>
               <el-table-column prop="prompt" label="提示词" min-width="120" show-overflow-tooltip />
-              <el-table-column label="置信度" width="90">
-                <template #default="{ row }: { row: LocateAnythingFinding }">{{ formatScore(row.score) }}</template>
-              </el-table-column>
               <el-table-column label="bbox" min-width="130">
                 <template #default="{ row }: { row: LocateAnythingFinding }">{{ bboxText(row.bbox) }}</template>
               </el-table-column>
@@ -118,7 +125,7 @@
       <el-col :span="12">
         <el-card shadow="never">
           <template #header>LocateAnything 说明</template>
-          <p class="info-text">LocateAnything 支持自然语言提示定位复杂目标。检查点检测中可配置提示词，例如「红色刀闸开关」「变压器底部渗油区域」，用于开放词汇定位。</p>
+          <p class="info-text">LocateAnything 支持自然语言提示定位复杂目标。检查点检测中可通过目标外观和所在区域描述提示词，用于开放词汇定位。</p>
           <el-link href="https://huggingface.co/nvidia/LocateAnything-3B" target="_blank" type="primary">查看模型文档</el-link>
         </el-card>
       </el-col>
@@ -142,32 +149,61 @@
         </el-table-column>
         <el-table-column label="检测项" min-width="200">
           <template #default="{ row }: { row: import('@/types').DetectionTemplate }">
-            <el-tag v-for="t in row.types" :key="t" size="small" style="margin: 2px">{{ DETECTION_LABELS[t as keyof typeof DETECTION_LABELS] }}</el-tag>
+            <el-tag
+              v-for="item in row.items"
+              :key="item.type"
+              :type="item.enabled ? 'success' : 'info'"
+              size="small"
+              style="margin: 2px"
+            >
+              {{ DETECTION_LABELS[item.type] }}{{ item.enabled ? '' : '（停用）' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" show-overflow-tooltip />
         <el-table-column label="提示词" min-width="180">
-          <template #default="{ row }">
-            <span v-for="(v, k) in row.prompts" :key="k" class="prompt">{{ k }}: {{ v }} </span>
-            <span v-if="!Object.keys(row.prompts).length">-</span>
+          <template #default="{ row }: { row: DetectionTemplate }">
+            <span v-for="item in row.items" :key="item.type" class="prompt">{{ DETECTION_LABELS[item.type] }}: {{ item.prompt || '-' }} </span>
           </template>
         </el-table-column>
-        <el-table-column v-if="can('detection:manage')" label="操作" width="80">
-          <template #default="{ row }"><el-button text type="danger" size="small" @click="detectionStore.removeTemplate(row.id)">删除</el-button></template>
+        <el-table-column v-if="can('detection:manage')" label="操作" width="210">
+          <template #default="{ row }: { row: DetectionTemplate }">
+            <el-button v-if="row.scope === 'CHECKPOINT' && can('route:edit')" text type="success" size="small" @click="openApplyTemplate(row)">应用</el-button>
+            <el-button text type="primary" size="small" @click="openEditTemplate(row)">编辑</el-button>
+            <el-button text type="danger" size="small" @click="removeTemplate(row.id)">删除</el-button>
+          </template>
         </el-table-column>
       </el-table>
       <ListPagination :total="detectionStore.total" :page="templatePage" @change="loadTemplatePage" />
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="新建检测模板" width="500px">
+    <el-dialog v-model="dialogVisible" :title="editingTemplateId ? '编辑检测模板' : '新建检测模板'" width="760px">
       <el-form :model="form" label-width="90px">
         <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="范围">
-          <el-radio-group v-model="form.scope"><el-radio value="ROUTE">路线级</el-radio><el-radio value="CHECKPOINT">检查点级</el-radio></el-radio-group>
+          <el-radio-group v-model="form.scope" @change="resetTemplateItems"><el-radio value="ROUTE">路线级</el-radio><el-radio value="CHECKPOINT">检查点级</el-radio></el-radio-group>
         </el-form-item>
         <el-form-item label="描述"><el-input v-model="form.description" type="textarea" /></el-form-item>
+        <el-form-item label="检测项"><DetectionConfig :items="form.items" @change="updateTemplateItems" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" @click="create">创建</el-button></template>
+      <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="savingTemplate" @click="saveTemplate">保存</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="applyDialogVisible" title="应用模板到检查点" width="520px">
+      <el-form label-width="90px">
+        <el-form-item label="模板"><el-input :model-value="applyTemplateName" disabled /></el-form-item>
+        <el-form-item label="路线">
+          <el-select v-model="applyForm.routeId" placeholder="选择路线" style="width: 100%" @change="applyForm.checkpointId = ''">
+            <el-option v-for="route in checkpointRoutes" :key="route.id" :label="route.name" :value="route.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="检查点">
+          <el-select v-model="applyForm.checkpointId" placeholder="选择检查点" style="width: 100%">
+            <el-option v-for="checkpoint in applyCheckpoints" :key="checkpoint.id" :label="checkpoint.name" :value="checkpoint.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer><el-button @click="applyDialogVisible = false">取消</el-button><el-button type="primary" :loading="applyingTemplate" @click="applyTemplateToCheckpoint">应用</el-button></template>
     </el-dialog>
   </div>
 </template>
@@ -180,17 +216,21 @@ import DetectionConfig from '@/components/DetectionConfig.vue'
 import { resourcesApi } from '@/api/resources'
 import { usePermission } from '@/composables/usePermission'
 import { useDetectionStore } from '@/stores/detection'
+import { useRouteStore } from '@/stores/route'
 import {
   CHECKPOINT_DETECTIONS,
   DETECTION_LABELS,
+  DETECTION_TARGET_LABELS,
   ROUTE_DETECTIONS,
   type DetectionItem,
+  type DetectionTemplate,
   type DetectionType,
   type LocateAnythingFinding,
   type ManualDetectionResponse,
 } from '@/types'
 
 const detectionStore = useDetectionStore()
+const routeStore = useRouteStore()
 const templatePage = ref(0)
 
 function loadTemplatePage(page: number) {
@@ -199,7 +239,17 @@ function loadTemplatePage(page: number) {
 }
 const { can } = usePermission()
 const dialogVisible = ref(false)
-const form = reactive({ name: '', scope: 'ROUTE' as 'ROUTE' | 'CHECKPOINT', description: '' })
+const editingTemplateId = ref<string | null>(null)
+const savingTemplate = ref(false)
+const form = reactive({
+  name: '',
+  scope: 'CHECKPOINT' as 'ROUTE' | 'CHECKPOINT',
+  description: '',
+  items: defaultDetectionItems('CHECKPOINT'),
+})
+const applyDialogVisible = ref(false)
+const applyingTemplate = ref(false)
+const applyForm = reactive({ templateId: '', routeId: '', checkpointId: '' })
 const fileInputRef = ref<HTMLInputElement>()
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
@@ -207,6 +257,10 @@ const detecting = ref(false)
 const manualResult = ref<ManualDetectionResponse | null>(null)
 const manualItems = ref<DetectionItem[]>(CHECKPOINT_DETECTIONS.map((type) => defaultDetectionItem(type)))
 let manualPollingTimer: ReturnType<typeof setInterval> | null = null
+
+const checkpointRoutes = computed(() => routeStore.routes.filter((route) => route.checkpoints.length > 0))
+const applyCheckpoints = computed(() => routeStore.getRouteById(applyForm.routeId)?.checkpoints ?? [])
+const applyTemplateName = computed(() => detectionStore.templates.find((template) => template.id === applyForm.templateId)?.name ?? '')
 
 const manualStatusLabel = computed(() => {
   if (!manualResult.value) return ''
@@ -223,14 +277,32 @@ const manualStatusTagType = computed(() => {
 })
 
 function defaultDetectionItem(type: DetectionType): DetectionItem {
-  const promptMap: Partial<Record<DetectionType, string>> = {
-    SWITCH: '红色刀闸开关',
-    METER: '压力表读数区域',
-    OIL_LEAK: '设备底部渗油区域',
-    FOREIGN_OBJECT: '设备附近异物',
-    FIRE: '烟雾或明火区域',
+  const promptMap: Record<DetectionType, string> = {
+    PERSON: '巡检区域内的人员',
+    HELMET: '人员头部佩戴的安全帽',
+    OBSTACLE: '机器人行进路线上的障碍物',
+    FIRE: '图像中清晰可见的火焰、火光或明显烟雾区域',
+    SWITCH: '变电设备上的刀闸开关操作手柄、连杆及触头区域',
+    METER: '圆形机械压力表的完整表盘和指针区域',
+    OIL_LEAK: '变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域',
+    FOREIGN_OBJECT: '设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物',
   }
-  return { type, enabled: true, prompt: promptMap[type] || '', threshold: 0.75 }
+  return {
+    type,
+    enabled: true,
+    displayLabel: DETECTION_TARGET_LABELS[type],
+    prompt: promptMap[type],
+    threshold: 0.75,
+  }
+}
+
+function defaultDetectionItems(scope: 'ROUTE' | 'CHECKPOINT') {
+  const types = scope === 'ROUTE' ? ROUTE_DETECTIONS : CHECKPOINT_DETECTIONS
+  return types.map((type) => defaultDetectionItem(type))
+}
+
+function cloneDetectionItems(items: DetectionItem[]) {
+  return items.map((item) => ({ ...item, threshold: 0.75 }))
 }
 
 function updateManualItems(items: DetectionItem[]) {
@@ -264,6 +336,10 @@ async function submitManualDetection() {
   const enabled = manualItems.value.filter((item) => item.enabled)
   if (!enabled.length) {
     ElMessage.warning('请至少启用一个检测项')
+    return
+  }
+  if (enabled.some((item) => !item.displayLabel?.trim())) {
+    ElMessage.warning('已启用检测项必须填写框上目标名称')
     return
   }
 
@@ -329,29 +405,110 @@ function bboxText(bbox: number[]) {
   return bbox && bbox.length ? bbox.join(', ') : '-'
 }
 
-function formatScore(score: number) {
-  return Number.isFinite(score) && score > 0 ? score.toFixed(2) : '-'
-}
-
 function rawSummary(row: LocateAnythingFinding) {
   const rawAnswer = row.rawResult?.rawAnswer
   return typeof rawAnswer === 'string' ? rawAnswer : '-'
 }
 
-function create() {
+function openCreateTemplate() {
+  editingTemplateId.value = null
+  form.name = ''
+  form.scope = 'CHECKPOINT'
+  form.description = ''
+  form.items = defaultDetectionItems('CHECKPOINT')
+  dialogVisible.value = true
+}
+
+function openEditTemplate(template: DetectionTemplate) {
+  editingTemplateId.value = template.id
+  form.name = template.name
+  form.scope = template.scope
+  form.description = template.description
+  form.items = cloneDetectionItems(template.items)
+  dialogVisible.value = true
+}
+
+function resetTemplateItems() {
+  form.items = defaultDetectionItems(form.scope)
+}
+
+function updateTemplateItems(items: DetectionItem[]) {
+  form.items = items
+}
+
+async function saveTemplate() {
   if (!form.name) {
     ElMessage.warning('请填写名称')
     return
   }
-  detectionStore.addTemplate({
-    name: form.name,
+  if (form.items.some((item) => item.enabled && !item.prompt?.trim())) {
+    ElMessage.warning('已启用检测项必须填写提示词')
+    return
+  }
+  if (form.items.some((item) => item.enabled && !item.displayLabel?.trim())) {
+    ElMessage.warning('已启用检测项必须填写框上目标名称')
+    return
+  }
+  const items = cloneDetectionItems(form.items)
+  const payload = {
+    name: form.name.trim(),
     scope: form.scope,
-    description: form.description,
-    types: form.scope === 'ROUTE' ? [...ROUTE_DETECTIONS] : [...CHECKPOINT_DETECTIONS],
-    prompts: {},
-  })
-  dialogVisible.value = false
-  ElMessage.success('模板已创建')
+    description: form.description.trim(),
+    items,
+    types: items.map((item) => item.type),
+    prompts: Object.fromEntries(items.filter((item) => item.prompt?.trim()).map((item) => [item.type, item.prompt!.trim()])),
+  }
+  savingTemplate.value = true
+  try {
+    if (editingTemplateId.value) {
+      await detectionStore.updateTemplate(editingTemplateId.value, payload)
+      ElMessage.success('模板已更新')
+    } else {
+      await detectionStore.addTemplate(payload)
+      ElMessage.success('模板已创建')
+    }
+    dialogVisible.value = false
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '模板保存失败')
+  } finally {
+    savingTemplate.value = false
+  }
+}
+
+async function removeTemplate(id: string) {
+  try {
+    await detectionStore.removeTemplate(id)
+    ElMessage.success('模板已删除')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '模板删除失败')
+  }
+}
+
+function openApplyTemplate(template: DetectionTemplate) {
+  applyForm.templateId = template.id
+  applyForm.routeId = checkpointRoutes.value[0]?.id ?? ''
+  applyForm.checkpointId = applyCheckpoints.value[0]?.id ?? ''
+  applyDialogVisible.value = true
+}
+
+async function applyTemplateToCheckpoint() {
+  const template = detectionStore.templates.find((item) => item.id === applyForm.templateId)
+  if (!template || !applyForm.routeId || !applyForm.checkpointId) {
+    ElMessage.warning('请选择路线和检查点')
+    return
+  }
+  applyingTemplate.value = true
+  try {
+    await routeStore.updateCheckpoint(applyForm.routeId, applyForm.checkpointId, {
+      detections: cloneDetectionItems(template.items),
+    })
+    applyDialogVisible.value = false
+    ElMessage.success('检测模板已应用到检查点')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '应用模板失败')
+  } finally {
+    applyingTemplate.value = false
+  }
 }
 
 onBeforeUnmount(() => {
@@ -476,6 +633,28 @@ onBeforeUnmount(() => {
 .image-compare img,
 .no-result {
   aspect-ratio: 4 / 3;
+}
+
+.result-image figure {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  background: #f8fafc;
+}
+
+.result-image figcaption {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #667085;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.result-image img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  background: #0f172a;
 }
 
 .no-result {

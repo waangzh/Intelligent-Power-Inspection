@@ -11,8 +11,11 @@ import com.powerinspection.data.DataStoreService;
 import com.powerinspection.model.LocateAnythingFinding;
 import com.powerinspection.model.LocateAnythingGateway;
 import com.powerinspection.model.LocateAnythingRequest;
+import com.powerinspection.model.LocateAnythingResult;
+import com.powerinspection.model.DetectionItems;
 import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.robot.RobotGateway;
+import com.powerinspection.robot.RobotInspectionImage;
 import com.powerinspection.robot.RobotProgressSnapshot;
 import com.powerinspection.robot.RobotProperties;
 import com.powerinspection.route.RouteExecutorSupport;
@@ -291,10 +294,14 @@ public class TaskService {
       String cpName = text(cp.get("name"));
       addEvent(taskId, "VOICE", "已到达指定位置，开始检查", cpName, null);
       addEvent(taskId, "ARRIVE", "到达检查点「" + cpName + "」", cpName, null);
-      addEvent(taskId, "INSPECT", "云台调整 P" + cp.get("pan") + "° T" + cp.get("tilt") + "°，采集图像中", cpName, "https://picsum.photos/seed/" + cp.get("id") + "/400/240");
-      String detectionImageUrl = "https://picsum.photos/seed/" + cp.get("id") + "_det/400/240";
-      addEvent(taskId, "DETECT", "调用 LocateAnything 执行检查点级检测", cpName, detectionImageUrl);
-      detectCheckpoint(task, route, cp, detectionImageUrl);
+      RobotInspectionImage inspectionImage = progress.inspectionImage();
+      if (inspectionImage == null) {
+        addEvent(taskId, "DETECT_SKIPPED", "机器人未返回真实巡检图像，已跳过视觉检测", cpName, null);
+      } else {
+        addEvent(taskId, "INSPECT", "云台调整 P" + cp.get("pan") + "° T" + cp.get("tilt") + "°，已采集真实图像", cpName, inspectionImage.url());
+        addEvent(taskId, "DETECT", "调用 LocateAnything 执行检查点级检测", cpName, inspectionImage.url());
+        detectCheckpoint(task, route, cp, inspectionImage);
+      }
     }
 
     task.put("progress", nextProgress);
@@ -386,16 +393,19 @@ public class TaskService {
     createAlarm(text(task.get("id")), text(route.get("name")), null, type, message, "https://picsum.photos/seed/" + System.currentTimeMillis() + "/400/240");
   }
 
-  private void detectCheckpoint(Map<String, Object> task, Map<String, Object> route, Map<String, Object> cp, String imageUrl) {
+  private void detectCheckpoint(Map<String, Object> task, Map<String, Object> route, Map<String, Object> cp, RobotInspectionImage image) {
     try {
-      List<LocateAnythingFinding> findings = locateAnythingGateway.detectCheckpoint(
-        new LocateAnythingRequest(task, route, cp, imageUrl, checkpointDetections(cp))
+      LocateAnythingResult result = locateAnythingGateway.detectCheckpoint(
+        new LocateAnythingRequest(task, route, cp, image.url(), image.width(), image.height(), checkpointDetections(cp))
       );
-      for (LocateAnythingFinding finding : findings) {
+      for (String warning : result.warnings()) {
+        addEvent(text(task.get("id")), "DETECT_WARNING", "LocateAnything 警告：" + warning, text(cp.get("name")), image.url());
+      }
+      for (LocateAnythingFinding finding : result.findings()) {
         createCheckpointAlarm(task, route, cp, finding);
       }
     } catch (ModelServiceException ex) {
-      addEvent(text(task.get("id")), "DETECT_FAILED", "LocateAnything 检测失败：" + ex.getMessage(), text(cp.get("name")), imageUrl);
+      addEvent(text(task.get("id")), "DETECT_FAILED", "LocateAnything 检测失败：" + ex.getMessage(), text(cp.get("name")), image.url());
     }
   }
 
@@ -424,7 +434,7 @@ public class TaskService {
   @SuppressWarnings("unchecked")
   private List<Map<String, Object>> checkpointDetections(Map<String, Object> cp) {
     if (cp.get("detections") instanceof List<?> detections) {
-      return (List<Map<String, Object>>) detections;
+      return DetectionItems.enabled((List<Map<String, Object>>) detections);
     }
     return List.of();
   }

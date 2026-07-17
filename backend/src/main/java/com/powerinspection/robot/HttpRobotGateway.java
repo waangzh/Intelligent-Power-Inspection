@@ -66,7 +66,7 @@ public class HttpRobotGateway implements RobotGateway {
       List<Map<String, Object>> path = pathFromRoute(route);
       position = path.isEmpty() ? Map.of("lat", 0, "lng", 0, "x", 0, "y", 0, "yaw", 0) : path.get(0);
     }
-    return new RobotProgressSnapshot(progress, checkpointSeq, position);
+    return new RobotProgressSnapshot(progress, checkpointSeq, position, RobotInspectionImage.fromRobot(robot));
   }
 
   @SuppressWarnings("unchecked")
