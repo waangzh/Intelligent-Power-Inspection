@@ -513,12 +513,6 @@ function robotStatusType(s: Robot['status']) {
   color: #67c23a;
 }
 
-.schedule {
-  max-height: 200px;
-  overflow: auto;
-  padding-top: 8px;
-}
-
 .card-head {
   display: flex;
   align-items: center;
@@ -556,7 +550,7 @@ function robotStatusType(s: Robot['status']) {
 }
 
 .schedule-card {
-  flex: 0 0 138px;
+  flex: 0 0 auto;
 }
 
 .robot-status-card {
@@ -564,8 +558,16 @@ function robotStatusType(s: Robot['status']) {
 }
 
 .schedule {
-  max-height: 78px;
-  padding-top: 0;
+  margin: 0;
+  padding-top: 2px;
+}
+
+.schedule :deep(.el-timeline-item) {
+  padding-bottom: 12px;
+}
+
+.schedule :deep(.el-timeline-item:last-child) {
+  padding-bottom: 0;
 }
 
 .completion-card :deep(.el-card__body) {
