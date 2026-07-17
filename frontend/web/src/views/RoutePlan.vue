@@ -51,6 +51,16 @@
       </el-col>
 
       <el-col :span="19">
+        <div v-if="currentRoute" class="map-asset-selector">
+          <div>
+            <span class="map-selector-kicker">APPROVED MAP ASSET</span>
+            <strong>路线地图</strong>
+            <small>这里只列出当前站点状态为 AVAILABLE 的地图；仍可在下方按原流程上传 YAML/PGM。</small>
+          </div>
+          <el-select v-model="selectedMapAssetId" clearable filterable placeholder="选择已审核可用地图" :loading="mapAssetsLoading" class="map-asset-select" @change="onMapAssetChange">
+            <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.id} · ${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id" />
+          </el-select>
+        </div>
         <RosMapRouteEditor
           v-if="currentRoute"
           ref="editorRef"
@@ -58,7 +68,7 @@
           :initial-json="editorInitialJson ?? undefined"
           :default-route-id="currentRoute.id"
           :default-route-name="currentRoute.name"
-          :map-id="draftState?.mapAssetId ?? currentRoute.mapId"
+          :map-id="effectiveMapAssetId"
           @change="onEditorChange"
           @map-files-change="onMapFilesChange"
         />
@@ -172,6 +182,7 @@ import { applySavedRouteDraft, keepLocalDraftAfterSaveFailure, restoreRouteDraft
 import { DEPLOYMENT_STATE_LABELS, deploymentEligibility, deploymentStateType, shortHash, shouldPollDeployment } from '@/utils/routeDeployment'
 import { useRobotStore } from '@/stores/robot'
 import { connectionLabel, heartbeatVisual, offlineReasonLabel } from '@/utils/robotHeartbeatStatus'
+import { availableMapAssets } from '@/utils/mapAssetReview'
 
 const siteStore = useSiteStore()
 const routeStore = useRouteStore()
@@ -204,9 +215,14 @@ const deploymentLoading = ref(false)
 const creatingDeployment = ref(false)
 const deploymentError = ref('')
 const reconcilingDeploymentId = ref('')
+const mapAssets = ref<MapAsset[]>([])
+const mapAssetsLoading = ref(false)
+const selectedMapAssetId = ref('')
 
 const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
 const currentRoute = computed<Route | null>(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
+const availableAssets = computed(() => availableMapAssets(mapAssets.value, selectedSiteId.value))
+const effectiveMapAssetId = computed(() => selectedMapAssetId.value || draftState.value?.mapAssetId || currentRoute.value?.mapId)
 const draftSaveLabel = computed(() => ({ unsaved: '未保存', saving: '保存中', saved: '已保存', failed: '保存失败' })[draftSaveState.value])
 const draftSaveTagType = computed(() => ({ unsaved: 'warning', saving: 'info', saved: 'success', failed: 'danger' })[draftSaveState.value])
 const publishBlockReason = computed(() => routePublishBlockReason(Boolean(currentRoute.value), hasUnsavedChanges.value, draftState.value))
@@ -254,6 +270,8 @@ watch(
   { immediate: true },
 )
 
+watch(selectedSiteId, siteId => void loadAvailableMapAssets(siteId), { immediate: true })
+
 function targetCount(route: Route) {
   return route.executorJson?.targets?.length ?? route.checkpoints.length
 }
@@ -282,6 +300,7 @@ async function selectRoute(id: string) {
 
 async function loadDraft(routeId: string) {
   pendingMapFiles.value = null
+  selectedMapAssetId.value = ''
   pendingDoc.value = null
   editorInitialJson.value = null
   draftValidation.value = null
@@ -301,6 +320,7 @@ async function loadDraft(routeId: string) {
     const state = await resourcesApi.getRouteDraft(routeId)
     if (routeId !== selectedRouteId.value) return
     draftState.value = state
+    selectedMapAssetId.value = state.mapAssetId || routeStore.getRouteById(routeId)?.mapId || ''
     draftValidation.value = state
     const restored = restoreRouteDraft(state, routeStore.getRouteById(routeId)?.executorJson ?? null)
     pendingDoc.value = restored.document
@@ -312,11 +332,32 @@ async function loadDraft(routeId: string) {
   } catch (error) {
     if (routeId !== selectedRouteId.value) return
     pendingDoc.value = routeStore.getRouteById(routeId)?.executorJson ?? null
+    selectedMapAssetId.value = routeStore.getRouteById(routeId)?.mapId || ''
     editorInitialJson.value = pendingDoc.value
     draftSaveState.value = 'failed'
     ElMessage.error(errorMessage(error, '草稿加载失败'))
     void loadDeploymentData(routeId)
   }
+}
+
+async function loadAvailableMapAssets(siteId: string) {
+  mapAssetsLoading.value = true
+  try {
+    const assets = await resourcesApi.listMapAssets({ status: 'AVAILABLE', siteId })
+    mapAssets.value = availableMapAssets(assets, siteId)
+  } catch (error) {
+    mapAssets.value = []
+    ElMessage.error(errorMessage(error, '可用地图列表加载失败'))
+  } finally {
+    mapAssetsLoading.value = false
+  }
+}
+
+function onMapAssetChange(mapAssetId: string) {
+  selectedMapAssetId.value = mapAssetId || ''
+  pendingMapFiles.value = null
+  hasUnsavedChanges.value = true
+  draftSaveState.value = 'unsaved'
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -348,6 +389,7 @@ function onEditorChange(doc: RouteExecutorDocument) {
 
 function onMapFilesChange(files: MapAssetUploadFiles) {
   pendingMapFiles.value = files
+  selectedMapAssetId.value = ''
   hasUnsavedChanges.value = true
   draftSaveState.value = 'unsaved'
 }
@@ -364,7 +406,7 @@ async function saveDraft() {
     ElMessage.error(`路线标注未通过安全检查：${annotationProblems.join('；')}`)
     return
   }
-  if (!route.mapId && !pendingMapFiles.value && !draftState.value?.mapAssetId) {
+  if (!effectiveMapAssetId.value && !pendingMapFiles.value) {
     ElMessage.warning('请先导入完整的 YAML/PGM 地图')
     return
   }
@@ -380,7 +422,7 @@ async function saveDraft() {
       form.append('pgm', pendingMapFiles.value.pgm)
       uploadedAsset = await resourcesApi.uploadMapAsset(form)
     }
-    const mapId = uploadedAsset?.id ?? draftState.value?.mapAssetId ?? route.mapId
+    const mapId = uploadedAsset?.id ?? effectiveMapAssetId.value
     if (!mapId) throw new Error('地图资产上传失败')
     const saved = await resourcesApi.saveRouteDraft(
       route.id,
@@ -397,6 +439,8 @@ async function saveDraft() {
     editorInitialJson.value = normalizedDocument
     persistedDocument.value = serializeRouteDocument(normalizedDocument)
     pendingMapFiles.value = null
+    selectedMapAssetId.value = mapId
+    void loadAvailableMapAssets(route.siteId)
     hasUnsavedChanges.value = false
     draftSaveState.value = 'saved'
     ElMessage[saved.publishable ? 'success' : 'warning'](saved.publishable ? '草稿已保存，可创建路线修订' : '草稿已保存，但存在 ERROR，暂不可发布')
@@ -614,6 +658,12 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 </script>
 
 <style scoped>
+.map-asset-selector { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 12px; padding: 14px 16px; border: 1px solid #cfe0e7; background: linear-gradient(100deg, #f6fafb, #edf6f8); }
+.map-asset-selector strong, .map-asset-selector small { display: block; }
+.map-asset-selector strong { color: #1e4356; font-size: 15px; }
+.map-asset-selector small { margin-top: 3px; color: #708995; }
+.map-selector-kicker { display: block; margin-bottom: 3px; color: #0b8b9c; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.map-asset-select { width: min(440px, 48%); }
 .route-list-panel {
   min-height: 640px;
   background: #fff;

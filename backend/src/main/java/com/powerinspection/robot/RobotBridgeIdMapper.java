@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -31,6 +32,12 @@ public class RobotBridgeIdMapper {
   public String toPlatformId(String bridgeRobotId) {
     String robotId = normalized(bridgeRobotId);
     return robotId == null ? "" : bridgeToPlatform.getOrDefault(robotId, robotId);
+  }
+
+  /** 内部上传必须命中显式设备映射，不能把未知 Bridge ID 当作平台 ID 信任。 */
+  public Optional<String> findPlatformId(String bridgeRobotId) {
+    String robotId = normalized(bridgeRobotId);
+    return robotId == null ? Optional.empty() : Optional.ofNullable(bridgeToPlatform.get(robotId));
   }
 
   /** 仅向持有 Bridge 平台凭据的回读请求暴露 Bridge 侧 ID。 */

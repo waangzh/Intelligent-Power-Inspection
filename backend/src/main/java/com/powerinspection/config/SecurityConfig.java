@@ -29,6 +29,7 @@ public class SecurityConfig {
       .authorizeHttpRequests(auth -> auth
         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
         .requestMatchers("/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/register", "/ws/**", "/model-files/**").permitAll()
+        .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-map-assets").permitAll()
         .requestMatchers("/h2-console/**").permitAll()
         .requestMatchers(HttpMethod.GET,
           "/api/v1/route-deployments/*", "/api/v1/route-revisions/*",

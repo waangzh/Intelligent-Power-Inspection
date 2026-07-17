@@ -104,6 +104,12 @@ const router = createRouter({
           meta: { title: '机器人管理', requiresAuth: true, permission: 'robot:manage', breadcrumbs: [{ label: '资产感知' }, { label: '机器人管理' }] },
         },
         {
+          path: 'robot-map-review',
+          name: 'RobotMapReview',
+          component: () => import('@/views/RobotMapReview.vue'),
+          meta: { title: '机器人建图审核', requiresAuth: true, breadcrumbs: [{ label: '巡检业务' }, { label: '机器人建图审核' }] },
+        },
+        {
           path: 'robots/status',
           name: 'RobotStatus',
           component: () => import('@/views/RobotStatus.vue'),

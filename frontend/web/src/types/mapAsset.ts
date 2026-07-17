@@ -2,7 +2,15 @@
 export interface MapAsset {
   id: string
   siteId: string
-  status: 'AVAILABLE' | string
+  status: MapAssetStatus
+  source: MapAssetSource
+  sourceRobotId?: string | null
+  sourceBridgeRobotId?: string | null
+  uploadIdempotencyKey?: string | null
+  capturedAt?: string | null
+  reviewedBy?: string | null
+  reviewedAt?: string | null
+  reviewComment?: string | null
   yamlName: string
   pgmName: string
   image: string
@@ -17,6 +25,20 @@ export interface MapAsset {
   pgmSha256: string
   createdAt: string
   updatedAt: string
+}
+
+export type MapAssetStatus = 'PENDING_REVIEW' | 'AVAILABLE' | 'REJECTED'
+export type MapAssetSource = 'USER' | 'ROBOT'
+
+export interface MapAssetQuery {
+  source?: MapAssetSource
+  status?: MapAssetStatus
+  siteId?: string
+}
+
+export interface MapAssetReviewInput {
+  action: 'APPROVE' | 'REJECT'
+  comment?: string
 }
 
 export interface MapAssetUploadInput {
