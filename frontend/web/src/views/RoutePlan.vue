@@ -47,6 +47,7 @@
             </button>
           </div>
           <div v-else class="empty-hint">暂无路线，请先新建</div>
+          <ListPagination :total="routeStore.total" :page="routePage" @change="loadRoutePage" />
         </div>
       </el-col>
 
@@ -180,11 +181,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { resourcesApi } from '@/api/resources'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import RosMapRouteEditor from '@/components/RosMapRouteEditor.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useRouteStore } from '@/stores/route'
@@ -206,6 +208,7 @@ const robotStore = useRobotStore()
 const router = useRouter()
 
 const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
+const routePage = ref(0)
 const selectedRouteId = ref('')
 const pendingDoc = shallowRef<RouteExecutorDocument | null>(null)
 const editorInitialJson = shallowRef<RouteExecutorDocument | null>(null)
@@ -299,11 +302,19 @@ async function onSiteChange() {
       selectedSiteId.value = previousSiteId
       return
     }
+    routePage.value = 0
+    await routeStore.load(selectedSiteId.value, { page: 0, size: 20 })
     selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
     await loadDraft(selectedRouteId.value)
   } finally {
     switchingSite.value = false
   }
+}
+
+async function loadRoutePage(page: number) {
+  if (!(await confirmDiscardChanges())) return
+  routePage.value = page
+  await routeStore.load(selectedSiteId.value, { page, size: 20 })
 }
 
 async function selectRoute(id: string) {
@@ -647,13 +658,27 @@ function onBeforeUnload(event: BeforeUnloadEvent) {
 }
 
 let deploymentPollTimer: number | undefined
+
+function startDeploymentPolling() {
+  if (deploymentPollTimer) return
+  deploymentPollTimer = window.setInterval(() => void refreshDeploymentDetails(), 5000)
+}
+
+function stopDeploymentPolling() {
+  if (!deploymentPollTimer) return
+  window.clearInterval(deploymentPollTimer)
+  deploymentPollTimer = undefined
+}
+
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
-  deploymentPollTimer = window.setInterval(() => void refreshDeploymentDetails(), 5000)
+  startDeploymentPolling()
 })
+onActivated(startDeploymentPolling)
+onDeactivated(stopDeploymentPolling)
 onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
-  if (deploymentPollTimer) window.clearInterval(deploymentPollTimer)
+  stopDeploymentPolling()
 })
 onBeforeRouteLeave(() => confirmDiscardChanges())
 </script>

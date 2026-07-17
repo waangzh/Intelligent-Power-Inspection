@@ -7,11 +7,11 @@
     </PageHeader>
 
     <el-card shadow="never" style="margin-bottom: 16px">
-      <el-radio-group v-model="typeFilter" size="small">
+      <el-radio-group v-model="typeFilter" size="small" @change="searchNotifications">
         <el-radio-button value="">全部</el-radio-button>
         <el-radio-button v-for="(label, key) in NOTIFICATION_TYPE_LABELS" :key="key" :value="key">{{ label }}</el-radio-button>
       </el-radio-group>
-      <el-radio-group v-model="readFilter" size="small" style="margin-left: 16px">
+      <el-radio-group v-model="readFilter" size="small" style="margin-left: 16px" @change="searchNotifications">
         <el-radio-button value="all">全部</el-radio-button>
         <el-radio-button value="unread">未读</el-radio-button>
       </el-radio-group>
@@ -37,6 +37,7 @@
           <el-button text type="danger" size="small" @click.stop="removeOne(item.id)">删除</el-button>
         </div>
       </div>
+      <ListPagination :total="notificationStore.total" :page="notificationPage" @change="loadNotificationPage" />
     </el-card>
   </div>
 </template>
@@ -45,6 +46,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
 import type { AppNotification, NotificationType } from '@/types/notification'
@@ -55,6 +57,21 @@ const authStore = useAuthStore()
 const notificationStore = useNotificationStore()
 const typeFilter = ref('')
 const readFilter = ref<'all' | 'unread'>('all')
+const notificationPage = ref(0)
+
+function loadNotificationPage(page: number) {
+  notificationPage.value = page
+  void notificationStore.load({
+    page,
+    size: 20,
+    type: typeFilter.value || undefined,
+    read: readFilter.value === 'unread' ? false : undefined,
+  })
+}
+
+function searchNotifications() {
+  loadNotificationPage(0)
+}
 
 const userId = computed(() => authStore.user?.id ?? '')
 

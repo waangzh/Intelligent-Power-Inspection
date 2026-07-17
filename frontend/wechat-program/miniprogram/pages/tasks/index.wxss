@@ -1,7 +1,5 @@
-.toolbar { display: flex; justify-content: flex-end; }
-.form-row { display: flex; align-items: center; margin-bottom: 20rpx; gap: 16rpx; }
-.form-label { width: 160rpx; color: #6b7c93; font-size: 26rpx; }
-.form-row input { flex: 1; border: 1rpx solid #e4e7ed; border-radius: 8rpx; padding: 12rpx 16rpx; }
-.picker-val { color: #1a5fb4; }
-.task-name { color: #1a5fb4; font-weight: 500; }
-.task-actions { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 16rpx; }
+.form-row { display: flex; align-items: center; margin-bottom: 16rpx; }
+.form-label { width: 160rpx; color: var(--pi-muted); font-size: 26rpx; }
+.picker-val { color: var(--pi-primary); }
+.task-name { color: var(--pi-primary); font-weight: 500; }
+.task-actions { display: flex; gap: 12rpx; margin-top: 12rpx; flex-wrap: wrap; }

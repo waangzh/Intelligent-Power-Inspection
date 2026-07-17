@@ -1,8 +1,8 @@
-.toolbar input { border: 1rpx solid #e4e9f0; border-radius: 8rpx; padding: 16rpx; margin-bottom: 12rpx; }
+.toolbar input { border: 1rpx solid var(--pi-border); border-radius: 16rpx; padding: 16rpx; margin-bottom: 12rpx; }
 .filter-row { display: flex; flex-wrap: wrap; gap: 12rpx; align-items: center; }
-.filter-chip { padding: 8rpx 20rpx; background: #f0f4f8; border-radius: 8rpx; font-size: 24rpx; }
-.filter-chip.on { background: #1a5fb4; color: #fff; }
-.alarm-card.sel { border: 2rpx solid #1a5fb4; }
+.filter-chip { padding: 8rpx 20rpx; background: var(--pi-bg-muted); border-radius: 12rpx; font-size: 24rpx; color: var(--pi-muted); }
+.filter-chip.on { background: var(--pi-primary); color: #fff; }
+.alarm-card.sel { border: 2rpx solid var(--pi-primary); }
 .alarm-msg { margin: 8rpx 0; font-weight: 500; }
 .alarm-img { width: 100%; height: 240rpx; border-radius: 12rpx; margin-top: 12rpx; }
 .detail-row { display: flex; justify-content: space-between; padding: 8rpx 0; }

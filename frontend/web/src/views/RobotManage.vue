@@ -13,6 +13,7 @@
       <el-button :disabled="!robot" @click="openBindingDialog">重新绑定站点</el-button>
       <el-button type="primary" @click="router.push('/robots/status')">查看在线状态</el-button>
     </div>
+    <ListPagination :total="robotStore.total" :page="robotPage" @change="loadRobotPage" />
 
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6" v-for="s in statusStats" :key="s.label">
@@ -96,6 +97,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import { resourcesApi } from '@/api/resources'
 import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
@@ -115,12 +117,18 @@ const siteStore = useSiteStore()
 const router = useRouter()
 
 const selectedRobotId = ref('')
+const robotPage = ref(0)
 const bindingDialogVisible = ref(false)
 const bindingSaving = ref(false)
 const bindingSiteId = ref('')
 const heartbeatStatus = ref<RobotHeartbeatStatus>()
 const heartbeatLoading = ref(false)
 const heartbeatLoadFailed = ref(false)
+
+function loadRobotPage(page: number) {
+  robotPage.value = page
+  void robotStore.load(undefined, { page, size: 20 })
+}
 
 const robot = computed(() => robotStore.getRobotById(selectedRobotId.value))
 

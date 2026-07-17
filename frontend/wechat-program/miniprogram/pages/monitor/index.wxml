@@ -36,3 +36,5 @@
     </view>
   </view>
 </view>
+
+<inline-tab-bar id="inlineTabBar" activePath="/pages/monitor/index" />

@@ -1,5 +1,6 @@
 package com.powerinspection.robot;
 
+import com.powerinspection.common.ResourceChangeEvent;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import java.time.Instant;
@@ -177,13 +178,15 @@ public class MobileBridgeRobotSyncService {
 
   private void saveTask(Map<String, Object> task) {
     Map<String, Object> saved = dataStore.upsert(DataCategory.TASK, task);
-    messagingTemplate.convertAndSend("/topic/tasks/" + saved.get("id"), saved);
-    messagingTemplate.convertAndSend("/topic/tasks", saved);
+    ResourceChangeEvent taskEvent = ResourceChangeEvent.updated("task", saved.get("id"));
+    messagingTemplate.convertAndSend("/topic/tasks/" + saved.get("id"), taskEvent);
+    messagingTemplate.convertAndSend("/topic/tasks", taskEvent);
   }
 
   private void publishRobot(Map<String, Object> robot) {
-    messagingTemplate.convertAndSend("/topic/robots/" + robot.get("id"), robot);
-    messagingTemplate.convertAndSend("/topic/robots", robot);
+    ResourceChangeEvent robotEvent = ResourceChangeEvent.updated("robot", robot.get("id"));
+    messagingTemplate.convertAndSend("/topic/robots/" + robot.get("id"), robotEvent);
+    messagingTemplate.convertAndSend("/topic/robots", robotEvent);
   }
 
   private String text(Object value) {

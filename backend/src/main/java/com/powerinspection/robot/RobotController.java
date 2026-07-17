@@ -3,6 +3,9 @@ package com.powerinspection.robot;
 import com.powerinspection.business.CrudSupport;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
+import com.powerinspection.common.ResourceChangeEvent;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.security.CurrentUser;
@@ -38,8 +41,9 @@ public class RobotController extends CrudSupport {
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> listRobots() {
-    return ApiResponse.ok(list(DataCategory.ROBOT));
+  public ApiResponse<PageResult<Map<String, Object>>> listRobots(ListQuery query) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(page(DataCategory.ROBOT, query, "siteId", "status"));
   }
 
   @GetMapping("/{id}")
@@ -122,7 +126,8 @@ public class RobotController extends CrudSupport {
   }
 
   private void publishRobot(Map<String, Object> robot) {
-    messagingTemplate.convertAndSend("/topic/robots/" + robot.get("id"), robot);
-    messagingTemplate.convertAndSend("/topic/robots", robot);
+    ResourceChangeEvent event = ResourceChangeEvent.updated("robot", robot.get("id"));
+    messagingTemplate.convertAndSend("/topic/robots/" + robot.get("id"), event);
+    messagingTemplate.convertAndSend("/topic/robots", event);
   }
 }

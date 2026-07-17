@@ -33,7 +33,7 @@
     </view>
     <view class="info-row"><text class="muted">路线</text><text>{{activeRouteName}}</text></view>
     <view class="info-row"><text class="muted">机器人</text><text>{{activeRobotName}}</text></view>
-    <progress percent="{{activeTask.progress}}" stroke-width="8" activeColor="#1a5fb4" />
+    <progress percent="{{activeTask.progress}}" stroke-width="8" activeColor="#1768f2" />
     <view class="voice-hint" wx:if="{{activeTask.status==='RUNNING'}}">🎙 行进中持续检测人员/安全帽/障碍物/火源；到点播报「已到达指定位置，开始检查」</view>
     <map-view wx:if="{{activeRoute}}" center="{{mapCenter}}" route="{{activeRoute}}" robotPosition="{{robotPos}}" />
     <view class="task-actions">
@@ -53,7 +53,7 @@
         <text class="task-name">{{item.name}}</text>
         <task-status-tag status="{{item.status}}" />
       </view>
-      <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1a5fb4" />
+      <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1768f2" />
       <view class="task-actions">
         <button wx:if="{{canDispatch && item.status==='CREATED'}}" size="mini" type="primary" catchtap="dispatch" data-id="{{item.id}}">下发</button>
         <button wx:if="{{canControl && item.status==='RUNNING'}}" size="mini" catchtap="pause" data-id="{{item.id}}">暂停</button>

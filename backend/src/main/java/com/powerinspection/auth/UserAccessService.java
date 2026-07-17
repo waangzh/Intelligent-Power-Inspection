@@ -38,10 +38,7 @@ public class UserAccessService {
   }
 
   private Map<String, Object> scopes() {
-    List<String> siteIds = dataStore.list(DataCategory.SITE).stream()
-      .map(item -> String.valueOf(item.get("id")))
-      .sorted()
-      .toList();
+    List<String> siteIds = dataStore.ids(DataCategory.SITE);
     Map<String, Object> scopes = new LinkedHashMap<>();
     scopes.put("siteIds", siteIds);
     return scopes;

@@ -217,14 +217,16 @@ type Permission =
 ### 5.5 工单
 
 
-| 方法                                          | HTTP                      | 说明    |
-| ------------------------------------------- | ------------------------- | ----- |
-| `getWorkOrders()`                           | `GET /work-orders`        | 工单列表  |
-| `createWorkOrderFromAlarm(alarm, creator)`  | `POST /work-orders`       | 从告警创建 |
-| `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}` | 状态流转  |
+| 方法                                          | HTTP                                  | 说明                                  |
+| ------------------------------------------- | ------------------------------------- | ------------------------------------ |
+| `getWorkOrders()`                           | `GET /work-orders`                    | 工单列表                                |
+| `createWorkOrderFromAlarm(alarm, creator)`  | `POST /work-orders/from-alarm/{alarmId}` | 从告警创建                              |
+| `claimWorkOrder(id)`                        | `POST /work-orders/{id}/claim`        | 调度员接单，仅此接口会写入 assigneeId/assigneeName |
+| `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}/status`      | 状态流转，`extra.review` 需符合后端 conclusion/onsiteFinding/handlingMeasures/followUpPlan 结构 |
+| `patchWorkOrderQuiet(id, patch)`            | `PATCH /work-orders/{id}`             | 仅修改工单本身信息（如优先级），仅接单调度员本人可调用 |
 
 
-状态：`PENDING → PROCESSING → REVIEW → CLOSED`
+状态：`PENDING → PROCESSING（仅通过 claim）→ REVIEW → CLOSED`，`REVIEW → PROCESSING`（管理员退回重做），`PENDING/PROCESSING → CANCELLED`（管理员取消，需 `workorder:review` 权限）
 
 ### 5.6 机器人 / 检测 / 通知
 

@@ -2,9 +2,9 @@
 
 page {
   background: var(--pi-bg);
-  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 28rpx;
-  color: #1a2b3c;
+  color: var(--pi-text);
 }
 
 .container {
@@ -14,7 +14,8 @@ page {
 
 .card {
   background: #fff;
-  border-radius: 20rpx;
+  border: 1rpx solid var(--pi-border);
+  border-radius: var(--pi-card-radius);
   box-shadow: var(--pi-card-shadow);
   padding: 24rpx;
   margin-bottom: 24rpx;
@@ -22,9 +23,9 @@ page {
 
 .card-title {
   font-size: 30rpx;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 16rpx;
-  color: #1a2b3c;
+  color: var(--pi-text);
 }
 
 .stat-grid {
@@ -37,7 +38,8 @@ page {
   flex: 1;
   min-width: 40%;
   background: #fff;
-  border-radius: 20rpx;
+  border: 1rpx solid var(--pi-border);
+  border-radius: var(--pi-card-radius);
   box-shadow: var(--pi-card-shadow);
   padding: 24rpx;
 }
@@ -50,13 +52,13 @@ page {
 
 .stat-label {
   font-size: 24rpx;
-  color: #6b7c93;
+  color: var(--pi-muted);
   margin-top: 8rpx;
 }
 
 .empty-hint {
   text-align: center;
-  color: #909399;
+  color: var(--pi-muted-light);
   padding: 60rpx 24rpx;
 }
 
@@ -74,19 +76,20 @@ page {
 .tag {
   display: inline-block;
   padding: 4rpx 12rpx;
-  border-radius: 8rpx;
+  border-radius: 12rpx;
   font-size: 22rpx;
+  font-weight: 600;
 }
 
-.tag-danger { background: #fef0f0; color: #f56c6c; }
-.tag-warning { background: #fdf6ec; color: #e6a23c; }
-.tag-success { background: #f0f9eb; color: #67c23a; }
-.tag-info { background: #f4f4f5; color: #909399; }
-.tag-primary { background: #ecf5ff; color: #1a5fb4; }
+.tag-danger { background: var(--pi-danger-soft); color: var(--pi-danger); }
+.tag-warning { background: var(--pi-warning-soft); color: var(--pi-warning); }
+.tag-success { background: var(--pi-success-soft); color: var(--pi-success); }
+.tag-info { background: var(--pi-info-soft); color: var(--pi-muted); }
+.tag-primary { background: var(--pi-primary-soft); color: var(--pi-primary); }
 
 .list-item {
   padding: 24rpx;
-  border-bottom: 1rpx solid #f0f2f5;
+  border-bottom: 1rpx solid var(--pi-border-soft);
 }
 
 .list-item:last-child { border-bottom: none; }
@@ -97,4 +100,6 @@ page {
   align-items: center;
 }
 
-.muted { color: #909399; font-size: 24rpx; }
+.muted { color: var(--pi-muted-light); font-size: 24rpx; }
+
+.link { color: var(--pi-primary); font-size: 26rpx; }

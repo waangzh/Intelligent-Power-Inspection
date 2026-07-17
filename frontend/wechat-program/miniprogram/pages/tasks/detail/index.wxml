@@ -6,7 +6,7 @@
       <task-status-tag status="{{task.status}}" />
       <button size="mini" class="btn-plain" bindtap="goBack">返回列表</button>
     </view>
-    <progress percent="{{task.progress}}" stroke-width="8" activeColor="#1a5fb4" />
+    <progress percent="{{task.progress}}" stroke-width="8" activeColor="#1768f2" />
     <view class="info-row"><text class="muted">路线</text><text>{{routeName}}</text></view>
     <view class="info-row"><text class="muted">机器人</text><text>{{robotName}}</text></view>
     <view class="info-row"><text class="muted">检查点</text><text>第 {{task.currentCheckpointSeq}} / {{checkpointTotal}} 个</text></view>

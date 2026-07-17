@@ -17,6 +17,18 @@ const HANDLING_METHOD_OPTIONS = [
   '误报关闭',
 ]
 
+const REVIEW_CONCLUSION_OPTIONS = ['RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED', 'FALSE_ALARM']
+
+const REVIEW_CONCLUSION_LABELS = {
+  RESOLVED: '已消缺',
+  PARTIALLY_RESOLVED: '部分消缺',
+  UNRESOLVED: '未消缺',
+  FALSE_ALARM: '误报',
+}
+
+/** 部分消缺 / 未消缺时，后端要求必须填写遗留风险与后续计划 */
+const CONCLUSIONS_REQUIRING_FOLLOW_UP = ['PARTIALLY_RESOLVED', 'UNRESOLVED']
+
 const ACTIVE_STATUSES = ['PROCESSING', 'REVIEW']
 
 /** 后端曾把 assigneeName 默认成创建人，且未写入 assigneeId */
@@ -112,6 +124,23 @@ function resolutionSummary(form) {
     .join('；')
 }
 
+/**
+ * 后端 `/work-orders/{id}/status` 在流转到 REVIEW 时要求提交结构化的 review
+ * （conclusion/onsiteFinding/handlingMeasures/followUpPlan），字段与现场处理表单不同，
+ * 这里做一次转换，避免真实后端因缺少 review 而拒绝提交。
+ */
+function buildReviewFromResolveForm(form) {
+  const handlingMeasures = form.replacedParts
+    ? `现场处理方式为${form.handlingMethod}，更换部件：${form.replacedParts}`
+    : `现场处理方式为${form.handlingMethod}`
+  return {
+    conclusion: form.conclusion,
+    onsiteFinding: `现场故障类型为${form.faultType}，试验/复测结果：${form.testResult}`,
+    handlingMeasures,
+    followUpPlan: form.remarks || undefined,
+  }
+}
+
 function enrichWorkOrder(order) {
   const loc = order.location || {}
   const resolutionForm = order.resolutionForm
@@ -127,6 +156,7 @@ function enrichWorkOrder(order) {
     resolutionSubmittedLabel: resolutionForm
       ? `${resolutionForm.submittedBy} · ${(resolutionForm.submittedAt || '').slice(0, 16).replace('T', ' ')}`
       : '',
+    resolutionConclusionLabel: resolutionForm?.conclusion ? REVIEW_CONCLUSION_LABELS[resolutionForm.conclusion] : '',
     reviewResultLabel: reviewForm
       ? (reviewForm.result === 'PASS' ? '通过' : '退回')
       : '',
@@ -139,6 +169,9 @@ function enrichWorkOrder(order) {
 module.exports = {
   FAULT_TYPE_OPTIONS,
   HANDLING_METHOD_OPTIONS,
+  REVIEW_CONCLUSION_OPTIONS,
+  REVIEW_CONCLUSION_LABELS,
+  CONCLUSIONS_REQUIRING_FOLLOW_UP,
   isPhantomAssignee,
   isWorkOrderUnassigned,
   resolveAssigneeName,
@@ -150,5 +183,6 @@ module.exports = {
   buildLocationFromAlarm,
   locationLabel,
   resolutionSummary,
+  buildReviewFromResolveForm,
   enrichWorkOrder,
 }

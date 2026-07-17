@@ -43,6 +43,7 @@ flowchart LR
 | Spring `app.robot.mode=bridge`、execution 与控制 worker | 已实现，待服务器部署 |
 | Spring 轮询 Bridge events 并更新 Task/STOMP | 已实现，待无运动联调 |
 | Vue Web revision-backed 任务与 execution 控制 | 已实现，待浏览器验收 |
+| 默认地图上传、V13 内容身份、人工审核 PGM 预览 | 已实现并于 2026-07-17 部署；待现场从 APP 发起真实地图验收 |
 | 公网无运动部署 | 按 acceptance runbook 执行并记录 |
 | 真实路线运动 | 必须等待现场授权 |
 

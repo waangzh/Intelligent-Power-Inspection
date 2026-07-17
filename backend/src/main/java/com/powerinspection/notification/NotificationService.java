@@ -1,6 +1,7 @@
 package com.powerinspection.notification;
 
 import com.powerinspection.common.Ids;
+import com.powerinspection.common.ResourceChangeEvent;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import java.time.Instant;
@@ -44,10 +45,11 @@ public class NotificationService {
     item.putAll(extras);
     item.put("createdAt", Instant.now().toString());
     Map<String, Object> saved = dataStore.upsert(DataCategory.NOTIFICATION, item);
+    ResourceChangeEvent event = ResourceChangeEvent.created("notification", saved.get("id"));
     if ("*".equals(userId)) {
-      messagingTemplate.convertAndSend("/topic/notifications", saved);
+      messagingTemplate.convertAndSend("/topic/notifications", event);
     } else {
-      messagingTemplate.convertAndSend("/topic/notifications/" + userId, saved);
+      messagingTemplate.convertAndSend("/topic/notifications/" + userId, event);
     }
     return saved;
   }

@@ -120,7 +120,8 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/sites").header("Authorization", bearer(token)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].id").exists());
+      .andExpect(jsonPath("$.data.items[0].id").exists())
+      .andExpect(jsonPath("$.data.total", greaterThanOrEqualTo(1)));
 
     String body = """
       {
@@ -249,7 +250,8 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/sites/site_test_api/areas").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].siteId").value("site_test_api"));
+      .andExpect(jsonPath("$.data.items[0].siteId").value("site_test_api"))
+      .andExpect(jsonPath("$.data.total").value(1));
 
     mockMvc.perform(patch("/api/v1/sites/site_test_api/areas/area_test_api")
         .header("Authorization", bearer(dispatcherToken))
@@ -390,11 +392,12 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/tasks/task_flow_api/events").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
+      .andExpect(jsonPath("$.data.items.length()", greaterThanOrEqualTo(1)));
 
     mockMvc.perform(get("/api/v1/records").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[?(@.taskId == 'task_flow_api')]").exists());
+      .andExpect(jsonPath("$.data.items[?(@.taskId == 'task_flow_api')]").exists())
+      .andExpect(jsonPath("$.data.total", greaterThanOrEqualTo(1)));
 
     mockMvc.perform(post("/api/v1/records/export").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
@@ -403,7 +406,7 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/alarms").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
+      .andExpect(jsonPath("$.data.items.length()", greaterThanOrEqualTo(1)));
 
     mockMvc.perform(post("/api/v1/alarms/alarm_flow_001/ack").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
@@ -480,7 +483,7 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/notifications").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
+      .andExpect(jsonPath("$.data.items.length()", greaterThanOrEqualTo(1)));
 
     mockMvc.perform(patch("/api/v1/notifications/ntf_flow_admin/read").header("Authorization", bearer(adminToken)))
       .andExpect(status().isOk())

@@ -30,7 +30,6 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/alarms/index')) return
     syncTabBar(this)
-    const user = app.globalData.user
     const perms = app.globalData.permissions
     this.setData({
       canAck: hasPermission(perms, 'alarm:ack'),
@@ -66,9 +65,9 @@ Page({
         medium: enriched.filter((a) => a.severity === 'MEDIUM').length,
       }
       const severityChart = [
-        { label: '紧急', value: stats.critical, color: '#f56c6c' },
-        { label: '高', value: stats.high, color: '#e6a23c' },
-        { label: '中', value: stats.medium, color: '#409eff' },
+        { label: '紧急', value: stats.critical, color: '#f04438' },
+        { label: '高', value: stats.high, color: '#ff8a00' },
+        { label: '中', value: stats.medium, color: '#1768f2' },
       ]
       this.setData({
         alarms: enriched,

@@ -156,6 +156,7 @@
           <template #default="{ row }"><el-button text type="danger" size="small" @click="detectionStore.removeTemplate(row.id)">删除</el-button></template>
         </el-table-column>
       </el-table>
+      <ListPagination :total="detectionStore.total" :page="templatePage" @change="loadTemplatePage" />
     </el-card>
 
     <el-dialog v-model="dialogVisible" title="新建检测模板" width="500px">
@@ -174,6 +175,7 @@
 import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import DetectionConfig from '@/components/DetectionConfig.vue'
 import { resourcesApi } from '@/api/resources'
 import { usePermission } from '@/composables/usePermission'
@@ -189,6 +191,12 @@ import {
 } from '@/types'
 
 const detectionStore = useDetectionStore()
+const templatePage = ref(0)
+
+function loadTemplatePage(page: number) {
+  templatePage.value = page
+  void detectionStore.load({ page, size: 20 })
+}
 const { can } = usePermission()
 const dialogVisible = ref(false)
 const form = reactive({ name: '', scope: 'ROUTE' as 'ROUTE' | 'CHECKPOINT', description: '' })

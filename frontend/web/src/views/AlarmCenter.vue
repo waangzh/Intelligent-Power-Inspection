@@ -21,12 +21,12 @@
         <el-card shadow="never">
           <template #header>
             <div class="filter-bar">
-              <el-input v-model="keyword" placeholder="搜索告警内容" clearable style="width: 200px" size="small" />
-              <el-radio-group v-model="filter" size="small">
+              <el-input v-model="keyword" placeholder="搜索告警内容" clearable style="width: 200px" size="small" @change="searchAlarms" />
+              <el-radio-group v-model="filter" size="small" @change="searchAlarms">
                 <el-radio-button value="all">全部</el-radio-button>
                 <el-radio-button value="pending">未确认</el-radio-button>
               </el-radio-group>
-              <el-select v-model="severityFilter" placeholder="级别" clearable size="small" style="width: 100px">
+              <el-select v-model="severityFilter" placeholder="级别" clearable size="small" style="width: 100px" @change="searchAlarms">
                 <el-option label="紧急" value="CRITICAL" />
                 <el-option label="高" value="HIGH" />
                 <el-option label="中" value="MEDIUM" />
@@ -78,6 +78,7 @@
               </template>
             </el-table-column>
           </el-table>
+          <ListPagination :total="alarmStore.total" :page="alarmPage" @change="loadAlarmPage" />
         </el-card>
       </el-col>
       <el-col :span="8">
@@ -149,6 +150,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ChartCard from '@/components/ChartCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useAlarmStore } from '@/stores/alarm'
 import { useAuthStore } from '@/stores/auth'
@@ -165,6 +167,7 @@ const filter = ref<'all' | 'pending'>('all')
 const severityFilter = ref('')
 const keyword = ref('')
 const selected = ref<Alarm | null>(alarmStore.alarms[0] ?? null)
+const alarmPage = ref(0)
 const policyDialogVisible = ref(false)
 const policySaving = ref(false)
 const policyRows = reactive<Array<{ severity: AlarmSeverity; label: string; mode: AlarmWorkOrderMode }>>([
@@ -188,6 +191,21 @@ const filteredAlarms = computed(() => {
   if (keyword.value) list = list.filter((a) => a.message.includes(keyword.value))
   return list
 })
+
+function loadAlarmPage(page: number) {
+  alarmPage.value = page
+  void alarmStore.load({
+    page,
+    size: 20,
+    q: keyword.value,
+    severity: severityFilter.value || undefined,
+    acknowledged: filter.value === 'pending' ? false : undefined,
+  })
+}
+
+function searchAlarms() {
+  loadAlarmPage(0)
+}
 
 const chartOption = computed(() => ({
   series: [{

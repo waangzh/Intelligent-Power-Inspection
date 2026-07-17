@@ -3,6 +3,8 @@ package com.powerinspection.site;
 import com.powerinspection.business.CrudSupport;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.security.CurrentUser;
@@ -35,8 +37,9 @@ public class SiteController extends CrudSupport {
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> sites() {
-    return ApiResponse.ok(list(DataCategory.SITE));
+  public ApiResponse<PageResult<Map<String, Object>>> sites(ListQuery query) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(page(DataCategory.SITE, query, "status"));
   }
 
   @GetMapping("/slam-maps")
@@ -49,6 +52,7 @@ public class SiteController extends CrudSupport {
 
   @GetMapping("/{id}")
   public ApiResponse<Map<String, Object>> site(@PathVariable String id) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
     return ApiResponse.ok(dataStore.get(DataCategory.SITE, id));
   }
 
@@ -63,8 +67,9 @@ public class SiteController extends CrudSupport {
   }
 
   @GetMapping("/areas")
-  public ApiResponse<List<Map<String, Object>>> areas() {
-    return ApiResponse.ok(list(DataCategory.AREA));
+  public ApiResponse<PageResult<Map<String, Object>>> areas(ListQuery query) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(page(DataCategory.AREA, query, "siteId"));
   }
 
   @PostMapping
@@ -123,8 +128,11 @@ public class SiteController extends CrudSupport {
     return ApiResponse.ok();
   }
   @GetMapping("/{id}/areas")
-  public ApiResponse<List<Map<String, Object>>> areasBySite(@PathVariable String id) {
-    return ApiResponse.ok(list(DataCategory.AREA).stream().filter(area -> id.equals(String.valueOf(area.get("siteId")))).toList());
+  public ApiResponse<PageResult<Map<String, Object>>> areasBySite(@PathVariable String id, ListQuery query) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    ensureSiteExists(id);
+    query.setSiteId(id);
+    return ApiResponse.ok(page(DataCategory.AREA, query, "siteId"));
   }
 
   @PostMapping("/{id}/areas")

@@ -3,13 +3,16 @@ import hmac
 import json
 import os
 import secrets
+import shutil
+import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-from fastapi import FastAPI, HTTPException, Request
+import httpx
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from .store import Store, StoreConflict, now
@@ -41,6 +44,13 @@ def create_app() -> FastAPI:
     platform_token = os.environ.get("PLATFORM_BEARER_TOKEN", "")
     bridge_token = os.environ.get("BRIDGE_API_TOKEN", "")
     timeout = float(os.environ.get("BRIDGE_READ_TIMEOUT_SEC", "10"))
+    upload_enabled = os.environ.get("BRIDGE_MAP_UPLOAD_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+    upload_connect_timeout = float(os.environ.get("BRIDGE_MAP_UPLOAD_CONNECT_TIMEOUT_SEC", "10"))
+    upload_read_timeout = float(os.environ.get("BRIDGE_MAP_UPLOAD_READ_TIMEOUT_SEC", "60"))
+    upload_yaml_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_YAML_MAX_BYTES", str(1024 * 1024)))
+    upload_pgm_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_PGM_MAX_BYTES", str(100 * 1024 * 1024)))
+    upload_request_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_REQUEST_MAX_BYTES", str(110 * 1024 * 1024)))
+    upload_temp_root = Path(os.environ.get("BRIDGE_MAP_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/map-upload-tmp")).expanduser()
     store = Store(os.environ.get("ROBOT_BRIDGE_STORAGE_PATH", "~/.local/share/ylhb/robot-bridge.db"))
     app.state.store = store
 
@@ -81,6 +91,34 @@ def create_app() -> FastAPI:
             return content
         payload = json.loads(content.decode())
         return payload.get("data", payload) if isinstance(payload, dict) else payload
+
+    async def save_upload(upload, path, limit):
+        digest = hashlib.sha256()
+        size = 0
+        with path.open("wb") as target:
+            while chunk := await upload.read(1024 * 1024):
+                size += len(chunk)
+                if size > limit:
+                    raise BridgeError("PAYLOAD_TOO_LARGE", "map file exceeds configured size limit", 413)
+                target.write(chunk)
+                digest.update(chunk)
+        return size, digest.hexdigest()
+
+    def valid_sha256(value):
+        return len(value) == 64 and all(character in "0123456789abcdefABCDEF" for character in value)
+
+    def platform_error(status, payload):
+        codes = {
+            400: "INVALID_REQUEST", 401: "PLATFORM_AUTH_FAILED",
+            403: "FORBIDDEN", 404: "ROBOT_NOT_FOUND",
+            409: "CONTENT_CONFLICT", 413: "PAYLOAD_TOO_LARGE",
+            429: "RATE_LIMITED",
+        }
+        return JSONResponse(status_code=status, content={
+            "code": codes.get(status, "PLATFORM_UNREACHABLE" if status >= 500 else "PLATFORM_ERROR"),
+            "message": str(payload.get("message") or f"platform HTTP {status}") if isinstance(payload, dict) else f"platform HTTP {status}",
+            "requestId": "",
+        })
 
     @app.get("/bridge/v1/health")
     async def health():
@@ -237,6 +275,82 @@ def create_app() -> FastAPI:
         if any(not isinstance(event, dict) for event in events):
             raise BridgeError("INVALID_REQUEST", "event must be an object")
         return {"acceptedThroughSequence": store.accept_events(robot_id, events)}
+
+    @app.post("/robot-api/v1/map-assets")
+    async def upload_map_asset(
+        request: Request,
+        yaml_file: UploadFile = File(alias="yaml"),
+        pgm_file: UploadFile = File(alias="pgm"),
+        captured_at: str = Form(default="", alias="capturedAt"),
+        content_identity: str = Form(alias="contentIdentitySha256"),
+        yaml_sha256: str = Form(default="", alias="yamlSha256"),
+        pgm_sha256: str = Form(default="", alias="pgmSha256"),
+    ):
+        if not upload_enabled:
+            raise BridgeError("UPLOAD_DISABLED", "map upload is disabled", 503)
+        robot_id = token_robot(request)
+        idempotency_key = request.headers.get("idempotency-key", "").strip()
+        if not idempotency_key or len(idempotency_key) > 160:
+            raise BridgeError("INVALID_REQUEST", "valid Idempotency-Key is required")
+        yaml_name = safe_name(yaml_file.filename, (".yaml", ".yml"))
+        pgm_name = safe_name(pgm_file.filename, (".pgm",))
+        if not valid_sha256(content_identity) or not valid_sha256(yaml_sha256) or not valid_sha256(pgm_sha256):
+            raise BridgeError("INVALID_REQUEST", "content and audit hashes must be SHA-256")
+        upload_temp_root.mkdir(parents=True, exist_ok=True)
+        temporary = Path(tempfile.mkdtemp(prefix="map-upload-", dir=upload_temp_root))
+        yaml_path, pgm_path = temporary / yaml_name, temporary / pgm_name
+        try:
+            yaml_size, actual_yaml_sha = await save_upload(yaml_file, yaml_path, upload_yaml_max)
+            pgm_size, actual_pgm_sha = await save_upload(pgm_file, pgm_path, upload_pgm_max)
+            if yaml_size + pgm_size > upload_request_max:
+                raise BridgeError("PAYLOAD_TOO_LARGE", "map upload exceeds configured request size", 413)
+            if not hmac.compare_digest(yaml_sha256.lower(), actual_yaml_sha):
+                raise BridgeError("CONTENT_MISMATCH", "YAML hash mismatch", 409)
+            if not hmac.compare_digest(pgm_sha256.lower(), actual_pgm_sha):
+                raise BridgeError("CONTENT_MISMATCH", "PGM hash mismatch", 409)
+            if not platform_url or not platform_token:
+                raise BridgeError("PLATFORM_UNREACHABLE", "platform configuration is missing", 503)
+            headers = {
+                "Authorization": f"Bearer {platform_token}",
+                "X-Bridge-Robot-Id": robot_id,
+                "Idempotency-Key": idempotency_key,
+            }
+            timeout_config = httpx.Timeout(upload_read_timeout, connect=upload_connect_timeout)
+            try:
+                with yaml_path.open("rb") as yaml_source, pgm_path.open("rb") as pgm_source:
+                    async with httpx.AsyncClient(timeout=timeout_config, trust_env=False) as client:
+                        response = await client.post(
+                            platform_url + "/api/v1/internal/robot-map-assets",
+                            headers=headers,
+                            data={
+                                "capturedAt": captured_at,
+                                "contentIdentitySha256": content_identity,
+                            },
+                            files={
+                                "yaml": (yaml_name, yaml_source, "application/x-yaml"),
+                                "pgm": (pgm_name, pgm_source, "image/x-portable-graymap"),
+                            },
+                        )
+            except httpx.HTTPError as exc:
+                raise BridgeError("PLATFORM_UNREACHABLE", f"platform upload failed: {type(exc).__name__}", 503) from exc
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise BridgeError("PLATFORM_UNREACHABLE", "platform returned invalid JSON", 503) from exc
+            if response.status_code >= 400:
+                return platform_error(response.status_code, payload)
+            asset = payload.get("data", payload)
+            return JSONResponse(status_code=response.status_code, content={
+                "mapAssetId": asset.get("id"),
+                "status": asset.get("status"),
+                "contentIdentitySha256": asset.get("contentIdentitySha256"),
+                "yamlSha256": asset.get("yamlSha256"),
+                "pgmSha256": asset.get("pgmSha256"),
+            })
+        finally:
+            await yaml_file.close()
+            await pgm_file.close()
+            shutil.rmtree(temporary, ignore_errors=True)
 
     @app.get("/robot-api/v1/deployments/{deployment_id}/{asset}")
     async def deployment_asset(deployment_id: str, asset: str, request: Request):

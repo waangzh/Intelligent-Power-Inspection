@@ -10,7 +10,7 @@
       <input class="input" password placeholder="密码" value="{{password}}" bindinput="onPass" />
     </view>
     <label class="remember">
-      <checkbox checked="{{remember}}" bindtap="toggleRemember" color="#1a5fb4" /> 记住我（7 天）
+      <checkbox checked="{{remember}}" bindtap="toggleRemember" color="#1768f2" /> 记住我（7 天）
     </label>
 
     <button class="submit btn-primary" loading="{{loading}}" bindtap="handleLogin">登 录</button>

@@ -4,6 +4,8 @@ import com.powerinspection.business.CrudSupport;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.common.Ids;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.mapasset.MapAssetService;
@@ -43,17 +45,18 @@ public class RouteController extends CrudSupport {
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> routes(@RequestParam(required = false) String siteId) {
-    List<Map<String, Object>> routes = list(DataCategory.ROUTE);
-    if (siteId != null && !siteId.isBlank()) {
-      routes = routes.stream().filter(route -> siteId.equals(String.valueOf(route.get("siteId")))).toList();
-    }
-    routes = routes.stream().map(RouteExecutorSupport::attachRosAlias).toList();
-    return ApiResponse.ok(routes);
+  public ApiResponse<PageResult<Map<String, Object>>> routes(ListQuery query) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    PageResult<Map<String, Object>> result = page(DataCategory.ROUTE, query, "siteId", "status");
+    return ApiResponse.ok(new PageResult<>(
+      result.items().stream().map(RouteExecutorSupport::attachRosAlias).toList(),
+      result.total(), result.page(), result.size(), result.hasMore(), result.nextCursor()
+    ));
   }
 
   @GetMapping("/{id}")
   public ApiResponse<Map<String, Object>> route(@PathVariable String id) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
     return ApiResponse.ok(RouteExecutorSupport.attachRosAlias(dataStore.get(DataCategory.ROUTE, id)));
   }
 

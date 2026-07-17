@@ -72,14 +72,14 @@ const TAB_LIST_VIEWER = [
 const NATIVE_TAB_PATHS = [
   TAB_DASHBOARD.pagePath,
   TAB_WORKORDERS.pagePath,
-  TAB_MONITOR.pagePath,
+  TAB_ALARMS.pagePath,
   TAB_TASKS.pagePath,
   TAB_PROFILE.pagePath,
 ]
 
 const TAB_PAGE_PATHS = [
   ...NATIVE_TAB_PATHS,
-  TAB_ALARMS.pagePath,
+  TAB_MONITOR.pagePath,
 ]
 
 function isNativeTabPage(url) {
