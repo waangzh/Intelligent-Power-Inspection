@@ -72,6 +72,7 @@ export function useRosMapRouteEditor(
 
   const mapBitmapCanvas = document.createElement('canvas')
   let mapBitmapCtx = mapBitmapCanvas.getContext('2d')
+  let wrapResizeObserver: ResizeObserver | null = null
 
   const jsonPreview = computed<string>(() => JSON.stringify(exportDocument() as unknown, null, 2))
   const isLegacyDraft = computed(() => sourceTemplate.value?.version === 2)
@@ -146,8 +147,12 @@ export function useRosMapRouteEditor(
     }
     const wMeters = (map.width * map.resolution).toFixed(2)
     const hMeters = (map.height * map.resolution).toFixed(2)
+    const minX = map.origin[0]
+    const maxX = map.origin[0] + map.width * map.resolution
+    const minY = map.origin[1]
+    const maxY = map.origin[1] + map.height * map.resolution
     const files = [map.yamlName, map.pgmName || map.image].filter(Boolean).join(' + ')
-    mapInfo.value = `${files} | ${map.width}x${map.height}px | ${wMeters}m x ${hMeters}m | res=${map.resolution}`
+    mapInfo.value = `${files} | ${map.width}x${map.height}px | ${wMeters}m x ${hMeters}m | origin=[${map.origin.join(', ')}] | res=${map.resolution} | x=${minX.toFixed(2)}..${maxX.toFixed(2)}, y=${minY.toFixed(2)}..${maxY.toFixed(2)}`
   }
 
   function drawArrow(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: number, color: string) {
@@ -389,6 +394,7 @@ export function useRosMapRouteEditor(
   function setMode(next: EditorMode) {
     mode.value = next
     yawPreview.value = null
+    hoverPixel.value = null
     draw()
   }
 
@@ -660,12 +666,14 @@ export function useRosMapRouteEditor(
     if (!map.width || !map.height || !map.pixels) return
     const currentHash = mapIdentity.value.image_sha256
     const sameMap = routeMap.yaml === map.yamlName
-      && rosMapImageFileName(routeMap.image).toLowerCase() === rosMapImageFileName(map.pgmName).toLowerCase()
+      && routeMap.image === map.image
+      && rosMapImageFileName(map.image).toLowerCase() === rosMapImageFileName(map.pgmName).toLowerCase()
       && routeMap.resolution === map.resolution
       && routeMap.width === map.width
       && routeMap.height === map.height
       && routeMap.origin.every((value, index) => value === map.origin[index])
-      && (!currentHash || routeMap.image_sha256 === currentHash)
+      && /^[0-9a-f]{64}$/.test(currentHash)
+      && routeMap.image_sha256 === currentHash
     if (!sameMap) throw new Error('导入路线不属于当前地图。请加载其对应 YAML/PGM，或在当前地图重新标注起点、巡检点、路线和禁行区。')
   }
 
@@ -774,7 +782,7 @@ export function useRosMapRouteEditor(
       draw()
       return
     }
-    if (hit && mode.value !== 'pan') {
+    if (hit && mode.value !== 'pan' && mode.value !== 'keepout') {
       drag.value = hit.kind === 'target' ? { type: 'target', id: hit.id } : { type: 'start' }
       if (hit.kind === 'target') {
         selectedTargetId.value = hit.id
@@ -851,6 +859,12 @@ export function useRosMapRouteEditor(
     draw()
   }
 
+  function onMouseLeave() {
+    hoverPixel.value = null
+    if (!drag.value) yawPreview.value = null
+    draw()
+  }
+
   function onWheel(event: WheelEvent) {
     event.preventDefault()
     const canvas = canvasRef.value
@@ -915,12 +929,18 @@ export function useRosMapRouteEditor(
 
   onMounted(() => {
     resizeCanvas()
+    if (typeof ResizeObserver !== 'undefined' && wrapRef.value) {
+      wrapResizeObserver = new ResizeObserver(() => resizeCanvas())
+      wrapResizeObserver.observe(wrapRef.value)
+    }
     window.addEventListener('resize', resizeCanvas)
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
   })
 
   onUnmounted(() => {
+    wrapResizeObserver?.disconnect()
+    wrapResizeObserver = null
     window.removeEventListener('resize', resizeCanvas)
     window.removeEventListener('mousemove', onMouseMove)
     window.removeEventListener('mouseup', onMouseUp)
@@ -970,6 +990,7 @@ export function useRosMapRouteEditor(
     updateZonePoint,
     handleDroppedFiles,
     onMouseDown,
+    onMouseLeave,
     onWheel,
     resizeCanvas,
     draw,

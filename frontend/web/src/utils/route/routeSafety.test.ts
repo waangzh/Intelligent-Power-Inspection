@@ -27,6 +27,20 @@ describe('routeSafety', () => {
     expect(classifyFootprint(map, zones, { x: 5, y: 5, yaw: 0 })).toBe('keepout')
   })
 
+  it('不把仅与车体边缘延长线相交的远端禁行区误判为碰撞', () => {
+    const map = freeMap()
+    const zones = [{
+      id: 'zone_001',
+      name: '远端禁行区',
+      type: 'hard_keepout' as const,
+      enabled: true,
+      maskPaddingM: 1,
+      polygon: [{ x: 7, y: 4 }, { x: 8, y: 4 }, { x: 8, y: 6 }, { x: 7, y: 6 }],
+    }]
+
+    expect(classifyFootprint(map, zones, { x: 5, y: 5, yaw: 0 })).toBe('free')
+  })
+
   it('将不安全点位和不完整禁行区拦截为不可导出', () => {
     const map = freeMap()
     const points = [{ id: 'start_pose', label: '起点', x: 5, y: 5, yaw: 0 }]
