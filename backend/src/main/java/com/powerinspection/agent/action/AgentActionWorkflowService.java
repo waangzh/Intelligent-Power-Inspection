@@ -15,6 +15,8 @@ import com.powerinspection.agent.planner.ActionProposal;
 import com.powerinspection.agent.policy.AgentPolicyDecision;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
+import com.powerinspection.config.JwtProperties;
+import com.powerinspection.security.AuthenticatedUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
 import com.powerinspection.user.UserEntity;
@@ -27,6 +29,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -42,15 +46,18 @@ public class AgentActionWorkflowService {
   private final PermissionService permissionService;
   private final ObjectMapper objectMapper;
   private final SimpMessagingTemplate messagingTemplate;
+  private final JwtProperties jwtProperties;
 
-  public AgentActionWorkflowService(AgentActionRepository actionRepository, AgentCaseRepository caseRepository, AgentRunRepository runRepository, AgentStepRepository stepRepository, AgentActionProposalService proposalService, AgentActionExecutor executor, AgentExecutionClaimService claimService, PermissionService permissionService, ObjectMapper objectMapper, SimpMessagingTemplate messagingTemplate) {
-    this.actionRepository = actionRepository; this.caseRepository = caseRepository; this.runRepository = runRepository; this.stepRepository = stepRepository; this.proposalService = proposalService; this.executor = executor; this.claimService = claimService; this.permissionService = permissionService; this.objectMapper = objectMapper; this.messagingTemplate = messagingTemplate;
+  public AgentActionWorkflowService(AgentActionRepository actionRepository, AgentCaseRepository caseRepository, AgentRunRepository runRepository, AgentStepRepository stepRepository, AgentActionProposalService proposalService, AgentActionExecutor executor, AgentExecutionClaimService claimService, PermissionService permissionService, ObjectMapper objectMapper, SimpMessagingTemplate messagingTemplate, JwtProperties jwtProperties) {
+    this.actionRepository = actionRepository; this.caseRepository = caseRepository; this.runRepository = runRepository; this.stepRepository = stepRepository; this.proposalService = proposalService; this.executor = executor; this.claimService = claimService; this.permissionService = permissionService; this.objectMapper = objectMapper; this.messagingTemplate = messagingTemplate; this.jwtProperties = jwtProperties;
   }
 
   @Transactional
   public AgentActionEntity approve(String actionId, AgentDtos.ActionDecisionRequest request, UserEntity user) {
     permissionService.require(user, Permission.AGENT_APPROVE);
     AgentActionEntity action = action(actionId);
+    forbidSelfApproval(action, user);
+    requireRecentAuth();
     requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.PROPOSED);
     requireBusinessPermission(action.getType(), user);
     AgentCaseEntity agentCase = agentCase(action); AgentRunEntity run = run(action);
@@ -70,7 +77,10 @@ public class AgentActionWorkflowService {
   @Transactional
   public AgentActionEntity reject(String actionId, AgentDtos.ActionDecisionRequest request, UserEntity user) {
     permissionService.require(user, Permission.AGENT_APPROVE);
-    AgentActionEntity action = action(actionId); requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.PROPOSED); requireBusinessPermission(action.getType(), user);
+    AgentActionEntity action = action(actionId);
+    forbidSelfApproval(action, user);
+    requireRecentAuth();
+    requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.PROPOSED); requireBusinessPermission(action.getType(), user);
     action.setStatus(AgentEnums.ActionStatus.REJECTED); action.setRejectedById(user.getId()); action.setRejectedAt(Instant.now()); action.setRejectionComment(request.comment().trim()); action.setUpdatedAt(Instant.now()); action = save(action);
     AgentRunEntity run = run(action); recordStep(run, AgentEnums.StepType.ACTION_REJECTED, "动作已被人工拒绝", Map.of("actionId", action.getId())); syncState(agentCase(action), run); return action;
   }
@@ -78,7 +88,10 @@ public class AgentActionWorkflowService {
   @Transactional
   public AgentActionEntity retry(String actionId, AgentDtos.ActionDecisionRequest request, UserEntity user) {
     permissionService.require(user, Permission.AGENT_APPROVE);
-    AgentActionEntity action = action(actionId); requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.FAILED); requireBusinessPermission(action.getType(), user);
+    AgentActionEntity action = action(actionId);
+    forbidSelfApproval(action, user);
+    requireRecentAuth();
+    requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.FAILED); requireBusinessPermission(action.getType(), user);
     AgentCaseEntity agentCase = agentCase(action); AgentRunEntity run = run(action); ActionProposal proposal = proposalService.revalidatedProposal(action, agentCase, proposalService.payload(action)); AgentPolicyDecision policy = proposalService.policy(action, agentCase, run, proposal, user);
     applyPayloadAndPolicy(action, proposal, policy, null, user);
     if (policy.decision() == AgentEnums.PolicyDecisionType.DENY) { action.setStatus(AgentEnums.ActionStatus.REJECTED); action.setRejectedAt(Instant.now()); action.setRejectedById(user.getId()); action.setRejectionComment(policy.reason()); action = save(action); syncState(agentCase, run); return action; }
@@ -132,6 +145,29 @@ public class AgentActionWorkflowService {
     else if (pending) { run.setStatus(AgentEnums.RunStatus.WAITING_APPROVAL); agentCase.setStatus(AgentEnums.CaseStatus.WAITING_APPROVAL); }
     else if (run.getStatus() == AgentEnums.RunStatus.WAITING_APPROVAL) { run.setStatus(AgentEnums.RunStatus.SUCCEEDED); run.setCompletedAt(Instant.now()); agentCase.setStatus(AgentEnums.CaseStatus.RESOLVED); agentCase.setResolvedAt(Instant.now()); }
     agentCase.setUpdatedAt(Instant.now()); runRepository.save(run); caseRepository.save(agentCase);
+  }
+
+  private void forbidSelfApproval(AgentActionEntity action, UserEntity user) {
+    String requestedById = action.getRequestedById();
+    if (requestedById == null || requestedById.isBlank()) {
+      requestedById = run(action).getCreatedById();
+    }
+    if (requestedById != null && requestedById.equals(user.getId())) {
+      throw ApiException.forbidden("发起人不能审批自己的动作");
+    }
+  }
+
+  private void requireRecentAuth() {
+    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
+      // Service-layer / test calls without JWT context skip the window check;
+      // HTTP requests always carry AuthenticatedUser after JwtAuthenticationFilter.
+      return;
+    }
+    long authTime = principal.authTimeEpochSeconds();
+    if (authTime <= 0 || Instant.now().getEpochSecond() - authTime > jwtProperties.getReauthWindowSeconds()) {
+      throw ApiException.forbidden("高风险操作需要近期重新认证，请先验证密码");
+    }
   }
 
   private void requireVersionAndState(AgentActionEntity action, long expectedVersion, AgentEnums.ActionStatus expected) { if (action.getVersion() != expectedVersion || action.getStatus() != expected) throw ApiException.conflict("动作已被其他请求处理，请刷新后重试"); }

@@ -19,24 +19,75 @@ export class ApiError extends Error {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const SESSION_KEY = 'pi_session'
 
-function authToken(): string | null {
+let refreshPromise: Promise<boolean> | null = null
+
+function readSession(): AuthSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY)
     if (!raw) return null
-    const session = JSON.parse(raw) as AuthSession
-    return session.token || null
+    return JSON.parse(raw) as AuthSession
   } catch {
     return null
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+function writeSession(session: AuthSession | null) {
+  if (!session) {
+    localStorage.removeItem(SESSION_KEY)
+    return
+  }
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+}
+
+function authToken(): string | null {
+  return readSession()?.token || null
+}
+
+async function tryRefreshSession(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (!response.ok) {
+          writeSession(null)
+          return false
+        }
+        const payload = (await response.json()) as ApiResponse<AuthSession>
+        if (payload.code !== 0 || !payload.data?.token) {
+          writeSession(null)
+          return false
+        }
+        const previous = readSession()
+        writeSession({
+          ...payload.data,
+          expiresAt: payload.data.expiresAt ?? previous?.expiresAt,
+        })
+        return true
+      } catch {
+        writeSession(null)
+        return false
+      } finally {
+        refreshPromise = null
+      }
+    })()
+  }
+  return refreshPromise
+}
+
+async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
   const headers = new Headers(init.headers)
   if (!(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
-  const isAuthRequest = path.startsWith('/auth/login') || path.startsWith('/auth/register')
-  const token = isAuthRequest ? null : authToken()
+  const isPublicAuth =
+    path.startsWith('/auth/login') ||
+    path.startsWith('/auth/register') ||
+    path.startsWith('/auth/refresh')
+  const token = isPublicAuth ? null : authToken()
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
@@ -44,10 +95,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
+    credentials: 'include',
   })
 
-  if (response.status === 401) {
-    localStorage.removeItem(SESSION_KEY)
+  if (response.status === 401 && !isPublicAuth && !retried) {
+    const refreshed = await tryRefreshSession()
+    if (refreshed) {
+      return request<T>(path, init, true)
+    }
+    writeSession(null)
   }
 
   const contentType = response.headers.get('content-type') || ''

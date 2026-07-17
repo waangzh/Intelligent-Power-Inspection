@@ -43,6 +43,9 @@ public final class AuthDtos {
   ) {
   }
 
+  public record ReauthRequest(@NotBlank(message = "请输入密码") String password) {
+  }
+
   public record ProfileRequest(String displayName, String phone, String bio, String avatarUrl) {
   }
 

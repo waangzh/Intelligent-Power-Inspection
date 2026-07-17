@@ -52,6 +52,7 @@ public class AgentActionProposalService {
     action.setId(Ids.next("agent_act")); action.setCaseId(agentCase.getId()); action.setRunId(run.getId()); action.setType(type); action.setTitle(proposal.title()); action.setReason(proposal.reason()); action.setRiskLevel(policy.riskLevel());
     action.setStatus(policy.decision() == AgentEnums.PolicyDecisionType.DENY ? AgentEnums.ActionStatus.REJECTED : AgentEnums.ActionStatus.PROPOSED);
     action.setPayloadJson(json(proposal.payload())); action.setConfidence(proposal.confidence()); action.setEvidenceIdsJson(json(proposal.evidenceIds())); action.setPolicyDecision(policy.decision()); action.setPolicyCode(policy.policyCode()); action.setPolicyReason(policy.reason()); action.setRequiresApproval(policy.decision() == AgentEnums.PolicyDecisionType.REQUIRE_APPROVAL); action.setIdempotencyKey(key);
+    action.setRequestedById(user == null ? run.getCreatedById() : user.getId());
     if (policy.decision() == AgentEnums.PolicyDecisionType.DENY) { action.setRejectedAt(now); action.setRejectionComment(policy.reason()); }
     action.setCreatedAt(now); action.setUpdatedAt(now);
     return new ProposalResult(actionRepository.save(action), true);

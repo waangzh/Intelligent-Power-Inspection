@@ -5,6 +5,7 @@ import com.powerinspection.auth.AuthDtos.PreferencesRequest;
 import com.powerinspection.auth.AuthDtos.ProfileRequest;
 import com.powerinspection.auth.AuthDtos.RoleRequest;
 import com.powerinspection.auth.AuthService;
+import com.powerinspection.auth.RefreshTokenService;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.security.CurrentUser;
@@ -27,12 +28,19 @@ public class UserController {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
   private final AuthService authService;
+  private final RefreshTokenService refreshTokenService;
 
-  public UserController(UserRepository userRepository, PermissionService permissionService, CurrentUser currentUser, AuthService authService) {
+  public UserController(
+      UserRepository userRepository,
+      PermissionService permissionService,
+      CurrentUser currentUser,
+      AuthService authService,
+      RefreshTokenService refreshTokenService) {
     this.userRepository = userRepository;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.authService = authService;
+    this.refreshTokenService = refreshTokenService;
   }
 
   @GetMapping
@@ -59,7 +67,11 @@ public class UserController {
     UserEntity user = userRepository.findById(id).orElseThrow(() -> ApiException.notFound("用户不存在"));
     user.setEnabled(request.enabled());
     user.setUpdatedAt(Instant.now().toString());
-    return ApiResponse.ok(UserDto.from(userRepository.save(user)));
+    UserDto saved = UserDto.from(userRepository.saveAndFlush(user));
+    if (!request.enabled()) {
+      refreshTokenService.revokeAllForUser(id);
+    }
+    return ApiResponse.ok(saved);
   }
 
   @PatchMapping("/me")

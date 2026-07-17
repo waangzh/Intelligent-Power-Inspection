@@ -13,7 +13,10 @@
 app:
   jwt:
     secret: test-secret-for-power-inspection
-    ttl-seconds: 3600
+    access-ttl-seconds: 3600
+    refresh-session-ttl-seconds: 7200
+    refresh-remember-ttl-seconds: 604800
+    reauth-window-seconds: 86400
   cors:
     allowed-origins:
       - http://localhost:5173
