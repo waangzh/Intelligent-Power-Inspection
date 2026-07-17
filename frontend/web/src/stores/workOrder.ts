@@ -8,6 +8,7 @@ import type {
   WorkOrderPriority,
   WorkOrderResolutionForm,
   WorkOrderReviewForm,
+  WorkOrderReviewInput,
   WorkOrderStatus,
 } from '@/types/workOrder'
 import { useSiteStore } from '@/stores/site'
@@ -36,6 +37,24 @@ function resolutionSummary(form: WorkOrderResolutionForm): string {
   ]
     .filter(Boolean)
     .join('；')
+}
+
+/**
+ * 后端 `/work-orders/{id}/status` 在流转到 REVIEW 时要求提交结构化的 review
+ * （conclusion/onsiteFinding/handlingMeasures/followUpPlan），字段与现场处理表单不同，
+ * 这里做一次转换，避免真实后端因缺少 review 而拒绝提交。
+ */
+function buildReviewInput(form: WorkOrderResolutionForm): WorkOrderReviewInput {
+  const onsiteFinding = `现场故障类型为${form.faultType}，试验/复测结果：${form.testResult}`
+  const handlingMeasures = form.replacedParts
+    ? `现场处理方式为${form.handlingMethod}，更换部件：${form.replacedParts}`
+    : `现场处理方式为${form.handlingMethod}`
+  return {
+    conclusion: form.conclusion,
+    onsiteFinding,
+    handlingMeasures,
+    followUpPlan: form.remarks || undefined,
+  }
 }
 
 export const useWorkOrderStore = defineStore('workOrder', () => {
@@ -131,7 +150,12 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
   async function updateStatus(
     id: string,
     status: WorkOrderStatus,
-    extra?: { resolution?: string; resolutionForm?: WorkOrderResolutionForm; reviewForm?: WorkOrderReviewForm },
+    extra?: {
+      resolution?: string
+      resolutionForm?: WorkOrderResolutionForm
+      reviewForm?: WorkOrderReviewForm
+      review?: WorkOrderReviewInput
+    },
   ) {
     const order = orders.value.find((o) => o.id === id)
     if (!order) return
@@ -144,6 +168,7 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
 
     const saved = await resourcesApi.updateWorkOrderStatus(id, status, {
       resolution: extra?.resolution ?? order.resolution,
+      review: extra?.review,
     })
     const merged = { ...saved, resolutionForm: order.resolutionForm, reviewForm: order.reviewForm, location: order.location }
     updateLocalOrder(merged)
@@ -155,6 +180,7 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
     return updateStatus(id, 'REVIEW', {
       resolution: resolutionSummary(fullForm),
       resolutionForm: fullForm,
+      review: buildReviewInput(fullForm),
     })
   }
 

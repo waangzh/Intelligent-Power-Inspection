@@ -4,7 +4,7 @@ const mock = require('./mock/store')
 const { uid, loadFromStorage } = require('../utils/storage')
 const { ROUTE_DETECTIONS, CHECKPOINT_DETECTIONS } = require('../utils/constants')
 const { createEmptyRosRoute } = require('../utils/ros-route')
-const { buildLocationFromAlarm, resolutionSummary, normalizeWorkOrder } = require('../utils/work-order')
+const { buildLocationFromAlarm, resolutionSummary, normalizeWorkOrder, buildReviewFromResolveForm } = require('../utils/work-order')
 const workOrderPerm = require('../utils/work-order-permission')
 
 function currentUser() {
@@ -581,7 +581,7 @@ async function updateWorkOrderStatus(id, status, extra = {}) {
     mock.save(mock.KEYS.workOrders, orders)
     return orders[idx]
   }
-  return http.patch(`/work-orders/${id}`, { status, ...extra })
+  return http.patch(`/work-orders/${id}/status`, { status, ...extra })
 }
 
 async function submitWorkOrderResolution(id, form) {
@@ -595,6 +595,7 @@ async function submitWorkOrderResolution(id, form) {
   const order = await updateWorkOrderStatus(id, 'REVIEW', {
     resolution: resolutionSummary(fullForm),
     resolutionForm: fullForm,
+    review: buildReviewFromResolveForm(fullForm),
   })
   if (useMock()) {
     await notifyWorkOrderByRole('ADMIN', '工单待复核', order.title || '有新的现场处理记录', user.id)

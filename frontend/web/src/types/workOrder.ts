@@ -18,6 +18,7 @@ export interface WorkOrderResolutionForm {
   replacedParts?: string
   testResult: string
   remarks?: string
+  conclusion: WorkOrderReviewConclusion
   submittedAt: string
   submittedBy: string
 }
@@ -53,6 +54,16 @@ export const WORK_ORDER_REVIEW_CONCLUSION_LABELS: Record<WorkOrderReviewConclusi
   UNRESOLVED: '未消缺',
   FALSE_ALARM: '误报',
 }
+
+export const WORK_ORDER_REVIEW_CONCLUSION_OPTIONS: WorkOrderReviewConclusion[] = [
+  'RESOLVED',
+  'PARTIALLY_RESOLVED',
+  'UNRESOLVED',
+  'FALSE_ALARM',
+]
+
+/** 部分消缺 / 未消缺时，后端要求必须填写遗留风险与后续计划 */
+export const CONCLUSIONS_REQUIRING_FOLLOW_UP: WorkOrderReviewConclusion[] = ['PARTIALLY_RESOLVED', 'UNRESOLVED']
 
 export interface WorkOrderReviewInput {
   conclusion: WorkOrderReviewConclusion

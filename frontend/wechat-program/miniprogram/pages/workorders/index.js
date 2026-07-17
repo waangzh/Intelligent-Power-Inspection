@@ -5,6 +5,9 @@ const { WORK_ORDER_STATUS_LABELS, WORK_ORDER_PRIORITY_LABELS, ALARM_SEVERITY_LAB
 const {
   FAULT_TYPE_OPTIONS,
   HANDLING_METHOD_OPTIONS,
+  REVIEW_CONCLUSION_OPTIONS,
+  REVIEW_CONCLUSION_LABELS,
+  CONCLUSIONS_REQUIRING_FOLLOW_UP,
   enrichWorkOrder,
   isWorkOrderUnassigned,
 } = require('../../utils/work-order')
@@ -27,9 +30,13 @@ const EMPTY_RESOLVE_FORM = {
   handlingMethodIndex: -1,
   replacedParts: '',
   testResult: '',
+  conclusion: '',
+  conclusionIndex: -1,
   remarks: '',
   photoItems: [],
 }
+
+const REVIEW_CONCLUSION_LABEL_LIST = REVIEW_CONCLUSION_OPTIONS.map((v) => REVIEW_CONCLUSION_LABELS[v])
 
 Page({
   data: {
@@ -51,6 +58,8 @@ Page({
     reviewForm: { result: 'PASS', comment: '' },
     faultTypeOptions: FAULT_TYPE_OPTIONS,
     handlingMethodOptions: HANDLING_METHOD_OPTIONS,
+    conclusionOptions: REVIEW_CONCLUSION_LABEL_LIST,
+    needsFollowUpPlan: false,
     canCreate: false,
     canProcess: false,
     canReview: false,
@@ -208,6 +217,7 @@ Page({
     this.setData({
       resolvingId: id,
       resolveForm: { ...EMPTY_RESOLVE_FORM },
+      needsFollowUpPlan: false,
       showResolve: true,
     })
   },
@@ -227,6 +237,16 @@ Page({
     this.setData({
       'resolveForm.handlingMethodIndex': index,
       'resolveForm.handlingMethod': HANDLING_METHOD_OPTIONS[index],
+    })
+  },
+
+  onConclusionChange(e) {
+    const index = Number(e.detail.value)
+    const conclusion = REVIEW_CONCLUSION_OPTIONS[index]
+    this.setData({
+      'resolveForm.conclusionIndex': index,
+      'resolveForm.conclusion': conclusion,
+      needsFollowUpPlan: CONCLUSIONS_REQUIRING_FOLLOW_UP.includes(conclusion),
     })
   },
 
@@ -320,6 +340,14 @@ Page({
       wx.showToast({ title: '请填写故障类型、处理方式、试验结果', icon: 'none' })
       return
     }
+    if (!resolveForm.conclusion) {
+      wx.showToast({ title: '请选择处理结论', icon: 'none' })
+      return
+    }
+    if (this.data.needsFollowUpPlan && !resolveForm.remarks.trim()) {
+      wx.showToast({ title: '部分消缺/未消缺时请填写补充说明', icon: 'none' })
+      return
+    }
     try {
       wx.showLoading({ title: '提交中' })
       const photos = []
@@ -331,6 +359,7 @@ Page({
         handlingMethod: resolveForm.handlingMethod,
         replacedParts: resolveForm.replacedParts.trim() || undefined,
         testResult: resolveForm.testResult.trim(),
+        conclusion: resolveForm.conclusion,
         remarks: resolveForm.remarks.trim() || undefined,
         photos: photos.length ? photos : undefined,
       })
