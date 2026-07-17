@@ -255,7 +255,7 @@ public class MapAssetService {
   }
 
   public Map<String, Object> getForManagement(String id) {
-    return dataStore.get(DataCategory.MAP_ASSET, id);
+    return managementView(dataStore.get(DataCategory.MAP_ASSET, id));
   }
 
   public List<Map<String, Object>> listForManagement(String source, String status, String siteId) {
@@ -264,6 +264,7 @@ public class MapAssetService {
       .filter(asset -> source == null || source.isBlank() || source.equals(String.valueOf(asset.get("source"))))
       .filter(asset -> effectiveStatus.equals(String.valueOf(asset.get("status"))))
       .filter(asset -> siteId == null || siteId.isBlank() || siteId.equals(String.valueOf(asset.get("siteId"))))
+      .map(this::managementView)
       .toList();
   }
 
@@ -286,6 +287,7 @@ public class MapAssetService {
         if (!"PENDING_REVIEW".equals(String.valueOf(asset.get("status")))) {
           throw ApiException.conflict("地图资产已经完成审核，不能重复审核");
         }
+        if ("APPROVE".equals(normalizedAction)) verifyStoredFiles(id, asset);
         String now = Instant.now().toString();
         Map<String, Object> patch = new LinkedHashMap<>();
         patch.put("status", "APPROVE".equals(normalizedAction) ? "AVAILABLE" : "REJECTED");
@@ -424,8 +426,38 @@ public class MapAssetService {
 
   private Path regularAssetFile(String id, String filename) {
     Path file = resolveAssetDirectory(id).resolve(filename).normalize();
-    if (!file.startsWith(ROOT) || !Files.isRegularFile(file)) throw ApiException.notFound("地图资产文件不存在");
+    if (!file.startsWith(ROOT) || !Files.isRegularFile(file)) {
+      throw ApiException.notFound("地图资产文件不存在，请重新上传 YAML/PGM");
+    }
     return file;
+  }
+
+  private Map<String, Object> managementView(Map<String, Object> asset) {
+    Map<String, Object> view = new LinkedHashMap<>(asset);
+    view.put("filesReady", storedFilesReady(String.valueOf(asset.get("id"))));
+    return view;
+  }
+
+  private boolean storedFilesReady(String id) {
+    Path directory = resolveAssetDirectory(id);
+    return Files.isRegularFile(directory.resolve(YAML_FILE)) && Files.isRegularFile(directory.resolve(PGM_FILE));
+  }
+
+  private void verifyStoredFiles(String id, Map<String, Object> asset) {
+    if (!storedFilesReady(id)) {
+      throw ApiException.conflict("地图资产文件不完整，无法通过审核，请让机器人使用新的 Idempotency-Key 重新上传");
+    }
+    try (InputStream yamlInput = Files.newInputStream(regularAssetFile(id, YAML_FILE));
+         InputStream pgmInput = Files.newInputStream(regularAssetFile(id, PGM_FILE))) {
+      String yamlSha256 = digest(yamlInput);
+      String pgmSha256 = digest(pgmInput);
+      if (!yamlSha256.equals(String.valueOf(asset.get("yamlSha256")))
+          || !pgmSha256.equals(String.valueOf(asset.get("pgmSha256")))) {
+        throw ApiException.conflict("地图资产文件校验失败，无法通过审核，请重新上传");
+      }
+    } catch (IOException ex) {
+      throw ApiException.conflict("地图资产文件读取失败，无法通过审核，请重新上传");
+    }
   }
 
   private Path resolveAssetDirectory(String name) {

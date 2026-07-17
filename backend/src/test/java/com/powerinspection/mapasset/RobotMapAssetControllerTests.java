@@ -93,6 +93,9 @@ class RobotMapAssetControllerTests {
     String mapId = objectMapper.readTree(response).path("data").path("id").asText();
 
     String token = login("dispatcher", "Disp@123");
+    mockMvc.perform(get("/api/v1/map-assets/{id}", mapId).header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.filesReady").value(true));
     mockMvc.perform(get("/api/v1/map-assets/{id}/yaml", mapId).header("Authorization", bearer(token)))
       .andExpect(status().isOk());
     mockMvc.perform(get("/api/v1/map-assets/{id}", mapId).header("Authorization", BRIDGE_AUTH))
@@ -111,6 +114,28 @@ class RobotMapAssetControllerTests {
 
     mockMvc.perform(upload(key, "robot-001", pgmBytes((byte) 7)).header("Authorization", BRIDGE_AUTH))
       .andExpect(status().isConflict());
+  }
+
+  @Test
+  void missingMapFilesAreVisibleToReviewersAndCannotBeApproved() throws Exception {
+    String mapId = "map_missing_files_" + suffix();
+    dataStore.upsert(DataCategory.MAP_ASSET, new LinkedHashMap<>(Map.of(
+      "id", mapId,
+      "siteId", "site_001",
+      "status", "PENDING_REVIEW",
+      "source", "ROBOT",
+      "yamlSha256", "a".repeat(64),
+      "pgmSha256", "b".repeat(64)
+    )));
+    String token = login("dispatcher", "Disp@123");
+
+    mockMvc.perform(get("/api/v1/map-assets/{id}", mapId).header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.filesReady").value(false));
+    mockMvc.perform(post("/api/v1/map-assets/{id}/review", mapId).header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON).content(json("action", "APPROVE")))
+      .andExpect(status().isConflict())
+      .andExpect(jsonPath("$.message").value("地图资产文件不完整，无法通过审核，请让机器人使用新的 Idempotency-Key 重新上传"));
   }
 
   @Test
