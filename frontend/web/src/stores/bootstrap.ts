@@ -1,40 +1,18 @@
 import { useAlarmStore } from '@/stores/alarm'
-import { useDetectionStore } from '@/stores/detection'
 import { useNotificationStore } from '@/stores/notification'
 import { useRobotStore } from '@/stores/robot'
-import { useRouteStore } from '@/stores/route'
-import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
-import { useWorkOrderStore } from '@/stores/workOrder'
 import { connectRealtime, disconnectRealtime, subscribeTopic } from '@/api/realtime'
-import type { Alarm, InspectionTask, Robot, TaskEvent } from '@/types'
-import type { AppNotification } from '@/types/notification'
-import type { UserRole } from '@/types/auth'
+import { resourcesApi } from '@/api/resources'
+import type { ResourceChangeEvent } from '@/types/pagination'
 
 const SESSION_KEY = 'pi_session'
 let realtimeStarted = false
-let unsubscribeRealtime: Array<() => void> = []
+let unsubscribeUserRealtime: Array<() => void> = []
+let unsubscribePageRealtime: Array<() => void> = []
+let pageChangeHandler: (() => void) | undefined
 
 export async function loadAppData() {
-  const siteStore = useSiteStore()
-  const routeStore = useRouteStore()
-  const robotStore = useRobotStore()
-  const taskStore = useTaskStore()
-  const alarmStore = useAlarmStore()
-  const workOrderStore = useWorkOrderStore()
-  const detectionStore = useDetectionStore()
-  const notificationStore = useNotificationStore()
-
-  await Promise.allSettled([
-    siteStore.load(),
-    routeStore.load(),
-    robotStore.load(),
-    taskStore.load(),
-    alarmStore.load(),
-    workOrderStore.load(),
-    detectionStore.load(),
-    notificationStore.load(),
-  ])
   startRealtime()
 }
 
@@ -43,39 +21,66 @@ export function startRealtime() {
   realtimeStarted = true
   connectRealtime()
 
-  unsubscribeRealtime = [
-    subscribeTopic<InspectionTask>('/topic/tasks', (task) => {
-      useTaskStore().applyRemoteTask(task)
-    }),
-    subscribeTopic<TaskEvent>('/topic/task-events', (event) => {
-      useTaskStore().applyRemoteTaskEvent(event)
-    }),
-    subscribeTopic<Robot>('/topic/robots', (robot) => {
-      useRobotStore().applyRemoteRobot(robot)
-    }),
-    subscribeTopic<Alarm>('/topic/alarms', (alarm) => {
-      useAlarmStore().applyRemoteAlarm(alarm)
-      void useNotificationStore().load()
-      if (['ADMIN', 'DISPATCHER'].includes(currentUserRole() ?? '')) {
-        void useWorkOrderStore().load()
-      }
-    }),
-    subscribeTopic<AppNotification>('/topic/notifications', (notification) => {
-      useNotificationStore().applyRemoteNotification(notification)
-    }),
-  ]
-
   const userId = currentUserId()
   if (userId) {
-    unsubscribeRealtime.push(subscribeTopic<AppNotification>(`/topic/notifications/${userId}`, (notification) => {
-      useNotificationStore().applyRemoteNotification(notification)
+    const refreshNotification = (event: ResourceChangeEvent) => {
+      void resourcesApi.getNotification(event.resourceId).then(useNotificationStore().applyRemoteNotification)
+    }
+    unsubscribeUserRealtime = [
+      subscribeTopic<ResourceChangeEvent>('/topic/notifications', refreshNotification),
+      subscribeTopic<ResourceChangeEvent>(`/topic/notifications/${userId}`, refreshNotification),
+    ]
+  }
+}
+
+export function setPageRealtimeResources(
+  resources: Array<'task' | 'taskEvent' | 'robot' | 'alarm'>,
+  onChange?: () => void,
+) {
+  startRealtime()
+  pageChangeHandler = onChange
+  unsubscribePageRealtime.forEach((unsubscribe) => unsubscribe())
+  unsubscribePageRealtime = []
+  const selected = new Set(resources)
+  if (selected.has('task')) {
+    unsubscribePageRealtime.push(subscribeTopic<ResourceChangeEvent>('/topic/tasks', (event) => {
+      void resourcesApi.getTask(event.resourceId).then((item) => {
+        useTaskStore().applyRemoteTask(item)
+        pageChangeHandler?.()
+      })
+    }))
+  }
+  if (selected.has('taskEvent')) {
+    unsubscribePageRealtime.push(subscribeTopic<ResourceChangeEvent>('/topic/task-events', (event) => {
+      void resourcesApi.getTaskEvent(event.resourceId).then((item) => {
+        useTaskStore().applyRemoteTaskEvent(item)
+        pageChangeHandler?.()
+      })
+    }))
+  }
+  if (selected.has('robot')) {
+    unsubscribePageRealtime.push(subscribeTopic<ResourceChangeEvent>('/topic/robots', (event) => {
+      void resourcesApi.getRobot(event.resourceId).then((item) => {
+        useRobotStore().applyRemoteRobot(item)
+        pageChangeHandler?.()
+      })
+    }))
+  }
+  if (selected.has('alarm')) {
+    unsubscribePageRealtime.push(subscribeTopic<ResourceChangeEvent>('/topic/alarms', (event) => {
+      void resourcesApi.getAlarm(event.resourceId).then((item) => {
+        useAlarmStore().applyRemoteAlarm(item)
+        pageChangeHandler?.()
+      })
     }))
   }
 }
 
 export function stopRealtime() {
-  unsubscribeRealtime.forEach((unsubscribe) => unsubscribe())
-  unsubscribeRealtime = []
+  unsubscribeUserRealtime.forEach((unsubscribe) => unsubscribe())
+  unsubscribePageRealtime.forEach((unsubscribe) => unsubscribe())
+  unsubscribeUserRealtime = []
+  unsubscribePageRealtime = []
   realtimeStarted = false
   disconnectRealtime()
 }
@@ -86,17 +91,6 @@ function currentUserId() {
     if (!raw) return null
     const session = JSON.parse(raw) as { user?: { id?: string } }
     return session.user?.id ?? null
-  } catch {
-    return null
-  }
-}
-
-function currentUserRole(): UserRole | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return null
-    const session = JSON.parse(raw) as { user?: { role?: UserRole } }
-    return session.user?.role ?? null
   } catch {
     return null
   }

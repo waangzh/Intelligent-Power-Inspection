@@ -135,6 +135,7 @@
           </template>
         </el-table-column>
       </el-table>
+      <ListPagination :total="taskStore.total" :page="taskPage" @change="loadTaskPage" />
     </el-card>
 
     <el-dialog v-model="dialogVisible" title="创建巡检任务" width="460px">
@@ -175,6 +176,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { resourcesApi } from '@/api/resources'
 import Map2D from '@/components/Map2D.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import TaskStatusTag from '@/components/TaskStatusTag.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useRobotStore } from '@/stores/robot'
@@ -188,6 +190,12 @@ const readyDeploymentLabel = DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT
 
 const router = useRouter()
 const { can, canAny } = usePermission()
+const taskPage = ref(0)
+
+function loadTaskPage(page: number) {
+  taskPage.value = page
+  void taskStore.loadDynamic({ page, size: 20 })
+}
 const taskStore = useTaskStore()
 const routeStore = useRouteStore()
 const robotStore = useRobotStore()

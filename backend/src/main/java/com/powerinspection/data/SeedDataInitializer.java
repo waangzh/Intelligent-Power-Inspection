@@ -16,10 +16,12 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
+@Order(2)
 public class SeedDataInitializer implements ApplicationRunner {
   private final UserRepository userRepository;
   private final UserPreferenceRepository preferenceRepository;

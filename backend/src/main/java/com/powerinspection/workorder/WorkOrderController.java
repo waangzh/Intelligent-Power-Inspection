@@ -3,6 +3,8 @@ package com.powerinspection.workorder;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.common.Ids;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.notification.NotificationService;
@@ -45,25 +47,31 @@ public class WorkOrderController {
   private final CurrentUser currentUser;
   private final NotificationService notificationService;
   private final UserRepository userRepository;
+  private final WorkOrderCommandService workOrderCommandService;
 
   public WorkOrderController(
     DataStoreService dataStore,
     PermissionService permissionService,
     CurrentUser currentUser,
     NotificationService notificationService,
-    UserRepository userRepository
+    UserRepository userRepository,
+    WorkOrderCommandService workOrderCommandService
   ) {
     this.dataStore = dataStore;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.notificationService = notificationService;
     this.userRepository = userRepository;
+    this.workOrderCommandService = workOrderCommandService;
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> orders() {
+  public ApiResponse<PageResult<Map<String, Object>>> orders(ListQuery query) {
     permissionService.require(currentUser.get(), Permission.WORKORDER_VIEW);
-    return ApiResponse.ok(dataStore.list(DataCategory.WORK_ORDER));
+    return ApiResponse.ok(dataStore.page(
+      DataCategory.WORK_ORDER, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(), query.filters("status", "siteId", "type")
+    ));
   }
 
   @GetMapping("/{id}")
@@ -100,36 +108,12 @@ public class WorkOrderController {
   @PostMapping("/from-alarm/{alarmId}")
   public ApiResponse<Map<String, Object>> createFromAlarm(@PathVariable String alarmId, @RequestBody(required = false) Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.WORKORDER_CREATE);
-    dataStore.list(DataCategory.WORK_ORDER).stream()
-      .filter(order -> alarmId.equals(String.valueOf(order.get("alarmId"))))
-      .findFirst()
-      .ifPresent(order -> {
-        throw ApiException.badRequest("该告警已有关联工单");
-      });
-    Map<String, Object> alarm = dataStore.get(DataCategory.ALARM, alarmId);
-    UserEntity user = currentUser.get();
-    String severity = String.valueOf(alarm.get("severity"));
-    String priority = "CRITICAL".equals(severity) ? "URGENT" : "HIGH".equals(severity) ? "HIGH" : "MEDIUM";
-    String now = Instant.now().toString();
-    String message = String.valueOf(alarm.get("message"));
-    Map<String, Object> order = new LinkedHashMap<>();
-    order.put("id", Ids.next("wo"));
-    order.put("title", "告警处置：" + message.substring(0, Math.min(24, message.length())));
-    order.put("description", message);
-    order.put("alarmId", alarmId);
-    order.put("status", "PENDING");
-    order.put("priority", priority);
-    order.put("createdById", user.getId());
-    order.put("createdByName", user.getDisplayName());
-    order.put("createdAt", now);
-    order.put("updatedAt", now);
-    String locationDescription = locationFromAlarm(alarm);
-    if (!locationDescription.isBlank()) {
-      order.put("locationDescription", locationDescription);
-    }
-    Map<String, Object> saved = dataStore.upsert(DataCategory.WORK_ORDER, order);
-    notifyDispatchersNewWorkOrder(saved);
-    return ApiResponse.ok(saved);
+    return ApiResponse.ok(workOrderCommandService.createFromAlarm(
+      alarmId,
+      ConversionSource.MANUAL,
+      currentUser.get(),
+      CreateWorkOrderFromAlarmRequest.fromMap(body)
+    ));
   }
 
   @PostMapping("/{id}/claim")
@@ -247,15 +231,6 @@ public class WorkOrderController {
       return true;
     }
     return assigneeName.equals(String.valueOf(order.get("createdByName")));
-  }
-
-  private String locationFromAlarm(Map<String, Object> alarm) {
-    String routeName = text(alarm.get("routeName"));
-    String checkpointName = text(alarm.get("checkpointName"));
-    if (routeName == null || routeName.isBlank()) {
-      return checkpointName == null ? "" : checkpointName;
-    }
-    return checkpointName == null || checkpointName.isBlank() ? routeName : routeName + " / " + checkpointName;
   }
 
   private Map<String, Object> normalizeReview(Object rawReview) {

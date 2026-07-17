@@ -83,6 +83,7 @@
           </template>
         </el-table-column>
       </el-table>
+      <ListPagination :total="workOrderStore.total" :page="orderPage" @change="loadOrderPage" />
     </el-card>
 
     <el-dialog v-model="detailVisible" title="工单详情" width="640px">
@@ -204,10 +205,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { usePermission } from '@/composables/usePermission'
@@ -228,6 +230,7 @@ const workOrderStore = useWorkOrderStore()
 const authStore = useAuthStore()
 const { can, role } = usePermission()
 const statusFilter = ref<string>('ALL')
+const orderPage = ref(0)
 const scopeFilter = ref<'ALL' | 'POOL' | 'MINE'>('ALL')
 const detailVisible = ref(false)
 const detail = ref<WorkOrder | null>(null)
@@ -237,6 +240,17 @@ const resolvingId = ref('')
 const reviewingId = ref('')
 const claimingId = ref('')
 const submitting = ref(false)
+
+function loadOrderPage(page: number) {
+  orderPage.value = page
+  void workOrderStore.load({
+    page,
+    size: 20,
+    status: statusFilter.value === 'ALL' ? undefined : statusFilter.value,
+  })
+}
+
+watch(statusFilter, () => loadOrderPage(0))
 
 const resolveForm = reactive({
   faultType: '',
@@ -424,9 +438,6 @@ function priorityType(p: WorkOrderPriority) {
   return { LOW: 'info', MEDIUM: '', HIGH: 'warning', URGENT: 'danger' }[p] as '' | 'warning' | 'danger' | 'info'
 }
 
-onMounted(() => {
-  void workOrderStore.load()
-})
 </script>
 
 <style scoped>

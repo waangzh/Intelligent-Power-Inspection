@@ -2,6 +2,9 @@ package com.powerinspection.task;
 
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
+import com.powerinspection.common.ResourceChangeEvent;
 import com.powerinspection.alarm.AlarmService;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
@@ -88,6 +91,13 @@ public class TaskService {
     return dataStore.list(DataCategory.TASK);
   }
 
+  public PageResult<Map<String, Object>> tasks(ListQuery query) {
+    return dataStore.page(
+      DataCategory.TASK, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(), query.filters("siteId", "routeId", "robotId", "status")
+    );
+  }
+
   public Map<String, Object> task(String id) {
     return dataStore.get(DataCategory.TASK, id);
   }
@@ -98,6 +108,18 @@ public class TaskService {
 
   public List<Map<String, Object>> events(String taskId) {
     return dataStore.list(DataCategory.EVENT).stream().filter(event -> taskId.equals(text(event.get("taskId")))).toList();
+  }
+
+  public PageResult<Map<String, Object>> events(String taskId, ListQuery query) {
+    query.setTaskId(taskId);
+    return dataStore.page(
+      DataCategory.EVENT, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(), query.filters("taskId", "type")
+    );
+  }
+
+  public Map<String, Object> event(String eventId) {
+    return dataStore.get(DataCategory.EVENT, eventId);
   }
 
   @Transactional
@@ -135,8 +157,7 @@ public class TaskService {
     }
     Map<String, Object> task = dataStore.patch(DataCategory.TASK, id, body);
     validateTaskBinding(task);
-    messagingTemplate.convertAndSend("/topic/tasks/" + id, task);
-    messagingTemplate.convertAndSend("/topic/tasks", task);
+    publishChange("task", id, "/topic/tasks/" + id, "/topic/tasks");
     return task;
   }
 
@@ -307,6 +328,9 @@ public class TaskService {
     dataStore.upsert(DataCategory.RECORD, map(
       "id", Ids.next("record"),
       "taskId", taskId,
+      "siteId", text(route.get("siteId")),
+      "routeId", text(route.get("id")),
+      "robotId", text(task.get("robotId")),
       "taskName", text(task.get("name")),
       "routeName", routeName,
       "robotName", robotName,
@@ -321,8 +345,7 @@ public class TaskService {
 
   private Map<String, Object> saveTask(Map<String, Object> task) {
     Map<String, Object> saved = dataStore.upsert(DataCategory.TASK, task);
-    messagingTemplate.convertAndSend("/topic/tasks/" + saved.get("id"), saved);
-    messagingTemplate.convertAndSend("/topic/tasks", saved);
+    publishChange("task", saved.get("id"), "/topic/tasks/" + saved.get("id"), "/topic/tasks");
     return saved;
   }
 
@@ -337,8 +360,7 @@ public class TaskService {
     robot.putAll(patch);
     robot.put("id", robotId);
     dataStore.upsert(DataCategory.ROBOT, robot);
-    messagingTemplate.convertAndSend("/topic/robots/" + robotId, robot);
-    messagingTemplate.convertAndSend("/topic/robots", robot);
+    publishChange("robot", robotId, "/topic/robots/" + robotId, "/topic/robots");
   }
 
   private void addEvent(String taskId, String type, String message, String checkpointName, String imageUrl) {
@@ -350,8 +372,7 @@ public class TaskService {
       event.put("imageUrl", imageUrl);
     }
     dataStore.upsert(DataCategory.EVENT, event);
-    messagingTemplate.convertAndSend("/topic/tasks/" + taskId + "/events", event);
-    messagingTemplate.convertAndSend("/topic/task-events", event);
+    publishChange("taskEvent", taskId, "/topic/tasks/" + taskId + "/events", "/topic/task-events");
   }
 
   private void maybeRouteAlarm(Map<String, Object> task, Map<String, Object> route) {
@@ -549,6 +570,12 @@ public class TaskService {
     } catch (NumberFormatException ex) {
       throw ApiException.badRequest("数字格式错误");
     }
+  }
+
+  private void publishChange(String resource, Object resourceId, String detailTopic, String collectionTopic) {
+    ResourceChangeEvent event = ResourceChangeEvent.updated(resource, resourceId);
+    messagingTemplate.convertAndSend(detailTopic, event);
+    messagingTemplate.convertAndSend(collectionTopic, event);
   }
 
   private String text(Object value) {

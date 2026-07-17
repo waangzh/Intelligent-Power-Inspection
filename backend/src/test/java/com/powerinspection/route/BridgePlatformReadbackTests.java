@@ -66,7 +66,7 @@ class BridgePlatformReadbackTests {
     mockMvc.perform(get("/api/v1/route-deployments/{id}", deploymentId).header("Authorization", bearer()))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.id").value(deploymentId))
-      .andExpect(jsonPath("$.data.robotId").value("robot-001"));
+      .andExpect(jsonPath("$.data.robotId").value("robot_001"));
     mockMvc.perform(get("/api/v1/route-revisions/{id}", revisionId).header("Authorization", bearer()))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.id").value(revisionId));

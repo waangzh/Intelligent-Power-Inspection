@@ -11,6 +11,7 @@ import router from './router'
 import { setupRouterGuards } from './router/guards'
 import { useAuthStore } from './stores/auth'
 import { loadAppData } from './stores/bootstrap'
+import { loadRouteData } from './stores/pageLoader'
 import './style.css'
 
 const app = createApp(App)
@@ -30,6 +31,11 @@ if (authStore.isLoggedIn) {
 }
 
 setupRouterGuards(router)
+router.beforeResolve(async (to) => {
+  if (to.meta.requiresAuth && authStore.isLoggedIn) {
+    await loadRouteData(to.name, to.params)
+  }
+})
 
 app.use(ElementPlus, { locale: zhCn })
 

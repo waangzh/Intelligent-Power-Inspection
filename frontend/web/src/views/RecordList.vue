@@ -12,7 +12,7 @@
     <el-card shadow="never" style="margin-bottom: 16px">
       <el-form :inline="true" size="small">
         <el-form-item label="关键词">
-          <el-input v-model="keyword" placeholder="任务/路线名称" clearable style="width: 180px" />
+          <el-input v-model="keyword" placeholder="任务/路线名称" clearable style="width: 180px" @change="searchRecords" />
         </el-form-item>
         <el-form-item label="告警">
           <el-select v-model="alarmFilter" clearable style="width: 120px">
@@ -45,6 +45,7 @@
           </template>
         </el-table-column>
       </el-table>
+      <ListPagination :total="taskStore.recordTotal" :page="recordPage" @change="loadRecordPage" />
     </el-card>
 
     <el-dialog v-model="detailVisible" title="巡检报告" width="640px">
@@ -75,6 +76,7 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import { usePermission } from '@/composables/usePermission'
 import { resourcesApi } from '@/api/resources'
 import { useTaskStore } from '@/stores/task'
@@ -87,6 +89,16 @@ const alarmFilter = ref('')
 const detailVisible = ref(false)
 const detailRecord = ref<InspectionRecord | null>(null)
 const exporting = ref(false)
+const recordPage = ref(0)
+
+function loadRecordPage(page: number) {
+  recordPage.value = page
+  void taskStore.loadRecords({ page, size: 20, q: keyword.value })
+}
+
+function searchRecords() {
+  loadRecordPage(0)
+}
 
 const filteredRecords = computed(() => {
   let list = taskStore.records

@@ -4,6 +4,7 @@ import { resourcesApi } from '@/api/resources'
 import type { Checkpoint, DetectionItem, DetectionType, Route } from '@/types'
 import { CHECKPOINT_DETECTIONS, ROUTE_DETECTIONS } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
+import type { ListQuery } from '@/types/pagination'
 import { withPlatformRouteName } from '@/utils/routeExecutorJson'
 import { uid } from '@/utils/storage'
 
@@ -25,9 +26,18 @@ function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
 
 export const useRouteStore = defineStore('route', () => {
   const routes = shallowRef<Route[]>([])
+  const total = shallowRef(0)
 
-  async function load() {
-    routes.value = await resourcesApi.listRoutes()
+  async function load(siteId?: string, query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listRoutes({ ...query, siteId })
+    routes.value = result.items
+    total.value = result.total
+  }
+
+  async function loadOne(id: string) {
+    const route = await resourcesApi.getRoute(id)
+    updateLocalRoute(route)
+    return route
   }
 
   async function createRoute(siteId: string, name: string, description = '') {
@@ -148,6 +158,7 @@ export const useRouteStore = defineStore('route', () => {
   function updateLocalRoute(route: Route) {
     const idx = routes.value.findIndex((r) => r.id === route.id)
     if (idx >= 0) routes.value = routes.value.map((item) => (item.id === route.id ? route : item))
+    else routes.value = [route, ...routes.value]
   }
 
   function updateLocalCheckpoint(routeId: string, checkpoint: Checkpoint) {
@@ -161,7 +172,9 @@ export const useRouteStore = defineStore('route', () => {
 
   return {
     routes,
+    total,
     load,
+    loadOne,
     createRoute,
     updateRoute,
     removeRoute,

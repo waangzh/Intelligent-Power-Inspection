@@ -1,6 +1,8 @@
 package com.powerinspection.record;
 
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.common.ListQuery;
+import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.security.CurrentUser;
@@ -32,9 +34,12 @@ public class RecordController {
   }
 
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> records() {
+  public ApiResponse<PageResult<Map<String, Object>>> records(ListQuery query) {
     permissionService.require(currentUser.get(), Permission.TASK_VIEW);
-    return ApiResponse.ok(dataStore.list(DataCategory.RECORD));
+    return ApiResponse.ok(dataStore.page(
+      DataCategory.RECORD, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(), query.filters("siteId", "routeId", "robotId", "status")
+    ));
   }
 
   @PostMapping("/export")
