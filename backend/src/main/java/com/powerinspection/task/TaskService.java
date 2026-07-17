@@ -328,6 +328,9 @@ public class TaskService {
     dataStore.upsert(DataCategory.RECORD, map(
       "id", Ids.next("record"),
       "taskId", taskId,
+      "siteId", text(route.get("siteId")),
+      "routeId", text(route.get("id")),
+      "robotId", text(task.get("robotId")),
       "taskName", text(task.get("name")),
       "routeName", routeName,
       "robotName", robotName,

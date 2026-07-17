@@ -128,8 +128,11 @@ public class SiteController extends CrudSupport {
     return ApiResponse.ok();
   }
   @GetMapping("/{id}/areas")
-  public ApiResponse<List<Map<String, Object>>> areasBySite(@PathVariable String id) {
-    return ApiResponse.ok(list(DataCategory.AREA).stream().filter(area -> id.equals(String.valueOf(area.get("siteId")))).toList());
+  public ApiResponse<PageResult<Map<String, Object>>> areasBySite(@PathVariable String id, ListQuery query) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    ensureSiteExists(id);
+    query.setSiteId(id);
+    return ApiResponse.ok(page(DataCategory.AREA, query, "siteId"));
   }
 
   @PostMapping("/{id}/areas")

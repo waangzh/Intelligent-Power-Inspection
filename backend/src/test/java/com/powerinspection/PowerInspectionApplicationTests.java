@@ -250,7 +250,8 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/sites/site_test_api/areas").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].siteId").value("site_test_api"));
+      .andExpect(jsonPath("$.data.items[0].siteId").value("site_test_api"))
+      .andExpect(jsonPath("$.data.total").value(1));
 
     mockMvc.perform(patch("/api/v1/sites/site_test_api/areas/area_test_api")
         .header("Authorization", bearer(dispatcherToken))
