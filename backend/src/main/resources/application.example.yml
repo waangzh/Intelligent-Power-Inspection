@@ -39,6 +39,8 @@ app:
     service-token: ${APP_MODEL_SERVICE_TOKEN:}
     locate-anything:
       base-url: http://127.0.0.1:9001
+      # 服务器模型通过 SSH 反向隧道读取本地上传文件，例如 http://127.0.0.1:18080/model-files/
+      input-file-base-url: ${APP_MODEL_LOCATE_ANYTHING_INPUT_FILE_BASE_URL:}
       timeout-seconds: 900
       generation-mode: fast
     llm:

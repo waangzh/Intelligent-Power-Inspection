@@ -100,8 +100,8 @@ public class SeedDataInitializer implements ApplicationRunner {
     ensureSingleRobot();
     if (dataStore.list(DataCategory.DETECTION_TEMPLATE).isEmpty()) {
       template("tpl_route_001", "路线标准检测", "ROUTE", List.of("PERSON", "HELMET", "OBSTACLE", "FIRE"), "行进过程中持续检测人员、安全帽、障碍物与火源", map(), "2026-01-10T08:00:00Z");
-      template("tpl_cp_001", "刀闸开关检测", "CHECKPOINT", List.of("SWITCH", "METER"), "检查点刀闸分合状态与表计读数", map("SWITCH", "红色刀闸开关", "METER", "压力表读数区域"), "2026-01-10T08:00:00Z");
-      template("tpl_cp_002", "设备渗漏检测", "CHECKPOINT", List.of("OIL_LEAK", "FOREIGN_OBJECT", "FIRE"), "变压器及 GIS 渗漏、异物与烟火", map("OIL_LEAK", "设备底部渗油区域", "FOREIGN_OBJECT", "绝缘子表面异物"), "2026-02-15T08:00:00Z");
+      template("tpl_cp_001", "刀闸开关检测", "CHECKPOINT", List.of("SWITCH", "METER"), "检查点刀闸分合状态与表计读数", map("SWITCH", "变电设备上的刀闸开关操作手柄、连杆及触头区域", "METER", "圆形机械压力表的完整表盘和指针区域"), "2026-01-10T08:00:00Z");
+      template("tpl_cp_002", "设备渗漏检测", "CHECKPOINT", List.of("OIL_LEAK", "FOREIGN_OBJECT", "FIRE"), "变压器及 GIS 渗漏、异物与烟火", map("OIL_LEAK", "变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域", "FOREIGN_OBJECT", "设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物", "FIRE", "图像中清晰可见的火焰、火光或明显烟雾区域"), "2026-02-15T08:00:00Z");
     }
   }
 
@@ -588,11 +588,15 @@ public class SeedDataInitializer implements ApplicationRunner {
     return List.of(types).stream().map(type -> {
       Map<String, Object> item = map("type", type, "enabled", true, "threshold", 0.75);
       if ("SWITCH".equals(type)) {
-        item.put("prompt", "红色刀闸开关");
-      } else if ("OIL_LEAK".equals(type)) {
-        item.put("prompt", "设备底部渗油区域");
+        item.put("prompt", "变电设备上的刀闸开关操作手柄、连杆及触头区域");
       } else if ("METER".equals(type)) {
-        item.put("prompt", "压力表读数区域");
+        item.put("prompt", "圆形机械压力表的完整表盘和指针区域");
+      } else if ("OIL_LEAK".equals(type)) {
+        item.put("prompt", "变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域");
+      } else if ("FIRE".equals(type)) {
+        item.put("prompt", "图像中清晰可见的火焰、火光或明显烟雾区域");
+      } else if ("FOREIGN_OBJECT".equals(type)) {
+        item.put("prompt", "设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物");
       }
       return item;
     }).toList();

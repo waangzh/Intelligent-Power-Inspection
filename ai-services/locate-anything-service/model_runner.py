@@ -18,6 +18,23 @@ from parser import BOX_PATTERN, NONE_PATTERN, POINT_PATTERN, parse_answer
 logger = logging.getLogger(__name__)
 REF_PATTERN = re.compile(r"<ref>.*?</ref>", re.IGNORECASE | re.DOTALL)
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
+ANNOTATION_COLORS = {
+    "PERSON": "#2563EB",
+    "HELMET": "#7C3AED",
+    "OBSTACLE": "#EA580C",
+    "FIRE": "#DC2626",
+    "SWITCH": "#16A34A",
+    "METER": "#0891B2",
+    "OIL_LEAK": "#CA8A04",
+    "FOREIGN_OBJECT": "#DB2777",
+}
+ANNOTATION_FONT_CANDIDATES = (
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simhei.ttf",
+)
 
 
 def compact_answer(answer: str) -> str:
@@ -84,33 +101,89 @@ def normalized_box_to_image_box(box: list[int], width: int, height: int) -> list
     return [max(0, left), max(0, top), min(width - 1, right), min(height - 1, bottom)]
 
 
-def normalized_point_to_image_point(point: list[int], width: int, height: int) -> list[int]:
-    x, y = point
-    return [max(0, min(width - 1, round(x * width / 1000))), max(0, min(height - 1, round(y * height / 1000)))]
+def annotation_font(size: int):
+    from PIL import ImageFont
+
+    candidates = ([settings.annotation_font_path] if settings.annotation_font_path else []) + list(ANNOTATION_FONT_CANDIDATES)
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            try:
+                return ImageFont.truetype(candidate, size=size), True
+            except OSError:
+                continue
+    return ImageFont.load_default(), False
 
 
-def save_annotated_image(image_url: str, parsed: dict, request_id: str, index: int) -> str | None:
+def boxes_overlap(left: list[int], right: list[int]) -> bool:
+    return left[0] < right[2] and left[2] > right[0] and left[1] < right[3] and left[3] > right[1]
+
+
+def label_box(draw, text: str, font, anchor_x: int, anchor_y: int, image_width: int, image_height: int, occupied: list[list[int]]) -> list[int]:
+    text_bounds = draw.textbbox((0, 0), text, font=font)
+    padding_x = 6
+    padding_y = 4
+    width = text_bounds[2] - text_bounds[0] + padding_x * 2
+    height = text_bounds[3] - text_bounds[1] + padding_y * 2
+    left = max(0, min(anchor_x, image_width - width))
+    preferred_top = anchor_y - height
+    candidates = [preferred_top, anchor_y]
+    candidates.extend(anchor_y + height * offset for offset in range(1, 6))
+    top = max(0, min(anchor_y, image_height - height))
+    for candidate in candidates:
+        candidate_top = max(0, min(candidate, image_height - height))
+        candidate_box = [left, candidate_top, left + width, candidate_top + height]
+        if not any(boxes_overlap(candidate_box, existing) for existing in occupied):
+            top = candidate_top
+            break
+    result = [left, top, left + width, top + height]
+    occupied.append(result)
+    return result
+
+
+def save_combined_annotated_image(image_url: str, findings: list[dict], request_id: str) -> str | None:
     from PIL import ImageDraw
 
+    if not findings:
+        return None
     image = load_image(image_url)
     draw = ImageDraw.Draw(image)
     stroke_width = max(3, round(min(image.width, image.height) / 200))
+    font, supports_chinese = annotation_font(max(14, round(min(image.width, image.height) / 35)))
+    occupied_labels: list[list[int]] = []
 
-    if parsed["outputType"] == "box" and parsed.get("normalizedBox"):
-        box = normalized_box_to_image_box(parsed["normalizedBox"], image.width, image.height)
-        draw.rectangle(box, outline="red", width=stroke_width)
-    elif parsed["outputType"] == "point" and parsed.get("point"):
-        point = normalized_point_to_image_point(parsed["point"], image.width, image.height)
-        radius = max(6, stroke_width * 2)
-        draw.ellipse([point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius], outline="red", width=stroke_width)
-    else:
-        return None
+    for finding in findings:
+        detection_type = str(finding.get("type") or "TARGET")
+        display_label = str(finding.get("label") or detection_type) if supports_chinese else detection_type
+        color = ANNOTATION_COLORS.get(detection_type, "#DC2626")
+        anchor_x = 0
+        anchor_y = 0
+        if finding.get("outputType") == "box" and finding.get("normalizedBox"):
+            box = normalized_box_to_image_box(finding["normalizedBox"], image.width, image.height)
+            draw.rectangle(box, outline=color, width=stroke_width)
+            anchor_x, anchor_y = box[0], box[1]
+        elif finding.get("outputType") == "point" and finding.get("point"):
+            raw_point = finding["point"]
+            point = [
+                max(0, min(image.width - 1, round(raw_point[0]))),
+                max(0, min(image.height - 1, round(raw_point[1]))),
+            ]
+            radius = max(6, stroke_width * 2)
+            draw.ellipse([point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius], outline=color, width=stroke_width)
+            draw.line([point[0] - radius, point[1], point[0] + radius, point[1]], fill=color, width=stroke_width)
+            draw.line([point[0], point[1] - radius, point[0], point[1] + radius], fill=color, width=stroke_width)
+            anchor_x, anchor_y = point[0], point[1] - radius
+        else:
+            continue
+
+        bounds = label_box(draw, display_label, font, anchor_x, anchor_y, image.width, image.height, occupied_labels)
+        draw.rectangle(bounds, fill=color)
+        draw.text((bounds[0] + 6, bounds[1] + 4), display_label, fill="white", font=font)
 
     output_dir = ensure_dir(settings.annotated_output_dir)
-    filename = f"{safe_filename(request_id)}_{index}.jpg"
+    filename = f"{safe_filename(request_id)}_annotated.jpg"
     output_path = output_dir / filename
     image.save(output_path, format="JPEG", quality=92)
-    logger.info("LocateAnything annotated image saved path=%s url=%s", output_path, public_url(settings.annotated_base_url, filename))
+    logger.info("LocateAnything combined annotated image saved path=%s url=%s", output_path, public_url(settings.annotated_base_url, filename))
     return public_url(settings.annotated_base_url, filename)
 
 
@@ -225,10 +298,10 @@ class LocateAnythingRunner:
         self._load_lock = Lock()
         self.warnings: list[str] = []
 
-    def locate_checkpoint(self, request: LocateCheckpointRequest) -> list[LocateFinding]:
-        findings: list[LocateFinding] = []
+    def locate_checkpoint(self, request: LocateCheckpointRequest) -> tuple[list[LocateFinding], str | None]:
+        parsed_findings: list[dict] = []
         self.warnings = []
-        for index, detection in enumerate(request.detections):
+        for detection in request.detections:
             prompt = detection.prompt or detection.type
             answer = self._predict(request.imageUrl, prompt, request.generationMode)
             parsed = parse_answer(answer, request.imageWidth, request.imageHeight)
@@ -237,33 +310,46 @@ class LocateAnythingRunner:
                 if answer and "<box>none</box>" not in answer.lower():
                     self.warnings.append(f"Unparsed model output: type={detection.type}, prompt={prompt}, rawAnswer={answer[:500]}")
                 continue
-            annotated_image_url = None
+            parsed_findings.append({
+                "type": detection.type,
+                "prompt": detection.prompt,
+                "label": detection.displayLabel or detection.type,
+                "outputType": parsed["outputType"],
+                "normalizedBox": parsed["normalizedBox"],
+                "pixelBox": parsed["pixelBox"],
+                "point": parsed["point"],
+                "rawAnswer": answer,
+            })
+
+        result_image_url = None
+        if parsed_findings:
             try:
-                annotated_image_url = save_annotated_image(request.imageUrl, parsed, request.requestId, index)
+                result_image_url = save_combined_annotated_image(request.imageUrl, parsed_findings, request.requestId)
             except Exception as exc:
                 logger.warning(
-                    "LocateAnything annotated image save failed requestId=%s index=%s error=%s",
+                    "LocateAnything combined annotated image save failed requestId=%s error=%s",
                     request.requestId,
-                    index,
                     exc,
                     exc_info=True,
                 )
-                self.warnings.append(f"Annotated image save failed: type={detection.type}, prompt={prompt}, error={exc}")
-            findings.append(
+                self.warnings.append(f"Combined annotated image save failed: error={exc}")
+
+        findings = [
                 LocateFinding(
-                    type=detection.type,
-                    prompt=detection.prompt,
-                    label="abnormal",
+                    type=finding["type"],
+                    prompt=finding["prompt"],
+                    label=finding["label"],
                     score=None,
-                    outputType=parsed["outputType"],
-                    normalizedBox=parsed["normalizedBox"],
-                    pixelBox=parsed["pixelBox"],
-                    point=parsed["point"],
-                    imageUrl=annotated_image_url,
-                    rawAnswer=answer,
+                    outputType=finding["outputType"],
+                    normalizedBox=finding["normalizedBox"],
+                    pixelBox=finding["pixelBox"],
+                    point=finding["point"],
+                    imageUrl=result_image_url,
+                    rawAnswer=finding["rawAnswer"],
                 )
-            )
-        return findings
+                for finding in parsed_findings
+        ]
+        return findings, result_image_url
 
     def _predict(self, image_url: str, prompt: str, generation_mode: str) -> str:
         return self._worker().generate(image_url, prompt, generation_mode)

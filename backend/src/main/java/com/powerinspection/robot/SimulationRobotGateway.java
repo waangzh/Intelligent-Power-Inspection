@@ -48,7 +48,7 @@ public class SimulationRobotGateway implements RobotGateway {
 
     List<Map<String, Object>> checkpoints = RouteExecutorSupport.compatibleCheckpoints(route);
     int checkpointSeq = checkpoints.isEmpty() ? 0 : Math.min(checkpoints.size(), (int) Math.ceil((nextProgress / 100.0) * checkpoints.size()));
-    return new RobotProgressSnapshot(nextProgress, checkpointSeq, position);
+    return new RobotProgressSnapshot(nextProgress, checkpointSeq, position, null);
   }
 
   private int number(Object value) {

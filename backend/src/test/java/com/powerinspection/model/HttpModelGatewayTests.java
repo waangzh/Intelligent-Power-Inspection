@@ -40,39 +40,48 @@ class HttpModelGatewayTests {
         "provider": "locate-anything",
         "modelVersion": "mock",
         "status": "SUCCEEDED",
+        "resultImageUrl": "http://example.test/combined.jpg",
         "findings": [
           {
             "type": "SWITCH",
             "prompt": "红色刀闸开关",
-            "label": "abnormal",
+            "label": "红色刀闸开关",
             "score": null,
             "outputType": "box",
             "normalizedBox": [120, 80, 360, 260],
             "pixelBox": [48, 32, 144, 104],
-            "imageUrl": "http://example.test/annotated.jpg",
+            "imageUrl": "http://example.test/combined.jpg",
             "rawAnswer": "<box><120><80><360><260></box>"
           }
         ],
-        "warnings": []
+        "warnings": ["Unparsed secondary output"]
       }
       """);
     });
 
     HttpLocateAnythingGateway gateway = new HttpLocateAnythingGateway(properties(baseUrl));
-    List<LocateAnythingFinding> findings = gateway.detectCheckpoint(new LocateAnythingRequest(
+    LocateAnythingResult result = gateway.detectCheckpoint(new LocateAnythingRequest(
       Map.of("id", "task_001"),
       Map.of("id", "route_001"),
       Map.of("id", "cp_001"),
       "http://example.test/input.jpg",
-      List.of(Map.of("type", "SWITCH", "prompt", "红色刀闸开关", "enabled", true))
+      400,
+      200,
+      List.of(Map.of("type", "SWITCH", "displayLabel", "红色刀闸开关", "prompt", "定位红色刀闸开关", "enabled", true))
     ));
 
-    assertThat(findings).hasSize(1);
-    assertThat(findings.get(0).type()).isEqualTo("SWITCH");
-    assertThat(findings.get(0).bbox()).containsExactly(48, 32, 144, 104);
-    assertThat(findings.get(0).imageUrl()).isEqualTo("http://example.test/annotated.jpg");
-    assertThat(findings.get(0).rawResult()).containsEntry("rawAnswer", "<box><120><80><360><260></box>");
+    assertThat(result.findings()).hasSize(1);
+    assertThat(result.findings().get(0).type()).isEqualTo("SWITCH");
+    assertThat(result.findings().get(0).bbox()).containsExactly(48, 32, 144, 104);
+    assertThat(result.findings().get(0).label()).isEqualTo("红色刀闸开关");
+    assertThat(result.findings().get(0).imageUrl()).isEqualTo("http://example.test/combined.jpg");
+    assertThat(result.resultImageUrl()).isEqualTo("http://example.test/combined.jpg");
+    assertThat(result.findings().get(0).rawResult()).containsEntry("rawAnswer", "<box><120><80><360><260></box>");
+    assertThat(result.warnings()).containsExactly("Unparsed secondary output");
     assertThat(requestBody.get()).contains("\"generationMode\":\"fast\"");
+    assertThat(requestBody.get()).contains("\"imageWidth\":400");
+    assertThat(requestBody.get()).contains("\"imageHeight\":200");
+    assertThat(requestBody.get()).contains("\"displayLabel\":\"红色刀闸开关\"");
   }
 
   private ModelProperties properties(String locateBaseUrl) {

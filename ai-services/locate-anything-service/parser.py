@@ -37,10 +37,8 @@ def parse_answer(answer: str, image_width: int | None = None, image_height: int 
 
 
 def normalize_box_order(box: list[int]) -> list[int]:
-    first, second, third, fourth = box
-    if second > third:
-        return [first, third, second, fourth]
-    return box
+    x1, y1, x2, y2 = box
+    return [min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)]
 
 
 def to_pixel_box(box: list[int], width: int | None, height: int | None) -> list[int] | None:
