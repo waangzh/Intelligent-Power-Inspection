@@ -1,12 +1,9 @@
 .video-card { position: relative; }
-.video-placeholder { width: 100%; height: 360rpx; border-radius: 12rpx; background: #0d2137; }
-.video-overlay { position: absolute; bottom: 36rpx; left: 36rpx; color: #fff; font-size: 24rpx; }
+.video-placeholder { width: 100%; height: 360rpx; border-radius: 12rpx; background: var(--pi-sidebar); }
+.video-overlay { position: absolute; bottom: 24rpx; left: 24rpx; color: #fff; font-size: 22rpx; background: rgba(7, 30, 66, 0.55); padding: 8rpx 16rpx; border-radius: 8rpx; }
 .telemetry-grid { display: flex; flex-wrap: wrap; gap: 16rpx; margin-bottom: 16rpx; }
-.telemetry-item { flex: 1; min-width: 40%; text-align: center; padding: 16rpx; background: #f5f8fc; border-radius: 12rpx; }
-.telemetry-value { display: block; font-size: 28rpx; font-weight: 600; color: #1a5fb4; }
-.telemetry-label { font-size: 22rpx; color: #909399; }
-.pos-hint { margin-top: 12rpx; }
-.robot-scroll { max-height: 480rpx; }
-.robot-item { padding: 20rpx; border-radius: 12rpx; margin-bottom: 12rpx; border: 2rpx solid #f0f2f5; }
-.robot-item.active { border-color: #1a5fb4; background: #ecf5ff; }
-.robot-name { font-weight: 500; }
+.telemetry-item { flex: 1; min-width: 40%; background: var(--pi-bg); border-radius: 12rpx; padding: 16rpx; text-align: center; }
+.telemetry-value { display: block; font-size: 28rpx; font-weight: 600; color: var(--pi-primary); }
+.telemetry-label { font-size: 22rpx; color: var(--pi-muted-light); }
+.robot-item { padding: 16rpx; border: 1rpx solid var(--pi-border); border-radius: 12rpx; margin-bottom: 12rpx; }
+.robot-item.active { border-color: var(--pi-primary); background: var(--pi-primary-soft); }

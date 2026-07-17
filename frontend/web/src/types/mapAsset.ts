@@ -23,6 +23,12 @@ export interface MapAsset {
   pgmSize: number
   yamlSha256: string
   pgmSha256: string
+  contentIdentitySha256?: string
+  occupiedThresh?: string
+  freeThresh?: string
+  mode?: 'trinary' | 'scale' | 'raw'
+  /** 管理端读取时由后端实时检查 YAML/PGM 是否仍完整存在。 */
+  filesReady?: boolean
   createdAt: string
   updatedAt: string
 }

@@ -1,5 +1,7 @@
-.tag { display: inline-block; padding: 4rpx 16rpx; border-radius: 8rpx; font-size: 22rpx; }
-.tag-info { background: #f4f4f5; color: #909399; }
-.tag-primary { background: #ecf5ff; color: #1a5fb4; }
-.tag-success { background: #f0f9eb; color: #67c23a; }
-.tag-warning { background: #fdf6ec; color: #e6a23c; }
+@import '../../config/theme.wxss';
+
+.tag { display: inline-block; padding: 4rpx 16rpx; border-radius: 12rpx; font-size: 22rpx; font-weight: 600; }
+.tag-info { background: var(--pi-info-soft); color: var(--pi-muted); }
+.tag-primary { background: var(--pi-primary-soft); color: var(--pi-primary); }
+.tag-success { background: var(--pi-success-soft); color: var(--pi-success); }
+.tag-warning { background: var(--pi-warning-soft); color: var(--pi-warning); }

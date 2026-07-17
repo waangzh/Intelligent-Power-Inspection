@@ -164,8 +164,8 @@ public class DomainStoreService {
       return toMap(category, entityManager.find(entityType(category), id));
     } catch (ObjectOptimisticLockingFailureException | OptimisticLockException ex) {
       throw ApiException.conflict("数据已被其他人修改，请刷新后重试");
-    } catch (DataIntegrityViolationException ex) {
-      String message = ex.getMostSpecificCause() == null ? "" : ex.getMostSpecificCause().getMessage();
+    } catch (DataIntegrityViolationException | org.hibernate.exception.ConstraintViolationException ex) {
+      String message = mostSpecificMessage(ex);
       if (message != null && message.toLowerCase().contains("active_robot")) {
         throw ApiException.conflict("机器人已有执行中的任务");
       }
@@ -261,6 +261,26 @@ public class DomainStoreService {
       Predicate searchPredicate = searchPredicate(cb, root, category, search.trim().toLowerCase());
       if (searchPredicate != null) {
         predicates.add(searchPredicate);
+      }
+    }
+    if (DataCategory.WORK_ORDER.equals(category) && filters != null) {
+      String viewerId = filters.get("_viewerId");
+      String viewerName = filters.get("_viewerName");
+      if (viewerId != null && !viewerId.isBlank()) {
+        Path<String> assigneeId = root.get("assigneeId");
+        Path<String> assigneeName = root.get("assigneeName");
+        Path<String> createdByName = root.get("createdByName");
+        Predicate noAssigneeId = cb.or(cb.isNull(assigneeId), cb.equal(assigneeId, ""));
+        Predicate unassignedName = cb.or(
+          cb.isNull(assigneeName), cb.equal(assigneeName, ""), cb.equal(assigneeName, createdByName));
+        Predicate ownLegacy = viewerName == null || viewerName.isBlank()
+          ? cb.disjunction()
+          : cb.and(noAssigneeId, cb.equal(assigneeName, viewerName));
+        predicates.add(cb.or(
+          cb.equal(assigneeId, viewerId),
+          ownLegacy,
+          cb.and(noAssigneeId, unassignedName)
+        ));
       }
     }
     if (filters != null) {
@@ -474,6 +494,15 @@ public class DomainStoreService {
     } catch (Exception ex) {
       return null;
     }
+  }
+
+  private static String mostSpecificMessage(Throwable throwable) {
+    Throwable current = throwable;
+    while (current.getCause() != null && current.getCause() != current) {
+      current = current.getCause();
+    }
+    String message = current.getMessage();
+    return message == null ? "" : message;
   }
 
   private static String text(Object value) {

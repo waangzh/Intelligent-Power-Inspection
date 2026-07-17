@@ -29,3 +29,5 @@ app:
   robot:
     mode: simulation
     allow-registration: false
+    bridge-robot-id-mappings:
+      robot_001: robot-001

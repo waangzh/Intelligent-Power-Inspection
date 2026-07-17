@@ -41,7 +41,8 @@ public class RobotMapAssetController {
       @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
       @RequestPart("yaml") MultipartFile yaml,
       @RequestPart("pgm") MultipartFile pgm,
-      @RequestParam(value = "capturedAt", required = false) String capturedAt) throws IOException {
+      @RequestParam(value = "capturedAt", required = false) String capturedAt,
+      @RequestParam(value = "contentIdentitySha256", required = false) String contentIdentitySha256) throws IOException {
     if (!robotBridgeIdMapper.isBridgePlatformRequest(authorization)) {
       throw ApiException.unauthorized("Bridge 服务凭据无效");
     }
@@ -56,7 +57,8 @@ public class RobotMapAssetController {
     }
 
     RobotMapUploadResult result = mapAssetService.createForRobot(
-      siteId, robotId, normalizedBridgeId, idempotencyKey, parseCapturedAt(capturedAt), yaml, pgm);
+      siteId, robotId, normalizedBridgeId, idempotencyKey, contentIdentitySha256,
+      parseCapturedAt(capturedAt), yaml, pgm);
     ResponseEntity.BodyBuilder response = result.created()
       ? ResponseEntity.created(URI.create("/api/v1/map-assets/" + result.asset().get("id")))
       : ResponseEntity.ok();

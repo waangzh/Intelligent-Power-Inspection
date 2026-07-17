@@ -1,3 +1,2 @@
-.info-row { display: flex; justify-content: space-between; padding: 12rpx 0; border-bottom: 1rpx solid #f0f2f5; }
+.info-row { display: flex; justify-content: space-between; padding: 24rpx 0; border-bottom: 1rpx solid var(--pi-border-soft); }
 .info-row:last-child { border-bottom: none; }
-.form-actions { display: flex; gap: 16rpx; margin-top: 16rpx; }

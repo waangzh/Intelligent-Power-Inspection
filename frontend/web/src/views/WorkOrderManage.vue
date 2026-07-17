@@ -118,6 +118,9 @@
             <el-descriptions-item label="处理方式">{{ detail.resolutionForm.handlingMethod }}</el-descriptions-item>
             <el-descriptions-item label="更换部件">{{ detail.resolutionForm.replacedParts || '-' }}</el-descriptions-item>
             <el-descriptions-item label="试验结果">{{ detail.resolutionForm.testResult }}</el-descriptions-item>
+            <el-descriptions-item label="处理结论">
+              {{ detail.resolutionForm.conclusion ? WORK_ORDER_REVIEW_CONCLUSION_LABELS[detail.resolutionForm.conclusion] : '-' }}
+            </el-descriptions-item>
             <el-descriptions-item label="备注">{{ detail.resolutionForm.remarks || '-' }}</el-descriptions-item>
             <el-descriptions-item label="提交人">{{ detail.resolutionForm.submittedBy }} · {{ fmt(detail.resolutionForm.submittedAt) }}</el-descriptions-item>
           </el-descriptions>
@@ -156,8 +159,23 @@
         <el-form-item label="试验结果" required>
           <el-input v-model="resolveForm.testResult" type="textarea" :rows="2" placeholder="如：复测正常、绝缘合格等" />
         </el-form-item>
-        <el-form-item label="补充说明">
-          <el-input v-model="resolveForm.remarks" type="textarea" :rows="2" placeholder="其他现场情况" />
+        <el-form-item label="处理结论" required>
+          <el-select v-model="resolveForm.conclusion" placeholder="请选择" style="width: 100%">
+            <el-option
+              v-for="o in WORK_ORDER_REVIEW_CONCLUSION_OPTIONS"
+              :key="o"
+              :label="WORK_ORDER_REVIEW_CONCLUSION_LABELS[o]"
+              :value="o"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="补充说明" :required="needsFollowUpPlan">
+          <el-input
+            v-model="resolveForm.remarks"
+            type="textarea"
+            :rows="2"
+            :placeholder="needsFollowUpPlan ? '部分消缺/未消缺时必须填写遗留风险与后续计划' : '其他现场情况'"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -195,11 +213,14 @@ import ListPagination from '@/components/ListPagination.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { usePermission } from '@/composables/usePermission'
-import type { WorkOrder, WorkOrderPriority, WorkOrderStatus } from '@/types/workOrder'
+import type { WorkOrder, WorkOrderPriority, WorkOrderReviewConclusion, WorkOrderStatus } from '@/types/workOrder'
 import {
+  CONCLUSIONS_REQUIRING_FOLLOW_UP,
   FAULT_TYPE_OPTIONS,
   HANDLING_METHOD_OPTIONS,
   WORK_ORDER_PRIORITY_LABELS,
+  WORK_ORDER_REVIEW_CONCLUSION_LABELS,
+  WORK_ORDER_REVIEW_CONCLUSION_OPTIONS,
   WORK_ORDER_STATUS_LABELS,
 } from '@/types/workOrder'
 import { isWorkOrderUnassigned, workOrderAssigneeLabel } from '@/utils/workOrder'
@@ -236,8 +257,13 @@ const resolveForm = reactive({
   handlingMethod: '',
   replacedParts: '',
   testResult: '',
+  conclusion: '' as WorkOrderReviewConclusion | '',
   remarks: '',
 })
+
+const needsFollowUpPlan = computed(() =>
+  CONCLUSIONS_REQUIRING_FOLLOW_UP.includes(resolveForm.conclusion as WorkOrderReviewConclusion),
+)
 
 const reviewForm = reactive({
   result: 'PASS' as 'PASS' | 'REJECT',
@@ -329,6 +355,7 @@ function openResolve(row: WorkOrder) {
   resolveForm.handlingMethod = ''
   resolveForm.replacedParts = ''
   resolveForm.testResult = ''
+  resolveForm.conclusion = ''
   resolveForm.remarks = ''
   resolveVisible.value = true
 }
@@ -345,6 +372,14 @@ async function submitResolve() {
     ElMessage.warning('请填写必填项：故障类型、处理方式、试验结果')
     return
   }
+  if (!resolveForm.conclusion) {
+    ElMessage.warning('请选择处理结论')
+    return
+  }
+  if (needsFollowUpPlan.value && !resolveForm.remarks.trim()) {
+    ElMessage.warning('部分消缺或未消缺时，请在补充说明中填写遗留风险与后续计划')
+    return
+  }
   const user = authStore.user
   if (!user) return
   submitting.value = true
@@ -356,6 +391,7 @@ async function submitResolve() {
         handlingMethod: resolveForm.handlingMethod,
         replacedParts: resolveForm.replacedParts || undefined,
         testResult: resolveForm.testResult.trim(),
+        conclusion: resolveForm.conclusion,
         remarks: resolveForm.remarks || undefined,
         submittedAt: '',
         submittedBy: user.displayName,

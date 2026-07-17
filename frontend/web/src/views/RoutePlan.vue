@@ -181,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { resourcesApi } from '@/api/resources'
@@ -658,13 +658,27 @@ function onBeforeUnload(event: BeforeUnloadEvent) {
 }
 
 let deploymentPollTimer: number | undefined
+
+function startDeploymentPolling() {
+  if (deploymentPollTimer) return
+  deploymentPollTimer = window.setInterval(() => void refreshDeploymentDetails(), 5000)
+}
+
+function stopDeploymentPolling() {
+  if (!deploymentPollTimer) return
+  window.clearInterval(deploymentPollTimer)
+  deploymentPollTimer = undefined
+}
+
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
-  deploymentPollTimer = window.setInterval(() => void refreshDeploymentDetails(), 5000)
+  startDeploymentPolling()
 })
+onActivated(startDeploymentPolling)
+onDeactivated(stopDeploymentPolling)
 onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
-  if (deploymentPollTimer) window.clearInterval(deploymentPollTimer)
+  stopDeploymentPolling()
 })
 onBeforeRouteLeave(() => confirmDiscardChanges())
 </script>

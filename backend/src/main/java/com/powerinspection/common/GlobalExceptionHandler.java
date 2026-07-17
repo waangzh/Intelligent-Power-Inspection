@@ -45,9 +45,9 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(409, "数据已被其他人修改，请刷新后重试"));
   }
 
-  @ExceptionHandler(DataIntegrityViolationException.class)
-  ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
-    String message = ex.getMostSpecificCause() == null ? "" : String.valueOf(ex.getMostSpecificCause().getMessage());
+  @ExceptionHandler({DataIntegrityViolationException.class, org.hibernate.exception.ConstraintViolationException.class})
+  ResponseEntity<ApiResponse<Void>> handleDataIntegrity(Exception ex) {
+    String message = mostSpecificMessage(ex);
     if (message.toLowerCase().contains("active_robot")) {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(409, "机器人已有执行中的任务"));
     }
@@ -55,6 +55,15 @@ public class GlobalExceptionHandler {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(409, "该告警已存在工单"));
     }
     return ResponseEntity.badRequest().body(ApiResponse.error(400, "数据约束冲突，请检查关联对象是否存在或状态是否合法"));
+  }
+
+  private String mostSpecificMessage(Throwable throwable) {
+    Throwable current = throwable;
+    while (current.getCause() != null && current.getCause() != current) {
+      current = current.getCause();
+    }
+    String message = current.getMessage();
+    return message == null ? "" : message;
   }
 
   @ExceptionHandler(Exception.class)

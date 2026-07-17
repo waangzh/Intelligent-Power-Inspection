@@ -14,6 +14,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -25,9 +26,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.multipart.MultipartFile;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -38,9 +41,9 @@ import org.yaml.snakeyaml.error.YAMLException;
 @Service
 public class MapAssetService {
   private static final Logger log = LoggerFactory.getLogger(MapAssetService.class);
-  private static final long MAX_YAML_BYTES = 1024L * 1024L;
-  private static final long MAX_PGM_BYTES = 100L * 1024L * 1024L;
   private static final int MAX_PGM_HEADER_BYTES = 8192;
+  private static final Set<String> MAP_YAML_FIELDS = Set.of(
+    "image", "resolution", "origin", "negate", "occupied_thresh", "free_thresh", "mode");
   private static final Path ROOT = ModelFileWebConfig.MODEL_FILE_ROOT.resolve("map-assets").normalize();
   private static final String YAML_FILE = "map.yaml";
   private static final String PGM_FILE = "map.pgm";
@@ -49,15 +52,21 @@ public class MapAssetService {
   private final RouteRevisionRepository routeRevisionRepository;
   private final RouteDraftRepository routeDraftRepository;
   private final RobotMapUploadRepository robotMapUploadRepository;
+  private final long maxYamlBytes;
+  private final long maxPgmBytes;
   private final ConcurrentMap<String, Object> uploadLocks = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Object> reviewLocks = new ConcurrentHashMap<>();
 
   public MapAssetService(DataStoreService dataStore, RouteRevisionRepository routeRevisionRepository,
-      RouteDraftRepository routeDraftRepository, RobotMapUploadRepository robotMapUploadRepository) {
+      RouteDraftRepository routeDraftRepository, RobotMapUploadRepository robotMapUploadRepository,
+      @Value("${app.map-assets.max-yaml-bytes:1048576}") long maxYamlBytes,
+      @Value("${app.map-assets.max-pgm-bytes:104857600}") long maxPgmBytes) {
     this.dataStore = dataStore;
     this.routeRevisionRepository = routeRevisionRepository;
     this.routeDraftRepository = routeDraftRepository;
     this.robotMapUploadRepository = robotMapUploadRepository;
+    this.maxYamlBytes = maxYamlBytes;
+    this.maxPgmBytes = maxPgmBytes;
   }
 
   public Map<String, Object> create(String siteId, MultipartFile yaml, MultipartFile pgm) throws IOException {
@@ -67,12 +76,17 @@ public class MapAssetService {
   }
 
   public RobotMapUploadResult createForRobot(String siteId, String robotId, String bridgeRobotId,
-      String idempotencyKey, Instant capturedAt, MultipartFile yaml, MultipartFile pgm) throws IOException {
+      String idempotencyKey, String expectedContentIdentity, Instant capturedAt,
+      MultipartFile yaml, MultipartFile pgm) throws IOException {
     ensureSiteExists(siteId);
     String normalizedKey = requiredText(idempotencyKey, "缺少 Idempotency-Key");
     if (normalizedKey.length() > 160) throw ApiException.badRequest("Idempotency-Key 长度不能超过 160");
     if (robotId == null || robotId.isBlank() || robotId.length() > 100) throw ApiException.badRequest("机器人 ID 无效");
     PreparedUpload prepared = prepare(yaml, pgm);
+    if (expectedContentIdentity != null && !expectedContentIdentity.isBlank()
+        && !prepared.contentIdentitySha256().equals(expectedContentIdentity.trim())) {
+      throw ApiException.badRequest("地图内容身份与平台计算结果不一致");
+    }
     String lockKey = robotId + '\n' + normalizedKey;
     Object lock = uploadLocks.computeIfAbsent(lockKey, ignored -> new Object());
     try {
@@ -131,8 +145,8 @@ public class MapAssetService {
   }
 
   private PreparedUpload prepare(MultipartFile yaml, MultipartFile pgm) throws IOException {
-    validateFile(yaml, MAX_YAML_BYTES, List.of(".yaml", ".yml"), "YAML");
-    validateFile(pgm, MAX_PGM_BYTES, List.of(".pgm"), "PGM");
+    validateFile(yaml, maxYamlBytes, List.of(".yaml", ".yml"), "YAML");
+    validateFile(pgm, maxPgmBytes, List.of(".pgm"), "PGM");
 
     String yamlName = safeOriginalName(yaml, "map.yaml");
     String pgmName = safeOriginalName(pgm, "map.pgm");
@@ -145,14 +159,23 @@ public class MapAssetService {
     double resolution = positiveNumber(yamlConfig.get("resolution"), "YAML 的 resolution 必须大于 0");
     List<Double> origin = origin(yamlConfig.get("origin"));
     int negate = negate(yamlConfig.getOrDefault("negate", 0));
-    validateThresholds(yamlConfig);
+    String occupiedThresh = unitDecimal(yamlConfig.getOrDefault("occupied_thresh", "0.65"), "occupied_thresh");
+    String freeThresh = unitDecimal(yamlConfig.getOrDefault("free_thresh", "0.25"), "free_thresh");
+    if (new BigDecimal(freeThresh).compareTo(new BigDecimal(occupiedThresh)) >= 0) {
+      throw ApiException.badRequest("YAML 的 free_thresh 必须小于 occupied_thresh");
+    }
+    String mode = String.valueOf(yamlConfig.getOrDefault("mode", "trinary")).toLowerCase(Locale.ROOT);
+    if (!List.of("trinary", "scale", "raw").contains(mode)) throw ApiException.badRequest("YAML 的 mode 不受支持");
     PgmHeader pgmHeader = parsePgmHeader(pgm);
     String pgmSha256;
     try (InputStream input = pgm.getInputStream()) {
       pgmSha256 = digest(input);
     }
+    String identity = contentIdentity(pgmSha256, yamlConfig.get("resolution"), yamlConfig.get("origin"),
+      negate, occupiedThresh, freeThresh, mode);
     return new PreparedUpload(yamlBytes, yamlName, pgmName, image, resolution, origin, negate,
-      pgmHeader.width(), pgmHeader.height(), sha256(yamlBytes), pgmSha256);
+      occupiedThresh, freeThresh, mode, pgmHeader.width(), pgmHeader.height(),
+      sha256(yamlBytes), pgmSha256, sha256(identity.getBytes(StandardCharsets.UTF_8)));
   }
 
   private Map<String, Object> createAsset(String siteId, MultipartFile yaml, MultipartFile pgm,
@@ -200,12 +223,16 @@ public class MapAssetService {
       metadata.put("resolution", prepared.resolution());
       metadata.put("origin", prepared.origin());
       metadata.put("negate", prepared.negate());
+      metadata.put("occupiedThresh", prepared.occupiedThresh());
+      metadata.put("freeThresh", prepared.freeThresh());
+      metadata.put("mode", prepared.mode());
       metadata.put("width", prepared.width());
       metadata.put("height", prepared.height());
       metadata.put("yamlSize", yaml.getSize());
       metadata.put("pgmSize", pgm.getSize());
       metadata.put("yamlSha256", prepared.yamlSha256());
       metadata.put("pgmSha256", pgmSha256);
+      metadata.put("contentIdentitySha256", prepared.contentIdentitySha256());
       metadata.put("createdAt", now);
       metadata.put("updatedAt", now);
       try {
@@ -228,7 +255,7 @@ public class MapAssetService {
   }
 
   public Map<String, Object> getForManagement(String id) {
-    return dataStore.get(DataCategory.MAP_ASSET, id);
+    return managementView(dataStore.get(DataCategory.MAP_ASSET, id));
   }
 
   public List<Map<String, Object>> listForManagement(String source, String status, String siteId) {
@@ -237,6 +264,7 @@ public class MapAssetService {
       .filter(asset -> source == null || source.isBlank() || source.equals(String.valueOf(asset.get("source"))))
       .filter(asset -> effectiveStatus.equals(String.valueOf(asset.get("status"))))
       .filter(asset -> siteId == null || siteId.isBlank() || siteId.equals(String.valueOf(asset.get("siteId"))))
+      .map(this::managementView)
       .toList();
   }
 
@@ -259,6 +287,7 @@ public class MapAssetService {
         if (!"PENDING_REVIEW".equals(String.valueOf(asset.get("status")))) {
           throw ApiException.conflict("地图资产已经完成审核，不能重复审核");
         }
+        if ("APPROVE".equals(normalizedAction)) verifyStoredFiles(id, asset);
         String now = Instant.now().toString();
         Map<String, Object> patch = new LinkedHashMap<>();
         patch.put("status", "APPROVE".equals(normalizedAction) ? "AVAILABLE" : "REJECTED");
@@ -333,25 +362,17 @@ public class MapAssetService {
     LoaderOptions options = new LoaderOptions();
     options.setAllowDuplicateKeys(false);
     options.setMaxAliasesForCollections(0);
-    options.setCodePointLimit((int) MAX_YAML_BYTES);
+    options.setCodePointLimit((int) Math.min(Integer.MAX_VALUE, maxYamlBytes));
     try {
       Object loaded = new Yaml(new SafeConstructor(options)).load(new String(bytes, StandardCharsets.UTF_8));
       if (!(loaded instanceof Map<?, ?> map)) throw ApiException.badRequest("YAML 根节点必须是地图配置对象");
+      if (map.keySet().stream().anyMatch(key -> !(key instanceof String))
+          || !MAP_YAML_FIELDS.containsAll(map.keySet())) {
+        throw ApiException.badRequest("YAML 只能包含标准 ROS 地图字段");
+      }
       return new LinkedHashMap<>((Map<String, Object>) map);
     } catch (YAMLException ex) {
       throw ApiException.badRequest("YAML 解析失败");
-    }
-  }
-
-  private void validateThresholds(Map<String, Object> config) {
-    Double free = optionalUnitNumber(config.get("free_thresh"), "free_thresh");
-    Double occupied = optionalUnitNumber(config.get("occupied_thresh"), "occupied_thresh");
-    if (free != null && occupied != null && free >= occupied) {
-      throw ApiException.badRequest("YAML 的 free_thresh 必须小于 occupied_thresh");
-    }
-    Object mode = config.get("mode");
-    if (mode != null && !List.of("trinary", "scale", "raw").contains(mode.toString())) {
-      throw ApiException.badRequest("YAML 的 mode 不受支持");
     }
   }
 
@@ -380,7 +401,7 @@ public class MapAssetService {
     } catch (ArithmeticException ex) {
       throw ApiException.badRequest("PGM 尺寸过大");
     }
-    if (pixels > MAX_PGM_BYTES || pgm.getSize() < index[0] + pixels) {
+    if (pixels > maxPgmBytes || pgm.getSize() < index[0] + pixels) {
       throw ApiException.badRequest("PGM 像素数据不完整或尺寸过大");
     }
     return new PgmHeader(width, height);
@@ -405,8 +426,38 @@ public class MapAssetService {
 
   private Path regularAssetFile(String id, String filename) {
     Path file = resolveAssetDirectory(id).resolve(filename).normalize();
-    if (!file.startsWith(ROOT) || !Files.isRegularFile(file)) throw ApiException.notFound("地图资产文件不存在");
+    if (!file.startsWith(ROOT) || !Files.isRegularFile(file)) {
+      throw ApiException.notFound("地图资产文件不存在，请重新上传 YAML/PGM");
+    }
     return file;
+  }
+
+  private Map<String, Object> managementView(Map<String, Object> asset) {
+    Map<String, Object> view = new LinkedHashMap<>(asset);
+    view.put("filesReady", storedFilesReady(String.valueOf(asset.get("id"))));
+    return view;
+  }
+
+  private boolean storedFilesReady(String id) {
+    Path directory = resolveAssetDirectory(id);
+    return Files.isRegularFile(directory.resolve(YAML_FILE)) && Files.isRegularFile(directory.resolve(PGM_FILE));
+  }
+
+  private void verifyStoredFiles(String id, Map<String, Object> asset) {
+    if (!storedFilesReady(id)) {
+      throw ApiException.conflict("地图资产文件不完整，无法通过审核，请让机器人使用新的 Idempotency-Key 重新上传");
+    }
+    try (InputStream yamlInput = Files.newInputStream(regularAssetFile(id, YAML_FILE));
+         InputStream pgmInput = Files.newInputStream(regularAssetFile(id, PGM_FILE))) {
+      String yamlSha256 = digest(yamlInput);
+      String pgmSha256 = digest(pgmInput);
+      if (!yamlSha256.equals(String.valueOf(asset.get("yamlSha256")))
+          || !pgmSha256.equals(String.valueOf(asset.get("pgmSha256")))) {
+        throw ApiException.conflict("地图资产文件校验失败，无法通过审核，请重新上传");
+      }
+    } catch (IOException ex) {
+      throw ApiException.conflict("地图资产文件读取失败，无法通过审核，请重新上传");
+    }
   }
 
   private Path resolveAssetDirectory(String name) {
@@ -480,11 +531,37 @@ public class MapAssetService {
     return number;
   }
 
-  private Double optionalUnitNumber(Object value, String field) {
-    if (value == null) return null;
-    double number = finiteNumber(value, "YAML 的 " + field + " 必须是数字");
-    if (number < 0 || number > 1) throw ApiException.badRequest("YAML 的 " + field + " 必须在 0 到 1 之间");
-    return number;
+  private String unitDecimal(Object value, String field) {
+    BigDecimal number = decimal(value, "YAML 的 " + field + " 必须是数字");
+    if (number.compareTo(BigDecimal.ZERO) < 0 || number.compareTo(BigDecimal.ONE) > 0) {
+      throw ApiException.badRequest("YAML 的 " + field + " 必须在 0 到 1 之间");
+    }
+    return decimalText(number);
+  }
+
+  private BigDecimal decimal(Object value, String message) {
+    try {
+      return new BigDecimal(String.valueOf(value));
+    } catch (NumberFormatException ex) {
+      throw ApiException.badRequest(message);
+    }
+  }
+
+  private String decimalText(Object value) {
+    BigDecimal number = value instanceof BigDecimal decimal ? decimal : decimal(value, "地图数值无效");
+    return number.signum() == 0 ? "0" : number.stripTrailingZeros().toPlainString();
+  }
+
+  private String contentIdentity(String pgmSha256, Object resolution, Object originValue, int negate,
+      String occupiedThresh, String freeThresh, String mode) {
+    if (!(originValue instanceof List<?> origin) || origin.size() != 3) {
+      throw ApiException.badRequest("YAML 的 origin 必须包含 3 个数字");
+    }
+    return "{\"freeThresh\":\"" + freeThresh + "\",\"mode\":\"" + mode
+      + "\",\"negate\":" + negate + ",\"occupiedThresh\":\"" + occupiedThresh
+      + "\",\"origin\":[\"" + decimalText(origin.get(0)) + "\",\"" + decimalText(origin.get(1))
+      + "\",\"" + decimalText(origin.get(2)) + "\"],\"pgmSha256\":\"" + pgmSha256
+      + "\",\"resolution\":\"" + decimalText(resolution) + "\"}";
   }
 
   private double finiteNumber(Object value, String message) {
@@ -546,6 +623,7 @@ public class MapAssetService {
     upload.setIdempotencyKey(idempotencyKey);
     upload.setYamlSha256(prepared.yamlSha256());
     upload.setPgmSha256(prepared.pgmSha256());
+    upload.setContentIdentitySha256(prepared.contentIdentitySha256());
     upload.setStatus("PROCESSING");
     upload.setCreatedAt(now);
     upload.setUpdatedAt(now);
@@ -559,15 +637,19 @@ public class MapAssetService {
   }
 
   private void verifyHashes(RobotMapUploadEntity upload, PreparedUpload prepared) {
-    if (!Objects.equals(upload.getYamlSha256(), prepared.yamlSha256())
-        || !Objects.equals(upload.getPgmSha256(), prepared.pgmSha256())) {
+    boolean same = upload.getContentIdentitySha256() == null
+      ? Objects.equals(upload.getYamlSha256(), prepared.yamlSha256())
+        && Objects.equals(upload.getPgmSha256(), prepared.pgmSha256())
+      : Objects.equals(upload.getContentIdentitySha256(), prepared.contentIdentitySha256());
+    if (!same) {
       throw ApiException.conflict("相同 Idempotency-Key 已用于不同的地图内容");
     }
   }
 
   private record PreparedUpload(byte[] yamlBytes, String yamlName, String pgmName, String image,
-      double resolution, List<Double> origin, int negate, int width, int height,
-      String yamlSha256, String pgmSha256) {
+      double resolution, List<Double> origin, int negate, String occupiedThresh, String freeThresh,
+      String mode, int width, int height, String yamlSha256, String pgmSha256,
+      String contentIdentitySha256) {
   }
 
   private record ClaimResult(RobotMapUploadEntity upload, boolean claimed) {

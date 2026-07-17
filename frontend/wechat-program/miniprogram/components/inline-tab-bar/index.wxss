@@ -1,4 +1,4 @@
-@import '../config/theme.wxss';
+@import '../../config/theme.wxss';
 
 .tab-bar {
   position: fixed;

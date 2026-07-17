@@ -28,6 +28,9 @@ public class RobotMapUploadEntity {
   @Column(name = "pgm_sha256", nullable = false, length = 64)
   private String pgmSha256;
 
+  @Column(name = "content_identity_sha256", length = 64)
+  private String contentIdentitySha256;
+
   @Column(name = "map_asset_id", length = 100)
   private String mapAssetId;
 
@@ -49,6 +52,8 @@ public class RobotMapUploadEntity {
   public void setYamlSha256(String yamlSha256) { this.yamlSha256 = yamlSha256; }
   public String getPgmSha256() { return pgmSha256; }
   public void setPgmSha256(String pgmSha256) { this.pgmSha256 = pgmSha256; }
+  public String getContentIdentitySha256() { return contentIdentitySha256; }
+  public void setContentIdentitySha256(String value) { contentIdentitySha256 = value; }
   public String getMapAssetId() { return mapAssetId; }
   public void setMapAssetId(String mapAssetId) { this.mapAssetId = mapAssetId; }
   public String getStatus() { return status; }

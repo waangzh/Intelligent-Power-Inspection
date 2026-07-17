@@ -5,6 +5,9 @@ const { WORK_ORDER_STATUS_LABELS, WORK_ORDER_PRIORITY_LABELS, ALARM_SEVERITY_LAB
 const {
   FAULT_TYPE_OPTIONS,
   HANDLING_METHOD_OPTIONS,
+  REVIEW_CONCLUSION_OPTIONS,
+  REVIEW_CONCLUSION_LABELS,
+  CONCLUSIONS_REQUIRING_FOLLOW_UP,
   enrichWorkOrder,
   isWorkOrderUnassigned,
 } = require('../../utils/work-order')
@@ -27,18 +30,25 @@ const EMPTY_RESOLVE_FORM = {
   handlingMethodIndex: -1,
   replacedParts: '',
   testResult: '',
+  conclusion: '',
+  conclusionIndex: -1,
   remarks: '',
   photoItems: [],
 }
+
+const REVIEW_CONCLUSION_LABEL_LIST = REVIEW_CONCLUSION_OPTIONS.map((v) => REVIEW_CONCLUSION_LABELS[v])
 
 Page({
   data: {
     orders: [],
     filtered: [],
     statusFilter: '',
-    statusCards: [],
-    scopeFilter: 'ALL',
-    scopeCards: [],
+    statusChips: [],
+    showStatusChips: false,
+    scopeFilter: 'POOL',
+    poolCount: 0,
+    mineCount: 0,
+    emptyHint: '暂无工单',
     isDispatcher: false,
     detail: null,
     showDetail: false,
@@ -51,6 +61,8 @@ Page({
     reviewForm: { result: 'PASS', comment: '' },
     faultTypeOptions: FAULT_TYPE_OPTIONS,
     handlingMethodOptions: HANDLING_METHOD_OPTIONS,
+    conclusionOptions: REVIEW_CONCLUSION_LABEL_LIST,
+    needsFollowUpPlan: false,
     canCreate: false,
     canProcess: false,
     canReview: false,
@@ -127,38 +139,59 @@ Page({
     })
 
     const isDispatcher = user.role === 'DISPATCHER'
-    let scopeCards = []
-    if (isDispatcher) {
-      const poolCount = orders.filter((o) => isWorkOrderUnassigned(o)).length
-      const mineCount = orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, user)).length
-      scopeCards = [
-        { key: 'ALL', label: '全部可见', value: orders.length },
-        { key: 'POOL', label: '接单大厅', value: poolCount },
-        { key: 'MINE', label: '我的工单', value: mineCount },
-      ]
-    }
+    const poolCount = isDispatcher ? orders.filter((o) => isWorkOrderUnassigned(o)).length : 0
+    const mineCount = isDispatcher
+      ? orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, user)).length
+      : 0
 
-    const scoped = workOrderPerm.filterByScope(orders, user, this.data.scopeFilter)
-    const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0, CLOSED: 0 }
-    scoped.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status]++ })
-    const statusCards = [
-      { key: '', label: '全部', value: scoped.length },
-      { key: 'PENDING', label: '待处理', value: counts.PENDING },
-      { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
-      { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
-    ]
+    this.setData({ orders, poolCount, mineCount, pendingAlarms })
+    this.rebuildFilters()
+  },
 
-    this.setData({ orders, statusCards, scopeCards, pendingAlarms })
+  switchScope(e) {
+    const key = e.currentTarget.dataset.key
+    if (key === this.data.scopeFilter) return
+    this.setData({ scopeFilter: key, statusFilter: '' })
+    this.rebuildFilters()
+  },
+
+  filterByStatus(e) {
+    this.setData({ statusFilter: e.currentTarget.dataset.key })
     this.applyFilter()
   },
 
-  filterByScope(e) {
-    this.setData({ scopeFilter: e.currentTarget.dataset.key })
-    this.load()
-  },
+  rebuildFilters() {
+    const { orders, scopeFilter, user, isDispatcher } = this.data
+    const scoped = workOrderPerm.filterByScope(orders, user, isDispatcher ? scopeFilter : 'ALL')
+    const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0 }
+    scoped.forEach((o) => {
+      if (counts[o.status] !== undefined) counts[o.status]++
+    })
 
-  filterByCard(e) {
-    this.setData({ statusFilter: e.currentTarget.dataset.key })
+    let statusChips = []
+    let showStatusChips = true
+    if (isDispatcher && scopeFilter === 'POOL') {
+      showStatusChips = false
+    } else if (isDispatcher && scopeFilter === 'MINE') {
+      statusChips = [
+        { key: '', label: '全部', value: scoped.length },
+        { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
+        { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
+      ]
+    } else {
+      statusChips = [
+        { key: '', label: '全部', value: scoped.length },
+        { key: 'PENDING', label: '待接单', value: counts.PENDING },
+        { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
+        { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
+      ]
+    }
+
+    let emptyHint = '暂无工单'
+    if (isDispatcher && scopeFilter === 'POOL') emptyHint = '暂无待接工单'
+    else if (isDispatcher && scopeFilter === 'MINE') emptyHint = '暂无我的工单'
+
+    this.setData({ statusChips, showStatusChips, emptyHint })
     this.applyFilter()
   },
 
@@ -188,6 +221,7 @@ Page({
     try {
       await api.claimWorkOrder(id)
       wx.showToast({ title: '接单成功，开始处置' })
+      this.setData({ scopeFilter: 'MINE', statusFilter: '' })
       getApp().refreshBadges()
       this.load()
     } catch (err) {
@@ -208,6 +242,7 @@ Page({
     this.setData({
       resolvingId: id,
       resolveForm: { ...EMPTY_RESOLVE_FORM },
+      needsFollowUpPlan: false,
       showResolve: true,
     })
   },
@@ -227,6 +262,16 @@ Page({
     this.setData({
       'resolveForm.handlingMethodIndex': index,
       'resolveForm.handlingMethod': HANDLING_METHOD_OPTIONS[index],
+    })
+  },
+
+  onConclusionChange(e) {
+    const index = Number(e.detail.value)
+    const conclusion = REVIEW_CONCLUSION_OPTIONS[index]
+    this.setData({
+      'resolveForm.conclusionIndex': index,
+      'resolveForm.conclusion': conclusion,
+      needsFollowUpPlan: CONCLUSIONS_REQUIRING_FOLLOW_UP.includes(conclusion),
     })
   },
 
@@ -320,6 +365,14 @@ Page({
       wx.showToast({ title: '请填写故障类型、处理方式、试验结果', icon: 'none' })
       return
     }
+    if (!resolveForm.conclusion) {
+      wx.showToast({ title: '请选择处理结论', icon: 'none' })
+      return
+    }
+    if (this.data.needsFollowUpPlan && !resolveForm.remarks.trim()) {
+      wx.showToast({ title: '部分消缺/未消缺时请填写补充说明', icon: 'none' })
+      return
+    }
     try {
       wx.showLoading({ title: '提交中' })
       const photos = []
@@ -331,6 +384,7 @@ Page({
         handlingMethod: resolveForm.handlingMethod,
         replacedParts: resolveForm.replacedParts.trim() || undefined,
         testResult: resolveForm.testResult.trim(),
+        conclusion: resolveForm.conclusion,
         remarks: resolveForm.remarks.trim() || undefined,
         photos: photos.length ? photos : undefined,
       })
