@@ -9,6 +9,7 @@
 - 用户上传继续使用 `POST /api/v1/map-assets`，保持当前平台 JWT 与 `ROUTE_EDIT` 权限模型。
 - 机器人上传使用新的设备 API `POST /robot-api/v1/map-assets`，只接受设备 Token。
 - 两条入口只复用地图校验、哈希和存储服务；不得共用认证语义，也不得让机器人持有平台用户 JWT。
+- 地图内容身份使用规范化地图语义与 PGM 哈希，不使用原始 YAML 哈希；Jetson 与 Spring 必须独立计算并互相核对。
 
 本期不做以下事情：
 
@@ -70,7 +71,7 @@ flowchart LR
 - YAML、PGM 本地路径和文件名；
 - YAML、PGM 的 SHA-256；
 - 建图完成时间 `capturedAt`；
-- 状态：`PENDING`、`UPLOADING`、`SUCCEEDED`、`RETRYING`、`FAILED`；
+- 持久状态：`PENDING`、`FAILED_RETRYABLE`、`FAILED_FINAL`、`SUCCEEDED`；`UPLOADING` 只保存在单线程 worker 内存中；
 - 后端返回的 `mapAssetId`（成功后写入）。
 
 任务与文件信息必须在 Jetson 本地 SQLite 中持久化。网络失败、Jetson 进程重启或 Bridge 超时后，必须重用原任务的同一个 `Idempotency-Key` 重试。
@@ -93,6 +94,9 @@ multipart 字段：
 | `yaml` | 是 | ROS map_server YAML 文件，扩展名为 `.yaml` 或 `.yml` |
 | `pgm` | 是 | ROS P5 PGM 文件，扩展名为 `.pgm` |
 | `capturedAt` | 否 | 机器人建图完成时间，ISO-8601；只作审计信息 |
+| `contentIdentitySha256` | 是 | 规范化地图内容身份 |
+| `yamlSha256` | 是 | 原始 YAML 审计哈希 |
+| `pgmSha256` | 是 | 原始 PGM 哈希 |
 
 机器人不得发送或信任以下业务归属字段：`robotId`、`siteId`、`status`、`reviewer`。
 
@@ -102,6 +106,7 @@ multipart 字段：
 {
   "mapAssetId": "map_xxx",
   "status": "PENDING_REVIEW",
+  "contentIdentitySha256": "<64 位十六进制哈希>",
   "yamlSha256": "<64 位十六进制哈希>",
   "pgmSha256": "<64 位十六进制哈希>",
   "width": 2048,
@@ -124,6 +129,8 @@ multipart 字段：
 | `409` | 同一幂等键提交了不同内容，标记失败并保留本地证据 |
 | `413` | 文件超过限制，标记失败 |
 | `429` / `503` / 网络错误 | 保持同一幂等键，按指数退避加抖动重试 |
+
+规范化身份 JSON 固定包含 `pgmSha256/resolution/origin/negate/occupiedThresh/freeThresh/mode`。键排序且无空白；数值转换为无多余零的十进制字符串；缺失的 `negate/occupied_thresh/free_thresh/mode` 使用 `0/0.65/0.25/trinary`。YAML 原始哈希只作审计，不参与内容去重。
 
 全程保持 TLS 证书校验；私有 CA 通过既有 CA 文件配置，不得关闭校验。
 
@@ -234,7 +241,8 @@ POST /api/v1/internal/robot-map-assets
 | --- | --- |
 | `robot_id` | 平台机器人 ID |
 | `idempotency_key` | 与 `robot_id` 组成唯一约束 |
-| `yaml_sha256` / `pgm_sha256` | 首次请求内容身份 |
+| `yaml_sha256` / `pgm_sha256` | 原始文件审计哈希 |
+| `content_identity_sha256` | V13 新增；规范化内容身份，旧记录为空时回退原始哈希兼容 |
 | `map_asset_id` | 创建成功后关联的地图资产 |
 | `status` | `PROCESSING`、`SUCCEEDED`、`FAILED` |
 | `created_at` / `updated_at` | 审计与故障恢复 |

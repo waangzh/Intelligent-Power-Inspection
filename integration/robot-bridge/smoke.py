@@ -27,6 +27,8 @@ class PlatformStub:
         self.route_hash = hashlib.sha256(canonical(self.route)).hexdigest()
         self.pgm = b"P5\n1 1\n255\n\0"
         self.map_hash = hashlib.sha256(self.pgm).hexdigest()
+        self.upload_identity = ""
+        self.upload_requests = 0
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -47,11 +49,28 @@ class PlatformStub:
                 self.send_response(404)
                 self.end_headers()
 
-            def respond_json(self, value):
-                self.respond_bytes(json.dumps(value).encode(), "application/json")
+            def do_POST(self):
+                if self.path == "/api/v1/internal/robot-map-assets":
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length)
+                    assert self.headers.get("Authorization") == "Bearer platform-placeholder"
+                    assert self.headers.get("X-Bridge-Robot-Id") == "robot-001"
+                    assert self.headers.get("Idempotency-Key") == "map-upload-smoke"
+                    assert b"name=\"yaml\"" in body and b"name=\"pgm\"" in body
+                    owner.upload_requests += 1
+                    return self.respond_json({"data": {
+                        "id": "map-upload-1", "status": "PENDING_REVIEW",
+                        "contentIdentitySha256": owner.upload_identity,
+                        "yamlSha256": "a" * 64, "pgmSha256": owner.map_hash,
+                    }}, status=201)
+                self.send_response(404)
+                self.end_headers()
 
-            def respond_bytes(self, value, content_type):
-                self.send_response(200)
+            def respond_json(self, value, status=200):
+                self.respond_bytes(json.dumps(value).encode(), "application/json", status)
+
+            def respond_bytes(self, value, content_type, status=200):
+                self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(value)))
                 self.end_headers()
@@ -84,6 +103,31 @@ def request(base_url, method, path, body=None, token=""):
     except urllib.error.HTTPError as exc:
         content = exc.read()
         return exc.code, json.loads(content) if content else {}
+
+
+def multipart_request(base_url, path, fields, files, token="", idempotency_key=""):
+    boundary = "ylhb-smoke-boundary"
+    body = bytearray()
+    for name, value in fields.items():
+        body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    for name, (filename, content, content_type) in files.items():
+        body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\nContent-Type: {content_type}\r\n\r\n'.encode())
+        body.extend(content)
+        body.extend(b"\r\n")
+    body.extend(f'--{boundary}--\r\n'.encode())
+    item = urllib.request.Request(base_url + path, data=bytes(body), headers={
+        "Authorization": f"Bearer {token}", "Idempotency-Key": idempotency_key,
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+    }, method="POST")
+    try:
+        with urllib.request.urlopen(item, timeout=3) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        content = exc.read()
+        try:
+            return exc.code, json.loads(content)
+        except json.JSONDecodeError:
+            return exc.code, {"raw": content.decode(errors="replace"), "reason": str(exc)}
 
 
 def free_port():
@@ -119,6 +163,8 @@ def main() -> None:
             "BRIDGE_API_TOKEN": "admin-placeholder",
             "PLATFORM_BASE_URL": platform.base_url,
             "PLATFORM_BEARER_TOKEN": "platform-placeholder",
+            "BRIDGE_MAP_UPLOAD_ENABLED": "true",
+            "BRIDGE_MAP_UPLOAD_TEMP_DIR": str(Path(temporary) / "uploads"),
         }
         store = Store(db_path)
         port = free_port()
@@ -132,7 +178,7 @@ def main() -> None:
         )
         try:
             wait_ready(process, base_url)
-            run_smoke(base_url, store)
+            run_smoke(base_url, store, platform)
         finally:
             process.terminate()
             try:
@@ -140,11 +186,15 @@ def main() -> None:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+            if sys.exc_info()[0] is not None and process.stderr:
+                details = process.stderr.read().decode(errors="replace").strip()
+                if details:
+                    print(details, file=sys.stderr)
             platform.close()
     print("bridge smoke: ok")
 
 
-def run_smoke(base_url, store) -> None:
+def run_smoke(base_url, store, platform) -> None:
     status, synced = request(base_url, "POST", "/bridge/v1/deployments/deploy-1/sync", token="admin-placeholder")
     assert status == 200 and synced["state"] == "READY_FOR_ROBOT"
     assert synced["deploymentId"] == "deploy-1" and synced["robotId"] == "robot-001"
@@ -189,6 +239,29 @@ def run_smoke(base_url, store) -> None:
     terminal = [{**events[-1], "sequence": 3, "event": "route_finished"}, {**events[-1], "sequence": 4, "event": "route_started"}]
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": terminal}, "token-placeholder")[1]["acceptedThroughSequence"] == 4
     assert request(base_url, "GET", "/bridge/v1/executions/execution-1", token="admin-placeholder")[1]["state"] == "COMPLETED"
+    upload_yaml = b"image: floor.pgm\nresolution: 0.05\norigin: [0, 0, 0]\n"
+    upload_pgm = platform.pgm
+    identity = hashlib.sha256(canonical({
+        "pgmSha256": hashlib.sha256(upload_pgm).hexdigest(), "resolution": "0.05",
+        "origin": ["0", "0", "0"], "negate": 0, "occupiedThresh": "0.65",
+        "freeThresh": "0.25", "mode": "trinary",
+    })).hexdigest()
+    platform.upload_identity = identity
+    fields = {
+        "contentIdentitySha256": identity,
+        "yamlSha256": hashlib.sha256(upload_yaml).hexdigest(),
+        "pgmSha256": hashlib.sha256(upload_pgm).hexdigest(),
+    }
+    files = {
+        "yaml": ("floor.yaml", upload_yaml, "application/x-yaml"),
+        "pgm": ("floor.pgm", upload_pgm, "image/x-portable-graymap"),
+    }
+    assert multipart_request(base_url, "/robot-api/v1/map-assets", fields, files)[0] == 401
+    status, uploaded = multipart_request(
+        base_url, "/robot-api/v1/map-assets", fields, files,
+        token="token-placeholder", idempotency_key="map-upload-smoke")
+    assert status == 201 and uploaded.get("mapAssetId") == "map-upload-1", (status, uploaded)
+    assert uploaded["contentIdentitySha256"] == identity and platform.upload_requests == 1
     robot = request(base_url, "GET", "/bridge/v1/robots/robot-001", token="admin-placeholder")[1]
     assert robot["configured"] is True and robot["online"] is True and robot["acceptedEventSequence"] == 4
     second = {**body, "requestId": "request-2"}

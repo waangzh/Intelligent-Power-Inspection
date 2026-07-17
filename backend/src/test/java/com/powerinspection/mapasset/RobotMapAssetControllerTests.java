@@ -83,6 +83,10 @@ class RobotMapAssetControllerTests {
       .andExpect(jsonPath("$.data.sourceRobotId").value("robot_001"))
       .andExpect(jsonPath("$.data.sourceBridgeRobotId").value("robot-001"))
       .andExpect(jsonPath("$.data.uploadIdempotencyKey").value(key))
+      .andExpect(jsonPath("$.data.contentIdentitySha256").isString())
+      .andExpect(jsonPath("$.data.occupiedThresh").value("0.65"))
+      .andExpect(jsonPath("$.data.freeThresh").value("0.2"))
+      .andExpect(jsonPath("$.data.mode").value("trinary"))
       .andExpect(jsonPath("$.data.capturedAt").value("2026-07-17T00:00:00Z"))
       .andExpect(jsonPath("$.data.reviewedBy").doesNotExist())
       .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
@@ -95,6 +99,13 @@ class RobotMapAssetControllerTests {
       .andExpect(status().isNotFound());
 
     mockMvc.perform(upload(key, "robot-001").header("Authorization", BRIDGE_AUTH))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.id").value(mapId));
+
+    mockMvc.perform(upload(key, "robot-001", yaml(
+        "mode: trinary\nfree_thresh: 0.2000\norigin: [0.0, 0.00, -0]\nimage: floor.pgm\n"
+          + "occupied_thresh: 0.6500\nresolution: 0.0500\nnegate: 0\n"), pgmBytes((byte) 0))
+        .header("Authorization", BRIDGE_AUTH))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.id").value(mapId));
 
@@ -123,7 +134,7 @@ class RobotMapAssetControllerTests {
     Callable<RobotMapUploadResult> call = () -> {
       start.await();
       return mapAssetService.createForRobot("site_001", "robot_001", "robot-001", key,
-        Instant.parse("2026-07-17T00:00:00Z"), yaml(), pgm());
+        null, Instant.parse("2026-07-17T00:00:00Z"), yaml(), pgm());
     };
     var executor = Executors.newFixedThreadPool(2);
     try {
@@ -197,7 +208,12 @@ class RobotMapAssetControllerTests {
   }
 
   private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder upload(String key, String bridgeRobotId, byte[] pgmBytes) {
-    return multipart(INTERNAL_URL).file(yaml()).file(new MockMultipartFile("pgm", "floor.pgm", "image/x-portable-graymap", pgmBytes))
+    return upload(key, bridgeRobotId, yaml(), pgmBytes);
+  }
+
+  private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder upload(
+      String key, String bridgeRobotId, MockMultipartFile yaml, byte[] pgmBytes) {
+    return multipart(INTERNAL_URL).file(yaml).file(new MockMultipartFile("pgm", "floor.pgm", "image/x-portable-graymap", pgmBytes))
       .param("capturedAt", "2026-07-17T00:00:00Z").header("X-Bridge-Robot-Id", bridgeRobotId).header("Idempotency-Key", key);
   }
 

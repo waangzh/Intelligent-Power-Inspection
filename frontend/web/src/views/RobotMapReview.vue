@@ -104,21 +104,25 @@
           <el-descriptions-item label="分辨率 / 尺寸">{{ selectedAsset.resolution }} m/px · {{ selectedAsset.width }} × {{ selectedAsset.height }}</el-descriptions-item>
           <el-descriptions-item label="YAML SHA-256"><code class="full-hash">{{ selectedAsset.yamlSha256 }}</code></el-descriptions-item>
           <el-descriptions-item label="PGM SHA-256"><code class="full-hash">{{ selectedAsset.pgmSha256 }}</code></el-descriptions-item>
+          <el-descriptions-item label="内容身份"><code class="full-hash">{{ selectedAsset.contentIdentitySha256 || '-' }}</code></el-descriptions-item>
           <el-descriptions-item label="审核意见">{{ selectedAsset.reviewComment || '-' }}</el-descriptions-item>
         </el-descriptions>
         <div class="file-actions">
           <el-button :loading="yamlLoading" @click="previewYaml(selectedAsset)">预览 YAML</el-button>
+          <el-button :loading="pgmLoading" @click="previewPgm(selectedAsset)">预览 PGM</el-button>
           <el-button @click="downloadYaml(selectedAsset)">下载 YAML</el-button>
           <el-button @click="downloadPgm(selectedAsset)">下载 PGM</el-button>
         </div>
         <div v-if="yamlText" class="yaml-preview"><div>YAML 核心参数</div><pre>{{ yamlText }}</pre></div>
+        <el-alert v-if="pgmError" type="error" :closable="false" :title="pgmError" class="pgm-error" />
+        <div v-if="pgmVisible" class="pgm-preview"><canvas ref="pgmCanvas" aria-label="PGM 地图预览" /></div>
       </template>
     </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import { resourcesApi } from '@/api/resources'
@@ -127,6 +131,8 @@ import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
 import type { MapAsset, MapAssetStatus } from '@/types/mapAsset'
 import { shortMapHash } from '@/utils/mapAssetReview'
+import { parsePgm, rebuildMapBitmap } from '@/utils/rosMap'
+import type { RosMapState } from '@/types/routeExecutor'
 
 const statusOptions = [
   { label: '待审核', value: 'PENDING_REVIEW' },
@@ -146,6 +152,10 @@ const detailVisible = ref(false)
 const selectedAsset = ref<MapAsset>()
 const yamlText = ref('')
 const yamlLoading = ref(false)
+const pgmLoading = ref(false)
+const pgmVisible = ref(false)
+const pgmError = ref('')
+const pgmCanvas = ref<HTMLCanvasElement>()
 
 const totalPixels = computed(() => new Intl.NumberFormat('zh-CN', { notation: 'compact' })
   .format(assets.value.reduce((sum, asset) => sum + asset.width * asset.height, 0)))
@@ -166,6 +176,8 @@ async function refresh() {
 function openDetail(asset: MapAsset) {
   selectedAsset.value = asset
   yamlText.value = ''
+  pgmVisible.value = false
+  pgmError.value = ''
   detailVisible.value = true
 }
 
@@ -209,6 +221,33 @@ async function previewYaml(asset: MapAsset) {
   finally { yamlLoading.value = false }
 }
 
+async function previewPgm(asset: MapAsset) {
+  pgmLoading.value = true
+  pgmError.value = ''
+  try {
+    const parsed = parsePgm(await (await resourcesApi.getMapAssetPgm(asset.id)).arrayBuffer())
+    pgmVisible.value = true
+    await nextTick()
+    if (!pgmCanvas.value) throw new Error('预览画布不可用')
+    rebuildMapBitmap({
+      ...parsed,
+      yamlName: asset.yamlName,
+      pgmName: asset.pgmName,
+      image: asset.image,
+      resolution: asset.resolution,
+      origin: asset.origin,
+      negate: asset.negate,
+      occupiedThresh: Number(asset.occupiedThresh ?? 0.65),
+      freeThresh: Number(asset.freeThresh ?? 0.25),
+    } satisfies RosMapState, pgmCanvas.value)
+  } catch (error) {
+    pgmVisible.value = false
+    pgmError.value = error instanceof Error ? error.message : 'PGM 加载失败'
+  } finally {
+    pgmLoading.value = false
+  }
+}
+
 async function downloadYaml(asset: MapAsset) { await download(resourcesApi.getMapAssetYaml(asset.id), asset.yamlName) }
 async function downloadPgm(asset: MapAsset) { await download(resourcesApi.getMapAssetPgm(asset.id), asset.pgmName) }
 async function download(blobPromise: Promise<Blob> | Blob, filename: string) {
@@ -242,5 +281,6 @@ onMounted(() => void refresh())
 .eyebrow { color: #80dbe7; font-size: 10px; font-weight: 800; letter-spacing: .15em; }.banner-copy strong { margin: 5px 0 3px; font-size: 22px; letter-spacing: .03em; }.banner-copy p { margin: 0; color: #b8d7de; font-size: 12px; }.banner-metric b { color: #83e4c0; font-size: 30px; font-variant-numeric: tabular-nums; }.banner-metric span { margin-top: 5px; color: #b8d7de; font-size: 12px; }.banner-rule { border: 0; color: #c4dce2; font-size: 12px; line-height: 1.7; }.banner-rule i { width: 34px; height: 3px; margin-bottom: 10px; background: #f1b85b; }
 .ledger-card { border-color: var(--review-line); }.ledger-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }.ledger-header strong, .ledger-header small { display: block; }.ledger-header strong { color: var(--review-ink); letter-spacing: .04em; }.ledger-header small { margin-top: 4px; color: #80919a; }.filters { display: flex; gap: 10px; }.site-filter { width: 180px; }.load-alert { margin-bottom: 14px; }
 .review-table :deep(th.el-table__cell) { background: #f2f7f8; color: #58717d; font-size: 12px; letter-spacing: .04em; }.identity-cell strong, .identity-cell span, .file-stack span, .spec-cell strong, .spec-cell span, .time-stack span, .time-stack small, .review-state span { display: block; }.identity-cell strong { color: #223e50; }.identity-cell span, .spec-cell span, .time-stack small { margin-top: 3px; color: #87969e; font-size: 12px; }.identity-cell strong, .hash-stack code, .full-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }.file-stack, .hash-stack, .time-stack, .review-state { display: grid; gap: 4px; }.file-stack span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.hash-stack code { color: #426475; font-size: 11px; }.review-state span { color: #71838d; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.drawer-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }.drawer-heading strong { display: block; margin-top: 5px; color: var(--review-ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; }.full-hash { word-break: break-all; font-size: 11px; }.file-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }.yaml-preview { margin-top: 16px; border: 1px solid #d5e3e8; background: #f5f9fa; }.yaml-preview > div { padding: 9px 12px; border-bottom: 1px solid #d5e3e8; color: #55717e; font-size: 12px; font-weight: 700; }.yaml-preview pre { max-height: 340px; margin: 0; padding: 14px; overflow: auto; color: #17394b; font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pgm-error { margin-top: 16px; }.pgm-preview { margin-top: 16px; padding: 10px; overflow: auto; border: 1px solid #d5e3e8; background: #eef3f4; }.pgm-preview canvas { display: block; max-width: 100%; height: auto; margin: auto; image-rendering: pixelated; }
 @media (max-width: 900px) { .review-banner { grid-template-columns: 1fr 1fr; }.banner-copy { grid-column: 1 / -1; }.banner-rule { display: none; }.ledger-header { align-items: flex-start; flex-direction: column; }.filters { width: 100%; }.site-filter { flex: 1; } }
 </style>

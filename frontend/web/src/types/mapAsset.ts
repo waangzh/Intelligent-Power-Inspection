@@ -23,6 +23,10 @@ export interface MapAsset {
   pgmSize: number
   yamlSha256: string
   pgmSha256: string
+  contentIdentitySha256?: string
+  occupiedThresh?: string
+  freeThresh?: string
+  mode?: 'trinary' | 'scale' | 'raw'
   createdAt: string
   updatedAt: string
 }
