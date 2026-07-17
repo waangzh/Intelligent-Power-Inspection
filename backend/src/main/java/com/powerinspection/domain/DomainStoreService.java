@@ -239,6 +239,26 @@ public class DomainStoreService {
         predicates.add(searchPredicate);
       }
     }
+    if (DataCategory.WORK_ORDER.equals(category) && filters != null) {
+      String viewerId = filters.get("_viewerId");
+      String viewerName = filters.get("_viewerName");
+      if (viewerId != null && !viewerId.isBlank()) {
+        Path<String> assigneeId = root.get("assigneeId");
+        Path<String> assigneeName = root.get("assigneeName");
+        Path<String> createdByName = root.get("createdByName");
+        Predicate noAssigneeId = cb.or(cb.isNull(assigneeId), cb.equal(assigneeId, ""));
+        Predicate unassignedName = cb.or(
+          cb.isNull(assigneeName), cb.equal(assigneeName, ""), cb.equal(assigneeName, createdByName));
+        Predicate ownLegacy = viewerName == null || viewerName.isBlank()
+          ? cb.disjunction()
+          : cb.and(noAssigneeId, cb.equal(assigneeName, viewerName));
+        predicates.add(cb.or(
+          cb.equal(assigneeId, viewerId),
+          ownLegacy,
+          cb.and(noAssigneeId, unassignedName)
+        ));
+      }
+    }
     if (filters != null) {
       filters.forEach((field, value) -> {
         if (field == null || value == null || value.isBlank()) {

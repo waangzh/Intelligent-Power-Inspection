@@ -67,17 +67,32 @@ public class WorkOrderController {
 
   @GetMapping
   public ApiResponse<PageResult<Map<String, Object>>> orders(ListQuery query) {
-    permissionService.require(currentUser.get(), Permission.WORKORDER_VIEW);
+    UserEntity user = currentUser.get();
+    permissionService.require(user, Permission.WORKORDER_VIEW);
+    if (user.getRole() != UserRole.DISPATCHER) {
+      return ApiResponse.ok(dataStore.page(
+        DataCategory.WORK_ORDER, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+        query.getUpdatedAfter(), query.getQ(), query.filters("status", "siteId", "type")
+      ));
+    }
+    Map<String, String> filters = new LinkedHashMap<>(query.filters("status", "siteId", "type"));
+    filters.put("_viewerId", user.getId());
+    filters.put("_viewerName", user.getDisplayName());
     return ApiResponse.ok(dataStore.page(
       DataCategory.WORK_ORDER, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
-      query.getUpdatedAfter(), query.getQ(), query.filters("status", "siteId", "type")
+      query.getUpdatedAfter(), query.getQ(), filters
     ));
   }
 
   @GetMapping("/{id}")
   public ApiResponse<Map<String, Object>> order(@PathVariable String id) {
-    permissionService.require(currentUser.get(), Permission.WORKORDER_VIEW);
-    return ApiResponse.ok(dataStore.get(DataCategory.WORK_ORDER, id));
+    UserEntity user = currentUser.get();
+    permissionService.require(user, Permission.WORKORDER_VIEW);
+    Map<String, Object> order = dataStore.get(DataCategory.WORK_ORDER, id);
+    if (!canView(order, user)) {
+      throw ApiException.forbidden("无权查看该工单");
+    }
+    return ApiResponse.ok(order);
   }
 
   @PostMapping
@@ -231,6 +246,19 @@ public class WorkOrderController {
       return true;
     }
     return assigneeName.equals(String.valueOf(order.get("createdByName")));
+  }
+
+  private boolean canView(Map<String, Object> order, UserEntity user) {
+    if (user.getRole() != UserRole.DISPATCHER) {
+      return true;
+    }
+    String assigneeId = text(order.get("assigneeId"));
+    if (user.getId().equals(assigneeId)) {
+      return true;
+    }
+    String assigneeName = text(order.get("assigneeName"));
+    return (assigneeId == null || assigneeId.isBlank())
+      && (user.getDisplayName().equals(assigneeName) || isUnassigned(order));
   }
 
   private Map<String, Object> normalizeReview(Object rawReview) {
