@@ -62,8 +62,8 @@ public class RobotEventIngestionService {
       return;
     }
     if (!validOwnership(execution, input, robotId, executionId, deploymentId, eventType, sequence)) {
-      reject(audit, "EVENT_OWNERSHIP_CONFLICT", "事件缺少协议必填字段，或 robot、execution、deployment、request、command 归属不匹配");
-      conflict(execution.getExecutionId(), "EVENT_OWNERSHIP_CONFLICT", "Bridge 事件不完整或归属校验失败");
+      reject(audit, "EVENT_OWNERSHIP_CONFLICT", "事件的 robot、execution、deployment、request 或 command 归属不匹配");
+      conflict(execution.getExecutionId(), "EVENT_OWNERSHIP_CONFLICT", "Bridge 事件归属校验失败");
       return;
     }
     if (sequence <= execution.getLastRobotSequence()) {

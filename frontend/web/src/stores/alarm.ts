@@ -44,7 +44,7 @@ export const useAlarmStore = defineStore('alarm', () => {
     const workOrderStore = useWorkOrderStore()
     const authStore = useAuthStore()
     const user = authStore.user
-    if (!user || !hasPermission(user.role, 'workorder:create')) return
+    if (!user || !hasPermission(authStore.permissions, 'workorder:create')) return
     if (workOrderStore.getByAlarmId(alarm.id)) return
     if (workOrderPolicy.value.rules[alarm.severity] !== 'AUTO') return
     try {

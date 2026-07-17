@@ -3,7 +3,7 @@
 > **项目**：`power-inspection-wechat`  
 > **版本**：1.0.0  
 > **后端**：与网页端（`frontend/web`）**共用同一 REST API**（`/api/v1`）  
-> **演示模式**：`config/api.js` 中 `useMock: true` 时使用本地 wx.storage 模拟（与 web 演示数据对齐）
+> **演示模式**：复制 `config/api.local.example.js` 为 `config/api.local.js` 并设置 `useMock: true`，使用本地 wx.storage 模拟
 
 ---
 
@@ -25,26 +25,30 @@ services/index.js        ← 统一业务入口
 | 配置项       | 文件                          | 说明                                      |
 | --------- | --------------------------- | --------------------------------------- |
 | `baseUrl` | `miniprogram/config/api.js` | 后端根路径，默认 `http://localhost:8080/api/v1` |
-| `useMock` | 同上                          | `true` 本地演示；`false` 对接共用后端              |
+| `useMock` | `api.js` 默认 `false`；`api.local.js` 可覆盖 | `true` 本地演示；`false` 对接共用后端（默认）              |
 | `timeout` | 同上                          | 请求超时毫秒数                                 |
 
 
 
 
-### 切换为共用后端
+### 切换为共用后端（默认）
 
-1. 启动与 web 端相同的后端服务（监听 `8080` 或自定义端口）
-2. 修改 `miniprogram/config/api.js`：
+默认已对接后端。若需改地址，在 `miniprogram/config/api.local.js` 中覆盖：
 
 ```javascript
 module.exports = {
   baseUrl: 'https://your-api.example.com/api/v1',
   useMock: false,
-  timeout: 15000,
 }
 ```
 
-1. 微信开发者工具 → 详情 → 本地设置 → 勾选「不校验合法域名」（开发阶段）
+### 启用演示模式（无后端）
+
+```bash
+cp miniprogram/config/api.local.example.js miniprogram/config/api.local.js
+```
+
+微信开发者工具 → 详情 → 本地设置 → 勾选「不校验合法域名」（开发阶段）
 
 ---
 

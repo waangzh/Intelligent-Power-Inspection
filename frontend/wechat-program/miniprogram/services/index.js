@@ -13,6 +13,10 @@ function currentUser() {
   return session.user
 }
 
+function sessionPermissions() {
+  return getSession()?.permissions || []
+}
+
 async function getWorkOrderById(id) {
   const orders = await getWorkOrders()
   const order = orders.find((o) => o.id === id)
@@ -41,9 +45,32 @@ async function register(form) {
   return http.post('/auth/register', form)
 }
 
+function normalizeSession(session) {
+  if (!session?.user) return null
+  if (!Array.isArray(session.permissions) || !session.permissions.length) return null
+  return session
+}
+
 function getSession() {
-  if (useMock()) return mock.getSession()
-  return wx.getStorageSync('pi_session') || null
+  if (useMock()) return normalizeSession(mock.getSession())
+  return normalizeSession(wx.getStorageSync('pi_session') || null)
+}
+
+async function refreshMe() {
+  if (useMock()) return getSession()
+  const session = getSession()
+  if (!session?.token) return null
+  const data = await http.get('/auth/me')
+  const next = {
+    ...session,
+    user: data.user,
+    permissions: data.permissions || [],
+    scopes: data.scopes,
+    features: data.features,
+  }
+  if (!next.permissions.length) return null
+  wx.setStorageSync('pi_session', next)
+  return next
 }
 
 function logout() {
@@ -403,6 +430,24 @@ async function acknowledgeAllAlarms() {
   await http.post('/alarms/ack-all')
 }
 
+// ==================== Alarm Work Order Policy ====================
+async function getAlarmWorkOrderPolicy() {
+  if (useMock()) {
+    const alarmPolicy = require('../utils/alarm-policy')
+    return { id: 'default', rules: alarmPolicy.loadPolicy() }
+  }
+  return http.get('/alarms/work-order-policy')
+}
+
+async function updateAlarmWorkOrderPolicy(rules) {
+  if (useMock()) {
+    const alarmPolicy = require('../utils/alarm-policy')
+    alarmPolicy.savePolicy(rules)
+    return { id: 'default', rules: alarmPolicy.loadPolicy() }
+  }
+  return http.put('/alarms/work-order-policy', { rules })
+}
+
 // ==================== Work Orders ====================
 async function patchWorkOrderQuiet(id, patch) {
   if (useMock()) {
@@ -439,7 +484,7 @@ async function getWorkOrders() {
 async function createWorkOrderFromAlarm(alarm, creator, options = {}) {
   const sessionUser = currentUser()
   if (creator?.id && creator.id !== sessionUser.id) throw new Error('用户身份不一致')
-  workOrderPerm.assertCanCreateWorkOrder(sessionUser)
+  workOrderPerm.assertCanCreateWorkOrder(sessionUser, sessionPermissions())
   const creatorName = sessionUser.displayName || sessionUser.name || '系统'
   const sites = useMock() ? mock.getState().sites : await getSites()
   const location = buildLocationFromAlarm(alarm, sites[0])
@@ -474,8 +519,9 @@ async function createWorkOrderFromAlarm(alarm, creator, options = {}) {
 }
 
 async function tryAutoConvertPendingAlarms(alarms, creator) {
+  if (!useMock()) return
   const alarmPolicy = require('../utils/alarm-policy')
-  if (!creator || !workOrderPerm.canCreateWorkOrder(creator)) return
+  if (!creator || !workOrderPerm.canCreateWorkOrder(creator, sessionPermissions())) return
   const policy = alarmPolicy.loadPolicy()
   let orders = await getWorkOrders()
   const linked = new Set(orders.filter((o) => o.alarmId).map((o) => o.alarmId))
@@ -495,7 +541,7 @@ async function tryAutoConvertPendingAlarms(alarms, creator) {
 async function claimWorkOrder(id) {
   const user = currentUser()
   const order = await getWorkOrderById(id)
-  workOrderPerm.assertCanClaimOrder(order, user)
+  workOrderPerm.assertCanClaimOrder(order, user, sessionPermissions())
 
   const now = new Date().toISOString()
   const assigneeName = user.displayName || user.name || '调度员'
@@ -511,7 +557,7 @@ async function claimWorkOrder(id) {
     const orders = mock.getState().workOrders
     const idx = orders.findIndex((o) => o.id === id)
     if (idx < 0) throw new Error('工单不存在')
-    if (!workOrderPerm.canClaimOrder(orders[idx], user)) {
+    if (!workOrderPerm.canClaimOrder(orders[idx], user, sessionPermissions())) {
       throw new Error('无法接单，可能已被他人抢走')
     }
     orders[idx] = { ...orders[idx], ...patch }
@@ -525,7 +571,7 @@ async function claimWorkOrder(id) {
 async function updateWorkOrderStatus(id, status, extra = {}) {
   const user = currentUser()
   const order = await getWorkOrderById(id)
-  workOrderPerm.assertStatusTransition(order, status, user)
+  workOrderPerm.assertStatusTransition(order, status, user, sessionPermissions())
   if (useMock()) {
     const orders = mock.getState().workOrders
     const idx = orders.findIndex((o) => o.id === id)
@@ -689,6 +735,7 @@ module.exports = {
   login,
   register,
   getSession,
+  refreshMe,
   logout,
   updateProfile,
   changePassword,
@@ -726,6 +773,8 @@ module.exports = {
   getAlarms,
   acknowledgeAlarm,
   acknowledgeAllAlarms,
+  getAlarmWorkOrderPolicy,
+  updateAlarmWorkOrderPolicy,
   getWorkOrders,
   createWorkOrderFromAlarm,
   tryAutoConvertPendingAlarms,

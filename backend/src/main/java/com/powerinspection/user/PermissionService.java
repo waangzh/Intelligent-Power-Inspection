@@ -3,6 +3,7 @@ package com.powerinspection.user;
 import com.powerinspection.common.ApiException;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class PermissionService {
       Permission.WORKORDER_VIEW,
       Permission.WORKORDER_CREATE,
       Permission.WORKORDER_REVIEW,
+      Permission.ALARM_POLICY,
       Permission.AGENT_VIEW,
       Permission.AGENT_RUN,
       Permission.AGENT_APPROVE,
@@ -50,6 +52,13 @@ public class PermissionService {
 
   public boolean has(UserRole role, Permission permission) {
     return ROLE_PERMISSIONS.getOrDefault(role, Set.of()).contains(permission);
+  }
+
+  public List<String> permissionValuesFor(UserRole role) {
+    return ROLE_PERMISSIONS.getOrDefault(role, Set.of()).stream()
+      .map(Permission::value)
+      .sorted()
+      .toList();
   }
 
   public void require(UserEntity user, Permission permission) {

@@ -1,5 +1,11 @@
 const api = require('../../services/index')
-const { hasPermission } = require('../../utils/permission')
+const {
+  hasPermission,
+  canControlTask,
+  canTakeoverTask,
+  canCancelTask,
+  cancelTaskLabel,
+} = require('../../utils/permission')
 const { syncTabBar } = require('../../utils/tab-page')
 
 Page({
@@ -19,6 +25,9 @@ Page({
     canCreate: false,
     canDispatch: false,
     canControl: false,
+    canTakeover: false,
+    canCancel: false,
+    cancelLabel: '取消',
   },
 
   onShow() {
@@ -28,10 +37,14 @@ Page({
     syncTabBar(this)
     app.refreshBadges()
     const user = app.globalData.user
+    const perms = app.globalData.permissions
     this.setData({
-      canCreate: hasPermission(user.role, 'task:create'),
-      canDispatch: hasPermission(user.role, 'task:dispatch'),
-      canControl: hasPermission(user.role, 'task:control'),
+      canCreate: hasPermission(perms, 'task:create'),
+      canDispatch: hasPermission(perms, 'task:dispatch'),
+      canControl: canControlTask(perms),
+      canTakeover: canTakeoverTask(perms),
+      canCancel: canCancelTask(perms),
+      cancelLabel: cancelTaskLabel(perms),
     })
     this.load()
   },
@@ -159,9 +172,10 @@ Page({
   },
 
   async cancel(e) {
+    const isEstop = this.data.cancelLabel === '急停'
     wx.showModal({
-      title: '取消任务',
-      content: '确认取消该巡检任务？',
+      title: isEstop ? '远程急停' : '取消任务',
+      content: isEstop ? '确认对该任务执行远程急停？' : '确认取消该巡检任务？',
       success: async (res) => {
         if (!res.confirm) return
         try {

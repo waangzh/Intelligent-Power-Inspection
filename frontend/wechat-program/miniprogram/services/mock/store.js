@@ -1,5 +1,10 @@
 const { loadFromStorage, saveToStorage, uid } = require('../../utils/storage')
+/**
+ * Mock 演示数据层 — 仅 useMock=true 时使用。
+ * 权限与状态机以 utils/permission.js 及后端集成测试为准，勿在此扩展独有业务规则。
+ */
 const { DETECTION_LABELS } = require('../../utils/constants')
+const { permissionsForRole } = require('../../generated/permissions')
 const seed = require('./seed-data')
 
 const KEYS = {
@@ -147,6 +152,7 @@ function login(username, password, remember) {
       const session = {
         token: `mock_token_${user.id}_${Date.now()}`,
         user,
+        permissions: permissionsForRole(user.role),
         expiresAt: remember ? Date.now() + 7 * 24 * 60 * 60 * 1000 : undefined,
       }
       save(KEYS.session, session)
@@ -200,6 +206,10 @@ function getSession() {
   const users = loadFromStorage(KEYS.users, [])
   const fresh = users.find((u) => u.id === session.user.id)
   if (fresh) session.user = fresh
+  if (!Array.isArray(session.permissions) || !session.permissions.length) {
+    save(KEYS.session, null)
+    return null
+  }
   return session
 }
 
