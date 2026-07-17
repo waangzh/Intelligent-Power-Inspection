@@ -23,6 +23,8 @@ export interface MapAsset {
   pgmSize: number
   yamlSha256: string
   pgmSha256: string
+  /** 管理端读取时由后端实时检查 YAML/PGM 是否仍完整存在。 */
+  filesReady?: boolean
   createdAt: string
   updatedAt: string
 }

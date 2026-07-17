@@ -77,14 +77,20 @@
         </el-table-column>
         <el-table-column label="状态 / 意见" min-width="190">
           <template #default="{ row }: { row: MapAsset }">
-            <div class="review-state"><el-tag size="small" :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag><span>{{ row.reviewComment || '暂无审核意见' }}</span></div>
+            <div class="review-state">
+              <div class="state-tags">
+                <el-tag size="small" :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
+                <el-tag v-if="row.filesReady === false" size="small" type="danger">文件缺失</el-tag>
+              </div>
+              <span>{{ row.reviewComment || '暂无审核意见' }}</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }: { row: MapAsset }">
             <el-button link type="primary" @click="openDetail(row)">详情 / 文件</el-button>
             <template v-if="can('route:edit') && row.status === 'PENDING_REVIEW'">
-              <el-button link type="success" :loading="reviewingId === row.id" @click="approve(row)">通过</el-button>
+              <el-button link type="success" :disabled="row.filesReady === false" :loading="reviewingId === row.id" @click="approve(row)">通过</el-button>
               <el-button link type="danger" :loading="reviewingId === row.id" @click="reject(row)">驳回</el-button>
             </template>
           </template>
@@ -92,7 +98,7 @@
       </el-table>
     </el-card>
 
-    <el-drawer v-model="detailVisible" title="地图资产核验" size="560px" destroy-on-close>
+    <el-drawer v-model="detailVisible" title="地图资产核验" size="min(860px, 92vw)" destroy-on-close>
       <template v-if="selectedAsset">
         <div class="drawer-heading">
           <div><span class="eyebrow">MAP ASSET</span><strong>{{ selectedAsset.id }}</strong></div>
@@ -106,19 +112,35 @@
           <el-descriptions-item label="PGM SHA-256"><code class="full-hash">{{ selectedAsset.pgmSha256 }}</code></el-descriptions-item>
           <el-descriptions-item label="审核意见">{{ selectedAsset.reviewComment || '-' }}</el-descriptions-item>
         </el-descriptions>
+        <section class="map-preview-panel" aria-label="ROS 栅格地图预览">
+          <div class="preview-heading">
+            <div><strong>地图预览</strong><span>使用与路线规划相同的 YAML + PGM 解析方式</span></div>
+            <el-button size="small" :loading="previewLoading" @click="loadPreview(selectedAsset)">重新加载</el-button>
+          </div>
+          <div v-loading="previewLoading" class="preview-stage">
+            <canvas v-show="previewReady" ref="previewCanvasRef" aria-label="ROS 栅格地图画布" />
+            <el-result v-if="previewError" icon="error" title="地图文件无法预览" :sub-title="previewError" />
+            <div v-else-if="!previewReady && !previewLoading" class="preview-empty">暂无可预览的栅格地图</div>
+          </div>
+          <div v-if="previewReady" class="preview-meta">
+            <span><b>{{ selectedAsset.width }} × {{ selectedAsset.height }}</b> px</span>
+            <span><b>{{ selectedAsset.resolution }}</b> m/px</span>
+            <span><b>{{ formatOrigin(selectedAsset.origin) }}</b> origin</span>
+          </div>
+        </section>
         <div class="file-actions">
-          <el-button :loading="yamlLoading" @click="previewYaml(selectedAsset)">预览 YAML</el-button>
-          <el-button @click="downloadYaml(selectedAsset)">下载 YAML</el-button>
-          <el-button @click="downloadPgm(selectedAsset)">下载 PGM</el-button>
+          <el-button :disabled="!yamlText" @click="yamlVisible = !yamlVisible">{{ yamlVisible ? '收起 YAML' : '查看 YAML 原文' }}</el-button>
+          <el-button :disabled="selectedAsset.filesReady === false" @click="downloadYaml(selectedAsset)">下载 YAML</el-button>
+          <el-button :disabled="selectedAsset.filesReady === false" @click="downloadPgm(selectedAsset)">下载 PGM</el-button>
         </div>
-        <div v-if="yamlText" class="yaml-preview"><div>YAML 核心参数</div><pre>{{ yamlText }}</pre></div>
+        <div v-if="yamlVisible && yamlText" class="yaml-preview"><div>YAML 原文</div><pre>{{ yamlText }}</pre></div>
       </template>
     </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import { resourcesApi } from '@/api/resources'
@@ -126,7 +148,9 @@ import { usePermission } from '@/composables/usePermission'
 import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
 import type { MapAsset, MapAssetStatus } from '@/types/mapAsset'
+import { fetchMapAssetFiles } from '@/utils/mapAsset'
 import { shortMapHash } from '@/utils/mapAssetReview'
+import { createDefaultMapState, parsePgm, parseYaml, rebuildMapBitmap } from '@/utils/rosMap'
 
 const statusOptions = [
   { label: '待审核', value: 'PENDING_REVIEW' },
@@ -145,7 +169,11 @@ const reviewingId = ref('')
 const detailVisible = ref(false)
 const selectedAsset = ref<MapAsset>()
 const yamlText = ref('')
-const yamlLoading = ref(false)
+const yamlVisible = ref(false)
+const previewCanvasRef = ref<HTMLCanvasElement | null>(null)
+const previewLoading = ref(false)
+const previewReady = ref(false)
+const previewError = ref('')
 
 const totalPixels = computed(() => new Intl.NumberFormat('zh-CN', { notation: 'compact' })
   .format(assets.value.reduce((sum, asset) => sum + asset.width * asset.height, 0)))
@@ -166,10 +194,18 @@ async function refresh() {
 function openDetail(asset: MapAsset) {
   selectedAsset.value = asset
   yamlText.value = ''
+  yamlVisible.value = false
+  previewReady.value = false
+  previewError.value = ''
   detailVisible.value = true
+  void nextTick(() => loadPreview(asset))
 }
 
 async function approve(asset: MapAsset) {
+  if (asset.filesReady === false) {
+    ElMessage.error('地图文件不完整，请让机器人使用新的 Idempotency-Key 重新上传后再审核')
+    return
+  }
   try {
     await ElMessageBox.confirm('通过后地图可被路线规划主动选择，但不会自动替换任何已有路线或部署。确认通过？', '审核通过确认', {
       type: 'warning', confirmButtonText: '确认通过', cancelButtonText: '取消',
@@ -202,11 +238,27 @@ async function submitReview(asset: MapAsset, action: 'APPROVE' | 'REJECT', comme
   }
 }
 
-async function previewYaml(asset: MapAsset) {
-  yamlLoading.value = true
-  try { yamlText.value = await (await resourcesApi.getMapAssetYaml(asset.id)).text() }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : 'YAML 加载失败') }
-  finally { yamlLoading.value = false }
+async function loadPreview(asset: MapAsset) {
+  previewLoading.value = true
+  previewReady.value = false
+  previewError.value = ''
+  yamlText.value = ''
+  try {
+    const files = await fetchMapAssetFiles(asset.id)
+    const parsedPgm = parsePgm(files.pgmBuffer)
+    const map = { ...createDefaultMapState(), ...parseYaml(files.yamlText), ...parsedPgm }
+    await nextTick()
+    if (!previewCanvasRef.value || selectedAsset.value?.id !== asset.id) return
+    rebuildMapBitmap(map, previewCanvasRef.value)
+    yamlText.value = files.yamlText
+    previewReady.value = true
+  } catch (error) {
+    previewError.value = error instanceof Error && error.message.includes('不存在')
+      ? '该记录只有元数据，YAML/PGM 实体文件已不可读取。请让机器人使用新的 Idempotency-Key 重新上传。'
+      : error instanceof Error ? error.message : '地图预览加载失败'
+  } finally {
+    previewLoading.value = false
+  }
 }
 
 async function downloadYaml(asset: MapAsset) { await download(resourcesApi.getMapAssetYaml(asset.id), asset.yamlName) }
@@ -230,6 +282,7 @@ function formatTime(value?: string | null) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false })
 }
+function formatOrigin(origin: [number, number, number]) { return origin.map(value => Number(value).toFixed(2)).join(', ') }
 
 watch([statusFilter, siteFilter], () => void refresh())
 onMounted(() => void refresh())
@@ -242,5 +295,20 @@ onMounted(() => void refresh())
 .eyebrow { color: #80dbe7; font-size: 10px; font-weight: 800; letter-spacing: .15em; }.banner-copy strong { margin: 5px 0 3px; font-size: 22px; letter-spacing: .03em; }.banner-copy p { margin: 0; color: #b8d7de; font-size: 12px; }.banner-metric b { color: #83e4c0; font-size: 30px; font-variant-numeric: tabular-nums; }.banner-metric span { margin-top: 5px; color: #b8d7de; font-size: 12px; }.banner-rule { border: 0; color: #c4dce2; font-size: 12px; line-height: 1.7; }.banner-rule i { width: 34px; height: 3px; margin-bottom: 10px; background: #f1b85b; }
 .ledger-card { border-color: var(--review-line); }.ledger-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }.ledger-header strong, .ledger-header small { display: block; }.ledger-header strong { color: var(--review-ink); letter-spacing: .04em; }.ledger-header small { margin-top: 4px; color: #80919a; }.filters { display: flex; gap: 10px; }.site-filter { width: 180px; }.load-alert { margin-bottom: 14px; }
 .review-table :deep(th.el-table__cell) { background: #f2f7f8; color: #58717d; font-size: 12px; letter-spacing: .04em; }.identity-cell strong, .identity-cell span, .file-stack span, .spec-cell strong, .spec-cell span, .time-stack span, .time-stack small, .review-state span { display: block; }.identity-cell strong { color: #223e50; }.identity-cell span, .spec-cell span, .time-stack small { margin-top: 3px; color: #87969e; font-size: 12px; }.identity-cell strong, .hash-stack code, .full-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }.file-stack, .hash-stack, .time-stack, .review-state { display: grid; gap: 4px; }.file-stack span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.hash-stack code { color: #426475; font-size: 11px; }.review-state span { color: #71838d; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.drawer-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }.drawer-heading strong { display: block; margin-top: 5px; color: var(--review-ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; }.full-hash { word-break: break-all; font-size: 11px; }.file-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }.yaml-preview { margin-top: 16px; border: 1px solid #d5e3e8; background: #f5f9fa; }.yaml-preview > div { padding: 9px 12px; border-bottom: 1px solid #d5e3e8; color: #55717e; font-size: 12px; font-weight: 700; }.yaml-preview pre { max-height: 340px; margin: 0; padding: 14px; overflow: auto; color: #17394b; font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; }
-@media (max-width: 900px) { .review-banner { grid-template-columns: 1fr 1fr; }.banner-copy { grid-column: 1 / -1; }.banner-rule { display: none; }.ledger-header { align-items: flex-start; flex-direction: column; }.filters { width: 100%; }.site-filter { flex: 1; } }
+.state-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.map-preview-panel { margin-top: 18px; overflow: hidden; border: 1px solid #cddde3; background: #eef4f5; }
+.preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 14px; border-bottom: 1px solid #cddde3; background: #f8fbfb; }
+.preview-heading strong, .preview-heading span { display: block; }
+.preview-heading strong { color: var(--review-ink); }
+.preview-heading span { margin-top: 3px; color: #78909a; font-size: 11px; }
+.preview-stage { min-height: 360px; display: flex; align-items: center; justify-content: center; padding: 18px; background-color: #173347; background-image: linear-gradient(rgb(255 255 255 / 4%) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 4%) 1px, transparent 1px); background-size: 20px 20px; }
+.preview-stage canvas { display: block; max-width: 100%; max-height: 520px; width: auto; height: auto; background: #fff; box-shadow: 0 12px 30px rgb(0 0 0 / 28%); image-rendering: pixelated; }
+.preview-stage :deep(.el-result) { padding: 24px; }
+.preview-stage :deep(.el-result__title p) { color: #f2f7f8; }
+.preview-stage :deep(.el-result__subtitle p), .preview-empty { max-width: 560px; color: #b9cbd2; line-height: 1.7; text-align: center; }
+.preview-meta { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid #cddde3; background: #f8fbfb; }
+.preview-meta span { padding: 9px 12px; color: #71848d; font-size: 11px; text-align: center; border-right: 1px solid #dce7ea; }
+.preview-meta span:last-child { border: 0; }
+.preview-meta b { color: #294b5a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (max-width: 900px) { .review-banner { grid-template-columns: 1fr 1fr; }.banner-copy { grid-column: 1 / -1; }.banner-rule { display: none; }.ledger-header { align-items: flex-start; flex-direction: column; }.filters { width: 100%; }.site-filter { flex: 1; }.preview-meta { grid-template-columns: 1fr; }.preview-meta span { border-right: 0; border-bottom: 1px solid #dce7ea; } }
 </style>
