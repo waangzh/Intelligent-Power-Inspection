@@ -19,19 +19,25 @@
     </view>
   </view>
 
-  <view class="stat-grid scope-grid" wx:if="{{isDispatcher && scopeCards.length}}">
-    <view class="stat-item {{scopeFilter===item.key?'sel':''}}" wx:for="{{scopeCards}}" wx:key="key" bindtap="filterByScope" data-key="{{item.key}}">
-      <view class="stat-value">{{item.value}}</view>
-      <view class="stat-label">{{item.label}}</view>
+  <view class="scope-tabs" wx:if="{{isDispatcher}}">
+    <view class="scope-tab {{scopeFilter==='POOL'?'active':''}}" bindtap="switchScope" data-key="POOL">
+      <text>接单大厅</text>
+      <text class="tab-badge" wx:if="{{poolCount}}">{{poolCount > 99 ? '99+' : poolCount}}</text>
+    </view>
+    <view class="scope-tab {{scopeFilter==='MINE'?'active':''}}" bindtap="switchScope" data-key="MINE">
+      <text>我的工单</text>
+      <text class="tab-badge" wx:if="{{mineCount}}">{{mineCount > 99 ? '99+' : mineCount}}</text>
     </view>
   </view>
 
-  <view class="stat-grid">
-    <view class="stat-item {{statusFilter===item.key?'sel':''}}" wx:for="{{statusCards}}" wx:key="key" bindtap="filterByCard" data-key="{{item.key}}">
-      <view class="stat-value">{{item.value}}</view>
-      <view class="stat-label">{{item.label}}</view>
+  <scroll-view class="status-chips" scroll-x enhanced show-scrollbar="{{false}}" wx:if="{{showStatusChips}}">
+    <view class="status-chips-inner">
+      <view class="chip {{statusFilter===item.key?'active':''}}" wx:for="{{statusChips}}" wx:key="key" bindtap="filterByStatus" data-key="{{item.key}}">
+        <text>{{item.label}}</text>
+        <text class="chip-count">{{item.value}}</text>
+      </view>
     </view>
-  </view>
+  </scroll-view>
 
   <view class="card" wx:for="{{filtered}}" wx:key="id" bindtap="openDetail" data-id="{{item.id}}">
     <view class="flex-between">
@@ -48,7 +54,7 @@
       <button wx:if="{{item.canConfirmReview}}" size="mini" type="primary" catchtap="openReview" data-id="{{item.id}}">确认复核</button>
     </view>
   </view>
-  <view wx:if="{{!filtered.length}}" class="empty-hint">暂无工单</view>
+  <view wx:if="{{!filtered.length}}" class="empty-hint">{{emptyHint}}</view>
 
   <view class="modal-mask" wx:if="{{showDetail}}" bindtap="closeDetail">
     <view class="modal-panel detail-panel" catchtap="">

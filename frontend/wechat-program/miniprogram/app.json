@@ -42,10 +42,10 @@
         "selectedIconPath": "assets/tabbar/tasks-active.png"
       },
       {
-        "pagePath": "pages/monitor/index",
-        "text": "监控",
-        "iconPath": "assets/tabbar/monitor.png",
-        "selectedIconPath": "assets/tabbar/monitor-active.png"
+        "pagePath": "pages/alarms/index",
+        "text": "告警",
+        "iconPath": "assets/tabbar/alarms.png",
+        "selectedIconPath": "assets/tabbar/alarms-active.png"
       },
       {
         "pagePath": "pages/tasks/index",

@@ -2,6 +2,7 @@
   "navigationBarTitleText": "实时监控",
   "usingComponents": {
     "page-header": "/components/page-header/index",
-    "map-view": "/components/map-view/index"
+    "map-view": "/components/map-view/index",
+    "inline-tab-bar": "/components/inline-tab-bar/index"
   }
 }

@@ -43,9 +43,12 @@ Page({
     orders: [],
     filtered: [],
     statusFilter: '',
-    statusCards: [],
-    scopeFilter: 'ALL',
-    scopeCards: [],
+    statusChips: [],
+    showStatusChips: false,
+    scopeFilter: 'POOL',
+    poolCount: 0,
+    mineCount: 0,
+    emptyHint: '暂无工单',
     isDispatcher: false,
     detail: null,
     showDetail: false,
@@ -136,38 +139,59 @@ Page({
     })
 
     const isDispatcher = user.role === 'DISPATCHER'
-    let scopeCards = []
-    if (isDispatcher) {
-      const poolCount = orders.filter((o) => isWorkOrderUnassigned(o)).length
-      const mineCount = orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, user)).length
-      scopeCards = [
-        { key: 'ALL', label: '全部可见', value: orders.length },
-        { key: 'POOL', label: '接单大厅', value: poolCount },
-        { key: 'MINE', label: '我的工单', value: mineCount },
-      ]
-    }
+    const poolCount = isDispatcher ? orders.filter((o) => isWorkOrderUnassigned(o)).length : 0
+    const mineCount = isDispatcher
+      ? orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, user)).length
+      : 0
 
-    const scoped = workOrderPerm.filterByScope(orders, user, this.data.scopeFilter)
-    const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0, CLOSED: 0 }
-    scoped.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status]++ })
-    const statusCards = [
-      { key: '', label: '全部', value: scoped.length },
-      { key: 'PENDING', label: '待处理', value: counts.PENDING },
-      { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
-      { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
-    ]
+    this.setData({ orders, poolCount, mineCount, pendingAlarms })
+    this.rebuildFilters()
+  },
 
-    this.setData({ orders, statusCards, scopeCards, pendingAlarms })
+  switchScope(e) {
+    const key = e.currentTarget.dataset.key
+    if (key === this.data.scopeFilter) return
+    this.setData({ scopeFilter: key, statusFilter: '' })
+    this.rebuildFilters()
+  },
+
+  filterByStatus(e) {
+    this.setData({ statusFilter: e.currentTarget.dataset.key })
     this.applyFilter()
   },
 
-  filterByScope(e) {
-    this.setData({ scopeFilter: e.currentTarget.dataset.key })
-    this.load()
-  },
+  rebuildFilters() {
+    const { orders, scopeFilter, user, isDispatcher } = this.data
+    const scoped = workOrderPerm.filterByScope(orders, user, isDispatcher ? scopeFilter : 'ALL')
+    const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0 }
+    scoped.forEach((o) => {
+      if (counts[o.status] !== undefined) counts[o.status]++
+    })
 
-  filterByCard(e) {
-    this.setData({ statusFilter: e.currentTarget.dataset.key })
+    let statusChips = []
+    let showStatusChips = true
+    if (isDispatcher && scopeFilter === 'POOL') {
+      showStatusChips = false
+    } else if (isDispatcher && scopeFilter === 'MINE') {
+      statusChips = [
+        { key: '', label: '全部', value: scoped.length },
+        { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
+        { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
+      ]
+    } else {
+      statusChips = [
+        { key: '', label: '全部', value: scoped.length },
+        { key: 'PENDING', label: '待接单', value: counts.PENDING },
+        { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
+        { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
+      ]
+    }
+
+    let emptyHint = '暂无工单'
+    if (isDispatcher && scopeFilter === 'POOL') emptyHint = '暂无待接工单'
+    else if (isDispatcher && scopeFilter === 'MINE') emptyHint = '暂无我的工单'
+
+    this.setData({ statusChips, showStatusChips, emptyHint })
     this.applyFilter()
   },
 
@@ -197,6 +221,7 @@ Page({
     try {
       await api.claimWorkOrder(id)
       wx.showToast({ title: '接单成功，开始处置' })
+      this.setData({ scopeFilter: 'MINE', statusFilter: '' })
       getApp().refreshBadges()
       this.load()
     } catch (err) {

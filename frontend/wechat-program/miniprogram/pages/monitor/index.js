@@ -1,6 +1,5 @@
 const api = require('../../services/index')
 const { ROBOT_STATUS_LABELS } = require('../../utils/constants')
-const { syncTabBar } = require('../../utils/tab-page')
 
 Page({
   data: {
@@ -19,8 +18,9 @@ Page({
 
   onShow() {
     if (!getApp().requireAuth('/pages/monitor/index')) return
-    syncTabBar(this)
-    getApp().refreshBadges()
+    getApp().refreshBadges().then(() => {
+      this.selectComponent('#inlineTabBar')?.refresh?.()
+    })
     this.load()
   },
 

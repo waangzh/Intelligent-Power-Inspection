@@ -30,7 +30,6 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/alarms/index')) return
     syncTabBar(this)
-    const user = app.globalData.user
     const perms = app.globalData.permissions
     this.setData({
       canAck: hasPermission(perms, 'alarm:ack'),
