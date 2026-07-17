@@ -75,6 +75,7 @@ public class WorkOrderCommandService {
       order.put("locationDescription", locationDescription);
     }
     order.put("alarmId", alarmId);
+    putIfPresent(order, "siteId", text(alarm.get("siteId")));
     order.put("source", conversionSource.name());
     order.put("status", "PENDING");
     order.put("priority", priority);
@@ -103,10 +104,7 @@ public class WorkOrderCommandService {
   public Map<String, Object> findByAlarmId(String alarmId) {
     return workOrderRepository.findByAlarmId(alarmId)
       .map(WorkOrderEntity::toMap)
-      .orElseGet(() -> dataStore.list(DataCategory.WORK_ORDER).stream()
-        .filter(order -> alarmId.equals(text(order.get("alarmId"))))
-        .findFirst()
-        .orElse(null));
+      .orElse(null);
   }
 
   private Map<String, Object> persistWorkOrder(Map<String, Object> order) {

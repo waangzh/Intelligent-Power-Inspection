@@ -1,17 +1,24 @@
 package com.powerinspection.route;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.domain.EntityPayloadCodec;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Entity
 @Table(name = "routes")
 public class RouteEntity {
+  private static final Set<String> KNOWN = Set.of(
+    "id", "siteId", "name", "mapId", "status", "executor", "executorJson",
+    "checkpoints", "createdAt", "updatedAt"
+  );
+
   @Id
   private String id;
   @Column(name = "site_id", nullable = false)
@@ -36,33 +43,48 @@ public class RouteEntity {
 
   public static RouteEntity fromMap(Map<String, Object> map) {
     RouteEntity entity = new RouteEntity();
-    entity.id = text(map.get("id"));
-    entity.siteId = first(map.get("siteId"), "");
-    entity.name = first(map.get("name"), entity.id);
-    entity.mapId = text(map.get("mapId"));
-    entity.status = text(map.get("status"));
-    Object executor = map.get("executor") != null ? map.get("executor") : map.get("executorJson");
-    if (executor != null) {
-      entity.executorJson = asJson(executor);
-    }
-    Object checkpoints = map.get("checkpoints");
-    if (checkpoints != null) {
-      entity.checkpointsJson = asJson(checkpoints);
-    }
-    entity.createdAt = first(map.get("createdAt"), Instant.now().toString());
-    entity.updatedAt = first(map.get("updatedAt"), entity.createdAt);
+    entity.apply(map);
     return entity;
   }
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  public void apply(Map<String, Object> map) {
+    id = text(map.get("id"));
+    siteId = first(map.get("siteId"), "");
+    name = first(map.get("name"), id);
+    mapId = text(map.get("mapId"));
+    status = text(map.get("status"));
+    Object executor = map.get("executor") != null ? map.get("executor") : map.get("executorJson");
+    executorJson = EntityPayloadCodec.write(executor);
+    checkpointsJson = EntityPayloadCodec.write(map.get("checkpoints"));
+    extraJson = EntityPayloadCodec.extraJson(map, KNOWN);
+    createdAt = first(map.get("createdAt"), Instant.now().toString());
+    updatedAt = first(map.get("updatedAt"), createdAt);
+  }
+
+  public Map<String, Object> toMap() {
+    Map<String, Object> map = new LinkedHashMap<>();
+    map.put("id", id);
+    map.put("siteId", siteId);
+    map.put("name", name);
+    if (mapId != null) map.put("mapId", mapId);
+    if (status != null) map.put("status", status);
+    Object executor = EntityPayloadCodec.readValue(executorJson);
+    if (executor != null) map.put("executor", executor);
+    Object checkpoints = EntityPayloadCodec.readValue(checkpointsJson);
+    if (checkpoints != null) map.put("checkpoints", checkpoints);
+    map.put("createdAt", createdAt);
+    map.put("updatedAt", updatedAt);
+    EntityPayloadCodec.mergeExtra(map, extraJson);
+    return map;
+  }
+
+  public String getId() { return id; }
+  public Long getVersion() { return version; }
+  public void setVersion(Long version) { this.version = version; }
 
   private static String text(Object value) { return value == null ? null : value.toString(); }
   private static String first(Object value, String fallback) {
     String text = text(value);
     return text == null || text.isBlank() ? fallback : text;
-  }
-  private static String asJson(Object value) {
-    if (value instanceof String s) return s;
-    try { return MAPPER.writeValueAsString(value); } catch (Exception ex) { return null; }
   }
 }

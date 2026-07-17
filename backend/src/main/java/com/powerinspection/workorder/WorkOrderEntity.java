@@ -1,5 +1,6 @@
 package com.powerinspection.workorder;
 
+import com.powerinspection.domain.EntityPayloadCodec;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -7,10 +8,17 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Entity
 @Table(name = "work_orders")
 public class WorkOrderEntity {
+  private static final Set<String> KNOWN = Set.of(
+    "id", "title", "description", "locationDescription", "alarmId", "taskId", "siteId", "source", "status",
+    "priority", "assigneeId", "assigneeName", "createdById", "createdByName", "agentActionId",
+    "agentIdempotencyKey", "claimedAt", "closedAt", "resolution", "review", "createdAt", "updatedAt"
+  );
+
   @Id
   private String id;
   @Column(nullable = false)
@@ -23,6 +31,8 @@ public class WorkOrderEntity {
   private String alarmId;
   @Column(name = "task_id")
   private String taskId;
+  @Column(name = "site_id")
+  private String siteId;
   @Column(nullable = false)
   private String source;
   @Column(nullable = false)
@@ -60,27 +70,34 @@ public class WorkOrderEntity {
 
   public static WorkOrderEntity fromMap(Map<String, Object> map) {
     WorkOrderEntity entity = new WorkOrderEntity();
-    entity.id = text(map.get("id"));
-    entity.title = text(map.get("title"));
-    entity.description = text(map.get("description"));
-    entity.locationDescription = text(map.get("locationDescription"));
-    entity.alarmId = text(map.get("alarmId"));
-    entity.taskId = text(map.get("taskId"));
-    entity.source = first(map.get("source"), "MANUAL");
-    entity.status = first(map.get("status"), "PENDING");
-    entity.priority = first(map.get("priority"), "MEDIUM");
-    entity.assigneeId = text(map.get("assigneeId"));
-    entity.assigneeName = text(map.get("assigneeName"));
-    entity.createdById = first(map.get("createdById"), "system");
-    entity.createdByName = first(map.get("createdByName"), "系统");
-    entity.agentActionId = text(map.get("agentActionId"));
-    entity.agentIdempotencyKey = text(map.get("agentIdempotencyKey"));
-    entity.claimedAt = text(map.get("claimedAt"));
-    entity.closedAt = text(map.get("closedAt"));
-    entity.resolution = text(map.get("resolution"));
-    entity.createdAt = first(map.get("createdAt"), java.time.Instant.now().toString());
-    entity.updatedAt = first(map.get("updatedAt"), entity.createdAt);
+    entity.apply(map);
     return entity;
+  }
+
+  public void apply(Map<String, Object> map) {
+    id = text(map.get("id"));
+    title = first(map.get("title"), id);
+    description = text(map.get("description"));
+    locationDescription = text(map.get("locationDescription"));
+    alarmId = text(map.get("alarmId"));
+    taskId = text(map.get("taskId"));
+    siteId = text(map.get("siteId"));
+    source = first(map.get("source"), "MANUAL");
+    status = first(map.get("status"), "PENDING");
+    priority = first(map.get("priority"), "MEDIUM");
+    assigneeId = text(map.get("assigneeId"));
+    assigneeName = text(map.get("assigneeName"));
+    createdById = first(map.get("createdById"), "system");
+    createdByName = first(map.get("createdByName"), "系统");
+    agentActionId = text(map.get("agentActionId"));
+    agentIdempotencyKey = text(map.get("agentIdempotencyKey"));
+    claimedAt = text(map.get("claimedAt"));
+    closedAt = text(map.get("closedAt"));
+    resolution = text(map.get("resolution"));
+    reviewJson = EntityPayloadCodec.write(map.get("review"));
+    extraJson = EntityPayloadCodec.extraJson(map, KNOWN);
+    createdAt = first(map.get("createdAt"), java.time.Instant.now().toString());
+    updatedAt = first(map.get("updatedAt"), createdAt);
   }
 
   public Map<String, Object> toMap() {
@@ -91,6 +108,7 @@ public class WorkOrderEntity {
     if (locationDescription != null) map.put("locationDescription", locationDescription);
     if (alarmId != null) map.put("alarmId", alarmId);
     if (taskId != null) map.put("taskId", taskId);
+    if (siteId != null) map.put("siteId", siteId);
     map.put("source", source);
     map.put("status", status);
     map.put("priority", priority);
@@ -103,8 +121,11 @@ public class WorkOrderEntity {
     if (claimedAt != null) map.put("claimedAt", claimedAt);
     if (closedAt != null) map.put("closedAt", closedAt);
     if (resolution != null) map.put("resolution", resolution);
+    Object review = EntityPayloadCodec.readValue(reviewJson);
+    if (review != null) map.put("review", review);
     map.put("createdAt", createdAt);
     map.put("updatedAt", updatedAt);
+    EntityPayloadCodec.mergeExtra(map, extraJson);
     return map;
   }
 

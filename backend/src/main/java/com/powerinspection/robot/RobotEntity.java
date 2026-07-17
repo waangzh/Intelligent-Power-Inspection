@@ -1,16 +1,24 @@
 package com.powerinspection.robot;
 
+import com.powerinspection.domain.EntityPayloadCodec;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Entity
 @Table(name = "robots")
 public class RobotEntity {
+  private static final Set<String> KNOWN = Set.of(
+    "id", "name", "model", "serialNo", "siteId", "status", "position", "telemetry",
+    "createdAt", "updatedAt"
+  );
+
   @Id
   private String id;
   @Column(nullable = false)
@@ -37,21 +45,50 @@ public class RobotEntity {
 
   public static RobotEntity fromMap(Map<String, Object> map) {
     RobotEntity entity = new RobotEntity();
-    entity.id = text(map.get("id"));
-    entity.name = first(map.get("name"), entity.id);
-    entity.model = text(map.get("model"));
-    entity.serialNo = text(map.get("serialNo"));
-    entity.siteId = text(map.get("siteId"));
-    entity.status = first(map.get("status"), "OFFLINE");
-    Object position = map.get("position");
-    if (position instanceof Map<?, ?> p) {
-      entity.positionLat = dbl(p.get("lat"));
-      entity.positionLng = dbl(p.get("lng"));
-    }
-    entity.createdAt = first(map.get("createdAt"), Instant.now().toString());
-    entity.updatedAt = first(map.get("updatedAt"), entity.createdAt);
+    entity.apply(map);
     return entity;
   }
+
+  public void apply(Map<String, Object> map) {
+    id = text(map.get("id"));
+    name = first(map.get("name"), id);
+    model = text(map.get("model"));
+    serialNo = text(map.get("serialNo"));
+    siteId = text(map.get("siteId"));
+    status = first(map.get("status"), "OFFLINE");
+    Object position = map.get("position");
+    if (position instanceof Map<?, ?> p) {
+      positionLat = dbl(p.get("lat"));
+      positionLng = dbl(p.get("lng"));
+    }
+    extraJson = EntityPayloadCodec.extraJson(map, KNOWN);
+    createdAt = first(map.get("createdAt"), Instant.now().toString());
+    updatedAt = first(map.get("updatedAt"), createdAt);
+  }
+
+  public Map<String, Object> toMap() {
+    Map<String, Object> map = new LinkedHashMap<>();
+    map.put("id", id);
+    map.put("name", name);
+    if (model != null) map.put("model", model);
+    if (serialNo != null) map.put("serialNo", serialNo);
+    if (siteId != null) map.put("siteId", siteId);
+    map.put("status", status);
+    if (positionLat != null || positionLng != null) {
+      Map<String, Object> position = new LinkedHashMap<>();
+      position.put("lat", positionLat == null ? 0 : positionLat);
+      position.put("lng", positionLng == null ? 0 : positionLng);
+      map.put("position", position);
+    }
+    map.put("createdAt", createdAt);
+    map.put("updatedAt", updatedAt);
+    EntityPayloadCodec.mergeExtra(map, extraJson);
+    return map;
+  }
+
+  public String getId() { return id; }
+  public Long getVersion() { return version; }
+  public void setVersion(Long version) { this.version = version; }
 
   private static String text(Object value) { return value == null ? null : value.toString(); }
   private static String first(Object value, String fallback) {

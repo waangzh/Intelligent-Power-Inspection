@@ -7,6 +7,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Entity
@@ -65,6 +66,37 @@ public class RobotTelemetryEntity {
     entity.updatedAt = Instant.now().toString();
     return entity;
   }
+
+  public Map<String, Object> toMap() {
+    if (payloadJson != null && !payloadJson.isBlank()) {
+      try {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parsed = new ObjectMapper().readValue(payloadJson, Map.class);
+        return new LinkedHashMap<>(parsed);
+      } catch (Exception ignored) {
+      }
+    }
+    Map<String, Object> map = new LinkedHashMap<>();
+    if (patrolState != null) map.put("patrolState", patrolState);
+    if (systemMode != null) map.put("systemMode", systemMode);
+    if (mappingStatus != null) map.put("mappingStatus", mappingStatus);
+    if (nav2Status != null) map.put("nav2Status", nav2Status);
+    if (canStatus != null) map.put("canStatus", canStatus);
+    if (zlacStatus != null) map.put("zlacStatus", zlacStatus);
+    if (poseX != null || poseY != null || poseYaw != null) {
+      Map<String, Object> pose = new LinkedHashMap<>();
+      pose.put("x", poseX == null ? 0 : poseX);
+      pose.put("y", poseY == null ? 0 : poseY);
+      pose.put("yaw", poseYaw == null ? 0 : poseYaw);
+      map.put("pose", pose);
+    }
+    if (lastOdomAgeSec != null) map.put("lastOdomAgeSec", lastOdomAgeSec);
+    if (lastScanAgeSec != null) map.put("lastScanAgeSec", lastScanAgeSec);
+    return map;
+  }
+
+  public Long getVersion() { return version; }
+  public void setVersion(Long version) { this.version = version; }
 
   private static String text(Object value) { return value == null ? null : value.toString(); }
   private static Double dbl(Object value) {

@@ -1,5 +1,6 @@
 package com.powerinspection.alarm;
 
+import com.powerinspection.domain.EntityPayloadCodec;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -8,10 +9,18 @@ import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Entity
 @Table(name = "alarms")
 public class AlarmEntity {
+  private static final Set<String> KNOWN = Set.of(
+    "id", "siteId", "routeId", "robotId", "taskId", "type", "severity", "status", "message",
+    "routeName", "checkpointName", "imageUrl", "acknowledged", "workOrderId",
+    "workOrderModeApplied", "workOrderConversionSource", "workOrderConversionStatus",
+    "workOrderConversionError", "workOrderConversionFailedAt", "convertedAt", "createdAt", "updatedAt"
+  );
+
   @Id
   private String id;
   @Column(name = "site_id")
@@ -86,6 +95,7 @@ public class AlarmEntity {
     workOrderConversionError = text(map.get("workOrderConversionError"));
     workOrderConversionFailedAt = text(map.get("workOrderConversionFailedAt"));
     convertedAt = text(map.get("convertedAt"));
+    extraJson = EntityPayloadCodec.extraJson(map, KNOWN);
     createdAt = first(map.get("createdAt"), Instant.now().toString());
     updatedAt = first(map.get("updatedAt"), createdAt);
   }
@@ -114,6 +124,7 @@ public class AlarmEntity {
     put(map, "convertedAt", convertedAt);
     map.put("createdAt", createdAt);
     map.put("updatedAt", updatedAt);
+    EntityPayloadCodec.mergeExtra(map, extraJson);
     return map;
   }
 
