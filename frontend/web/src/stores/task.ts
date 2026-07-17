@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { InspectionRecord, InspectionTask, RouteRevision, TaskEvent, TaskExecution, TaskStartEligibility, TaskStatus } from '@/types'
 import type { RouteDeployment } from '@/types/routeDeployment'
+import type { ListQuery } from '@/types/pagination'
 import { uid } from '@/utils/storage'
 
 export function latestReadyRevision(revisions: RouteRevision[], deployments: RouteDeployment[], robotId: string) {
@@ -19,8 +20,11 @@ export function latestReadyRevision(revisions: RouteRevision[], deployments: Rou
 
 export const useTaskStore = defineStore('task', () => {
   const tasks = ref<InspectionTask[]>([])
+  const total = ref(0)
   const records = ref<InspectionRecord[]>([])
+  const recordTotal = ref(0)
   const events = ref<TaskEvent[]>([])
+  const eventTotals = ref<Record<string, number>>({})
   const executions = ref<Record<string, TaskExecution>>({})
   const startEligibility = ref<Record<string, TaskStartEligibility>>({})
   const controlInFlight = ref<Record<string, boolean>>({})
@@ -29,11 +33,19 @@ export const useTaskStore = defineStore('task', () => {
 
   async function load() {
     await loadDynamic()
-    records.value = await resourcesApi.listRecords()
+    await loadRecords()
   }
 
-  async function loadDynamic() {
-    tasks.value = (await resourcesApi.listTasks({ size: 50 })).items
+  async function loadDynamic(query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listTasks(query)
+    tasks.value = result.items
+    total.value = result.total
+  }
+
+  async function loadRecords(query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listRecords(query)
+    records.value = result.items
+    recordTotal.value = result.total
   }
 
   async function loadOne(taskId: string) {
@@ -201,8 +213,10 @@ export const useTaskStore = defineStore('task', () => {
     ]
   }
 
-  async function refreshEvents(taskId: string) {
-    replaceEvents(taskId, await resourcesApi.taskEvents(taskId))
+  async function refreshEvents(taskId: string, query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.taskEvents(taskId, query)
+    replaceEvents(taskId, result.items)
+    eventTotals.value = { ...eventTotals.value, [taskId]: result.total }
   }
 
   function applyRemoteTaskEvent(event: TaskEvent) {
@@ -217,12 +231,16 @@ export const useTaskStore = defineStore('task', () => {
 
   return {
     tasks,
+    total,
     records,
+    recordTotal,
     events,
+    eventTotals,
     executions,
     startEligibility,
     load,
     loadDynamic,
+    loadRecords,
     loadOne,
     refreshExecution,
     refreshExecutions,

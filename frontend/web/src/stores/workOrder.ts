@@ -13,6 +13,7 @@ import type {
 import { useSiteStore } from '@/stores/site'
 import { uid } from '@/utils/storage'
 import { normalizeWorkOrder } from '@/utils/workOrder'
+import type { ListQuery } from '@/types/pagination'
 
 function buildLocationFromAlarm(alarm: Alarm): WorkOrderLocation {
   const siteStore = useSiteStore()
@@ -40,6 +41,7 @@ function resolutionSummary(form: WorkOrderResolutionForm): string {
 
 export const useWorkOrderStore = defineStore('workOrder', () => {
   const orders = ref<WorkOrder[]>([])
+  const total = ref(0)
 
   const statusCounts = computed(() => ({
     PENDING: orders.value.filter((o) => o.status === 'PENDING').length,
@@ -48,8 +50,10 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
     CLOSED: orders.value.filter((o) => o.status === 'CLOSED').length,
   }))
 
-  async function load() {
-    const raw = (await resourcesApi.listWorkOrders({ size: 50 })).items
+  async function load(query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listWorkOrders(query)
+    const raw = result.items
+    total.value = result.total
     const normalized = raw.map(normalizeWorkOrder)
     orders.value = normalized
 
@@ -179,6 +183,7 @@ export const useWorkOrderStore = defineStore('workOrder', () => {
 
   return {
     orders,
+    total,
     statusCounts,
     load,
     getById,

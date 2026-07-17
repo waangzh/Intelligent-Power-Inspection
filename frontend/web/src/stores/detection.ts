@@ -3,12 +3,16 @@ import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { DetectionTemplate } from '@/types'
 import { uid } from '@/utils/storage'
+import type { ListQuery } from '@/types/pagination'
 
 export const useDetectionStore = defineStore('detection', () => {
   const templates = ref<DetectionTemplate[]>([])
+  const total = ref(0)
 
-  async function load() {
-    templates.value = (await resourcesApi.listDetectionTemplates({ size: 50 })).items
+  async function load(query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listDetectionTemplates(query)
+    templates.value = result.items
+    total.value = result.total
   }
 
   function addTemplate(tpl: Omit<DetectionTemplate, 'id' | 'createdAt'>) {
@@ -30,5 +34,5 @@ export const useDetectionStore = defineStore('detection', () => {
     void resourcesApi.removeDetectionTemplate(id)
   }
 
-  return { templates, load, addTemplate, removeTemplate }
+  return { templates, total, load, addTemplate, removeTemplate }
 })

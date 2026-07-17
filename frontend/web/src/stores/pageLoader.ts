@@ -13,8 +13,13 @@ export async function loadRouteData(routeName: unknown, params: Record<string, u
   const loaders: Array<Promise<unknown>> = []
   const realtime: Array<'task' | 'taskEvent' | 'robot' | 'alarm'> = []
 
-  if (['Monitor', 'Routes', 'Tasks', 'Statistics', 'BigScreen'].includes(name)) {
+  if (['Monitor', 'Tasks', 'Statistics', 'BigScreen'].includes(name)) {
     loaders.push(useSiteStore().load(), useRouteStore().load(), useRobotStore().load())
+  }
+  if (name === 'Routes') {
+    const siteStore = useSiteStore()
+    await siteStore.loadSites()
+    loaders.push(useRouteStore().load(siteStore.sites[0]?.id), useRobotStore().load())
   }
   if (['Monitor', 'Tasks', 'Statistics', 'BigScreen'].includes(name)) {
     loaders.push(useTaskStore().loadDynamic())
@@ -24,12 +29,12 @@ export async function loadRouteData(routeName: unknown, params: Record<string, u
     loaders.push(useAlarmStore().load())
     realtime.push('alarm')
   }
-  if (name === 'WorkOrders') loaders.push(useWorkOrderStore().load(), useSiteStore().load())
+  if (name === 'WorkOrders') loaders.push(useWorkOrderStore().load(), useSiteStore().loadSites())
   if (name === 'Notifications') loaders.push(useNotificationStore().load())
-  if (name === 'Sites') loaders.push(useSiteStore().load())
-  if (name === 'Robots') loaders.push(useSiteStore().load(), useRobotStore().load())
+  if (name === 'Sites') loaders.push(useSiteStore().loadSites())
+  if (name === 'Robots') loaders.push(useSiteStore().loadSites(), useRobotStore().load())
   if (name === 'Detection') loaders.push(useDetectionStore().load())
-  if (name === 'Records') loaders.push(useTaskStore().load())
+  if (name === 'Records') loaders.push(useTaskStore().loadRecords())
   if (name === 'Dashboard') realtime.push('task', 'robot', 'alarm')
   if (name === 'TaskDetail' && typeof params.id === 'string') {
     const task = await useTaskStore().loadOne(params.id)
@@ -37,7 +42,7 @@ export async function loadRouteData(routeName: unknown, params: Record<string, u
     await Promise.all([
       useRobotStore().loadOne(task.robotId),
       useSiteStore().loadOne(route.siteId),
-      useAlarmStore().load(),
+      useAlarmStore().load({ taskId: task.id }),
     ])
     realtime.push('task', 'taskEvent', 'robot', 'alarm')
   }

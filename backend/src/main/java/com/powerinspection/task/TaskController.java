@@ -134,9 +134,15 @@ public class TaskController {
   }
 
   @GetMapping("/{id}/events")
-  public ApiResponse<List<Map<String, Object>>> events(@PathVariable String id) {
+  public ApiResponse<PageResult<Map<String, Object>>> events(@PathVariable String id, ListQuery query) {
     permissionService.require(currentUser.get(), Permission.TASK_VIEW);
-    return ApiResponse.ok(taskService.events(id));
+    return ApiResponse.ok(taskService.events(id, query));
+  }
+
+  @GetMapping("/events/{eventId}")
+  public ApiResponse<Map<String, Object>> event(@PathVariable String eventId) {
+    permissionService.require(currentUser.get(), Permission.TASK_VIEW);
+    return ApiResponse.ok(taskService.event(eventId));
   }
 
   private ResponseEntity<ApiResponse<Map<String, Object>>> accepted(Map<String, Object> result) {

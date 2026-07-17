@@ -2,19 +2,36 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { Area, Site } from '@/types'
+import type { ListQuery } from '@/types/pagination'
 import { uid } from '@/utils/storage'
 
 export const useSiteStore = defineStore('site', () => {
   const sites = ref<Site[]>([])
+  const siteTotal = ref(0)
   const areas = ref<Area[]>([])
+  const areaTotal = ref(0)
 
   async function load(siteId?: string) {
     const [remoteSites, remoteAreas] = await Promise.all([
-      resourcesApi.listSites({ size: 50 }),
-      resourcesApi.listAreas({ size: 100, siteId }),
+      resourcesApi.listSites({ size: 20 }),
+      resourcesApi.listAreas({ size: 20, siteId }),
     ])
     sites.value = remoteSites.items
+    siteTotal.value = remoteSites.total
     areas.value = remoteAreas.items
+    areaTotal.value = remoteAreas.total
+  }
+
+  async function loadSites(query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listSites(query)
+    sites.value = result.items
+    siteTotal.value = result.total
+  }
+
+  async function loadAreas(siteId: string, query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listAreas({ ...query, siteId })
+    areas.value = result.items
+    areaTotal.value = result.total
   }
 
   async function loadOne(id: string) {
@@ -81,8 +98,12 @@ export const useSiteStore = defineStore('site', () => {
 
   return {
     sites,
+    siteTotal,
     areas,
+    areaTotal,
     load,
+    loadSites,
+    loadAreas,
     loadOne,
     addSite,
     updateSite,

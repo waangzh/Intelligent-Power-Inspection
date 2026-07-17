@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { hasPermission } from '@/utils/permission'
 import { uid } from '@/utils/storage'
+import type { ListQuery } from '@/types/pagination'
 
 const ROUTE_ALARM_TYPES: DetectionType[] = ['PERSON', 'HELMET', 'FIRE', 'OBSTACLE']
 
@@ -23,6 +24,7 @@ const SEVERITY_MAP: Record<DetectionType, AlarmSeverity> = {
 
 export const useAlarmStore = defineStore('alarm', () => {
   const alarms = ref<Alarm[]>([])
+  const total = ref(0)
   const workOrderPolicy = ref<AlarmWorkOrderPolicy>({
     id: 'default',
     rules: { CRITICAL: 'AUTO', HIGH: 'AUTO', MEDIUM: 'MANUAL', LOW: 'MANUAL' },
@@ -30,8 +32,10 @@ export const useAlarmStore = defineStore('alarm', () => {
 
   const unacknowledgedCount = computed(() => alarms.value.filter((a) => !a.acknowledged).length)
 
-  async function load() {
-    alarms.value = (await resourcesApi.listAlarms({ size: 50 })).items
+  async function load(query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listAlarms(query)
+    alarms.value = result.items
+    total.value = result.total
     try {
       workOrderPolicy.value = await resourcesApi.getAlarmWorkOrderPolicy()
     } catch {
@@ -150,6 +154,7 @@ export const useAlarmStore = defineStore('alarm', () => {
 
   return {
     alarms,
+    total,
     workOrderPolicy,
     unacknowledgedCount,
     load,

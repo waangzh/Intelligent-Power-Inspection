@@ -4,6 +4,7 @@ import { resourcesApi } from '@/api/resources'
 import type { Checkpoint, DetectionItem, DetectionType, Route } from '@/types'
 import { CHECKPOINT_DETECTIONS, ROUTE_DETECTIONS } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
+import type { ListQuery } from '@/types/pagination'
 import { withPlatformRouteName } from '@/utils/routeExecutorJson'
 import { uid } from '@/utils/storage'
 
@@ -25,9 +26,12 @@ function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
 
 export const useRouteStore = defineStore('route', () => {
   const routes = shallowRef<Route[]>([])
+  const total = shallowRef(0)
 
-  async function load(siteId?: string) {
-    routes.value = (await resourcesApi.listRoutes({ size: 50, siteId })).items
+  async function load(siteId?: string, query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listRoutes({ ...query, siteId })
+    routes.value = result.items
+    total.value = result.total
   }
 
   async function loadOne(id: string) {
@@ -168,6 +172,7 @@ export const useRouteStore = defineStore('route', () => {
 
   return {
     routes,
+    total,
     load,
     loadOne,
     createRoute,

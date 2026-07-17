@@ -52,7 +52,10 @@ export function setPageRealtimeResources(
   }
   if (selected.has('taskEvent')) {
     unsubscribePageRealtime.push(subscribeTopic<ResourceChangeEvent>('/topic/task-events', (event) => {
-      void useTaskStore().refreshEvents(event.resourceId).then(() => pageChangeHandler?.())
+      void resourcesApi.getTaskEvent(event.resourceId).then((item) => {
+        useTaskStore().applyRemoteTaskEvent(item)
+        pageChangeHandler?.()
+      })
     }))
   }
   if (selected.has('robot')) {

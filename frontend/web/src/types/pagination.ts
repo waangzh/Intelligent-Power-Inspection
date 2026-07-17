@@ -10,9 +10,11 @@ export interface ListQuery {
   siteId?: string
   routeId?: string
   robotId?: string
+  taskId?: string
   status?: string
   severity?: string
   acknowledged?: boolean
+  read?: boolean
   type?: string
   enabled?: boolean
 }

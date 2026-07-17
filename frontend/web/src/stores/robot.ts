@@ -2,13 +2,17 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { LatLng, Robot } from '@/types'
+import type { ListQuery } from '@/types/pagination'
 import { uid } from '@/utils/storage'
 
 export const useRobotStore = defineStore('robot', () => {
   const robots = ref<Robot[]>([])
+  const total = ref(0)
 
-  async function load(siteId?: string) {
-    robots.value = (await resourcesApi.listRobots({ size: 50, siteId })).items
+  async function load(siteId?: string, query: ListQuery = { size: 20 }) {
+    const result = await resourcesApi.listRobots({ ...query, siteId })
+    robots.value = result.items
+    total.value = result.total
   }
 
   async function loadOne(id: string) {
@@ -51,5 +55,5 @@ export const useRobotStore = defineStore('robot', () => {
     else robots.value.unshift(robot)
   }
 
-  return { robots, load, loadOne, updateRobot, setPosition, getRobotById, addRobot, removeRobot, applyRemoteRobot: updateLocalRobot }
+  return { robots, total, load, loadOne, updateRobot, setPosition, getRobotById, addRobot, removeRobot, applyRemoteRobot: updateLocalRobot }
 })

@@ -13,9 +13,11 @@ public class ListQuery {
   private String siteId;
   private String routeId;
   private String robotId;
+  private String taskId;
   private String status;
   private String severity;
   private String acknowledged;
+  private String read;
   private String type;
   private String enabled;
 
@@ -26,9 +28,11 @@ public class ListQuery {
         case "siteId" -> siteId;
         case "routeId" -> routeId;
         case "robotId" -> robotId;
+        case "taskId" -> taskId;
         case "status" -> status;
         case "severity" -> severity;
         case "acknowledged" -> acknowledged;
+        case "read" -> read;
         case "type" -> type;
         case "enabled" -> enabled;
         default -> null;
@@ -56,12 +60,16 @@ public class ListQuery {
   public void setRouteId(String routeId) { this.routeId = routeId; }
   public String getRobotId() { return robotId; }
   public void setRobotId(String robotId) { this.robotId = robotId; }
+  public String getTaskId() { return taskId; }
+  public void setTaskId(String taskId) { this.taskId = taskId; }
   public String getStatus() { return status; }
   public void setStatus(String status) { this.status = status; }
   public String getSeverity() { return severity; }
   public void setSeverity(String severity) { this.severity = severity; }
   public String getAcknowledged() { return acknowledged; }
   public void setAcknowledged(String acknowledged) { this.acknowledged = acknowledged; }
+  public String getRead() { return read; }
+  public void setRead(String read) { this.read = read; }
   public String getType() { return type; }
   public void setType(String type) { this.type = type; }
   public String getEnabled() { return enabled; }

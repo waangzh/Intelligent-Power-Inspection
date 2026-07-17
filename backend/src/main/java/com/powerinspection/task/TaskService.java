@@ -110,6 +110,18 @@ public class TaskService {
     return dataStore.list(DataCategory.EVENT).stream().filter(event -> taskId.equals(text(event.get("taskId")))).toList();
   }
 
+  public PageResult<Map<String, Object>> events(String taskId, ListQuery query) {
+    query.setTaskId(taskId);
+    return dataStore.page(
+      DataCategory.EVENT, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(), query.filters("taskId", "type")
+    );
+  }
+
+  public Map<String, Object> event(String eventId) {
+    return dataStore.get(DataCategory.EVENT, eventId);
+  }
+
   @Transactional
   public Map<String, Object> createTask(Map<String, Object> body) {
     if (text(body.get("name")) == null || text(body.get("name")).isBlank()) {

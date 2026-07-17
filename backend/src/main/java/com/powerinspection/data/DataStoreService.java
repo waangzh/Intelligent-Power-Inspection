@@ -33,6 +33,10 @@ public class DataStoreService {
       .toList();
   }
 
+  public List<String> ids(String category) {
+    return repository.findRecordIdsByCategory(category);
+  }
+
   public PageResult<Map<String, Object>> page(
       String category, int page, int size, String sort, String direction,
       String updatedAfter, String search, Map<String, String> filters) {

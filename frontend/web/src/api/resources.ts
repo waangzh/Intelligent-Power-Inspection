@@ -104,8 +104,9 @@ export const resourcesApi = {
     http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/takeover`, { reason }, { 'Idempotency-Key': idempotencyKey }),
   cancelTask: (id: string, idempotencyKey: string) =>
     http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/cancel`, undefined, { 'Idempotency-Key': idempotencyKey }),
-  taskEvents: (id: string) => http.get<TaskEvent[]>(`/tasks/${id}/events`),
-  listRecords: () => http.get<InspectionRecord[]>('/records'),
+  taskEvents: (id: string, query: ListQuery = {}) => http.get<PageResult<TaskEvent>>(`/tasks/${id}/events${listQueryString(query)}`),
+  getTaskEvent: (id: string) => http.get<TaskEvent>(`/tasks/events/${id}`),
+  listRecords: (query: ListQuery = {}) => http.get<PageResult<InspectionRecord>>(`/records${listQueryString(query)}`),
   exportRecords: () => http.post<Blob>('/records/export'),
 
   listAlarms: (query: ListQuery = {}) => http.get<PageResult<Alarm>>(`/alarms${listQueryString(query)}`),

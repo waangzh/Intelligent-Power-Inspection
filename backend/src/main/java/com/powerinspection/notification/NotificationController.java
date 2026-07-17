@@ -33,7 +33,11 @@ public class NotificationController {
     return ApiResponse.ok(dataStore.page(
       DataCategory.NOTIFICATION, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
       query.getUpdatedAfter(), query.getQ(),
-      Map.of("userId", userId + ",*", "type", query.getType() == null ? "" : query.getType())
+      Map.of(
+        "userId", userId + ",*",
+        "type", query.getType() == null ? "" : query.getType(),
+        "read", query.getRead() == null ? "" : query.getRead()
+      )
     ));
   }
 

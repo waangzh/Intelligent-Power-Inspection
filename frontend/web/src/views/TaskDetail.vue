@@ -92,6 +92,7 @@
             </el-timeline-item>
           </el-timeline>
           <div v-else class="empty-hint">暂无执行记录，下发任务后将自动生成</div>
+          <ListPagination :total="taskStore.eventTotals[taskId] ?? 0" :page="eventPage" @change="loadEventPage" />
         </el-card>
       </el-col>
 
@@ -125,11 +126,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Map2D from '@/components/Map2D.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import TaskStatusTag from '@/components/TaskStatusTag.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useAlarmStore } from '@/stores/alarm'
@@ -143,6 +145,7 @@ import { DEPLOYMENT_STATE_LABELS } from '@/utils/routeDeployment'
 const router = useRouter()
 const routeParam = useRoute()
 const taskStore = useTaskStore()
+const eventPage = ref(0)
 const routeStore = useRouteStore()
 const robotStore = useRobotStore()
 const alarmStore = useAlarmStore()
@@ -154,6 +157,11 @@ const task = computed(() => taskStore.getTaskById(taskId.value))
 const route = computed(() => (task.value ? routeStore.getRouteById(task.value.routeId) : undefined))
 const robot = computed(() => (task.value ? robotStore.getRobotById(task.value.robotId) : undefined))
 const events = computed(() => taskStore.getEventsByTask(taskId.value))
+
+function loadEventPage(page: number) {
+  eventPage.value = page
+  void taskStore.refreshEvents(taskId.value, { page, size: 20 })
+}
 const taskAlarms = computed(() => alarmStore.alarms.filter((a) => a.taskId === taskId.value))
 const execution = computed(() => taskStore.executionFor(taskId.value))
 const eligibility = computed(() => taskStore.eligibilityFor(taskId.value))

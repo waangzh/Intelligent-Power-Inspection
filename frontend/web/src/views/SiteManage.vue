@@ -34,6 +34,7 @@
               </template>
             </el-table-column>
           </el-table>
+          <ListPagination :total="siteStore.siteTotal" :page="sitePage" @change="loadSitePage" />
         </el-card>
       </el-col>
 
@@ -56,6 +57,7 @@
               </template>
             </el-table-column>
           </el-table>
+          <ListPagination :total="siteStore.areaTotal" :page="areaPage" @change="loadAreaPage" />
           <div style="height: 320px; margin-top: 12px">
             <Map2D :center="currentSite.center" :fallback-center="currentSite.center" :areas="areas" />
           </div>
@@ -121,6 +123,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Map2D from '@/components/Map2D.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useSiteStore } from '@/stores/site'
 import type { Site } from '@/types'
@@ -128,11 +131,14 @@ import type { Site } from '@/types'
 const siteStore = useSiteStore()
 const { can } = usePermission()
 const currentSite = ref<Site | null>(siteStore.sites[0] ?? null)
+const sitePage = ref(0)
+const areaPage = ref(0)
 watch(
   () => siteStore.sites,
   (sites) => {
     if (!currentSite.value && sites.length > 0) {
       currentSite.value = sites[0]
+      void siteStore.loadAreas(sites[0].id)
       return
     }
     if (currentSite.value && !sites.some((site) => site.id === currentSite.value?.id)) {
@@ -161,6 +167,19 @@ const areas = computed(() =>
 
 function onSiteSelect(site: Site | undefined) {
   currentSite.value = site ?? null
+  areaPage.value = 0
+  if (site) void siteStore.loadAreas(site.id)
+}
+
+function loadSitePage(page: number) {
+  sitePage.value = page
+  void siteStore.loadSites({ page, size: 20 })
+}
+
+function loadAreaPage(page: number) {
+  if (!currentSite.value) return
+  areaPage.value = page
+  void siteStore.loadAreas(currentSite.value.id, { page, size: 20 })
 }
 
 function openSiteDialog(site?: Site) {

@@ -391,11 +391,12 @@ class PowerInspectionApplicationTests {
 
     mockMvc.perform(get("/api/v1/tasks/task_flow_api/events").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.length()", greaterThanOrEqualTo(1)));
+      .andExpect(jsonPath("$.data.items.length()", greaterThanOrEqualTo(1)));
 
     mockMvc.perform(get("/api/v1/records").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[?(@.taskId == 'task_flow_api')]").exists());
+      .andExpect(jsonPath("$.data.items[?(@.taskId == 'task_flow_api')]").exists())
+      .andExpect(jsonPath("$.data.total", greaterThanOrEqualTo(1)));
 
     mockMvc.perform(post("/api/v1/records/export").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())
