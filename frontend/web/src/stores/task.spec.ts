@@ -14,6 +14,7 @@ vi.mock('@/api/resources', () => ({
 
 import { resourcesApi } from '@/api/resources'
 import { latestReadyRevision, useTaskStore } from '@/stores/task'
+import { DEPLOYMENT_STATE_LABELS } from '@/utils/routeDeployment'
 
 const task: InspectionTask = {
   id: 'task-1', name: '测试巡检', routeId: 'route-1', robotId: 'robot-1', status: 'CREATED',
@@ -31,7 +32,7 @@ function execution(status: TaskExecution['status'] = 'STARTING'): TaskExecution 
 }
 
 function eligibility(eligible = true): TaskStartEligibility {
-  return { ...execution('CREATED'), eligible, ineligibleReason: eligible ? null : '部署尚未 READY_FOR_ROBOT' }
+  return { ...execution('CREATED'), eligible, ineligibleReason: eligible ? null : `部署尚未${DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT}` }
 }
 
 describe('任务执行轮询与启动状态', () => {
@@ -64,7 +65,7 @@ describe('任务执行轮询与启动状态', () => {
     await store.loadDynamic()
 
     expect(store.eligibilityFor('task-1')?.eligible).toBe(false)
-    expect(store.eligibilityFor('task-1')?.ineligibleReason).toContain('READY_FOR_ROBOT')
+    expect(store.eligibilityFor('task-1')?.ineligibleReason).toContain(DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT)
     store.stopExecutionPolling()
   })
 
