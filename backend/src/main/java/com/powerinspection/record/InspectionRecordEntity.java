@@ -16,7 +16,7 @@ import java.util.Set;
 public class InspectionRecordEntity {
   private static final Set<String> KNOWN = Set.of(
     "id", "taskId", "siteId", "routeId", "robotId", "taskName", "routeName", "robotName",
-    "alarmCount", "checkpointCount", "duration", "summary", "completedAt", "createdAt", "updatedAt"
+    "alarmCount", "checkpointCount", "duration", "summary", "completedAt", "version", "createdAt", "updatedAt"
   );
 
   @Id

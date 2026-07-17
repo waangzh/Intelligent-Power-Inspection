@@ -163,9 +163,9 @@ public class TaskService {
 
   @Transactional
   public void deleteTask(String id) {
-    dataStore.delete(DataCategory.TASK, id);
     dataStore.deleteWhere(DataCategory.EVENT, "taskId", id);
     taskExecutionService.delete(id);
+    dataStore.delete(DataCategory.TASK, id);
   }
 
   @Transactional

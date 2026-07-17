@@ -238,8 +238,9 @@ class RouteDeploymentServiceTests {
     String routeSha = "a".repeat(64);
     String mapSha = "b".repeat(64);
     String mapAssetId = "map-deploy-" + suffix;
+    dataStore.upsert(DataCategory.SITE, map("id", siteId, "name", "部署测试站点"));
     dataStore.upsert(DataCategory.ROUTE, map("id", routeId, "siteId", siteId, "name", "部署测试路线"));
-    dataStore.upsert(DataCategory.ROBOT, map("id", robotId, "siteId", siteId, "name", "部署测试机器人", "serialNo", robotId));
+    dataStore.upsert(DataCategory.ROBOT, map("id", robotId, "siteId", siteId, "name", "部署测试机器人", "serialNo", robotId, "status", "ONLINE"));
     RouteRevisionEntity revision = new RouteRevisionEntity();
     revision.setId(revisionId);
     revision.setRouteId(routeId);

@@ -14,6 +14,7 @@ import com.powerinspection.task.InspectionTaskEntity;
 import com.powerinspection.task.TaskEventEntity;
 import com.powerinspection.workorder.WorkOrderEntity;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -28,6 +29,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -146,27 +149,47 @@ public class DomainStoreService {
     payload.putIfAbsent("createdAt", now);
     payload.put("updatedAt", now);
 
-    Object existing = entityManager.find(entityType(category), id);
-    Object next = fromMap(category, payload);
-    if (existing == null) {
-      entityManager.persist(next);
-    } else {
-      copyVersion(existing, next);
-      entityManager.merge(next);
+    try {
+      Object existing = entityManager.find(entityType(category), id);
+      if (existing == null) {
+        entityManager.persist(fromMap(category, payload));
+      } else {
+        assertExpectedVersion(existing, payload.get("version"));
+        applyExisting(category, existing, payload);
+      }
+      if (DataCategory.ROBOT.equals(category)) {
+        syncRobotTelemetry(id, payload.get("telemetry"));
+      }
+      entityManager.flush();
+      return toMap(category, entityManager.find(entityType(category), id));
+    } catch (ObjectOptimisticLockingFailureException | OptimisticLockException ex) {
+      throw ApiException.conflict("数据已被其他人修改，请刷新后重试");
+    } catch (DataIntegrityViolationException ex) {
+      String message = ex.getMostSpecificCause() == null ? "" : ex.getMostSpecificCause().getMessage();
+      if (message != null && message.toLowerCase().contains("active_robot")) {
+        throw ApiException.conflict("机器人已有执行中的任务");
+      }
+      if (message != null && message.toLowerCase().contains("uq_work_orders_alarm")) {
+        throw ApiException.conflict("该告警已存在工单");
+      }
+      throw ApiException.badRequest("数据约束冲突，请检查关联对象是否存在或状态是否合法");
     }
-    if (DataCategory.ROBOT.equals(category)) {
-      syncRobotTelemetry(id, payload.get("telemetry"));
-    }
-    entityManager.flush();
-    return toMap(category, entityManager.find(entityType(category), id));
   }
 
   @Transactional
   public Map<String, Object> patch(String category, String id, Map<String, Object> patch) {
     Map<String, Object> current = get(category, id);
     Map<String, Object> merged = new LinkedHashMap<>(current);
-    merged.putAll(patch);
+    Object patchVersion = patch == null ? null : patch.get("version");
+    if (patch != null) {
+      merged.putAll(patch);
+    }
     merged.put("id", id);
+    if (patchVersion != null) {
+      merged.put("version", patchVersion);
+    } else {
+      merged.put("version", current.get("version"));
+    }
     return upsert(category, merged);
   }
 
@@ -177,15 +200,16 @@ public class DomainStoreService {
         .setParameter("id", id)
         .executeUpdate();
     }
-    Object managed = entityManager.find(entityType(category), id);
-    if (managed != null) {
-      entityManager.remove(managed);
-    }
     if (DataCategory.ROBOT.equals(category)) {
       RobotTelemetryEntity telemetry = entityManager.find(RobotTelemetryEntity.class, id);
       if (telemetry != null) {
         entityManager.remove(telemetry);
+        entityManager.flush();
       }
+    }
+    Object managed = entityManager.find(entityType(category), id);
+    if (managed != null) {
+      entityManager.remove(managed);
     }
   }
 
@@ -381,6 +405,21 @@ public class DomainStoreService {
     };
   }
 
+  private void applyExisting(String category, Object existing, Map<String, Object> payload) {
+    switch (category) {
+      case DataCategory.SITE -> ((SiteEntity) existing).apply(payload);
+      case DataCategory.ROUTE -> ((RouteEntity) existing).apply(payload);
+      case DataCategory.ROBOT -> ((RobotEntity) existing).apply(payload);
+      case DataCategory.TASK -> ((InspectionTaskEntity) existing).apply(payload);
+      case DataCategory.RECORD -> ((InspectionRecordEntity) existing).apply(payload);
+      case DataCategory.EVENT -> ((TaskEventEntity) existing).apply(payload);
+      case DataCategory.ALARM -> ((AlarmEntity) existing).apply(payload);
+      case DataCategory.WORK_ORDER -> ((WorkOrderEntity) existing).apply(payload);
+      case DataCategory.NOTIFICATION -> ((NotificationEntity) existing).apply(payload);
+      default -> throw ApiException.badRequest("不支持的领域类别: " + category);
+    }
+  }
+
   private Map<String, Object> toMap(String category, Object entity) {
     Map<String, Object> map = switch (category) {
       case DataCategory.SITE -> ((SiteEntity) entity).toMap();
@@ -394,6 +433,10 @@ public class DomainStoreService {
       case DataCategory.NOTIFICATION -> ((NotificationEntity) entity).toMap();
       default -> throw ApiException.badRequest("不支持的领域类别: " + category);
     };
+    Long version = readVersion(entity);
+    if (version != null) {
+      map.put("version", version);
+    }
     if (DataCategory.ROBOT.equals(category)) {
       RobotTelemetryEntity telemetry = entityManager.find(RobotTelemetryEntity.class, map.get("id"));
       if (telemetry != null) {
@@ -403,11 +446,33 @@ public class DomainStoreService {
     return map;
   }
 
-  private void copyVersion(Object existing, Object next) {
+  private void assertExpectedVersion(Object existing, Object expectedVersion) {
+    if (expectedVersion == null) {
+      return;
+    }
+    Long current = readVersion(existing);
+    Long expected = toLong(expectedVersion);
+    if (current != null && expected != null && !current.equals(expected)) {
+      throw ApiException.conflict("数据已被其他人修改，请刷新后重试");
+    }
+  }
+
+  private Long readVersion(Object entity) {
     try {
-      Long version = (Long) existing.getClass().getMethod("getVersion").invoke(existing);
-      next.getClass().getMethod("setVersion", Long.class).invoke(next, version);
-    } catch (Exception ignored) {
+      Object value = entity.getClass().getMethod("getVersion").invoke(entity);
+      return toLong(value);
+    } catch (Exception ex) {
+      return null;
+    }
+  }
+
+  private static Long toLong(Object value) {
+    if (value == null) return null;
+    if (value instanceof Number number) return number.longValue();
+    try {
+      return Long.parseLong(value.toString());
+    } catch (Exception ex) {
+      return null;
     }
   }
 
