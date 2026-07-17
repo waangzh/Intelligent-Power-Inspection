@@ -15,7 +15,7 @@ import java.util.Set;
 @Table(name = "task_events")
 public class TaskEventEntity {
   private static final Set<String> KNOWN = Set.of(
-    "id", "taskId", "type", "message", "checkpointName", "imageUrl", "createdAt", "updatedAt"
+    "id", "taskId", "type", "message", "checkpointName", "imageUrl", "version", "createdAt", "updatedAt"
   );
 
   @Id

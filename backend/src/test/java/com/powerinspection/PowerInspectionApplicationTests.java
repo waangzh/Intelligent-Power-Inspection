@@ -348,9 +348,6 @@ class PowerInspectionApplicationTests {
     String adminToken = login("admin", "Admin@123");
     String routeId = "route_task_flow_test";
     ensureTestRoute(routeId);
-    seedFlowAlarm("alarm_flow_001", "HIGH");
-    seedFlowAlarm("alarm_flow_002", "HIGH");
-    seedFlowAlarm("alarm_flow_003", "HIGH");
     dataStore.upsert(DataCategory.NOTIFICATION, map(
       "id", "ntf_flow_admin", "userId", "user_admin", "type", "SYSTEM", "title", "测试通知",
       "content", "用于验证通知读取状态", "read", false, "link", "/dashboard"
@@ -371,6 +368,10 @@ class PowerInspectionApplicationTests {
         )))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.id").value("task_flow_api"));
+
+    seedFlowAlarm("alarm_flow_001", "HIGH");
+    seedFlowAlarm("alarm_flow_002", "HIGH");
+    seedFlowAlarm("alarm_flow_003", "HIGH");
 
     mockMvc.perform(get("/api/v1/tasks/task_flow_api").header("Authorization", bearer(dispatcherToken)))
       .andExpect(status().isOk())

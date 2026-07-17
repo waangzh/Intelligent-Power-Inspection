@@ -16,7 +16,7 @@ public class WorkOrderEntity {
   private static final Set<String> KNOWN = Set.of(
     "id", "title", "description", "locationDescription", "alarmId", "taskId", "siteId", "source", "status",
     "priority", "assigneeId", "assigneeName", "createdById", "createdByName", "agentActionId",
-    "agentIdempotencyKey", "claimedAt", "closedAt", "resolution", "review", "createdAt", "updatedAt"
+    "agentIdempotencyKey", "claimedAt", "closedAt", "resolution", "review", "version", "createdAt", "updatedAt"
   );
 
   @Id

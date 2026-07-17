@@ -16,7 +16,7 @@ import java.util.Set;
 public class SiteEntity {
   private static final Set<String> KNOWN = Set.of(
     "id", "name", "address", "description", "center", "status",
-    "deviceMapUploaded", "lingbotMapId", "createdAt", "updatedAt"
+    "deviceMapUploaded", "lingbotMapId", "version", "createdAt", "updatedAt"
   );
 
   @Id

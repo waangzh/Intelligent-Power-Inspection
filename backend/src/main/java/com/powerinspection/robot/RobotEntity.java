@@ -16,7 +16,7 @@ import java.util.Set;
 public class RobotEntity {
   private static final Set<String> KNOWN = Set.of(
     "id", "name", "model", "serialNo", "siteId", "status", "position", "telemetry",
-    "createdAt", "updatedAt"
+    "version", "createdAt", "updatedAt"
   );
 
   @Id

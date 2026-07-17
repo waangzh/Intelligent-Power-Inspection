@@ -18,7 +18,7 @@ public class AlarmEntity {
     "id", "siteId", "routeId", "robotId", "taskId", "type", "severity", "status", "message",
     "routeName", "checkpointName", "imageUrl", "acknowledged", "workOrderId",
     "workOrderModeApplied", "workOrderConversionSource", "workOrderConversionStatus",
-    "workOrderConversionError", "workOrderConversionFailedAt", "convertedAt", "createdAt", "updatedAt"
+    "workOrderConversionError", "workOrderConversionFailedAt", "convertedAt", "version", "createdAt", "updatedAt"
   );
 
   @Id
