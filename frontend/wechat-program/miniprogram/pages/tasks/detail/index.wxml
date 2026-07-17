@@ -16,8 +16,8 @@
       <button wx:if="{{canDispatch && task.status==='CREATED'}}" size="mini" type="primary" bindtap="dispatch">下发</button>
       <button wx:if="{{canControl && task.status==='RUNNING'}}" size="mini" bindtap="pause">暂停</button>
       <button wx:if="{{canControl && task.status==='PAUSED'}}" size="mini" type="primary" bindtap="resume">恢复</button>
-      <button wx:if="{{canControl && task.status==='RUNNING'}}" size="mini" type="warn" bindtap="takeover">接管</button>
-      <button wx:if="{{canControl && task.status!=='COMPLETED' && task.status!=='CANCELLED'}}" size="mini" bindtap="cancel">取消</button>
+      <button wx:if="{{canTakeover && task.status==='RUNNING'}}" size="mini" type="warn" bindtap="takeover">接管</button>
+      <button wx:if="{{canCancel && task.status!=='COMPLETED' && task.status!=='CANCELLED'}}" size="mini" bindtap="cancel">{{cancelLabel}}</button>
     </view>
   </view>
 

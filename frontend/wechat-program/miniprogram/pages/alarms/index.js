@@ -31,8 +31,9 @@ Page({
     if (!app.requireAuth('/pages/alarms/index')) return
     syncTabBar(this)
     const user = app.globalData.user
+    const perms = app.globalData.permissions
     this.setData({
-      canAck: hasPermission(user.role, 'alarm:ack'),
+      canAck: hasPermission(perms, 'alarm:ack'),
     })
     this.load()
     app.refreshBadges()

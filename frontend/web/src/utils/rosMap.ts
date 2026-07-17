@@ -69,8 +69,6 @@ export function parseYaml(text: string): Partial<RosMapState> {
     patch.origin = [Number(o[0]), Number(o[1]), Number(o[2] ?? 0)]
   }
   if (typeof config.negate === 'number') patch.negate = config.negate
-  if (typeof config.occupied_thresh === 'number') patch.occupiedThresh = config.occupied_thresh
-  if (typeof config.free_thresh === 'number') patch.freeThresh = config.free_thresh
   if (typeof config.image === 'string') patch.image = config.image
   return patch
 }
@@ -134,7 +132,7 @@ export function pixelToMap(map: RosMapState, px: number, py: number) {
 export function isMapCoordinateInside(map: RosMapState, x: number, y: number): boolean {
   if (!map.width || !map.height) return true
   const p = mapToPixel(map, x, y)
-  return p.x >= 0 && p.x < map.width && p.y >= 0 && p.y < map.height
+  return p.x >= 0 && p.x <= map.width && p.y >= 0 && p.y <= map.height
 }
 
 export function createDefaultMapState(): RosMapState {
@@ -148,8 +146,6 @@ export function createDefaultMapState(): RosMapState {
     resolution: 0.05,
     origin: [-2.89, -6.37, 0],
     negate: 0,
-    occupiedThresh: 0.65,
-    freeThresh: 0.25,
   }
 }
 

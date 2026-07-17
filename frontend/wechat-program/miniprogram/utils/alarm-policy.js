@@ -1,5 +1,10 @@
 const { loadFromStorage, saveToStorage } = require('./storage')
 
+/**
+ * 告警转工单策略 — 仅 Mock 模式使用本地 wx.storage。
+ * 真实后端请通过 services/index.js 的 get/updateAlarmWorkOrderPolicy 访问 /alarms/work-order-policy。
+ */
+
 const STORAGE_KEY = 'pi_alarm_escalation_policy'
 
 const DEFAULT_POLICY = {
@@ -37,8 +42,8 @@ function setMode(severity, mode) {
   return policy
 }
 
-function getPolicyRows() {
-  const policy = loadPolicy()
+function getPolicyRows(rules) {
+  const policy = rules || loadPolicy()
   const { ALARM_SEVERITY_LABELS } = require('./constants')
   return POLICY_ROWS.map((row) => ({
     ...row,
@@ -50,6 +55,7 @@ function getPolicyRows() {
 
 module.exports = {
   DEFAULT_POLICY,
+  POLICY_ROWS,
   loadPolicy,
   savePolicy,
   shouldAutoConvert,

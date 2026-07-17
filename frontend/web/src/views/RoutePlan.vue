@@ -155,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { resourcesApi } from '@/api/resources'
@@ -357,11 +357,6 @@ async function saveDraft() {
   const document = pendingDoc.value
   if (!route || !document) {
     ElMessage.warning('请先在地图上标注路线')
-    return
-  }
-  const annotationProblems = editorRef.value?.validateForExport() ?? []
-  if (annotationProblems.length) {
-    ElMessage.error(`路线标注未通过安全检查：${annotationProblems.join('；')}`)
     return
   }
   if (!route.mapId && !pendingMapFiles.value && !draftState.value?.mapAssetId) {
@@ -588,27 +583,13 @@ function onBeforeUnload(event: BeforeUnloadEvent) {
 }
 
 let deploymentPollTimer: number | undefined
-
-function startDeploymentPolling() {
-  if (deploymentPollTimer) return
-  deploymentPollTimer = window.setInterval(() => void refreshDeploymentDetails(), 5000)
-}
-
-function stopDeploymentPolling() {
-  if (!deploymentPollTimer) return
-  window.clearInterval(deploymentPollTimer)
-  deploymentPollTimer = undefined
-}
-
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
-  startDeploymentPolling()
+  deploymentPollTimer = window.setInterval(() => void refreshDeploymentDetails(), 5000)
 })
-onActivated(startDeploymentPolling)
-onDeactivated(stopDeploymentPolling)
 onUnmounted(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
-  stopDeploymentPolling()
+  if (deploymentPollTimer) window.clearInterval(deploymentPollTimer)
 })
 onBeforeRouteLeave(() => confirmDiscardChanges())
 </script>

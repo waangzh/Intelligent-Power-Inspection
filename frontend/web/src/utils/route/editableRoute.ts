@@ -16,7 +16,7 @@ export function createEditableRouteDraft(context?: PlatformRouteContext): Editab
 export function toEditableRouteDraft(document: RouteExecutorDocument, context?: PlatformRouteContext): EditableRouteDraft {
   const draft = createEditableRouteDraft(context)
   const start = asRecord(document.start_pose)
-  const startPose = poseOf(start.pose ?? start.location)
+  const startPose = poseOf(start.pose)
   const covariance = asRecord(start.covariance)
   draft.sourceTemplate = document
   draft.requiresConversion = document.version === 2
@@ -44,15 +44,12 @@ export function toEditableRouteDraft(document: RouteExecutorDocument, context?: 
   }
   draft.keepoutZones = (document.keepout_zones || []).map((zone): EditableKeepoutZone => ({
     id: zone.id, name: typeof zone.name === 'string' ? zone.name : zone.id, type: 'hard_keepout', enabled: zone.enabled,
-    maskPaddingM: typeof zone.mask_padding_m === 'number' && Number.isFinite(zone.mask_padding_m)
-      ? zone.mask_padding_m
-      : (document.version === 3 ? document.map.resolution : undefined),
-    polygon: zone.polygon.map((point) => ({ x: finiteNumber(point.x), y: finiteNumber(point.y) })),
+    maskPaddingM: finiteNumber(zone.mask_padding_m), polygon: zone.polygon.map((point) => ({ x: finiteNumber(point.x), y: finiteNumber(point.y) })),
   }))
   return draft
 }
 
 function toEditableTarget(target: RouteExecutorDocument['targets'][number]): EditableTarget {
-  const pose = poseOf(target.pose ?? target.location)
+  const pose = poseOf(target.pose)
   return { id: target.id, name: target.name || target.id, ...pose, taskDuration: finiteNumber(target.task_duration_sec, 0) }
 }

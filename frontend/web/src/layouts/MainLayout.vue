@@ -87,11 +87,7 @@
       </el-header>
 
       <el-main class="main-content">
-        <router-view v-slot="{ Component }">
-          <keep-alive>
-            <component :is="Component" />
-          </keep-alive>
-        </router-view>
+        <router-view />
       </el-main>
     </el-container>
 
@@ -148,10 +144,11 @@ const notificationUnread = computed(() => {
 
 const visibleMenuGroups = computed(() => {
   const role = authStore.user?.role
+  const permissions = authStore.permissions
   return menuGroups
     .map((g) => ({
       ...g,
-      items: g.items.filter((item) => canAccess(role, item)),
+      items: g.items.filter((item) => canAccess(permissions, role, item)),
     }))
     .filter((g) => g.items.length > 0)
 })

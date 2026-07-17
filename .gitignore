@@ -49,6 +49,7 @@ ai-services/**/weights/
 .env.*.local
 backend/src/main/resources/application.yml
 frontend/wechat-program/miniprogram/project.private.config.json
+frontend/wechat-program/miniprogram/config/api.local.js
 
 # Logs
 *.log

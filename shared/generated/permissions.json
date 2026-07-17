@@ -1,0 +1,67 @@
+{
+  "source": "backend",
+  "generatedAt": "2026-07-17T01:17:15.460Z",
+  "permissions": [
+    "agent:admin",
+    "agent:approve",
+    "agent:run",
+    "agent:view",
+    "alarm:ack",
+    "alarm:policy",
+    "detection:manage",
+    "record:export",
+    "robot:manage",
+    "route:edit",
+    "site:edit",
+    "task:control",
+    "task:create",
+    "task:dispatch",
+    "task:estop",
+    "task:takeover",
+    "task:view",
+    "user:manage",
+    "workorder:create",
+    "workorder:process",
+    "workorder:review",
+    "workorder:view"
+  ],
+  "byRole": {
+    "ADMIN": [
+      "agent:admin",
+      "agent:approve",
+      "agent:run",
+      "agent:view",
+      "alarm:policy",
+      "detection:manage",
+      "record:export",
+      "robot:manage",
+      "route:edit",
+      "site:edit",
+      "task:estop",
+      "task:view",
+      "user:manage",
+      "workorder:create",
+      "workorder:review",
+      "workorder:view"
+    ],
+    "DISPATCHER": [
+      "agent:approve",
+      "agent:run",
+      "agent:view",
+      "alarm:ack",
+      "record:export",
+      "route:edit",
+      "site:edit",
+      "task:control",
+      "task:create",
+      "task:dispatch",
+      "task:takeover",
+      "task:view",
+      "workorder:process",
+      "workorder:view"
+    ],
+    "VIEWER": [
+      "task:view"
+    ]
+  }
+}

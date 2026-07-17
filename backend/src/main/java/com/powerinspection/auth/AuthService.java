@@ -1,5 +1,6 @@
 package com.powerinspection.auth;
 
+import com.powerinspection.auth.AuthDtos.MeResponse;
 import com.powerinspection.auth.AuthDtos.ChangePasswordRequest;
 import com.powerinspection.auth.AuthDtos.LoginRequest;
 import com.powerinspection.auth.AuthDtos.LoginResponse;
@@ -36,19 +37,22 @@ public class AuthService {
   private final UserActivityRepository activityRepository;
   private final PasswordEncoder passwordEncoder;
   private final TokenService tokenService;
+  private final UserAccessService userAccessService;
 
   public AuthService(
     UserRepository userRepository,
     UserPreferenceRepository preferenceRepository,
     UserActivityRepository activityRepository,
     PasswordEncoder passwordEncoder,
-    TokenService tokenService
+    TokenService tokenService,
+    UserAccessService userAccessService
   ) {
     this.userRepository = userRepository;
     this.preferenceRepository = preferenceRepository;
     this.activityRepository = activityRepository;
     this.passwordEncoder = passwordEncoder;
     this.tokenService = tokenService;
+    this.userAccessService = userAccessService;
   }
 
   public LoginResponse login(LoginRequest request) {
@@ -62,7 +66,15 @@ public class AuthService {
     }
     logActivity(user.getId(), "LOGIN", "登录系统");
     Long expiresAt = request.remember() ? Instant.now().plusSeconds(7 * 24 * 60 * 60).toEpochMilli() : null;
-    return new LoginResponse(tokenService.create(user), UserDto.from(user), expiresAt);
+    MeResponse access = userAccessService.me(user);
+    return new LoginResponse(
+      tokenService.create(user),
+      access.user(),
+      access.permissions(),
+      access.scopes(),
+      access.features(),
+      expiresAt
+    );
   }
 
   @Transactional

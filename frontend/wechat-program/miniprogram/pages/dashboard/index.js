@@ -1,6 +1,6 @@
 const api = require('../../services/index')
 const { computeAnalytics } = require('../../utils/analytics')
-const { hasPermission } = require('../../utils/permission')
+const { canControlTask, canTakeoverTask } = require('../../utils/permission')
 const { syncTabBar } = require('../../utils/tab-page')
 const { isNativeTabPage } = require('../../config/tab-bar')
 const { ALARM_SEVERITY_LABELS } = require('../../utils/constants')
@@ -15,6 +15,7 @@ Page({
     schedule: [],
     unack: 0,
     canControl: false,
+    canTakeover: false,
     alarmChartData: [],
     completionRate: 0,
   },
@@ -24,11 +25,13 @@ Page({
     if (!app.requireAuth('/pages/dashboard/index')) return
     syncTabBar(this)
     const user = app.globalData.user
+    const perms = app.globalData.permissions
     const h = new Date().getHours()
     this.setData({
       user,
       greeting: h < 12 ? '早上好' : h < 18 ? '下午好' : '晚上好',
-      canControl: hasPermission(user.role, 'task:control'),
+      canControl: canControlTask(perms),
+      canTakeover: canTakeoverTask(perms),
     })
     this.load()
     app.refreshBadges()
