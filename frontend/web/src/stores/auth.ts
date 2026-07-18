@@ -10,12 +10,20 @@ import { loadFromStorage, saveToStorage } from '@/utils/storage'
 
 const SESSION_KEY = 'pi_session'
 
+function withExpires(session: AuthSession, previousExpiresAt?: number): AuthSession {
+  return {
+    ...session,
+    expiresAt: session.expiresAt ?? previousExpiresAt,
+  }
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(null)
   const user = ref<User | null>(null)
   const permissions = ref<Permission[]>([])
   const scopes = ref<AuthSession['scopes']>()
   const features = ref<AuthSession['features']>()
+  const expiresAt = ref<number | undefined>()
 
   const isLoggedIn = computed(() => !!token.value && !!user.value)
 
@@ -28,13 +36,15 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function applySession(session: AuthSession) {
-    token.value = session.token
-    user.value = session.user
-    permissions.value = Array.isArray(session.permissions) ? (session.permissions as Permission[]) : []
-    scopes.value = session.scopes
-    features.value = session.features
+    const next = withExpires(session, expiresAt.value)
+    token.value = next.token
+    user.value = next.user
+    permissions.value = Array.isArray(next.permissions) ? (next.permissions as Permission[]) : []
+    scopes.value = next.scopes
+    features.value = next.features
+    expiresAt.value = next.expiresAt
     persistSession({
-      ...session,
+      ...next,
       permissions: permissions.value,
     })
   }
@@ -47,11 +57,11 @@ export const useAuthStore = defineStore('auth', () => {
       permissions.value = []
       scopes.value = undefined
       features.value = undefined
+      expiresAt.value = undefined
       return
     }
     if (session.expiresAt && Date.now() > session.expiresAt) {
-      clearSession()
-      return
+      // Access token expired: keep session shell and let http refresh via cookie.
     }
     applySession(session)
     void refreshMe()
@@ -63,6 +73,7 @@ export const useAuthStore = defineStore('auth', () => {
     permissions.value = []
     scopes.value = undefined
     features.value = undefined
+    expiresAt.value = undefined
     stopRealtime()
     persistSession(null)
   }
@@ -82,22 +93,35 @@ export const useAuthStore = defineStore('auth', () => {
     return newUser
   }
 
-  function logout() {
-    clearSession()
-    void http.post('/auth/logout').catch(() => undefined)
+  async function logout() {
+    try {
+      // Keep the current Access Token until the server has revoked the refresh session.
+      await http.post('/auth/logout')
+    } catch {
+      // Local logout must still complete when the server is unavailable.
+    } finally {
+      clearSession()
+    }
+  }
+
+  function currentSessionBase(): AuthSession | null {
+    if (!token.value || !user.value) return null
+    return {
+      token: token.value,
+      user: user.value,
+      permissions: permissions.value,
+      scopes: scopes.value,
+      features: features.value,
+      expiresAt: expiresAt.value,
+    }
   }
 
   function patchUser(patch: Partial<User>) {
     if (!user.value) return
     user.value = { ...user.value, ...patch }
-    if (token.value) {
-      persistSession({
-        token: token.value,
-        user: user.value,
-        permissions: permissions.value,
-        scopes: scopes.value,
-        features: features.value,
-      })
+    const base = currentSessionBase()
+    if (base) {
+      persistSession(base)
     }
     if (patch.id || user.value.id) {
       useUserStore().syncUser(user.value)
@@ -108,14 +132,9 @@ export const useAuthStore = defineStore('auth', () => {
     if (!user.value) throw new Error('未登录')
     const updated = await updateProfileApi(user.value.id, form)
     user.value = { ...updated }
-    if (token.value) {
-      persistSession({
-        token: token.value,
-        user: user.value,
-        permissions: permissions.value,
-        scopes: scopes.value,
-        features: features.value,
-      })
+    const base = currentSessionBase()
+    if (base) {
+      persistSession(base)
     }
     useUserStore().syncUser(updated)
     return updated
@@ -128,19 +147,36 @@ export const useAuthStore = defineStore('auth', () => {
       permissions.value = (fresh.permissions ?? []) as Permission[]
       scopes.value = fresh.scopes
       features.value = fresh.features
-      if (token.value) {
+      const base = currentSessionBase()
+      if (base) {
+        // Prefer token possibly refreshed by http interceptor.
+        const stored = loadFromStorage<AuthSession | null>(SESSION_KEY, null)
         persistSession({
-          token: token.value,
+          ...base,
+          token: stored?.token || base.token,
+          expiresAt: stored?.expiresAt ?? base.expiresAt,
           user: fresh.user,
           permissions: permissions.value,
           scopes: scopes.value,
           features: features.value,
         })
+        if (stored?.token) {
+          token.value = stored.token
+        }
+        if (stored?.expiresAt) {
+          expiresAt.value = stored.expiresAt
+        }
       }
       await loadAppData()
     } catch {
       clearSession()
     }
+  }
+
+  async function reauth(password: string) {
+    const session = await http.post<AuthSession>('/auth/reauth', { password })
+    applySession(withExpires(session, expiresAt.value))
+    return session
   }
 
   return {
@@ -149,6 +185,7 @@ export const useAuthStore = defineStore('auth', () => {
     permissions,
     scopes,
     features,
+    expiresAt,
     isLoggedIn,
     restoreSession,
     login,
@@ -157,5 +194,6 @@ export const useAuthStore = defineStore('auth', () => {
     patchUser,
     updateProfile,
     refreshMe,
+    reauth,
   }
 })

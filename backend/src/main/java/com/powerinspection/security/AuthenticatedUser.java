@@ -8,13 +8,23 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 public class AuthenticatedUser implements UserDetails {
   private final UserEntity user;
+  private final long authTimeEpochSeconds;
 
   public AuthenticatedUser(UserEntity user) {
+    this(user, 0L);
+  }
+
+  public AuthenticatedUser(UserEntity user, long authTimeEpochSeconds) {
     this.user = user;
+    this.authTimeEpochSeconds = authTimeEpochSeconds;
   }
 
   public UserEntity user() {
     return user;
+  }
+
+  public long authTimeEpochSeconds() {
+    return authTimeEpochSeconds;
   }
 
   @Override

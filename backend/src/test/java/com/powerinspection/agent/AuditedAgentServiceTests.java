@@ -53,6 +53,7 @@ class AuditedAgentServiceTests {
   AgentActionExecutor actionExecutor;
 
   private UserEntity dispatcher;
+  private UserEntity approver;
   private final AtomicInteger actionExecutionCount = new AtomicInteger();
 
   @BeforeEach
@@ -67,6 +68,17 @@ class AuditedAgentServiceTests {
     dispatcher.setEnabled(true);
     dispatcher.setCreatedAt(Instant.now().toString());
     userRepository.save(dispatcher);
+
+    approver = userRepository.findById("agent_test_approver").orElseGet(UserEntity::new);
+    approver.setId("agent_test_approver");
+    approver.setUsername("agent-test-approver");
+    approver.setPasswordHash("unused");
+    approver.setDisplayName("测试审批员");
+    // Separate dispatcher: initiator cannot approve their own actions; ADMIN lacks TASK_DISPATCH.
+    approver.setRole(UserRole.DISPATCHER);
+    approver.setEnabled(true);
+    approver.setCreatedAt(Instant.now().toString());
+    userRepository.save(approver);
 
     seedAlarm("agent_test_alarm", "HIGH", "测试安全帽告警");
     seedAlarm("agent_test_alarm_iso", "HIGH", "测试安全帽告警-隔离");
@@ -119,11 +131,11 @@ class AuditedAgentServiceTests {
       .findFirst()
       .orElseThrow();
     AgentDtos.ActionResponse executed = agentService.approveAction(
-      workOrder.id(), new AgentDtos.ActionDecisionRequest(workOrder.version(), "同意建单"), dispatcher
+      workOrder.id(), new AgentDtos.ActionDecisionRequest(workOrder.version(), "同意建单"), approver
     );
     assertThat(executed.status()).isEqualTo(AgentEnums.ActionStatus.SUCCEEDED);
     assertThatThrownBy(() -> agentService.approveAction(
-      workOrder.id(), new AgentDtos.ActionDecisionRequest(workOrder.version(), "重复批准"), dispatcher
+      workOrder.id(), new AgentDtos.ActionDecisionRequest(workOrder.version(), "重复批准"), approver
     )).isInstanceOf(ApiException.class).satisfies(error ->
       assertThat(((ApiException) error).status().value()).isEqualTo(409)
     );
@@ -178,7 +190,7 @@ class AuditedAgentServiceTests {
       start.await(5, TimeUnit.SECONDS);
       try {
         return agentService.approveAction(
-          action.id(), new AgentDtos.ActionDecisionRequest(action.version(), "concurrent approval"), dispatcher
+          action.id(), new AgentDtos.ActionDecisionRequest(action.version(), "concurrent approval"), approver
         ).status().name();
       } catch (ApiException ex) {
         return "HTTP_" + ex.status().value();
