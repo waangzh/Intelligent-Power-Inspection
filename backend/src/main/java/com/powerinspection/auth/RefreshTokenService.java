@@ -19,7 +19,7 @@ public class RefreshTokenService {
   public record IssuedRefresh(String rawToken, RefreshTokenEntity entity, Instant expiresAt) {
   }
 
-  public record RotatedSession(UserEntity user, String accessToken, IssuedRefresh refresh, long authTime) {
+  public record RotatedSession(UserEntity user, IssuedRefresh refresh, long authTime) {
   }
 
   private final RefreshTokenRepository repository;
@@ -37,7 +37,7 @@ public class RefreshTokenService {
   }
 
   @Transactional
-  public IssuedRefresh issue(UserEntity user, boolean remember) {
+  public IssuedRefresh issue(UserEntity user, boolean remember, long authTimeEpochSeconds) {
     long ttl = remember ? jwtProperties.getRefreshRememberTtlSeconds() : jwtProperties.getRefreshSessionTtlSeconds();
     Instant expiresAt = Instant.now().plusSeconds(ttl);
     String raw = randomToken();
@@ -48,14 +48,24 @@ public class RefreshTokenService {
     entity.setFamilyId(Ids.next("rtf"));
     entity.setRemember(remember);
     entity.setExpiresAt(expiresAt.toString());
+    entity.setAuthTimeEpochSeconds(authTimeEpochSeconds);
     entity.setCreatedAt(Instant.now().toString());
     repository.save(entity);
     return new IssuedRefresh(raw, entity, expiresAt);
   }
 
-  @Transactional
+  @Transactional(dontRollbackOn = ApiException.class)
   public RotatedSession rotate(String rawToken) {
-    RefreshTokenEntity current = repository.findByTokenHash(hash(rawToken))
+    return rotate(rawToken, null);
+  }
+
+  @Transactional(dontRollbackOn = ApiException.class)
+  public RotatedSession rotateAfterReauthentication(String rawToken, long authTimeEpochSeconds) {
+    return rotate(rawToken, authTimeEpochSeconds);
+  }
+
+  private RotatedSession rotate(String rawToken, Long replacementAuthTimeEpochSeconds) {
+    RefreshTokenEntity current = repository.findByTokenHashForUpdate(hash(rawToken))
       .orElseThrow(() -> ApiException.unauthorized("刷新凭证无效"));
     if (current.getRevokedAt() != null) {
       repository.revokeFamily(current.getFamilyId(), Instant.now().toString());
@@ -82,6 +92,10 @@ public class RefreshTokenService {
     next.setFamilyId(current.getFamilyId());
     next.setRemember(current.isRemember());
     next.setExpiresAt(current.getExpiresAt());
+    long authTime = replacementAuthTimeEpochSeconds == null
+      ? current.getAuthTimeEpochSeconds()
+      : replacementAuthTimeEpochSeconds;
+    next.setAuthTimeEpochSeconds(authTime);
     next.setCreatedAt(Instant.now().toString());
     repository.save(next);
 
@@ -89,8 +103,7 @@ public class RefreshTokenService {
     current.setReplacedById(next.getId());
     repository.save(current);
 
-    long authTime = Instant.now().getEpochSecond();
-    return new RotatedSession(user, null, new IssuedRefresh(nextRaw, next, expiresAt), authTime);
+    return new RotatedSession(user, new IssuedRefresh(nextRaw, next, expiresAt), authTime);
   }
 
   @Transactional

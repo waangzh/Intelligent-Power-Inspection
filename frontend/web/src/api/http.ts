@@ -87,6 +87,7 @@ async function request<T>(path: string, init: RequestInit = {}, retried = false)
     path.startsWith('/auth/login') ||
     path.startsWith('/auth/register') ||
     path.startsWith('/auth/refresh')
+  const allowsAutomaticRefresh = !path.startsWith('/auth/logout')
   const token = isPublicAuth ? null : authToken()
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
@@ -98,7 +99,7 @@ async function request<T>(path: string, init: RequestInit = {}, retried = false)
     credentials: 'include',
   })
 
-  if (response.status === 401 && !isPublicAuth && !retried) {
+  if (response.status === 401 && !isPublicAuth && allowsAutomaticRefresh && !retried) {
     const refreshed = await tryRefreshSession()
     if (refreshed) {
       return request<T>(path, init, true)

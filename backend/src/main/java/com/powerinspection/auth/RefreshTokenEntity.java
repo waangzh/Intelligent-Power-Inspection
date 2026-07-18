@@ -20,6 +20,8 @@ public class RefreshTokenEntity {
   private boolean remember;
   @Column(name = "expires_at", nullable = false)
   private String expiresAt;
+  @Column(name = "auth_time", nullable = false)
+  private long authTimeEpochSeconds;
   @Column(name = "revoked_at")
   private String revokedAt;
   @Column(name = "replaced_by_id")
@@ -39,6 +41,8 @@ public class RefreshTokenEntity {
   public void setRemember(boolean remember) { this.remember = remember; }
   public String getExpiresAt() { return expiresAt; }
   public void setExpiresAt(String expiresAt) { this.expiresAt = expiresAt; }
+  public long getAuthTimeEpochSeconds() { return authTimeEpochSeconds; }
+  public void setAuthTimeEpochSeconds(long authTimeEpochSeconds) { this.authTimeEpochSeconds = authTimeEpochSeconds; }
   public String getRevokedAt() { return revokedAt; }
   public void setRevokedAt(String revokedAt) { this.revokedAt = revokedAt; }
   public String getReplacedById() { return replacedById; }

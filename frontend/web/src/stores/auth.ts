@@ -93,11 +93,15 @@ export const useAuthStore = defineStore('auth', () => {
     return newUser
   }
 
-  function logout() {
-    const previous = token.value
-    clearSession()
-    void http.post('/auth/logout').catch(() => undefined)
-    void previous
+  async function logout() {
+    try {
+      // Keep the current Access Token until the server has revoked the refresh session.
+      await http.post('/auth/logout')
+    } catch {
+      // Local logout must still complete when the server is unavailable.
+    } finally {
+      clearSession()
+    }
   }
 
   function currentSessionBase(): AuthSession | null {

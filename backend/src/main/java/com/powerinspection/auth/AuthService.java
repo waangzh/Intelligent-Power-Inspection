@@ -75,7 +75,7 @@ public class AuthService {
     logActivity(user.getId(), "LOGIN", "登录系统");
     long authTime = Instant.now().getEpochSecond();
     String access = tokenService.create(user, authTime);
-    RefreshTokenService.IssuedRefresh refresh = refreshTokenService.issue(user, request.remember());
+    RefreshTokenService.IssuedRefresh refresh = refreshTokenService.issue(user, request.remember(), authTime);
     refreshCookieSupport.write(
       httpResponse,
       refresh.rawToken(),
@@ -128,7 +128,8 @@ public class AuthService {
     String existingRefresh = refreshCookieSupport.read(request);
     if (existingRefresh != null && !existingRefresh.isBlank()) {
       try {
-        RefreshTokenService.RotatedSession rotated = refreshTokenService.rotate(existingRefresh);
+        RefreshTokenService.RotatedSession rotated =
+          refreshTokenService.rotateAfterReauthentication(existingRefresh, authTime);
         access = tokenService.create(rotated.user(), authTime);
         refreshCookieSupport.write(
           response,
