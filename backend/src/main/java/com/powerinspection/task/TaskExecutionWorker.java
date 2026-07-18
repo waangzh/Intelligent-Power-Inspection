@@ -84,7 +84,7 @@ public class TaskExecutionWorker {
     TaskExecutionControlService.ControlCommand command = controls.claimNext(execution.getExecutionId(), Instant.now());
     if (command == null) return;
     try {
-      RobotBridgeExecutionStartResult result = bridge.control(command.executionId(), command.action().toLowerCase(), command.bridgePayload());
+      RobotBridgeExecutionStartResult result = bridge.control(command.executionId(), command.bridgePath(), command.bridgePayload());
       if (!result.accepted() || !Objects.equals(command.executionId(), result.executionId()) || !"QUEUED".equals(result.state())) {
         controls.explicitFailure(command, "INVALID_BRIDGE_PAYLOAD", "Bridge 控制回执与本地执行身份不一致", Instant.now());
         return;

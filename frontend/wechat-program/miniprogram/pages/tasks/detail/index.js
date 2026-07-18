@@ -4,7 +4,7 @@ const {
   canControlTask,
   canTakeoverTask,
   canCancelTask,
-  cancelTaskLabel,
+  canEstopTask,
 } = require('../../../utils/permission')
 
 const EVENT_LABELS = {
@@ -35,7 +35,7 @@ Page({
     canControl: false,
     canTakeover: false,
     canCancel: false,
-    cancelLabel: '取消',
+    canEstop: false,
   },
 
   onLoad(options) {
@@ -53,7 +53,7 @@ Page({
       canControl: canControlTask(perms),
       canTakeover: canTakeoverTask(perms),
       canCancel: canCancelTask(perms),
-      cancelLabel: cancelTaskLabel(perms),
+      canEstop: canEstopTask(perms),
     })
     if (this.data.taskId) this.load()
   },
@@ -108,11 +108,41 @@ Page({
     })
   },
   async cancel() {
-    const isEstop = this.data.cancelLabel === '急停'
     wx.showModal({
-      title: isEstop ? '远程急停' : '取消任务',
-      content: isEstop ? '确认对该任务执行远程急停？' : '确认取消？',
-      success: async (r) => { if (r.confirm) { await api.cancelTask(this.data.taskId); this.load() } },
+      title: '取消任务',
+      content: '确认取消？这是业务取消，不是设备急停。',
+      success: async (r) => {
+        if (!r.confirm) return
+        try {
+          await api.cancelTask(this.data.taskId)
+          this.load()
+        } catch (err) {
+          wx.showToast({ title: err.message || '操作失败', icon: 'none' })
+        }
+      },
+    })
+  },
+
+  async emergencyStop() {
+    wx.showModal({
+      title: '远程急停',
+      editable: true,
+      placeholderText: '请输入急停原因（必填）',
+      success: async (r) => {
+        if (!r.confirm) return
+        const reason = (r.content || '').trim()
+        if (!reason) {
+          wx.showToast({ title: '必须填写急停原因', icon: 'none' })
+          return
+        }
+        try {
+          await api.emergencyStopTask(this.data.taskId, reason)
+          wx.showToast({ title: '急停已受理', icon: 'none' })
+          this.load()
+        } catch (err) {
+          wx.showToast({ title: err.message || '急停失败', icon: 'none' })
+        }
+      },
     })
   },
 })

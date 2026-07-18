@@ -4,7 +4,7 @@ const apiConfig = require('../config/api')
  * 统一 HTTP 请求 — 与网页端共用后端 /api/v1
  * 响应格式: { code: 0, message: 'ok', data: T }
  */
-function request({ url, method = 'GET', data, auth = true }) {
+function request({ url, method = 'GET', data, auth = true, headers = {} }) {
   const { baseUrl, timeout } = apiConfig
   const session = wx.getStorageSync('pi_session')
   const token = session && session.token
@@ -18,6 +18,7 @@ function request({ url, method = 'GET', data, auth = true }) {
       header: {
         'Content-Type': 'application/json',
         ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
       },
       success(res) {
         if (res.statusCode === 401) {
@@ -49,8 +50,8 @@ function get(url, params) {
   return request({ url, method: 'GET', data: params })
 }
 
-function post(url, data) {
-  return request({ url, method: 'POST', data })
+function post(url, data, headers) {
+  return request({ url, method: 'POST', data, headers })
 }
 
 function put(url, data) {

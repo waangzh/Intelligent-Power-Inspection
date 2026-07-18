@@ -103,7 +103,14 @@ public class TaskExecutionControlService {
     command.setLastAttemptAt(now.toString());
     command.setUpdatedAt(now.toString());
     commands.save(command);
-    return new ControlCommand(command.getId(), command.getExecutionId(), command.getAction(), command.getRobotId(), command.getRequestId());
+    return new ControlCommand(
+      command.getId(),
+      command.getExecutionId(),
+      command.getAction(),
+      command.getRobotId(),
+      command.getRequestId(),
+      command.getTakeoverReason()
+    );
   }
 
   @Transactional
@@ -143,8 +150,11 @@ public class TaskExecutionControlService {
 
   public boolean needsStartDelivery(String executionId) {
     TaskExecutionControlCommandEntity command = commands.findFirstByExecutionIdAndStatusInOrderByRequestedAtDesc(executionId, RETRYABLE).orElse(null);
-    return command != null && TaskExecutionControlAction.CANCEL.name().equals(command.getAction())
-      && TaskExecutionStatus.STARTING.name().equals(command.getPriorExecutionStatus());
+    if (command == null || !TaskExecutionStatus.STARTING.name().equals(command.getPriorExecutionStatus())) {
+      return false;
+    }
+    return TaskExecutionControlAction.CANCEL.name().equals(command.getAction())
+      || TaskExecutionControlAction.ESTOP.name().equals(command.getAction());
   }
 
   private void fail(String executionId, TaskExecutionControlCommandEntity command, String code, String message, Instant now, String recoveryAction) {
@@ -176,7 +186,11 @@ public class TaskExecutionControlService {
     boolean valid = switch (action) {
       case PAUSE, TAKEOVER -> TaskExecutionStatus.RUNNING.name().equals(execution.getStatus());
       case RESUME -> TaskExecutionStatus.PAUSED.name().equals(execution.getStatus());
-      case CANCEL -> List.of(TaskExecutionStatus.RUNNING.name(), TaskExecutionStatus.PAUSED.name(), TaskExecutionStatus.STARTING.name()).contains(execution.getStatus());
+      case CANCEL, ESTOP -> List.of(
+        TaskExecutionStatus.RUNNING.name(),
+        TaskExecutionStatus.PAUSED.name(),
+        TaskExecutionStatus.STARTING.name()
+      ).contains(execution.getStatus());
     };
     if (!valid) throw ApiException.conflict("当前执行状态不允许该控制操作");
   }
@@ -187,6 +201,7 @@ public class TaskExecutionControlService {
       case RESUME -> TaskExecutionStatus.RESUMING;
       case TAKEOVER -> TaskExecutionStatus.TAKEOVER_PENDING;
       case CANCEL -> TaskExecutionStatus.CANCELLING;
+      case ESTOP -> TaskExecutionStatus.ESTOPPING;
     };
   }
 
@@ -196,8 +211,17 @@ public class TaskExecutionControlService {
 
   private static String normalizedReason(TaskExecutionControlAction action, String value) {
     String result = value == null ? "" : value.replaceAll("[\\r\\n]+", " ").trim();
-    if (action == TaskExecutionControlAction.TAKEOVER && result.isBlank()) throw ApiException.badRequest("人工接管必须提供原因");
-    if (result.length() > 500) throw ApiException.badRequest("人工接管原因不能超过 500 个字符");
+    if (action == TaskExecutionControlAction.TAKEOVER && result.isBlank()) {
+      throw ApiException.badRequest("人工接管必须提供原因");
+    }
+    if (action == TaskExecutionControlAction.ESTOP && result.isBlank()) {
+      throw ApiException.badRequest("远程急停必须提供原因");
+    }
+    if (result.length() > 500) {
+      throw ApiException.badRequest(action == TaskExecutionControlAction.ESTOP
+        ? "远程急停原因不能超过 500 个字符"
+        : "人工接管原因不能超过 500 个字符");
+    }
     return result.isBlank() ? null : result;
   }
 
@@ -228,11 +252,19 @@ public class TaskExecutionControlService {
     return result.substring(0, Math.min(500, result.length()));
   }
 
-  public record ControlCommand(String id, String executionId, String action, String robotId, String requestId) {
+  public record ControlCommand(
+      String id, String executionId, String action, String robotId, String requestId, String reason) {
+    public String bridgePath() {
+      return TaskExecutionControlAction.valueOf(action).bridgePath();
+    }
+
     public Map<String, Object> bridgePayload() {
       Map<String, Object> body = new LinkedHashMap<>();
       body.put("robotId", robotId);
       body.put("requestId", requestId);
+      if (reason != null && !reason.isBlank()) {
+        body.put("reason", reason);
+      }
       return body;
     }
   }

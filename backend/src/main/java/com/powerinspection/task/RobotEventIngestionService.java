@@ -210,6 +210,7 @@ public class RobotEventIngestionService {
       case "RESUME" -> "route_resumed".equals(eventType) ? TaskExecutionStatus.RUNNING : null;
       case "TAKEOVER" -> "manual_takeover".equals(eventType) ? TaskExecutionStatus.MANUAL_TAKEOVER : null;
       case "CANCEL" -> "route_canceled".equals(eventType) ? TaskExecutionStatus.CANCELLED : null;
+      case "ESTOP" -> "emergency_stopped".equals(eventType) ? TaskExecutionStatus.ESTOPPED : null;
       default -> null;
     };
     if (confirmed == null) return false;
@@ -259,6 +260,7 @@ public class RobotEventIngestionService {
       case "RESUME" -> TaskExecutionStatus.RESUMING.name();
       case "TAKEOVER" -> TaskExecutionStatus.TAKEOVER_PENDING.name();
       case "CANCEL" -> TaskExecutionStatus.CANCELLING.name();
+      case "ESTOP" -> TaskExecutionStatus.ESTOPPING.name();
       default -> "";
     };
   }

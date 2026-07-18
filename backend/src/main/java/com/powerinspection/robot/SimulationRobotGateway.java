@@ -36,6 +36,11 @@ public class SimulationRobotGateway implements RobotGateway {
   }
 
   @Override
+  public void emergencyStopTask(Map<String, Object> robot, Map<String, Object> task) {
+    // Simulation mode accepts emergency stop immediately (status handled by TaskService).
+  }
+
+  @Override
   @SuppressWarnings("unchecked")
   public RobotProgressSnapshot advanceTask(Map<String, Object> robot, Map<String, Object> task, Map<String, Object> route) {
     List<Map<String, Object>> path = RouteExecutorSupport.compatiblePath(route);

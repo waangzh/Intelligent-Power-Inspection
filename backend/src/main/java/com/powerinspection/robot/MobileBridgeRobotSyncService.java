@@ -166,7 +166,8 @@ public class MobileBridgeRobotSyncService {
   }
 
   private void cancelTask(Map<String, Object> task, Map<String, Object> robot) {
-    if ("CANCELLED".equals(text(task.get("status")))) {
+    String status = text(task.get("status"));
+    if ("CANCELLED".equals(status) || "ESTOPPED".equals(status)) {
       return;
     }
     task.put("status", "CANCELLED");
