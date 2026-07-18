@@ -75,6 +75,8 @@ public class NotificationEntity {
   }
 
   public String getId() { return id; }
+  public String getUserId() { return userId; }
+  public boolean isReadFlag() { return readFlag; }
   public Long getVersion() { return version; }
   public void setVersion(Long version) { this.version = version; }
 
