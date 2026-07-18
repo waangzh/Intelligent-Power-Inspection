@@ -34,9 +34,25 @@
         <el-table-column label="注册时间" width="160">
           <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="说明">
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }: { row: User }">
+            <el-tag :type="row.enabled === false ? 'danger' : 'success'" size="small">
+              {{ row.enabled === false ? '已禁用' : '已启用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120">
           <template #default="{ row }">
             <el-tag v-if="row.id === authStore.user?.id" size="small" type="info">当前用户</el-tag>
+            <el-button
+              v-else
+              link
+              :type="row.enabled === false ? 'success' : 'danger'"
+              :loading="togglingId === row.id"
+              @click="toggleEnabled(row)"
+            >
+              {{ row.enabled === false ? '启用' : '禁用' }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -54,8 +70,8 @@
 </template>
 
 <script setup lang="ts">
-import { onActivated, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { onActivated, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -65,6 +81,7 @@ import type { User, UserRole } from '@/types/auth'
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
+const togglingId = ref<string | null>(null)
 
 const roleTable = [
   { role: '管理员', desc: ROLE_SUMMARIES.ADMIN.title, perms: ROLE_SUMMARIES.ADMIN.scope },
@@ -88,6 +105,32 @@ async function changeRole(userId: string, role: UserRole) {
     ElMessage.success('角色已更新')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '更新失败')
+  }
+}
+
+async function toggleEnabled(user: User) {
+  const enabled = user.enabled === false
+  const action = enabled ? '启用' : '禁用'
+  try {
+    await ElMessageBox.confirm(
+      enabled
+        ? `确定要启用用户“${user.username}”吗？`
+        : `确定要禁用用户“${user.username}”吗？该用户现有的登录会话将被撤销。`,
+      `${action}用户`,
+      { type: enabled ? 'success' : 'warning', confirmButtonText: action, cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+
+  togglingId.value = user.id
+  try {
+    await userStore.updateEnabled(user.id, enabled)
+    ElMessage.success(`用户已${action}`)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : `${action}失败`)
+  } finally {
+    togglingId.value = null
   }
 }
 </script>

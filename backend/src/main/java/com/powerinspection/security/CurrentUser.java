@@ -13,6 +13,10 @@ public class CurrentUser {
     if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
       throw ApiException.unauthorized("未登录");
     }
-    return principal.user();
+    UserEntity user = principal.user();
+    if (!Boolean.TRUE.equals(user.getEnabled())) {
+      throw ApiException.unauthorized("用户已被禁用");
+    }
+    return user;
   }
 }

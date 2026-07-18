@@ -36,6 +36,9 @@ public class UserEntity {
   @Column(nullable = false)
   private Boolean enabled = true;
 
+  @Column(name = "token_version", nullable = false)
+  private long tokenVersion = 0L;
+
   @Column(name = "created_at", nullable = false)
   private String createdAt;
 
@@ -112,6 +115,18 @@ public class UserEntity {
 
   public void setEnabled(Boolean enabled) {
     this.enabled = enabled;
+  }
+
+  public long getTokenVersion() {
+    return tokenVersion;
+  }
+
+  public void setTokenVersion(long tokenVersion) {
+    this.tokenVersion = tokenVersion;
+  }
+
+  public void incrementTokenVersion() {
+    this.tokenVersion++;
   }
 
   public String getCreatedAt() {

@@ -66,7 +66,7 @@ public class PermissionService {
       throw ApiException.unauthorized("未登录");
     }
     if (!Boolean.TRUE.equals(user.getEnabled())) {
-      throw ApiException.forbidden("用户已被禁用");
+      throw ApiException.unauthorized("用户已被禁用");
     }
     if (!has(user.getRole(), permission)) {
       throw ApiException.forbidden("无权限访问");
@@ -78,7 +78,7 @@ public class PermissionService {
       throw ApiException.unauthorized("未登录");
     }
     if (!Boolean.TRUE.equals(user.getEnabled())) {
-      throw ApiException.forbidden("用户已被禁用");
+      throw ApiException.unauthorized("用户已被禁用");
     }
     for (Permission permission : permissions) {
       if (has(user.getRole(), permission)) {

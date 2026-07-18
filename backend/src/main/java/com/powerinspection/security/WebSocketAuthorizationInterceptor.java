@@ -48,8 +48,12 @@ public class WebSocketAuthorizationInterceptor implements ChannelInterceptor {
     Map<String, Object> claims = tokenService.claims(token);
     String userId = String.valueOf(claims.get("sub"));
     var user = userRepository.findById(userId)
-      .filter(item -> Boolean.TRUE.equals(item.getEnabled()))
       .orElseThrow(() -> new AccessDeniedException("WebSocket 用户不存在或已禁用"));
+    try {
+      tokenService.validateUserToken(user, claims);
+    } catch (RuntimeException ex) {
+      throw new AccessDeniedException(ex.getMessage() == null ? "WebSocket 认证失败" : ex.getMessage());
+    }
     AuthenticatedUser principal = new AuthenticatedUser(user, tokenService.authTime(token));
     accessor.setUser(new UsernamePasswordAuthenticationToken(
       principal,

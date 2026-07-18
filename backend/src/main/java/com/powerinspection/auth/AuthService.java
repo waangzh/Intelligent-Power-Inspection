@@ -154,7 +154,13 @@ public class AuthService {
     );
   }
 
-  public void logout(HttpServletRequest request, HttpServletResponse response) {
+  @Transactional
+  public void logout(UserEntity user, HttpServletRequest request, HttpServletResponse response) {
+    if (user != null) {
+      user.incrementTokenVersion();
+      user.setUpdatedAt(Instant.now().toString());
+      userRepository.saveAndFlush(user);
+    }
     refreshTokenService.revokeRaw(refreshCookieSupport.read(request));
     refreshCookieSupport.clear(response, refreshCookieSupport.secureRequest(request));
   }
@@ -225,6 +231,7 @@ public class AuthService {
       throw ApiException.badRequest("原密码不正确");
     }
     user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+    user.incrementTokenVersion();
     user.setUpdatedAt(Instant.now().toString());
     // Flush before revoke: @Modifying clearAutomatically would otherwise drop unflushed password hash.
     userRepository.saveAndFlush(user);

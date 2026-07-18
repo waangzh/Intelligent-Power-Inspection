@@ -188,6 +188,7 @@ export const useAuthStore = defineStore('auth', () => {
     expiresAt,
     isLoggedIn,
     restoreSession,
+    clearSession,
     login,
     register,
     logout,
@@ -197,3 +198,4 @@ export const useAuthStore = defineStore('auth', () => {
     reauth,
   }
 })
+

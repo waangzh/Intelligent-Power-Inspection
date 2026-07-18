@@ -1,5 +1,6 @@
 package com.powerinspection.security;
 
+import com.powerinspection.common.ApiException;
 import com.powerinspection.user.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -32,11 +33,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       try {
         Map<String, Object> claims = tokenService.claims(token);
         String userId = String.valueOf(claims.get("sub"));
-        userRepository.findById(userId).ifPresent(user -> {
-          if (!Boolean.TRUE.equals(user.getEnabled())) {
-            SecurityContextHolder.clearContext();
-            return;
-          }
+        var user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+          SecurityContextHolder.clearContext();
+        } else {
+          tokenService.validateUserToken(user, claims);
           long authTime = 0L;
           Object authTimeClaim = claims.get("auth_time");
           if (authTimeClaim instanceof Number number) {
@@ -50,8 +51,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
           );
           authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
           SecurityContextHolder.getContext().setAuthentication(authentication);
-        });
-      } catch (Exception ignored) {
+        }
+      } catch (ApiException ex) {
+        SecurityContextHolder.clearContext();
+      } catch (Exception ex) {
         SecurityContextHolder.clearContext();
       }
     }
