@@ -16,6 +16,8 @@ from pathlib import Path
 
 from app.store import Store
 
+urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
+
 
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
@@ -29,6 +31,7 @@ class PlatformStub:
         self.map_hash = hashlib.sha256(self.pgm).hexdigest()
         self.upload_identity = ""
         self.upload_requests = 0
+        self.inspection_upload_requests = 0
         owner = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -50,6 +53,22 @@ class PlatformStub:
                 self.end_headers()
 
             def do_POST(self):
+                if self.path == "/api/v1/internal/robot-inspection-images":
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length)
+                    assert self.headers.get("Authorization") == "Bearer platform-placeholder"
+                    assert self.headers.get("X-Bridge-Robot-Id") == "robot-001"
+                    assert self.headers.get("Idempotency-Key") == "inspection-upload-smoke"
+                    assert b'name="image"' in body
+                    assert b'name="executionId"' in body and b'execution-1' in body
+                    assert b'name="taskId"' in body and b'task-1' in body
+                    assert b'name="checkpointId"' in body and b'checkpoint-1' in body
+                    owner.inspection_upload_requests += 1
+                    return self.respond_json({"data": {
+                        "id": "rimg-smoke-1", "source": "ROBOT_BRIDGE",
+                        "executionId": "execution-1", "taskId": "task-1",
+                        "checkpointId": "checkpoint-1", "status": "AVAILABLE",
+                    }}, status=201)
                 if self.path == "/api/v1/internal/robot-map-assets":
                     length = int(self.headers.get("Content-Length", "0"))
                     body = self.rfile.read(length)
@@ -137,7 +156,7 @@ def free_port():
 
 
 def wait_ready(process, base_url):
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         if process.poll() is not None:
             details = process.stderr.read().decode(errors="replace").strip() if process.stderr else ""
@@ -165,6 +184,10 @@ def main() -> None:
             "PLATFORM_BEARER_TOKEN": "platform-placeholder",
             "BRIDGE_MAP_UPLOAD_ENABLED": "true",
             "BRIDGE_MAP_UPLOAD_TEMP_DIR": str(Path(temporary) / "uploads"),
+            "BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED": "true",
+            "BRIDGE_INSPECTION_IMAGE_UPLOAD_TEMP_DIR": str(Path(temporary) / "inspection-uploads"),
+            "NO_PROXY": "127.0.0.1,localhost",
+            "no_proxy": "127.0.0.1,localhost",
         }
         store = Store(db_path)
         port = free_port()
@@ -262,6 +285,18 @@ def run_smoke(base_url, store, platform) -> None:
         token="token-placeholder", idempotency_key="map-upload-smoke")
     assert status == 201 and uploaded.get("mapAssetId") == "map-upload-1", (status, uploaded)
     assert uploaded["contentIdentitySha256"] == identity and platform.upload_requests == 1
+    inspection = b"\xff\xd8\xff\xdbsmoke-inspection-image"
+    inspection_fields = {
+        "executionId": "execution-1", "taskId": "task-1", "checkpointId": "checkpoint-1",
+        "capturedAt": "2026-07-18T00:00:00Z", "imageSha256": hashlib.sha256(inspection).hexdigest(),
+    }
+    inspection_files = {"image": ("inspection.jpg", inspection, "image/jpeg")}
+    assert multipart_request(base_url, "/robot-api/v1/inspection-images", inspection_fields, inspection_files)[0] == 401
+    status, inspection_uploaded = multipart_request(
+        base_url, "/robot-api/v1/inspection-images", inspection_fields, inspection_files,
+        token="token-placeholder", idempotency_key="inspection-upload-smoke")
+    assert status == 201 and inspection_uploaded.get("imageId") == "rimg-smoke-1", (status, inspection_uploaded)
+    assert inspection_uploaded["status"] == "AVAILABLE" and platform.inspection_upload_requests == 1
     robot = request(base_url, "GET", "/bridge/v1/robots/robot-001", token="admin-placeholder")[1]
     assert robot["configured"] is True and robot["online"] is True and robot["acceptedEventSequence"] == 4
     second = {**body, "requestId": "request-2"}

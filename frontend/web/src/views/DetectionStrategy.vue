@@ -19,15 +19,15 @@
           <template #header>
             <div class="card-header">
               <div>
-                <span class="card-title">手动上传检测</span>
-                <p>上传巡检图片，选择检测项后调用后端 HTTP 网关转发至 Python 模型服务。</p>
+                <span class="card-title">图片检测</span>
+                <p>选择本地图片或机器人已返回图片，使用同一组检测项调用 LocateAnything。</p>
               </div>
-              <el-tag type="success" effect="plain">HTTP 模型网关</el-tag>
+              <el-segmented v-model="sourceMode" :options="sourceOptions" />
             </div>
           </template>
 
           <div class="manual-grid">
-            <div class="upload-panel" @click="triggerFileInput">
+            <div v-if="sourceMode === 'LOCAL'" class="upload-panel" @click="triggerFileInput">
               <input ref="fileInputRef" class="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" @change="onFileChange" />
               <img v-if="previewUrl" :src="previewUrl" class="preview-img" alt="待检测图片" />
               <div v-else class="upload-empty">
@@ -37,7 +37,44 @@
               </div>
             </div>
 
+            <div v-else class="robot-source-panel">
+              <div class="robot-filters">
+                <el-select v-model="robotFilter.taskId" clearable placeholder="最近任务" @change="onRobotTaskChange">
+                  <el-option v-for="item in taskStore.tasks" :key="item.id" :label="item.name" :value="item.id" />
+                </el-select>
+                <el-select v-model="robotFilter.checkpointId" clearable placeholder="检查点" @change="() => loadRobotImages()">
+                  <el-option v-for="item in robotFilterCheckpoints" :key="item.id" :label="item.name" :value="item.id" />
+                </el-select>
+                <el-select v-model="robotFilter.robotId" clearable placeholder="机器人" @change="() => loadRobotImages()">
+                  <el-option v-for="item in robotStore.robots" :key="item.id" :label="item.name" :value="item.id" />
+                </el-select>
+                <el-button type="primary" plain @click="openImportDialog">导入测试图片</el-button>
+              </div>
+              <div v-if="selectedRobotImage" class="robot-preview">
+                <img v-if="selectedRobotImage.originalAvailable" :src="selectedRobotImage.imageUrl" alt="选中的机器人巡检图片" />
+                <el-empty v-else description="原始图片已按保留策略清理" :image-size="48" />
+                <div>{{ selectedRobotImage.checkpointName }} · {{ fmt(selectedRobotImage.capturedAt) }}</div>
+              </div>
+              <div class="robot-image-list">
+                <button
+                  v-for="item in detectionStore.images"
+                  :key="item.id"
+                  type="button"
+                  :class="['robot-image-item', { selected: item.id === selectedRobotImageId }]"
+                  @click="selectRobotImage(item)"
+                >
+                  <img v-if="item.originalAvailable" :src="item.imageUrl" alt="机器人巡检图片缩略图" />
+                  <span v-else>原图已清理</span>
+                  <small>{{ item.checkpointName }}</small>
+                </button>
+              </div>
+              <ListPagination :total="detectionStore.imageTotal" :page="imagePage" @change="loadImagePage" />
+            </div>
+
             <div class="manual-controls">
+              <div v-if="sourceMode === 'ROBOT' && selectedRobotImage" class="config-source">
+                {{ manualConfigSource }}
+              </div>
               <DetectionConfig :items="manualItems" @change="updateManualItems" />
               <div class="action-bar">
                 <el-button @click="resetManualDetection">清空</el-button>
@@ -98,7 +135,7 @@
             <div v-else-if="manualResult.status === 'RUNNING'" class="result-image">
               <figure>
                 <figcaption>待检测原图</figcaption>
-                <img :src="previewUrl || manualResult.inputImageUrl" alt="待检测原图" />
+                <img :src="activePreviewUrl || manualResult.inputImageUrl" alt="待检测原图" />
               </figure>
             </div>
             <el-empty v-else-if="manualResult.status === 'SUCCEEDED'" description="模型未定位到目标" :image-size="56" />
@@ -121,6 +158,35 @@
       </el-col>
     </el-row>
 
+    <el-card shadow="never" class="top-row">
+      <template #header>
+        <div class="card-header compact">
+          <span class="card-title">最近检测</span>
+          <el-button text type="primary" @click="detectionStore.loadRuns({ size: 20 })">刷新</el-button>
+        </div>
+      </template>
+      <el-table :data="detectionStore.runs" size="small">
+        <el-table-column label="来源" width="110">
+          <template #default="{ row }: { row: DetectionRun }">{{ row.sourceType === 'ROBOT_IMAGE' ? '机器人图片' : '本地上传' }}</template>
+        </el-table-column>
+        <el-table-column label="任务 / 检查点" min-width="180">
+          <template #default="{ row }: { row: DetectionRun }">{{ runAssociation(row) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }: { row: DetectionRun }"><el-tag :type="statusTagType(row.status)" effect="plain">{{ statusLabel(row.status) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="结果" width="90">
+          <template #default="{ row }: { row: DetectionRun }">{{ row.findings.length }}</template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="180">
+          <template #default="{ row }: { row: DetectionRun }">{{ row.createdAt ? fmt(row.createdAt) : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }: { row: DetectionRun }"><el-button text type="primary" @click="openRun(row)">查看</el-button></template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <el-row :gutter="16" class="top-row">
       <el-col :span="12">
         <el-card shadow="never">
@@ -142,10 +208,20 @@
 
     <el-card shadow="never">
       <template #header>检测模板</template>
+      <el-alert
+        title="第一期机器人图片检测仅使用检查点级模板；路线级模板保留展示，但暂未接入该流程。"
+        type="info"
+        :closable="false"
+        show-icon
+        class="template-scope-notice"
+      />
       <el-table :data="detectionStore.templates" size="small">
         <el-table-column prop="name" label="模板名称" min-width="140" />
-        <el-table-column label="适用范围" width="110">
-          <template #default="{ row }"><el-tag size="small">{{ row.scope === 'ROUTE' ? '路线级' : '检查点级' }}</el-tag></template>
+        <el-table-column label="适用范围" width="190">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.scope === 'ROUTE' ? 'info' : 'primary'">{{ row.scope === 'ROUTE' ? '路线级' : '检查点级' }}</el-tag>
+            <span v-if="row.scope === 'ROUTE'" class="scope-unused">暂未用于机器人图片检测</span>
+          </template>
         </el-table-column>
         <el-table-column label="检测项" min-width="200">
           <template #default="{ row }: { row: import('@/types').DetectionTemplate }">
@@ -181,7 +257,8 @@
       <el-form :model="form" label-width="90px">
         <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="范围">
-          <el-radio-group v-model="form.scope" @change="resetTemplateItems"><el-radio value="ROUTE">路线级</el-radio><el-radio value="CHECKPOINT">检查点级</el-radio></el-radio-group>
+          <el-tag :type="form.scope === 'ROUTE' ? 'info' : 'primary'">{{ form.scope === 'ROUTE' ? '路线级' : '检查点级' }}</el-tag>
+          <span v-if="form.scope === 'ROUTE'" class="scope-unused">历史模板，暂未用于机器人图片检测</span>
         </el-form-item>
         <el-form-item label="描述"><el-input v-model="form.description" type="textarea" /></el-form-item>
         <el-form-item label="检测项"><DetectionConfig :items="form.items" @change="updateTemplateItems" /></el-form-item>
@@ -205,10 +282,31 @@
       </el-form>
       <template #footer><el-button @click="applyDialogVisible = false">取消</el-button><el-button type="primary" :loading="applyingTemplate" @click="applyTemplateToCheckpoint">应用</el-button></template>
     </el-dialog>
+
+    <el-dialog v-model="importDialogVisible" title="导入机器人测试图片" width="560px">
+      <el-form label-width="90px">
+        <el-form-item label="任务">
+          <el-select v-model="importForm.taskId" style="width: 100%" @change="onImportTaskChange">
+            <el-option v-for="item in taskStore.tasks" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="机器人"><el-input :model-value="importRobotName" disabled /></el-form-item>
+        <el-form-item label="检查点">
+          <el-select v-model="importForm.checkpointId" style="width: 100%">
+            <el-option v-for="item in importCheckpoints" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="图片"><input type="file" accept="image/jpeg,image/png,image/webp,image/bmp" @change="onImportFileChange" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importingImage" @click="importRobotImage">导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import ListPagination from '@/components/ListPagination.vue'
@@ -217,21 +315,37 @@ import { resourcesApi } from '@/api/resources'
 import { usePermission } from '@/composables/usePermission'
 import { useDetectionStore } from '@/stores/detection'
 import { useRouteStore } from '@/stores/route'
+import { useRobotStore } from '@/stores/robot'
+import { useTaskStore } from '@/stores/task'
+import {
+  cloneDetectionItems,
+  defaultCheckpointDetectionItems,
+  defaultDetectionItem,
+  resolveRobotImageDetectionItems,
+} from '@/utils/detectionStrategy'
 import {
   CHECKPOINT_DETECTIONS,
   DETECTION_LABELS,
-  DETECTION_TARGET_LABELS,
   ROUTE_DETECTIONS,
   type DetectionItem,
+  type DetectionRun,
   type DetectionTemplate,
-  type DetectionType,
   type LocateAnythingFinding,
   type ManualDetectionResponse,
+  type RobotInspectionImage,
 } from '@/types'
 
 const detectionStore = useDetectionStore()
 const routeStore = useRouteStore()
+const robotStore = useRobotStore()
+const taskStore = useTaskStore()
 const templatePage = ref(0)
+const imagePage = ref(0)
+const sourceMode = ref<'LOCAL' | 'ROBOT'>('LOCAL')
+const sourceOptions = [
+  { label: '本地上传', value: 'LOCAL' },
+  { label: '机器人图片', value: 'ROBOT' },
+]
 
 function loadTemplatePage(page: number) {
   templatePage.value = page
@@ -254,13 +368,28 @@ const fileInputRef = ref<HTMLInputElement>()
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
 const detecting = ref(false)
-const manualResult = ref<ManualDetectionResponse | null>(null)
-const manualItems = ref<DetectionItem[]>(CHECKPOINT_DETECTIONS.map((type) => defaultDetectionItem(type)))
+const manualResult = ref<(ManualDetectionResponse | DetectionRun) | null>(null)
+const selectedRobotImageId = ref('')
+const robotFilter = reactive({ taskId: '', checkpointId: '', robotId: '' })
+const importDialogVisible = ref(false)
+const importingImage = ref(false)
+const importForm = reactive({ taskId: '', robotId: '', checkpointId: '', file: null as File | null })
+const manualItems = ref<DetectionItem[]>(defaultCheckpointDetectionItems())
+const manualConfigSource = ref('使用默认检查点检测配置')
 let manualPollingTimer: ReturnType<typeof setInterval> | null = null
 
 const checkpointRoutes = computed(() => routeStore.routes.filter((route) => route.checkpoints.length > 0))
 const applyCheckpoints = computed(() => routeStore.getRouteById(applyForm.routeId)?.checkpoints ?? [])
 const applyTemplateName = computed(() => detectionStore.templates.find((template) => template.id === applyForm.templateId)?.name ?? '')
+const selectedRobotImage = computed(() => detectionStore.images.find((item) => item.id === selectedRobotImageId.value))
+const activePreviewUrl = computed(() => sourceMode.value === 'LOCAL' ? previewUrl.value : selectedRobotImage.value?.imageUrl ?? '')
+const robotFilterTask = computed(() => taskStore.getTaskById(robotFilter.taskId))
+const robotFilterRoute = computed(() => robotFilterTask.value ? routeStore.getRouteById(robotFilterTask.value.routeId) : undefined)
+const robotFilterCheckpoints = computed(() => robotFilterRoute.value?.checkpoints ?? [])
+const importTask = computed(() => taskStore.getTaskById(importForm.taskId))
+const importRoute = computed(() => importTask.value ? routeStore.getRouteById(importTask.value.routeId) : undefined)
+const importCheckpoints = computed(() => importRoute.value?.checkpoints ?? [])
+const importRobotName = computed(() => robotStore.getRobotById(importForm.robotId)?.name ?? importForm.robotId)
 
 const manualStatusLabel = computed(() => {
   if (!manualResult.value) return ''
@@ -276,33 +405,9 @@ const manualStatusTagType = computed(() => {
   return 'warning'
 })
 
-function defaultDetectionItem(type: DetectionType): DetectionItem {
-  const promptMap: Record<DetectionType, string> = {
-    PERSON: '巡检区域内的人员',
-    HELMET: '人员头部佩戴的安全帽',
-    OBSTACLE: '机器人行进路线上的障碍物',
-    FIRE: '图像中清晰可见的火焰、火光或明显烟雾区域',
-    SWITCH: '变电设备上的刀闸开关操作手柄、连杆及触头区域',
-    METER: '圆形机械压力表的完整表盘和指针区域',
-    OIL_LEAK: '变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域',
-    FOREIGN_OBJECT: '设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物',
-  }
-  return {
-    type,
-    enabled: true,
-    displayLabel: DETECTION_TARGET_LABELS[type],
-    prompt: promptMap[type],
-    threshold: 0.75,
-  }
-}
-
 function defaultDetectionItems(scope: 'ROUTE' | 'CHECKPOINT') {
   const types = scope === 'ROUTE' ? ROUTE_DETECTIONS : CHECKPOINT_DETECTIONS
   return types.map((type) => defaultDetectionItem(type))
-}
-
-function cloneDetectionItems(items: DetectionItem[]) {
-  return items.map((item) => ({ ...item, threshold: 0.75 }))
 }
 
 function updateManualItems(items: DetectionItem[]) {
@@ -329,8 +434,16 @@ function onFileChange(event: Event) {
 }
 
 async function submitManualDetection() {
-  if (!selectedFile.value) {
+  if (sourceMode.value === 'LOCAL' && !selectedFile.value) {
     ElMessage.warning('请先上传检测图片')
+    return
+  }
+  if (sourceMode.value === 'ROBOT' && !selectedRobotImage.value) {
+    ElMessage.warning('请先选择机器人图片')
+    return
+  }
+  if (sourceMode.value === 'ROBOT' && !selectedRobotImage.value?.originalAvailable) {
+    ElMessage.warning('该原始图片已按保留策略清理，不能再次检测')
     return
   }
   const enabled = manualItems.value.filter((item) => item.enabled)
@@ -343,14 +456,19 @@ async function submitManualDetection() {
     return
   }
 
-  const payload = new FormData()
-  payload.append('image', selectedFile.value)
-  payload.append('detections', JSON.stringify(manualItems.value))
   detecting.value = true
   try {
-    manualResult.value = await resourcesApi.manualLocateDetection(payload)
+    if (sourceMode.value === 'ROBOT') {
+      manualResult.value = await detectionStore.detectImage(selectedRobotImage.value!.id, manualItems.value)
+    } else {
+      const payload = new FormData()
+      payload.append('image', selectedFile.value!)
+      payload.append('detections', JSON.stringify(manualItems.value))
+      manualResult.value = await resourcesApi.manualLocateDetection(payload)
+    }
     ElMessage.success('检测任务已提交')
-    startManualDetectionPolling(manualResult.value.requestId)
+    const submitted = manualResult.value
+    if (submitted) startManualDetectionPolling(submitted.requestId)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '模型检测失败')
     detecting.value = false
@@ -367,7 +485,7 @@ function startManualDetectionPolling(requestId: string) {
 
 async function refreshManualDetection(requestId: string) {
   try {
-    const result = await resourcesApi.getManualLocateDetection(requestId)
+    const result = await detectionStore.getRun(requestId)
     manualResult.value = result
     if (result.status === 'RUNNING') return
     stopManualDetectionPolling()
@@ -394,11 +512,130 @@ function stopManualDetectionPolling() {
 function resetManualDetection() {
   stopManualDetectionPolling()
   selectedFile.value = null
+  selectedRobotImageId.value = ''
   manualResult.value = null
   detecting.value = false
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
   if (fileInputRef.value) fileInputRef.value.value = ''
+}
+
+function loadImagePage(page: number) {
+  imagePage.value = page
+  void loadRobotImages()
+}
+
+async function loadRobotImages() {
+  await detectionStore.loadImages({
+    page: imagePage.value,
+    size: 12,
+    taskId: robotFilter.taskId,
+    checkpointId: robotFilter.checkpointId,
+    robotId: robotFilter.robotId,
+  })
+}
+
+function onRobotTaskChange() {
+  const task = taskStore.getTaskById(robotFilter.taskId)
+  robotFilter.robotId = task?.robotId ?? ''
+  robotFilter.checkpointId = ''
+  imagePage.value = 0
+  void loadRobotImages()
+}
+
+async function selectRobotImage(image: RobotInspectionImage) {
+  stopManualDetectionPolling()
+  selectedRobotImageId.value = image.id
+  manualResult.value = null
+  detecting.value = false
+  let route = routeStore.getRouteById(image.routeId)
+  if (!route) {
+    try {
+      route = await routeStore.loadOne(image.routeId)
+    } catch {
+      route = undefined
+    }
+  }
+  if (selectedRobotImageId.value !== image.id) return
+  const checkpoint = route?.checkpoints.find((item) => item.id === image.checkpointId)
+  manualItems.value = resolveRobotImageDetectionItems(image, route)
+  manualConfigSource.value = checkpoint?.detections?.length
+    ? `已加载检查点“${checkpoint.name}”的默认检测配置，可在本次检测前临时修改`
+    : '该检查点尚未配置检测项，已使用默认 5 项检测配置'
+}
+
+function openImportDialog() {
+  const task = taskStore.getTaskById(robotFilter.taskId) ?? taskStore.tasks[0]
+  importForm.taskId = task?.id ?? ''
+  importForm.robotId = task?.robotId ?? ''
+  importForm.checkpointId = importCheckpoints.value[0]?.id ?? ''
+  importForm.file = null
+  importDialogVisible.value = true
+}
+
+function onImportTaskChange() {
+  importForm.robotId = importTask.value?.robotId ?? ''
+  importForm.checkpointId = importCheckpoints.value[0]?.id ?? ''
+}
+
+function onImportFileChange(event: Event) {
+  importForm.file = (event.target as HTMLInputElement).files?.[0] ?? null
+}
+
+async function importRobotImage() {
+  if (!importForm.taskId || !importForm.robotId || !importForm.checkpointId || !importForm.file) {
+    ElMessage.warning('请选择任务、检查点和图片')
+    return
+  }
+  const payload = new FormData()
+  payload.append('image', importForm.file)
+  payload.append('taskId', importForm.taskId)
+  payload.append('robotId', importForm.robotId)
+  payload.append('checkpointId', importForm.checkpointId)
+  payload.append('capturedAt', new Date().toISOString())
+  importingImage.value = true
+  try {
+    const saved = await detectionStore.importImage(payload)
+    robotFilter.taskId = saved.taskId
+    robotFilter.robotId = saved.robotId
+    robotFilter.checkpointId = saved.checkpointId
+    selectedRobotImageId.value = saved.id
+    importDialogVisible.value = false
+    await loadRobotImages()
+    await selectRobotImage(saved)
+    ElMessage.success('测试图片已导入')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '测试图片导入失败')
+  } finally {
+    importingImage.value = false
+  }
+}
+
+function fmt(value: string) {
+  return new Date(value).toLocaleString('zh-CN')
+}
+
+function statusLabel(status: DetectionRun['status']) {
+  return status === 'RUNNING' ? '检测中' : status === 'SUCCEEDED' ? '成功' : '失败'
+}
+
+function statusTagType(status: DetectionRun['status']) {
+  return status === 'SUCCEEDED' ? 'success' : status === 'FAILED' ? 'danger' : 'warning'
+}
+
+function runAssociation(run: DetectionRun) {
+  if (!run.taskId) return '-'
+  const taskName = taskStore.getTaskById(run.taskId)?.name ?? run.taskId
+  const checkpointName = routeStore.routes.flatMap((route) => route.checkpoints)
+    .find((item) => item.id === run.checkpointId)?.name ?? run.checkpointId ?? '-'
+  return `${taskName} / ${checkpointName}`
+}
+
+function openRun(run: DetectionRun) {
+  stopManualDetectionPolling()
+  manualResult.value = run
+  detecting.value = run.status === 'RUNNING'
+  if (run.status === 'RUNNING') startManualDetectionPolling(run.runId)
 }
 
 function bboxText(bbox: number[]) {
@@ -426,10 +663,6 @@ function openEditTemplate(template: DetectionTemplate) {
   form.description = template.description
   form.items = cloneDetectionItems(template.items)
   dialogVisible.value = true
-}
-
-function resetTemplateItems() {
-  form.items = defaultDetectionItems(form.scope)
 }
 
 function updateTemplateItems(items: DetectionItem[]) {
@@ -515,6 +748,13 @@ onBeforeUnmount(() => {
   stopManualDetectionPolling()
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
 })
+
+watch(sourceMode, (mode) => {
+  resetManualDetection()
+  manualItems.value = defaultCheckpointDetectionItems()
+  manualConfigSource.value = '使用默认检查点检测配置'
+  if (mode === 'ROBOT') void loadRobotImages()
+})
 </script>
 <style scoped>
 .detection-page {
@@ -565,6 +805,74 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.robot-source-panel {
+  min-height: 322px;
+  min-width: 0;
+}
+
+.robot-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.robot-preview {
+  border: 1px solid var(--panel-border);
+  background: var(--panel-soft);
+  margin-bottom: 10px;
+}
+
+.robot-preview img {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: contain;
+  background: #0f172a;
+}
+
+.robot-preview > div {
+  padding: 7px 9px;
+  font-size: 12px;
+  color: #667085;
+}
+
+.robot-image-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.robot-image-item {
+  min-width: 0;
+  height: 92px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  background: #f8fafc;
+  cursor: pointer;
+  color: #667085;
+}
+
+.robot-image-item.selected {
+  border: 2px solid #2f6fed;
+}
+
+.robot-image-item img {
+  display: block;
+  width: 100%;
+  height: 64px;
+  object-fit: cover;
+}
+
+.robot-image-item small {
+  display: block;
+  padding: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .file-input {
   display: none;
 }
@@ -596,6 +904,23 @@ onBeforeUnmount(() => {
 
 .manual-controls {
   min-width: 0;
+}
+
+.config-source {
+  margin-bottom: 10px;
+  color: #606266;
+  font-size: 13px;
+}
+
+.template-scope-notice {
+  margin-bottom: 12px;
+}
+
+.scope-unused {
+  display: block;
+  margin-top: 4px;
+  color: #909399;
+  font-size: 12px;
 }
 
 .action-bar {
