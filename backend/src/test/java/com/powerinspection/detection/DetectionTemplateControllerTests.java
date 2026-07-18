@@ -33,10 +33,10 @@ class DetectionTemplateControllerTests {
 
     mockMvc.perform(get("/api/v1/detection-templates").header("Authorization", bearer(token)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].items").isArray())
-      .andExpect(jsonPath("$.data[0].items[0].enabled").isBoolean())
-      .andExpect(jsonPath("$.data[0].items[0].displayLabel").isString())
-      .andExpect(jsonPath("$.data[0].items[0].prompt").isString());
+      .andExpect(jsonPath("$.data.items[0].items").isArray())
+      .andExpect(jsonPath("$.data.items[0].items[0].enabled").isBoolean())
+      .andExpect(jsonPath("$.data.items[0].items[0].displayLabel").isString())
+      .andExpect(jsonPath("$.data.items[0].items[0].prompt").isString());
   }
 
   @Test
