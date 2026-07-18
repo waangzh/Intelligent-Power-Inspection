@@ -49,10 +49,15 @@ public class HttpRobotGateway implements RobotGateway {
 
   @Override
   public void cancelTask(Map<String, Object> robot, Map<String, Object> task) {
-    boolean canceled = bridgeClient.sendPatrolCommand("cancel");
-    bridgeClient.emergencyStop();
-    if (!canceled) {
+    if (!bridgeClient.sendPatrolCommand("cancel")) {
       throw ApiException.badRequest("巡逻取消失败");
+    }
+  }
+
+  @Override
+  public void emergencyStopTask(Map<String, Object> robot, Map<String, Object> task) {
+    if (!bridgeClient.emergencyStop()) {
+      throw ApiException.badRequest("远程急停下发失败");
     }
   }
 

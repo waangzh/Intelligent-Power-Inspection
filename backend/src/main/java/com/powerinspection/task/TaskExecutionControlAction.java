@@ -4,9 +4,10 @@ public enum TaskExecutionControlAction {
   PAUSE,
   RESUME,
   TAKEOVER,
-  CANCEL;
+  CANCEL,
+  ESTOP;
 
   public String bridgePath() {
-    return name().toLowerCase();
+    return this == ESTOP ? "emergency-stop" : name().toLowerCase();
   }
 }

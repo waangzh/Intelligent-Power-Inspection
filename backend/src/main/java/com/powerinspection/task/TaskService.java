@@ -21,6 +21,7 @@ import com.powerinspection.robot.RobotProperties;
 import com.powerinspection.route.RouteExecutorSupport;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionService;
+import com.powerinspection.user.UserEntity;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -242,7 +243,7 @@ public class TaskService {
   public Map<String, Object> cancel(String id) {
     Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
     requireSimulationTask(task);
-    if ("COMPLETED".equals(task.get("status")) || "CANCELLED".equals(task.get("status"))) {
+    if ("COMPLETED".equals(task.get("status")) || "CANCELLED".equals(task.get("status")) || "ESTOPPED".equals(task.get("status"))) {
       throw ApiException.badRequest("已结束任务不能重复取消");
     }
     Map<String, Object> robot = requireRobot(task);
@@ -251,7 +252,38 @@ public class TaskService {
     task.put("completedAt", Instant.now().toString());
     saveTask(task);
     updateRobot(text(task.get("robotId")), map("status", "ONLINE", "currentTaskId", null));
+    addEvent(id, "PAUSE", "任务已取消", null, null);
     return task;
+  }
+
+  @Transactional
+  public Map<String, Object> emergencyStop(String id, String reason, UserEntity operator) {
+    Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
+    requireSimulationTask(task);
+    String status = text(task.get("status"));
+    if ("COMPLETED".equals(status) || "CANCELLED".equals(status) || "ESTOPPED".equals(status)) {
+      throw ApiException.badRequest("已结束任务不能远程急停");
+    }
+    if (!List.of("DISPATCHED", "RUNNING", "PAUSED", "MANUAL_TAKEOVER", "STARTING").contains(status)
+        && !"CREATED".equals(status)) {
+      throw ApiException.badRequest("当前状态不允许远程急停");
+    }
+    Map<String, Object> robot = requireRobot(task);
+    robotGateway.emergencyStopTask(robot, task);
+    String operatorName = operator == null ? "系统"
+      : (operator.getDisplayName() == null || operator.getDisplayName().isBlank() ? operator.getUsername() : operator.getDisplayName());
+    task.put("status", "ESTOPPED");
+    task.put("completedAt", Instant.now().toString());
+    task.put("emergencyStopReason", reason);
+    task.put("emergencyStoppedBy", operatorName);
+    saveTask(task);
+    updateRobot(text(task.get("robotId")), map("status", "ONLINE", "currentTaskId", null));
+    addEvent(id, "ESTOP", "远程急停已执行。原因：" + reason + "（操作人：" + operatorName + "）", null, null);
+    return task;
+  }
+
+  public void recordAuditEvent(String taskId, String type, String message) {
+    addEvent(taskId, type, message, null, null);
   }
 
   @Scheduled(fixedRate = 1500)

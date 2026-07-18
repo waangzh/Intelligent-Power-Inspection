@@ -63,10 +63,12 @@ export type TaskStatus =
   | 'PAUSED'
   | 'RESUMING'
   | 'CANCELLING'
+  | 'ESTOPPING'
   | 'TAKEOVER_PENDING'
   | 'MANUAL_TAKEOVER'
   | 'COMPLETED'
   | 'CANCELLED'
+  | 'ESTOPPED'
   | 'START_FAILED'
   | 'FAILED'
   | 'DISCONNECTED'
@@ -81,10 +83,12 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   PAUSED: '已暂停',
   RESUMING: '恢复请求中',
   CANCELLING: '取消请求中',
+  ESTOPPING: '急停请求中',
   TAKEOVER_PENDING: '人工接管请求中',
   MANUAL_TAKEOVER: '人工接管',
   COMPLETED: '已完成',
   CANCELLED: '已取消',
+  ESTOPPED: '已急停',
   START_FAILED: '启动失败',
   FAILED: '执行失败',
   DISCONNECTED: '机器人断联',

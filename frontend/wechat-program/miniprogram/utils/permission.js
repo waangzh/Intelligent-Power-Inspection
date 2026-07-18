@@ -24,15 +24,19 @@ function canTakeoverTask(permissions) {
 }
 
 function canCancelTask(permissions) {
-  return hasPermission(permissions, 'task:control') || hasPermission(permissions, 'task:estop')
+  return hasPermission(permissions, 'task:control')
+}
+
+function canEstopTask(permissions) {
+  return hasPermission(permissions, 'task:estop')
 }
 
 function isEmergencyCancel(permissions) {
-  return hasPermission(permissions, 'task:estop') && !hasPermission(permissions, 'task:control')
+  return canEstopTask(permissions) && !canControlTask(permissions)
 }
 
 function cancelTaskLabel(permissions) {
-  return isEmergencyCancel(permissions) ? '急停' : '取消'
+  return canEstopTask(permissions) && !canControlTask(permissions) ? '急停' : '取消'
 }
 
 module.exports = {
@@ -42,6 +46,7 @@ module.exports = {
   canControlTask,
   canTakeoverTask,
   canCancelTask,
+  canEstopTask,
   isEmergencyCancel,
   cancelTaskLabel,
 }

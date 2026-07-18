@@ -337,13 +337,15 @@ function setTaskStatus(id, status) {
     tasks[idx] = { ...task, status }
     stopSimulation()
     addEvent(id, 'PAUSE', '调度员已人工接管机器人')
-  } else if (status === 'CANCELLED' || status === 'COMPLETED') {
+  } else if (status === 'CANCELLED' || status === 'COMPLETED' || status === 'ESTOPPED') {
     stopSimulation()
     tasks[idx] = { ...task, status, completedAt: now, progress: status === 'COMPLETED' ? 100 : task.progress }
     updateRobot(task.robotId, { status: 'ONLINE', currentTaskId: undefined })
     if (status === 'COMPLETED') {
       addEvent(id, 'COMPLETE', '巡检任务已全部完成')
       finishRecord(id)
+    } else if (status === 'ESTOPPED') {
+      addEvent(id, 'ESTOP', '远程急停已执行')
     }
   } else {
     tasks[idx] = { ...task, status }

@@ -20,6 +20,25 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const SESSION_KEY = 'pi_session'
 
 let refreshPromise: Promise<boolean> | null = null
+let sessionExpiredHandler: (() => void) | null = null
+let sessionExpiryNotified = false
+
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  sessionExpiredHandler = handler
+}
+
+function notifySessionExpired() {
+  writeSession(null)
+  if (sessionExpiryNotified) return
+  sessionExpiryNotified = true
+  try {
+    sessionExpiredHandler?.()
+  } finally {
+    queueMicrotask(() => {
+      sessionExpiryNotified = false
+    })
+  }
+}
 
 function readSession(): AuthSession | null {
   try {
@@ -53,12 +72,10 @@ async function tryRefreshSession(): Promise<boolean> {
           headers: { 'Content-Type': 'application/json' },
         })
         if (!response.ok) {
-          writeSession(null)
           return false
         }
         const payload = (await response.json()) as ApiResponse<AuthSession>
         if (payload.code !== 0 || !payload.data?.token) {
-          writeSession(null)
           return false
         }
         const previous = readSession()
@@ -68,7 +85,6 @@ async function tryRefreshSession(): Promise<boolean> {
         })
         return true
       } catch {
-        writeSession(null)
         return false
       } finally {
         refreshPromise = null
@@ -104,7 +120,7 @@ async function request<T>(path: string, init: RequestInit = {}, retried = false)
     if (refreshed) {
       return request<T>(path, init, true)
     }
-    writeSession(null)
+    notifySessionExpired()
   }
 
   const contentType = response.headers.get('content-type') || ''

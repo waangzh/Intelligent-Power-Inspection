@@ -7,6 +7,7 @@ import 'element-plus/dist/index.css'
 import 'leaflet/dist/leaflet.css'
 
 import App from './App.vue'
+import { setSessionExpiredHandler } from './api/http'
 import router from './router'
 import { setupRouterGuards } from './router/guards'
 import { useAuthStore } from './stores/auth'
@@ -25,6 +26,12 @@ app.use(pinia)
 app.use(router)
 
 const authStore = useAuthStore()
+setSessionExpiredHandler(() => {
+  authStore.clearSession()
+  const current = router.currentRoute.value
+  if (current.path === '/login' || current.meta.public === true) return
+  void router.replace({ path: '/login', query: { redirect: current.fullPath } })
+})
 authStore.restoreSession()
 if (authStore.isLoggedIn) {
   void loadAppData()

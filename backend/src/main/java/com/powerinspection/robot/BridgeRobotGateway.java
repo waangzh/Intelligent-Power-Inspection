@@ -14,6 +14,7 @@ public class BridgeRobotGateway implements RobotGateway {
   @Override public void resumeTask(Map<String, Object> robot, Map<String, Object> task) { throw unavailable(); }
   @Override public void takeoverTask(Map<String, Object> robot, Map<String, Object> task) { throw unavailable(); }
   @Override public void cancelTask(Map<String, Object> robot, Map<String, Object> task) { throw unavailable(); }
+  @Override public void emergencyStopTask(Map<String, Object> robot, Map<String, Object> task) { throw unavailable(); }
   @Override public RobotProgressSnapshot advanceTask(Map<String, Object> robot, Map<String, Object> task, Map<String, Object> route) { throw unavailable(); }
   private ApiException unavailable() { return ApiException.badRequest("当前 bridge 模式仅启用机器人心跳，尚未开放路线下发或导航控制"); }
 }

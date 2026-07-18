@@ -186,7 +186,8 @@ public class TaskExecutionLifecycleService {
     String previous = execution.getRecoveryStatus();
     if (!List.of(TaskExecutionStatus.STARTING.name(), TaskExecutionStatus.RUNNING.name(), TaskExecutionStatus.PAUSING.name(),
         TaskExecutionStatus.PAUSED.name(), TaskExecutionStatus.RESUMING.name(), TaskExecutionStatus.CANCELLING.name(),
-        TaskExecutionStatus.TAKEOVER_PENDING.name(), TaskExecutionStatus.MANUAL_TAKEOVER.name()).contains(previous)) {
+        TaskExecutionStatus.ESTOPPING.name(), TaskExecutionStatus.TAKEOVER_PENDING.name(),
+        TaskExecutionStatus.MANUAL_TAKEOVER.name()).contains(previous)) {
       previous = TaskExecutionStatus.STARTING.name();
     }
     execution.setStatus(previous);
@@ -310,11 +311,15 @@ public class TaskExecutionLifecycleService {
 
   private boolean startDeliveryRequired(TaskExecutionEntity execution) {
     if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus())) return true;
-    if (!TaskExecutionStatus.CANCELLING.name().equals(execution.getStatus())) return false;
+    if (!TaskExecutionStatus.CANCELLING.name().equals(execution.getStatus())
+        && !TaskExecutionStatus.ESTOPPING.name().equals(execution.getStatus())) {
+      return false;
+    }
     return controlCommands.findFirstByExecutionIdAndStatusInOrderByRequestedAtDesc(execution.getExecutionId(), List.of(
       TaskExecutionControlCommandStatus.PENDING_SEND.name(), TaskExecutionControlCommandStatus.SENDING.name(),
       TaskExecutionControlCommandStatus.RECONCILING.name())).map(command ->
-        TaskExecutionControlAction.CANCEL.name().equals(command.getAction())
+        (TaskExecutionControlAction.CANCEL.name().equals(command.getAction())
+          || TaskExecutionControlAction.ESTOP.name().equals(command.getAction()))
           && TaskExecutionStatus.STARTING.name().equals(command.getPriorExecutionStatus())).orElse(false);
   }
 

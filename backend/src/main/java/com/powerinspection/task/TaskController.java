@@ -26,14 +26,21 @@ public class TaskController {
   private final TaskService taskService;
   private final TaskExecutionLifecycleService executionLifecycleService;
   private final TaskExecutionControlService executionControlService;
+  private final TaskEmergencyStopService emergencyStopService;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public TaskController(TaskService taskService, TaskExecutionLifecycleService executionLifecycleService, TaskExecutionControlService executionControlService,
-      PermissionService permissionService, CurrentUser currentUser) {
+  public TaskController(
+      TaskService taskService,
+      TaskExecutionLifecycleService executionLifecycleService,
+      TaskExecutionControlService executionControlService,
+      TaskEmergencyStopService emergencyStopService,
+      PermissionService permissionService,
+      CurrentUser currentUser) {
     this.taskService = taskService;
     this.executionLifecycleService = executionLifecycleService;
     this.executionControlService = executionControlService;
+    this.emergencyStopService = emergencyStopService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
   }
@@ -131,6 +138,20 @@ public class TaskController {
     permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
     if (!executionLifecycleService.hasExecution(id)) return ResponseEntity.ok(ApiResponse.ok(taskService.cancel(id)));
     return accepted(executionControlService.request(id, TaskExecutionControlAction.CANCEL, idempotencyKey, null, currentUser.get()));
+  }
+
+  @PostMapping("/{id}/emergency-stop")
+  public ResponseEntity<ApiResponse<Map<String, Object>>> emergencyStop(
+      @PathVariable String id,
+      @RequestHeader("Idempotency-Key") String idempotencyKey,
+      @RequestBody Map<String, Object> body) {
+    permissionService.require(currentUser.get(), Permission.TASK_ESTOP);
+    String reason = body == null || body.get("reason") == null ? null : String.valueOf(body.get("reason"));
+    Map<String, Object> result = emergencyStopService.emergencyStop(id, idempotencyKey, reason, currentUser.get());
+    if (executionLifecycleService.hasExecution(id)) {
+      return accepted(result);
+    }
+    return ResponseEntity.ok(ApiResponse.ok(result));
   }
 
   @GetMapping("/{id}/events")

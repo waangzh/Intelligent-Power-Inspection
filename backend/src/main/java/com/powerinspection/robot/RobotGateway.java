@@ -13,5 +13,8 @@ public interface RobotGateway {
 
   void cancelTask(Map<String, Object> robot, Map<String, Object> task);
 
+  /** High-risk device stop; must not be implemented as a soft task cancel. */
+  void emergencyStopTask(Map<String, Object> robot, Map<String, Object> task);
+
   RobotProgressSnapshot advanceTask(Map<String, Object> robot, Map<String, Object> task, Map<String, Object> route);
 }

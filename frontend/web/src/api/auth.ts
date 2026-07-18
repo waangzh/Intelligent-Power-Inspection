@@ -42,6 +42,6 @@ export async function updateProfileApi(userId: string, form: ProfileForm): Promi
   return http.patch<User>('/users/me', form)
 }
 
-export async function toggleUserEnabledApi(userId: string, enabled: boolean): Promise<void> {
-  await http.patch<User>(`/users/${userId}/enabled`, { enabled })
+export async function toggleUserEnabledApi(userId: string, enabled: boolean): Promise<User> {
+  return http.patch<User>(`/users/${userId}/enabled`, { enabled })
 }

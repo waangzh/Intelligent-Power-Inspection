@@ -14,10 +14,15 @@ import org.springframework.stereotype.Service;
 public class NotificationService {
   private final DataStoreService dataStore;
   private final SimpMessagingTemplate messagingTemplate;
+  private final NotificationRecipientRepository recipientRepository;
 
-  public NotificationService(DataStoreService dataStore, SimpMessagingTemplate messagingTemplate) {
+  public NotificationService(
+      DataStoreService dataStore,
+      SimpMessagingTemplate messagingTemplate,
+      NotificationRecipientRepository recipientRepository) {
     this.dataStore = dataStore;
     this.messagingTemplate = messagingTemplate;
+    this.recipientRepository = recipientRepository;
   }
 
   public Map<String, Object> push(String userId, String type, String title, String content, String link) {
@@ -45,6 +50,12 @@ public class NotificationService {
     item.putAll(extras);
     item.put("createdAt", Instant.now().toString());
     Map<String, Object> saved = dataStore.upsert(DataCategory.NOTIFICATION, item);
+    if (!"*".equals(userId)) {
+      NotificationRecipientEntity recipient = new NotificationRecipientEntity();
+      recipient.setNotificationId(String.valueOf(saved.get("id")));
+      recipient.setUserId(userId);
+      recipientRepository.save(recipient);
+    }
     ResourceChangeEvent event = ResourceChangeEvent.created("notification", saved.get("id"));
     if ("*".equals(userId)) {
       messagingTemplate.convertAndSend("/topic/notifications", event);

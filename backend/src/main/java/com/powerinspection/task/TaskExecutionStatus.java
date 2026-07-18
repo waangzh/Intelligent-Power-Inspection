@@ -11,6 +11,8 @@ public enum TaskExecutionStatus {
   RESUMING,
   CANCELLING,
   CANCELLED,
+  ESTOPPING,
+  ESTOPPED,
   TAKEOVER_PENDING,
   MANUAL_TAKEOVER,
   COMPLETED,
@@ -19,9 +21,11 @@ public enum TaskExecutionStatus {
   DISCONNECTED,
   RECOVERING;
 
-  public static final Set<String> TERMINAL = Set.of(COMPLETED.name(), START_FAILED.name(), FAILED.name(), CANCELLED.name());
+  public static final Set<String> TERMINAL = Set.of(
+    COMPLETED.name(), START_FAILED.name(), FAILED.name(), CANCELLED.name(), ESTOPPED.name());
   public static final Set<String> ACTIVE = Set.of(STARTING.name(), RUNNING.name(), PAUSING.name(), PAUSED.name(), RESUMING.name(),
-    CANCELLING.name(), TAKEOVER_PENDING.name(), MANUAL_TAKEOVER.name(), DISCONNECTED.name(), RECOVERING.name());
+    CANCELLING.name(), ESTOPPING.name(), TAKEOVER_PENDING.name(), MANUAL_TAKEOVER.name(), DISCONNECTED.name(), RECOVERING.name());
   public static final Set<String> NON_TERMINAL = Set.of(CREATED.name(), STARTING.name(), RUNNING.name(), PAUSING.name(), PAUSED.name(),
-    RESUMING.name(), CANCELLING.name(), TAKEOVER_PENDING.name(), MANUAL_TAKEOVER.name(), DISCONNECTED.name(), RECOVERING.name());
+    RESUMING.name(), CANCELLING.name(), ESTOPPING.name(), TAKEOVER_PENDING.name(), MANUAL_TAKEOVER.name(), DISCONNECTED.name(),
+    RECOVERING.name());
 }

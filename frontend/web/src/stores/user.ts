@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { listUsersApi, updateUserRoleApi } from '@/api/auth'
+import { listUsersApi, toggleUserEnabledApi, updateUserRoleApi } from '@/api/auth'
 import type { User, UserRole } from '@/types/auth'
 
 export const useUserStore = defineStore('user', () => {
@@ -16,6 +16,12 @@ export const useUserStore = defineStore('user', () => {
     return updated
   }
 
+  async function updateEnabled(userId: string, enabled: boolean) {
+    const updated = await toggleUserEnabledApi(userId, enabled)
+    syncUser(updated)
+    return updated
+  }
+
   function syncUser(updated: User) {
     const idx = users.value.findIndex((u) => u.id === updated.id)
     if (idx >= 0) {
@@ -25,5 +31,5 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  return { users, loadUsers, updateRole, syncUser }
+  return { users, loadUsers, updateRole, updateEnabled, syncUser }
 })

@@ -402,7 +402,16 @@ async function takeoverTask(id) {
 
 async function cancelTask(id) {
   if (useMock()) { mock.setTaskStatus(id, 'CANCELLED'); return }
-  await http.post(`/tasks/${id}/cancel`)
+  await http.post(`/tasks/${id}/cancel`, undefined, { 'Idempotency-Key': `mp-cancel-${Date.now()}` })
+}
+
+async function emergencyStopTask(id, reason) {
+  if (useMock()) { mock.setTaskStatus(id, 'ESTOPPED'); return }
+  await http.post(
+    `/tasks/${id}/emergency-stop`,
+    { reason },
+    { 'Idempotency-Key': `mp-estop-${Date.now()}` },
+  )
 }
 
 // ==================== Alarms ====================
@@ -771,6 +780,7 @@ module.exports = {
   resumeTask,
   takeoverTask,
   cancelTask,
+  emergencyStopTask,
   getAlarms,
   acknowledgeAlarm,
   acknowledgeAllAlarms,

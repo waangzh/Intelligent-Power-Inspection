@@ -37,6 +37,7 @@ public class TokenService {
       claims.put("sub", user.getId());
       claims.put("username", user.getUsername());
       claims.put("role", user.getRole().name());
+      claims.put("token_version", user.getTokenVersion());
       claims.put("iat", now);
       claims.put("auth_time", authTimeEpochSeconds);
       claims.put("exp", exp);
@@ -88,6 +89,16 @@ public class TokenService {
       return number.longValue();
     }
     return 0L;
+  }
+
+  public void validateUserToken(UserEntity user, Map<String, Object> claims) {
+    if (!Boolean.TRUE.equals(user.getEnabled())) {
+      throw ApiException.unauthorized("用户已被禁用");
+    }
+    Object claim = claims.get("token_version");
+    if (!(claim instanceof Number number) || number.longValue() != user.getTokenVersion()) {
+      throw ApiException.unauthorized("登录状态已失效，请重新登录");
+    }
   }
 
   public void requireRecentAuth(String token) {

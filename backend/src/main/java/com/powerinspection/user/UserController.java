@@ -67,6 +67,9 @@ public class UserController {
     UserEntity user = userRepository.findById(id).orElseThrow(() -> ApiException.notFound("用户不存在"));
     user.setEnabled(request.enabled());
     user.setUpdatedAt(Instant.now().toString());
+    if (!request.enabled()) {
+      user.incrementTokenVersion();
+    }
     UserDto saved = UserDto.from(userRepository.saveAndFlush(user));
     if (!request.enabled()) {
       refreshTokenService.revokeAllForUser(id);

@@ -89,7 +89,11 @@ export const useTaskStore = defineStore('task', () => {
     return execution
   }
 
-  async function controlInspection(taskId: string, action: 'PAUSE' | 'RESUME' | 'TAKEOVER' | 'CANCEL', reason?: string) {
+  async function controlInspection(
+    taskId: string,
+    action: 'PAUSE' | 'RESUME' | 'TAKEOVER' | 'CANCEL' | 'ESTOP',
+    reason?: string,
+  ) {
     if (controlInFlight.value[taskId]) return executionFor(taskId)
     const current = controlRequestKeys.value[taskId]
     const key = current?.action === action ? current.key : uid('control')
@@ -101,6 +105,7 @@ export const useTaskStore = defineStore('task', () => {
         RESUME: () => resourcesApi.resumeTask(taskId, key),
         TAKEOVER: () => resourcesApi.takeoverTask(taskId, reason ?? '', key),
         CANCEL: () => resourcesApi.cancelTask(taskId, key),
+        ESTOP: () => resourcesApi.emergencyStopTask(taskId, reason ?? '', key),
       }[action])()
       executions.value = { ...executions.value, [taskId]: execution }
       await refreshExecution(taskId)
@@ -116,6 +121,7 @@ export const useTaskStore = defineStore('task', () => {
   function resume(taskId: string) { void controlInspection(taskId, 'RESUME') }
   function takeover(taskId: string) { void controlInspection(taskId, 'TAKEOVER', '页面快捷人工接管') }
   function cancel(taskId: string) { void controlInspection(taskId, 'CANCEL') }
+  function emergencyStop(taskId: string, reason: string) { return controlInspection(taskId, 'ESTOP', reason) }
 
   function executionFor(taskId: string) {
     return executions.value[taskId]
@@ -259,6 +265,7 @@ export const useTaskStore = defineStore('task', () => {
     resume,
     takeover,
     cancel,
+    emergencyStop,
     getActiveTask,
     getTaskById,
     getEventsByTask,

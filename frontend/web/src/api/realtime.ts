@@ -13,6 +13,7 @@ interface TopicSubscription {
 }
 
 const WS_URL = import.meta.env.VITE_WS_URL || defaultWsUrl()
+const SESSION_KEY = 'pi_session'
 
 let socket: WebSocket | null = null
 let connected = false
@@ -26,6 +27,15 @@ function defaultWsUrl() {
   return `${protocol}//${window.location.host}/ws`
 }
 
+function accessToken() {
+  try {
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') as { token?: string } | null
+    return session?.token || null
+  } catch {
+    return null
+  }
+}
+
 export function connectRealtime() {
   if (
     socket
@@ -36,9 +46,15 @@ export function connectRealtime() {
 
   socket = new WebSocket(WS_URL)
   socket.onopen = () => {
+    const token = accessToken()
+    if (!token) {
+      socket?.close()
+      return
+    }
     sendFrame('CONNECT', {
       'accept-version': '1.2',
       'heart-beat': '10000,10000',
+      Authorization: `Bearer ${token}`,
     })
   }
   socket.onmessage = (event) => {

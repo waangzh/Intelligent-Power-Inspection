@@ -68,11 +68,8 @@
         <el-button v-if="can('task:control') && activeTask.executionId && taskStore.statusOf(activeTask) === 'RUNNING'" @click="controlTask(activeTask.id, 'PAUSE')">暂停</el-button>
         <el-button v-if="can('task:control') && activeTask.executionId && taskStore.statusOf(activeTask) === 'PAUSED'" type="primary" @click="controlTask(activeTask.id, 'RESUME')">恢复</el-button>
         <el-button v-if="can('task:takeover') && activeTask.executionId && taskStore.statusOf(activeTask) === 'RUNNING'" type="warning" @click="controlTask(activeTask.id, 'TAKEOVER')">人工接管</el-button>
-        <el-button
-          v-if="canCancelTask(activeTask)"
-          type="danger"
-          @click="cancelTask(activeTask.id)"
-        >{{ can('task:estop') && !can('task:control') ? '远程急停' : '取消任务' }}</el-button>
+        <el-button v-if="canCancelTask(activeTask)" type="danger" plain @click="cancelTask(activeTask.id)">取消任务</el-button>
+        <el-button v-if="canEstopTask(activeTask)" type="danger" @click="emergencyStopTask(activeTask.id)">远程急停</el-button>
         <el-button v-if="can('task:dispatch')" type="success" @click="openAgentForTask(activeTask.id)">Agent 分析</el-button>
         <el-button @click="router.push(`/tasks/${activeTask.id}`)">任务详情</el-button>
       </div>
@@ -125,13 +122,8 @@
             <el-button v-if="can('task:takeover') && row.executionId && taskStore.statusOf(row) === 'RUNNING'" text type="warning" size="small" @click="controlTask(row.id, 'TAKEOVER')">接管</el-button>
             <el-button v-if="can('task:dispatch')" text type="success" size="small" @click="openAgentForTask(row.id)">Agent</el-button>
             <el-button text size="small" @click="router.push(`/tasks/${row.id}`)">详情</el-button>
-            <el-button
-              v-if="canCancelTask(row)"
-              text
-              type="danger"
-              size="small"
-              @click="cancelTask(row.id)"
-            >{{ can('task:estop') && !can('task:control') ? '急停' : '取消' }}</el-button>
+            <el-button v-if="canCancelTask(row)" text type="danger" size="small" @click="cancelTask(row.id)">取消</el-button>
+            <el-button v-if="canEstopTask(row)" text type="danger" size="small" @click="emergencyStopTask(row.id)">急停</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -289,9 +281,18 @@ async function submitTask() {
 }
 
 function canCancelTask(task: InspectionTask) {
-  if (!canAny('task:control', 'task:estop')) return false
-  if (task.executionId) return can('task:control') && ['RUNNING', 'PAUSED'].includes(taskStore.statusOf(task))
-  return !['COMPLETED', 'CANCELLED'].includes(task.status)
+  if (!can('task:control')) return false
+  const status = taskStore.statusOf(task)
+  if (task.executionId) return ['STARTING', 'RUNNING', 'PAUSED'].includes(status)
+  return !['COMPLETED', 'CANCELLED', 'ESTOPPED'].includes(task.status)
+}
+
+function canEstopTask(task: InspectionTask) {
+  if (!can('task:estop')) return false
+  const status = taskStore.statusOf(task)
+  if (['COMPLETED', 'CANCELLED', 'ESTOPPED', 'ESTOPPING', 'CANCELLING'].includes(status)) return false
+  if (task.executionId) return ['STARTING', 'RUNNING', 'PAUSED'].includes(status)
+  return ['CREATED', 'DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER', 'STARTING'].includes(task.status)
 }
 
 async function controlTask(id: string, action: 'PAUSE' | 'RESUME' | 'TAKEOVER') {
@@ -319,8 +320,7 @@ async function startInspection(taskId: string) {
 }
 
 function cancelTask(id: string) {
-  const emergency = can('task:estop') && !can('task:control')
-  ElMessageBox.confirm(emergency ? '确定远程急停该任务？' : '确定取消该任务？', '确认', { type: 'warning' })
+  ElMessageBox.confirm('确定取消该任务？这是业务取消，不是设备急停。', '确认取消', { type: 'warning' })
     .then(async () => {
       const task = taskStore.getTaskById(id)
       if (task?.executionId) {
@@ -328,10 +328,28 @@ function cancelTask(id: string) {
         ElMessage.info('取消命令已接受，等待机器人确认')
       } else {
         taskStore.cancel(id)
-        ElMessage.success(emergency ? '已发送远程急停' : '任务已取消')
+        ElMessage.success('任务已取消')
       }
     })
     .catch(() => {})
+}
+
+function emergencyStopTask(id: string) {
+  ElMessageBox.prompt('请填写远程急停原因（必填）', '远程急停确认', {
+    type: 'error',
+    confirmButtonText: '确认急停',
+    cancelButtonText: '取消',
+    inputPattern: /\S+/,
+    inputErrorMessage: '必须填写急停原因',
+    inputPlaceholder: '例如：现场出现人员闯入，立即停机',
+  }).then(async ({ value }) => {
+    try {
+      await taskStore.emergencyStop(id, value.trim())
+      ElMessage.warning('远程急停已受理，等待机器人 ACK 与确认事件')
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '远程急停失败')
+    }
+  }).catch(() => {})
 }
 
 function openAgentForTask(taskId: string) {
