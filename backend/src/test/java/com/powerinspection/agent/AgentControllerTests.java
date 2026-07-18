@@ -59,6 +59,7 @@ class AgentControllerTests {
   @BeforeEach
   void setUpData() {
     saveUser("agent_controller_dispatcher", "dispatcher", "Disp@123", UserRole.DISPATCHER);
+    saveUser("agent_controller_approver", "approver", "Appr@123", UserRole.DISPATCHER);
     saveUser("agent_controller_viewer", "viewer", "View@123", UserRole.VIEWER);
     saveAlarm(HIGH_ALARM_ID, "HIGH", "agent controller high alarm");
     saveAlarm(MEDIUM_ALARM_ID, "MEDIUM", "agent controller medium alarm");
@@ -75,6 +76,7 @@ class AgentControllerTests {
     ));
 
     String token = login("dispatcher", "Disp@123");
+    String approverToken = login("approver", "Appr@123");
     String created = mockMvc.perform(post("/api/v1/agents/sessions")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
@@ -91,7 +93,7 @@ class AgentControllerTests {
     assertThat(hasEvidenceType(data, "ALARM")).isTrue();
     String createActionId = firstActionId(data, "CREATE_WORK_ORDER_DRAFT");
     mockMvc.perform(post("/api/v1/agents/actions/" + createActionId + "/confirm")
-        .header("Authorization", bearer(token)))
+        .header("Authorization", bearer(approverToken)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("CONFIRMED"))
       .andExpect(jsonPath("$.data.resultRef.id").exists());

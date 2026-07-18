@@ -1,0 +1,2 @@
+ALTER TABLE refresh_tokens
+  ADD COLUMN auth_time BIGINT NOT NULL DEFAULT 0;

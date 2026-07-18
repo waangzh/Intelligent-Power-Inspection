@@ -178,9 +178,9 @@ function handleUserCommand(command: string) {
   }
   if (command === 'logout') {
     ElMessageBox.confirm('确定退出登录？', '提示', { type: 'warning' })
-      .then(() => {
-        authStore.logout()
-        router.push('/login')
+      .then(async () => {
+        await authStore.logout()
+        await router.push('/login')
       })
       .catch(() => {})
   }

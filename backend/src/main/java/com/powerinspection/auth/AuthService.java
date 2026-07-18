@@ -1,9 +1,9 @@
 package com.powerinspection.auth;
 
-import com.powerinspection.auth.AuthDtos.MeResponse;
 import com.powerinspection.auth.AuthDtos.ChangePasswordRequest;
 import com.powerinspection.auth.AuthDtos.LoginRequest;
 import com.powerinspection.auth.AuthDtos.LoginResponse;
+import com.powerinspection.auth.AuthDtos.MeResponse;
 import com.powerinspection.auth.AuthDtos.ProfileRequest;
 import com.powerinspection.auth.AuthDtos.RegisterRequest;
 import com.powerinspection.common.ApiException;
@@ -19,6 +19,8 @@ import com.powerinspection.user.UserPreferenceRepository;
 import com.powerinspection.user.UserPreferencesDto;
 import com.powerinspection.user.UserRepository;
 import com.powerinspection.user.UserRole;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.List;
@@ -38,6 +40,8 @@ public class AuthService {
   private final PasswordEncoder passwordEncoder;
   private final TokenService tokenService;
   private final UserAccessService userAccessService;
+  private final RefreshTokenService refreshTokenService;
+  private final RefreshCookieSupport refreshCookieSupport;
 
   public AuthService(
     UserRepository userRepository,
@@ -45,7 +49,9 @@ public class AuthService {
     UserActivityRepository activityRepository,
     PasswordEncoder passwordEncoder,
     TokenService tokenService,
-    UserAccessService userAccessService
+    UserAccessService userAccessService,
+    RefreshTokenService refreshTokenService,
+    RefreshCookieSupport refreshCookieSupport
   ) {
     this.userRepository = userRepository;
     this.preferenceRepository = preferenceRepository;
@@ -53,9 +59,11 @@ public class AuthService {
     this.passwordEncoder = passwordEncoder;
     this.tokenService = tokenService;
     this.userAccessService = userAccessService;
+    this.refreshTokenService = refreshTokenService;
+    this.refreshCookieSupport = refreshCookieSupport;
   }
 
-  public LoginResponse login(LoginRequest request) {
+  public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
     UserEntity user = userRepository.findByUsername(request.username().trim())
       .orElseThrow(() -> ApiException.badRequest("用户名或密码错误"));
     if (!Boolean.TRUE.equals(user.getEnabled())) {
@@ -65,16 +73,90 @@ public class AuthService {
       throw ApiException.badRequest("用户名或密码错误");
     }
     logActivity(user.getId(), "LOGIN", "登录系统");
-    Long expiresAt = request.remember() ? Instant.now().plusSeconds(7 * 24 * 60 * 60).toEpochMilli() : null;
-    MeResponse access = userAccessService.me(user);
-    return new LoginResponse(
-      tokenService.create(user),
-      access.user(),
-      access.permissions(),
-      access.scopes(),
-      access.features(),
-      expiresAt
+    long authTime = Instant.now().getEpochSecond();
+    String access = tokenService.create(user, authTime);
+    RefreshTokenService.IssuedRefresh refresh = refreshTokenService.issue(user, request.remember(), authTime);
+    refreshCookieSupport.write(
+      httpResponse,
+      refresh.rawToken(),
+      request.remember(),
+      refresh.expiresAt(),
+      refreshCookieSupport.secureRequest(httpRequest)
     );
+    MeResponse accessInfo = userAccessService.me(user);
+    return new LoginResponse(
+      access,
+      accessInfo.user(),
+      accessInfo.permissions(),
+      accessInfo.scopes(),
+      accessInfo.features(),
+      tokenService.accessExpiresAtEpochMilli()
+    );
+  }
+
+  public LoginResponse refresh(HttpServletRequest request, HttpServletResponse response) {
+    String raw = refreshCookieSupport.read(request);
+    if (raw == null || raw.isBlank()) {
+      throw ApiException.unauthorized("缺少刷新凭证");
+    }
+    RefreshTokenService.RotatedSession rotated = refreshTokenService.rotate(raw);
+    String access = tokenService.create(rotated.user(), rotated.authTime());
+    refreshCookieSupport.write(
+      response,
+      rotated.refresh().rawToken(),
+      rotated.refresh().entity().isRemember(),
+      rotated.refresh().expiresAt(),
+      refreshCookieSupport.secureRequest(request)
+    );
+    MeResponse accessInfo = userAccessService.me(rotated.user());
+    return new LoginResponse(
+      access,
+      accessInfo.user(),
+      accessInfo.permissions(),
+      accessInfo.scopes(),
+      accessInfo.features(),
+      tokenService.accessExpiresAtEpochMilli()
+    );
+  }
+
+  public LoginResponse reauth(UserEntity user, String password, HttpServletRequest request, HttpServletResponse response) {
+    if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+      throw ApiException.badRequest("密码不正确");
+    }
+    long authTime = Instant.now().getEpochSecond();
+    String access = tokenService.create(user, authTime);
+    String existingRefresh = refreshCookieSupport.read(request);
+    if (existingRefresh != null && !existingRefresh.isBlank()) {
+      try {
+        RefreshTokenService.RotatedSession rotated =
+          refreshTokenService.rotateAfterReauthentication(existingRefresh, authTime);
+        access = tokenService.create(rotated.user(), authTime);
+        refreshCookieSupport.write(
+          response,
+          rotated.refresh().rawToken(),
+          rotated.refresh().entity().isRemember(),
+          rotated.refresh().expiresAt(),
+          refreshCookieSupport.secureRequest(request)
+        );
+      } catch (ApiException ignored) {
+        // keep access token even if refresh rotation fails
+      }
+    }
+    MeResponse accessInfo = userAccessService.me(user);
+    logActivity(user.getId(), "LOGIN", "完成高风险操作再认证");
+    return new LoginResponse(
+      access,
+      accessInfo.user(),
+      accessInfo.permissions(),
+      accessInfo.scopes(),
+      accessInfo.features(),
+      tokenService.accessExpiresAtEpochMilli()
+    );
+  }
+
+  public void logout(HttpServletRequest request, HttpServletResponse response) {
+    refreshTokenService.revokeRaw(refreshCookieSupport.read(request));
+    refreshCookieSupport.clear(response, refreshCookieSupport.secureRequest(request));
   }
 
   @Transactional
@@ -144,7 +226,9 @@ public class AuthService {
     }
     user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
     user.setUpdatedAt(Instant.now().toString());
-    userRepository.save(user);
+    // Flush before revoke: @Modifying clearAutomatically would otherwise drop unflushed password hash.
+    userRepository.saveAndFlush(user);
+    refreshTokenService.revokeAllForUser(user.getId());
     logActivity(user.getId(), "PASSWORD", "修改了登录密码");
   }
 

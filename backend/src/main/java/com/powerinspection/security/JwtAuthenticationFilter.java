@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Map;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -29,12 +30,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     if (authorization != null && authorization.startsWith("Bearer ")) {
       String token = authorization.substring("Bearer ".length());
       try {
-        String userId = tokenService.subject(token);
+        Map<String, Object> claims = tokenService.claims(token);
+        String userId = String.valueOf(claims.get("sub"));
         userRepository.findById(userId).ifPresent(user -> {
-          AuthenticatedUser principal = new AuthenticatedUser(user);
+          if (!Boolean.TRUE.equals(user.getEnabled())) {
+            SecurityContextHolder.clearContext();
+            return;
+          }
+          long authTime = 0L;
+          Object authTimeClaim = claims.get("auth_time");
+          if (authTimeClaim instanceof Number number) {
+            authTime = number.longValue();
+          }
+          AuthenticatedUser principal = new AuthenticatedUser(user, authTime);
           UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
             principal,
-            null,
+            token,
             principal.getAuthorities()
           );
           authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

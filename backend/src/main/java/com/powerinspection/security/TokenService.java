@@ -8,6 +8,7 @@ import com.powerinspection.user.UserEntity;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -24,10 +25,22 @@ public class TokenService {
   }
 
   public String create(UserEntity user) {
+    return create(user, Instant.now().getEpochSecond());
+  }
+
+  public String create(UserEntity user, long authTimeEpochSeconds) {
     try {
       String header = encodeJson(Map.of("alg", "HS256", "typ", "JWT"));
-      long exp = Instant.now().plusSeconds(jwtProperties.getTtlSeconds()).getEpochSecond();
-      String payload = encodeJson(Map.of("sub", user.getId(), "username", user.getUsername(), "role", user.getRole().name(), "exp", exp));
+      long now = Instant.now().getEpochSecond();
+      long exp = now + jwtProperties.getAccessTtlSeconds();
+      Map<String, Object> claims = new LinkedHashMap<>();
+      claims.put("sub", user.getId());
+      claims.put("username", user.getUsername());
+      claims.put("role", user.getRole().name());
+      claims.put("iat", now);
+      claims.put("auth_time", authTimeEpochSeconds);
+      claims.put("exp", exp);
+      String payload = encodeJson(claims);
       return header + "." + payload + "." + sign(header + "." + payload);
     } catch (Exception ex) {
       throw ApiException.unauthorized("Token 生成失败");
@@ -35,6 +48,10 @@ public class TokenService {
   }
 
   public String subject(String token) {
+    return String.valueOf(claims(token).get("sub"));
+  }
+
+  public Map<String, Object> claims(String token) {
     try {
       String[] parts = token.split("\\.");
       if (parts.length != 3) {
@@ -50,16 +67,39 @@ public class TokenService {
       if (exp == null || exp.longValue() < Instant.now().getEpochSecond()) {
         throw ApiException.unauthorized("登录已过期");
       }
-      Object subject = payload.get("sub");
-      if (subject == null) {
+      if (payload.get("sub") == null) {
         throw ApiException.unauthorized("Token 无效");
       }
-      return subject.toString();
+      return payload;
     } catch (ApiException ex) {
       throw ex;
     } catch (Exception ex) {
       throw ApiException.unauthorized("Token 无效");
     }
+  }
+
+  public long authTime(String token) {
+    Object value = claims(token).get("auth_time");
+    if (value instanceof Number number) {
+      return number.longValue();
+    }
+    Object iat = claims(token).get("iat");
+    if (iat instanceof Number number) {
+      return number.longValue();
+    }
+    return 0L;
+  }
+
+  public void requireRecentAuth(String token) {
+    long authTime = authTime(token);
+    long window = jwtProperties.getReauthWindowSeconds();
+    if (authTime <= 0 || Instant.now().getEpochSecond() - authTime > window) {
+      throw ApiException.forbidden("高风险操作需要近期重新认证，请先验证密码");
+    }
+  }
+
+  public long accessExpiresAtEpochMilli() {
+    return Instant.now().plusSeconds(jwtProperties.getAccessTtlSeconds()).toEpochMilli();
   }
 
   private String encodeJson(Object value) throws Exception {

@@ -29,6 +29,7 @@ public class AgentActionEntity {
   @Column(name = "policy_reason", nullable = false, columnDefinition = "LONGTEXT") private String policyReason;
   @Column(name = "requires_approval", nullable = false) private boolean requiresApproval;
   @Column(name = "idempotency_key", nullable = false) private String idempotencyKey;
+  @Column(name = "requested_by_id") private String requestedById;
   @Column(name = "approved_by_id") private String approvedById;
   @Column(name = "approved_at") private Instant approvedAt;
   @Column(name = "approval_comment") private String approvalComment;
@@ -60,6 +61,7 @@ public class AgentActionEntity {
   public String getPolicyReason() { return policyReason; } public void setPolicyReason(String value) { policyReason = value; }
   public boolean isRequiresApproval() { return requiresApproval; } public void setRequiresApproval(boolean value) { requiresApproval = value; }
   public String getIdempotencyKey() { return idempotencyKey; } public void setIdempotencyKey(String value) { idempotencyKey = value; }
+  public String getRequestedById() { return requestedById; } public void setRequestedById(String value) { requestedById = value; }
   public String getApprovedById() { return approvedById; } public void setApprovedById(String value) { approvedById = value; }
   public Instant getApprovedAt() { return approvedAt; } public void setApprovedAt(Instant value) { approvedAt = value; }
   public String getApprovalComment() { return approvalComment; } public void setApprovalComment(String value) { approvalComment = value; }
