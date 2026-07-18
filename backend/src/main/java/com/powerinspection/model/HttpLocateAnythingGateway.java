@@ -26,10 +26,12 @@ public class HttpLocateAnythingGateway implements LocateAnythingGateway {
 
   @Override
   @SuppressWarnings("unchecked")
-  public List<LocateAnythingFinding> detectCheckpoint(LocateAnythingRequest request) {
+  public LocateAnythingResult detectCheckpoint(LocateAnythingRequest request) {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("requestId", text(request.task().get("id")) + "_" + text(request.checkpoint().get("id")));
     payload.put("imageUrl", request.imageUrl());
+    payload.put("imageWidth", request.imageWidth());
+    payload.put("imageHeight", request.imageHeight());
     payload.put("detections", request.detections());
     payload.put("generationMode", generationMode);
 
@@ -39,22 +41,23 @@ public class HttpLocateAnythingGateway implements LocateAnythingGateway {
         .body(payload)
         .retrieve()
         .body(Map.class);
-      return findings(response);
+      return result(response);
     } catch (RestClientException ex) {
       throw new ModelServiceException("LocateAnything 模型服务调用失败", ex);
     }
   }
 
-  private List<LocateAnythingFinding> findings(Map<String, Object> response) {
+  private LocateAnythingResult result(Map<String, Object> response) {
     if (response == null) {
-      return List.of();
+      return new LocateAnythingResult(List.of(), List.of(), null);
     }
     if (!"SUCCEEDED".equals(text(response.get("status")))) {
       throw new ModelServiceException("LocateAnything 模型服务返回失败状态: " + text(response.get("status")));
     }
     Object rawFindings = response.get("findings");
+    String resultImageUrl = text(response.get("resultImageUrl"));
     if (!(rawFindings instanceof List<?> list)) {
-      return List.of();
+      return new LocateAnythingResult(List.of(), strings(response.get("warnings")), resultImageUrl);
     }
     List<LocateAnythingFinding> items = new ArrayList<>();
     for (Object raw : list) {
@@ -66,12 +69,23 @@ public class HttpLocateAnythingGateway implements LocateAnythingGateway {
           number(finding.get("score"), 0),
           intList(firstNonNull(finding.get("pixelBox"), firstNonNull(finding.get("bbox"), finding.get("normalizedBox")))),
           text(finding.getOrDefault("label", "abnormal")),
-          text(finding.get("imageUrl")),
+          firstText(text(finding.get("imageUrl")), resultImageUrl),
           finding
         ));
       }
     }
-    return items;
+    return new LocateAnythingResult(items, strings(response.get("warnings")), resultImageUrl);
+  }
+
+  private String firstText(String preferred, String fallback) {
+    return preferred == null || preferred.isBlank() ? fallback : preferred;
+  }
+
+  private List<String> strings(Object value) {
+    if (!(value instanceof List<?> list)) {
+      return List.of();
+    }
+    return list.stream().filter(item -> item != null).map(Object::toString).toList();
   }
 
   private Map<String, Object> normalize(Map<?, ?> raw) {

@@ -8,19 +8,26 @@ import com.powerinspection.common.ApiResponse;
 import com.powerinspection.common.Ids;
 import com.powerinspection.config.ModelFileWebConfig;
 import com.powerinspection.model.LocateAnythingFinding;
+import com.powerinspection.model.ModelProperties;
+import com.powerinspection.model.DetectionItems;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
 import jakarta.servlet.http.HttpServletRequest;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.http.MediaType;
@@ -43,12 +50,14 @@ public class ManualDetectionController {
   private final ObjectMapper objectMapper;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
+  private final ModelProperties modelProperties;
 
-  public ManualDetectionController(ManualDetectionService manualDetectionService, ObjectMapper objectMapper, PermissionService permissionService, CurrentUser currentUser) {
+  public ManualDetectionController(ManualDetectionService manualDetectionService, ObjectMapper objectMapper, PermissionService permissionService, CurrentUser currentUser, ModelProperties modelProperties) {
     this.manualDetectionService = manualDetectionService;
     this.objectMapper = objectMapper;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
+    this.modelProperties = modelProperties;
   }
 
   @PostMapping(value = "/manual", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -74,8 +83,19 @@ public class ManualDetectionController {
       Files.copy(input, output, StandardCopyOption.REPLACE_EXISTING);
     }
 
-    String inputImageUrl = publicImageUrl(request, filename);
-    return ApiResponse.ok(manualDetectionService.submit(requestId, inputImageUrl, enabledDetections));
+    ImageDimensions dimensions = imageDimensions(output);
+    String publicInputImageUrl = publicFileUrl(request, "uploads/" + filename);
+    String modelInputImageUrl = modelInputImageUrl(publicInputImageUrl, filename);
+    String publicResultBaseUrl = publicFileUrl(request, "results/");
+    return ApiResponse.ok(manualDetectionService.submit(
+      requestId,
+      publicInputImageUrl,
+      modelInputImageUrl,
+      publicResultBaseUrl,
+      dimensions.width(),
+      dimensions.height(),
+      enabledDetections
+    ));
   }
 
   @GetMapping("/manual/{requestId}")
@@ -108,18 +128,52 @@ public class ManualDetectionController {
   private Map<String, Object> normalizeDetection(Map<String, Object> raw) {
     Map<String, Object> item = new LinkedHashMap<>();
     item.put("type", text(raw.get("type")));
+    String displayLabel = text(raw.get("displayLabel"));
+    item.put("displayLabel", displayLabel == null || displayLabel.isBlank()
+      ? DetectionItems.displayLabel(text(raw.get("type")))
+      : displayLabel.trim());
     item.put("prompt", text(raw.get("prompt")));
     item.put("threshold", raw.getOrDefault("threshold", 0.75));
     item.put("enabled", true);
     return item;
   }
 
-  private String publicImageUrl(HttpServletRequest request, String filename) {
+  private String publicFileUrl(HttpServletRequest request, String relativePath) {
     return ServletUriComponentsBuilder.fromRequestUri(request)
-      .replacePath("/model-files/locate-anything/uploads/" + filename)
+      .replacePath("/model-files/locate-anything/" + relativePath)
       .replaceQuery(null)
       .build()
       .toUriString();
+  }
+
+  private String modelInputImageUrl(String publicInputImageUrl, String filename) {
+    String baseUrl = modelProperties.getLocateAnything().getInputFileBaseUrl();
+    if (!StringUtils.hasText(baseUrl)) {
+      return publicInputImageUrl;
+    }
+    String normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+    return normalizedBaseUrl + "/locate-anything/uploads/" + filename;
+  }
+
+  private ImageDimensions imageDimensions(Path image) {
+    try (ImageInputStream input = ImageIO.createImageInputStream(image.toFile())) {
+      if (input == null) {
+        return ImageDimensions.unknown();
+      }
+      Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+      if (!readers.hasNext()) {
+        return ImageDimensions.unknown();
+      }
+      ImageReader reader = readers.next();
+      try {
+        reader.setInput(input, true, true);
+        return new ImageDimensions(reader.getWidth(0), reader.getHeight(0));
+      } finally {
+        reader.dispose();
+      }
+    } catch (IOException ex) {
+      return ImageDimensions.unknown();
+    }
   }
 
   private String extension(MultipartFile image) {
@@ -134,6 +188,12 @@ public class ManualDetectionController {
 
   private String text(Object value) {
     return value == null ? null : value.toString();
+  }
+
+  private record ImageDimensions(Integer width, Integer height) {
+    private static ImageDimensions unknown() {
+      return new ImageDimensions(null, null);
+    }
   }
 
   public record ManualDetectionResponse(

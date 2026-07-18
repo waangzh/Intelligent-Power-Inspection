@@ -43,6 +43,17 @@ export const DETECTION_LABELS: Record<DetectionType, string> = {
   FOREIGN_OBJECT: '异物检测',
 }
 
+export const DETECTION_TARGET_LABELS: Record<DetectionType, string> = {
+  PERSON: '人员',
+  HELMET: '安全帽',
+  OBSTACLE: '障碍物',
+  FIRE: '明火烟雾',
+  SWITCH: '刀闸开关',
+  METER: '压力表',
+  OIL_LEAK: '漏油区域',
+  FOREIGN_OBJECT: '异物',
+}
+
 export type TaskStatus =
   | 'CREATED'
   | 'DISPATCHED'
@@ -128,6 +139,7 @@ export interface Area {
 export interface DetectionItem {
   type: DetectionType
   enabled: boolean
+  displayLabel: string
   prompt?: string
   threshold: number
 }
@@ -238,6 +250,7 @@ export interface DetectionTemplate {
   types: DetectionType[]
   description: string
   prompts: Record<string, string>
+  items: DetectionItem[]
   createdAt: string
 }
 

@@ -16,6 +16,7 @@ class Settings:
     max_answer_boxes: int = int(os.getenv("LOCATE_ANYTHING_MAX_ANSWER_BOXES", "5"))
     annotated_output_dir: str = os.getenv("ANNOTATED_OUTPUT_DIR", str(SERVICE_DIR / "annotated-images"))
     annotated_base_url: str = os.getenv("ANNOTATED_BASE_URL", "http://127.0.0.1:9001/files/annotated")
+    annotation_font_path: str = os.getenv("ANNOTATION_FONT_PATH", "")
 
 
 settings = Settings()

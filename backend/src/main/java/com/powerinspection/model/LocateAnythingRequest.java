@@ -8,6 +8,8 @@ public record LocateAnythingRequest(
   Map<String, Object> route,
   Map<String, Object> checkpoint,
   String imageUrl,
+  Integer imageWidth,
+  Integer imageHeight,
   List<Map<String, Object>> detections
 ) {
 }

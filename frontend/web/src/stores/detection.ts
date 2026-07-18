@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { DetectionTemplate } from '@/types'
-import { uid } from '@/utils/storage'
 import type { ListQuery } from '@/types/pagination'
 
 export const useDetectionStore = defineStore('detection', () => {
@@ -15,24 +14,23 @@ export const useDetectionStore = defineStore('detection', () => {
     total.value = result.total
   }
 
-  function addTemplate(tpl: Omit<DetectionTemplate, 'id' | 'createdAt'>) {
-    const item: DetectionTemplate = {
-      ...tpl,
-      id: uid('tpl'),
-      createdAt: new Date().toISOString(),
-    }
-    templates.value.push(item)
-    void resourcesApi.createDetectionTemplate(item).then((saved) => {
-      const idx = templates.value.findIndex((t) => t.id === saved.id)
-      if (idx >= 0) templates.value[idx] = saved
-    })
-    return item
+  async function addTemplate(tpl: Omit<DetectionTemplate, 'id' | 'createdAt'>) {
+    const saved = await resourcesApi.createDetectionTemplate(tpl)
+    templates.value.push(saved)
+    return saved
   }
 
-  function removeTemplate(id: string) {
+  async function updateTemplate(id: string, patch: Partial<DetectionTemplate>) {
+    const saved = await resourcesApi.updateDetectionTemplate(id, patch)
+    const idx = templates.value.findIndex((template) => template.id === id)
+    if (idx >= 0) templates.value[idx] = saved
+    return saved
+  }
+
+  async function removeTemplate(id: string) {
+    await resourcesApi.removeDetectionTemplate(id)
     templates.value = templates.value.filter((t) => t.id !== id)
-    void resourcesApi.removeDetectionTemplate(id)
   }
 
-  return { templates, total, load, addTemplate, removeTemplate }
+  return { templates, total, load, addTemplate, updateTemplate, removeTemplate }
 })

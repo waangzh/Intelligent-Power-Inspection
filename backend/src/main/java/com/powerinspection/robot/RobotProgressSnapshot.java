@@ -5,6 +5,7 @@ import java.util.Map;
 public record RobotProgressSnapshot(
   int progress,
   int currentCheckpointSeq,
-  Map<String, Object> position
+  Map<String, Object> position,
+  RobotInspectionImage inspectionImage
 ) {
 }

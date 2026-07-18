@@ -43,6 +43,7 @@ public class ModelProperties {
 
   public static class LocateAnything {
     private String baseUrl = "http://127.0.0.1:9001";
+    private String inputFileBaseUrl;
     private int timeoutSeconds = 900;
     private String generationMode = "fast";
 
@@ -52,6 +53,14 @@ public class ModelProperties {
 
     public void setBaseUrl(String baseUrl) {
       this.baseUrl = baseUrl;
+    }
+
+    public String getInputFileBaseUrl() {
+      return inputFileBaseUrl;
+    }
+
+    public void setInputFileBaseUrl(String inputFileBaseUrl) {
+      this.inputFileBaseUrl = inputFileBaseUrl;
     }
 
     public int getTimeoutSeconds() {

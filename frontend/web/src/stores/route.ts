@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { Checkpoint, DetectionItem, DetectionType, Route } from '@/types'
-import { CHECKPOINT_DETECTIONS, ROUTE_DETECTIONS } from '@/types'
+import { CHECKPOINT_DETECTIONS, DETECTION_TARGET_LABELS, ROUTE_DETECTIONS } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
 import type { ListQuery } from '@/types/pagination'
 import { withPlatformRouteName } from '@/utils/routeExecutorJson'
@@ -12,15 +12,20 @@ function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
   return types.map((type) => ({
     type,
     enabled: true,
+    displayLabel: DETECTION_TARGET_LABELS[type],
     threshold: 0.75,
     prompt:
       type === 'SWITCH'
-        ? '红色刀闸开关'
-        : type === 'OIL_LEAK'
-          ? '设备底部渗油区域'
-          : type === 'METER'
-            ? '压力表读数区域'
-            : undefined,
+        ? '变电设备上的刀闸开关操作手柄、连杆及触头区域'
+        : type === 'METER'
+          ? '圆形机械压力表的完整表盘和指针区域'
+          : type === 'OIL_LEAK'
+            ? '变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域'
+            : type === 'FIRE'
+              ? '图像中清晰可见的火焰、火光或明显烟雾区域'
+              : type === 'FOREIGN_OBJECT'
+                ? '设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物'
+                : undefined,
   }))
 }
 
@@ -83,19 +88,16 @@ export const useRouteStore = defineStore('route', () => {
     return cp
   }
 
-  function updateCheckpoint(routeId: string, checkpointId: string, patch: Partial<Checkpoint>) {
+  async function updateCheckpoint(routeId: string, checkpointId: string, patch: Partial<Checkpoint>) {
     const route = routes.value.find((r) => r.id === routeId)
-    if (!route) return
+    if (!route) throw new Error('路线不存在')
     const idx = route.checkpoints.findIndex((c) => c.id === checkpointId)
     if (idx >= 0) {
-      updateLocalRoute({
-        ...route,
-        checkpoints: route.checkpoints.map((checkpoint) =>
-          checkpoint.id === checkpointId ? { ...checkpoint, ...patch } : checkpoint,
-        ),
-      })
-      void resourcesApi.updateCheckpoint(routeId, checkpointId, patch).then((saved) => updateLocalCheckpoint(routeId, saved))
+      const saved = await resourcesApi.updateCheckpoint(routeId, checkpointId, patch)
+      updateLocalCheckpoint(routeId, saved)
+      return saved
     }
+    throw new Error('检查点不存在')
   }
 
   function removeCheckpoint(routeId: string, checkpointId: string) {

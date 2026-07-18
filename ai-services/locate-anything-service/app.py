@@ -52,10 +52,11 @@ def locate_checkpoint(request: LocateCheckpointRequest) -> LocateCheckpointRespo
         request.generationMode,
     )
     try:
-        findings = runner.locate_checkpoint(request)
+        findings, result_image_url = runner.locate_checkpoint(request)
         elapsed_ms = round((time.perf_counter() - started_at) * 1000)
         response = LocateCheckpointResponse(
             modelVersion=runner.model_version,
+            resultImageUrl=result_image_url,
             findings=findings,
             warnings=runner.warnings,
         )
