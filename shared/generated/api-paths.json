@@ -1,0 +1,500 @@
+{
+  "generatedAt": "2026-07-18T09:58:21.399Z",
+  "paths": [
+    {
+      "apiPath": "/api/v1/agent-actions/{actionId}",
+      "relPath": "/agent-actions/{actionId}",
+      "name": "agentActionsActionId"
+    },
+    {
+      "apiPath": "/api/v1/agent-actions/{actionId}/approve",
+      "relPath": "/agent-actions/{actionId}/approve",
+      "name": "agentActionsActionIdApprove"
+    },
+    {
+      "apiPath": "/api/v1/agent-actions/{actionId}/reject",
+      "relPath": "/agent-actions/{actionId}/reject",
+      "name": "agentActionsActionIdReject"
+    },
+    {
+      "apiPath": "/api/v1/agent-actions/{actionId}/retry",
+      "relPath": "/agent-actions/{actionId}/retry",
+      "name": "agentActionsActionIdRetry"
+    },
+    {
+      "apiPath": "/api/v1/agent-cases",
+      "relPath": "/agent-cases",
+      "name": "agentCases"
+    },
+    {
+      "apiPath": "/api/v1/agent-cases/{caseId}",
+      "relPath": "/agent-cases/{caseId}",
+      "name": "agentCasesCaseId"
+    },
+    {
+      "apiPath": "/api/v1/agent-cases/{caseId}/runs",
+      "relPath": "/agent-cases/{caseId}/runs",
+      "name": "agentCasesCaseIdRuns"
+    },
+    {
+      "apiPath": "/api/v1/agent-runs/{runId}",
+      "relPath": "/agent-runs/{runId}",
+      "name": "agentRunsRunId"
+    },
+    {
+      "apiPath": "/api/v1/agent-runs/{runId}/cancel",
+      "relPath": "/agent-runs/{runId}/cancel",
+      "name": "agentRunsRunIdCancel"
+    },
+    {
+      "apiPath": "/api/v1/agent-runs/{runId}/evidence",
+      "relPath": "/agent-runs/{runId}/evidence",
+      "name": "agentRunsRunIdEvidence"
+    },
+    {
+      "apiPath": "/api/v1/agent-runs/{runId}/human-inputs",
+      "relPath": "/agent-runs/{runId}/human-inputs",
+      "name": "agentRunsRunIdHumanInputs"
+    },
+    {
+      "apiPath": "/api/v1/agent-runs/{runId}/question",
+      "relPath": "/agent-runs/{runId}/question",
+      "name": "agentRunsRunIdQuestion"
+    },
+    {
+      "apiPath": "/api/v1/agent-runs/{runId}/tool-calls",
+      "relPath": "/agent-runs/{runId}/tool-calls",
+      "name": "agentRunsRunIdToolCalls"
+    },
+    {
+      "apiPath": "/api/v1/agent-runs/{runId}/trace",
+      "relPath": "/agent-runs/{runId}/trace",
+      "name": "agentRunsRunIdTrace"
+    },
+    {
+      "apiPath": "/api/v1/agents/actions/{id}/confirm",
+      "relPath": "/agents/actions/{id}/confirm",
+      "name": "agentsActionsIdConfirm"
+    },
+    {
+      "apiPath": "/api/v1/agents/actions/{id}/reject",
+      "relPath": "/agents/actions/{id}/reject",
+      "name": "agentsActionsIdReject"
+    },
+    {
+      "apiPath": "/api/v1/agents/sessions",
+      "relPath": "/agents/sessions",
+      "name": "agentsSessions"
+    },
+    {
+      "apiPath": "/api/v1/agents/sessions/{id}",
+      "relPath": "/agents/sessions/{id}",
+      "name": "agentsSessionsId"
+    },
+    {
+      "apiPath": "/api/v1/agents/sessions/{id}/runs",
+      "relPath": "/agents/sessions/{id}/runs",
+      "name": "agentsSessionsIdRuns"
+    },
+    {
+      "apiPath": "/api/v1/alarms",
+      "relPath": "/alarms",
+      "name": "alarms"
+    },
+    {
+      "apiPath": "/api/v1/alarms/ack-all",
+      "relPath": "/alarms/ack-all",
+      "name": "alarmsAckAll"
+    },
+    {
+      "apiPath": "/api/v1/alarms/work-order-policy",
+      "relPath": "/alarms/work-order-policy",
+      "name": "alarmsWorkOrderPolicy"
+    },
+    {
+      "apiPath": "/api/v1/alarms/{id}",
+      "relPath": "/alarms/{id}",
+      "name": "alarmsId"
+    },
+    {
+      "apiPath": "/api/v1/alarms/{id}/ack",
+      "relPath": "/alarms/{id}/ack",
+      "name": "alarmsIdAck"
+    },
+    {
+      "apiPath": "/api/v1/alarms/{id}/retry-work-order",
+      "relPath": "/alarms/{id}/retry-work-order",
+      "name": "alarmsIdRetryWorkOrder"
+    },
+    {
+      "apiPath": "/api/v1/auth/login",
+      "relPath": "/auth/login",
+      "name": "authLogin"
+    },
+    {
+      "apiPath": "/api/v1/auth/logout",
+      "relPath": "/auth/logout",
+      "name": "authLogout"
+    },
+    {
+      "apiPath": "/api/v1/auth/me",
+      "relPath": "/auth/me",
+      "name": "authMe"
+    },
+    {
+      "apiPath": "/api/v1/auth/password",
+      "relPath": "/auth/password",
+      "name": "authPassword"
+    },
+    {
+      "apiPath": "/api/v1/auth/reauth",
+      "relPath": "/auth/reauth",
+      "name": "authReauth"
+    },
+    {
+      "apiPath": "/api/v1/auth/refresh",
+      "relPath": "/auth/refresh",
+      "name": "authRefresh"
+    },
+    {
+      "apiPath": "/api/v1/auth/register",
+      "relPath": "/auth/register",
+      "name": "authRegister"
+    },
+    {
+      "apiPath": "/api/v1/dashboard/overview",
+      "relPath": "/dashboard/overview",
+      "name": "dashboardOverview"
+    },
+    {
+      "apiPath": "/api/v1/detection-templates",
+      "relPath": "/detection-templates",
+      "name": "detectionTemplates"
+    },
+    {
+      "apiPath": "/api/v1/detection-templates/{id}",
+      "relPath": "/detection-templates/{id}",
+      "name": "detectionTemplatesId"
+    },
+    {
+      "apiPath": "/api/v1/detections/manual",
+      "relPath": "/detections/manual",
+      "name": "detectionsManual"
+    },
+    {
+      "apiPath": "/api/v1/detections/manual/{requestId}",
+      "relPath": "/detections/manual/{requestId}",
+      "name": "detectionsManualRequestId"
+    },
+    {
+      "apiPath": "/api/v1/health",
+      "relPath": "/health",
+      "name": "health"
+    },
+    {
+      "apiPath": "/api/v1/internal/robot-map-assets",
+      "relPath": "/internal/robot-map-assets",
+      "name": "internalRobotMapAssets"
+    },
+    {
+      "apiPath": "/api/v1/map-assets",
+      "relPath": "/map-assets",
+      "name": "mapAssets"
+    },
+    {
+      "apiPath": "/api/v1/map-assets/{id}",
+      "relPath": "/map-assets/{id}",
+      "name": "mapAssetsId"
+    },
+    {
+      "apiPath": "/api/v1/map-assets/{id}/pgm",
+      "relPath": "/map-assets/{id}/pgm",
+      "name": "mapAssetsIdPgm"
+    },
+    {
+      "apiPath": "/api/v1/map-assets/{id}/review",
+      "relPath": "/map-assets/{id}/review",
+      "name": "mapAssetsIdReview"
+    },
+    {
+      "apiPath": "/api/v1/map-assets/{id}/yaml",
+      "relPath": "/map-assets/{id}/yaml",
+      "name": "mapAssetsIdYaml"
+    },
+    {
+      "apiPath": "/api/v1/notifications",
+      "relPath": "/notifications",
+      "name": "notifications"
+    },
+    {
+      "apiPath": "/api/v1/notifications/read-all",
+      "relPath": "/notifications/read-all",
+      "name": "notificationsReadAll"
+    },
+    {
+      "apiPath": "/api/v1/notifications/{id}",
+      "relPath": "/notifications/{id}",
+      "name": "notificationsId"
+    },
+    {
+      "apiPath": "/api/v1/notifications/{id}/read",
+      "relPath": "/notifications/{id}/read",
+      "name": "notificationsIdRead"
+    },
+    {
+      "apiPath": "/api/v1/records",
+      "relPath": "/records",
+      "name": "records"
+    },
+    {
+      "apiPath": "/api/v1/records/export",
+      "relPath": "/records/export",
+      "name": "recordsExport"
+    },
+    {
+      "apiPath": "/api/v1/robots",
+      "relPath": "/robots",
+      "name": "robots"
+    },
+    {
+      "apiPath": "/api/v1/robots/status",
+      "relPath": "/robots/status",
+      "name": "robotsStatus"
+    },
+    {
+      "apiPath": "/api/v1/robots/{id}",
+      "relPath": "/robots/{id}",
+      "name": "robotsId"
+    },
+    {
+      "apiPath": "/api/v1/robots/{id}/telemetry",
+      "relPath": "/robots/{id}/telemetry",
+      "name": "robotsIdTelemetry"
+    },
+    {
+      "apiPath": "/api/v1/robots/{robotId}/status",
+      "relPath": "/robots/{robotId}/status",
+      "name": "robotsRobotIdStatus"
+    },
+    {
+      "apiPath": "/api/v1/route-deployments/{deploymentId}",
+      "relPath": "/route-deployments/{deploymentId}",
+      "name": "routeDeploymentsDeploymentId"
+    },
+    {
+      "apiPath": "/api/v1/route-deployments/{deploymentId}/reconcile",
+      "relPath": "/route-deployments/{deploymentId}/reconcile",
+      "name": "routeDeploymentsDeploymentIdReconcile"
+    },
+    {
+      "apiPath": "/api/v1/route-revisions/{revisionId}",
+      "relPath": "/route-revisions/{revisionId}",
+      "name": "routeRevisionsRevisionId"
+    },
+    {
+      "apiPath": "/api/v1/route-revisions/{revisionId}/deployments",
+      "relPath": "/route-revisions/{revisionId}/deployments",
+      "name": "routeRevisionsRevisionIdDeployments"
+    },
+    {
+      "apiPath": "/api/v1/routes",
+      "relPath": "/routes",
+      "name": "routes"
+    },
+    {
+      "apiPath": "/api/v1/routes/{id}",
+      "relPath": "/routes/{id}",
+      "name": "routesId"
+    },
+    {
+      "apiPath": "/api/v1/routes/{id}/checkpoints",
+      "relPath": "/routes/{id}/checkpoints",
+      "name": "routesIdCheckpoints"
+    },
+    {
+      "apiPath": "/api/v1/routes/{routeId}/checkpoints/{checkpointId}",
+      "relPath": "/routes/{routeId}/checkpoints/{checkpointId}",
+      "name": "routesRouteIdCheckpointsCheckpointId"
+    },
+    {
+      "apiPath": "/api/v1/routes/{routeId}/draft",
+      "relPath": "/routes/{routeId}/draft",
+      "name": "routesRouteIdDraft"
+    },
+    {
+      "apiPath": "/api/v1/routes/{routeId}/draft:check",
+      "relPath": "/routes/{routeId}/draft:check",
+      "name": "routesRouteIdDraftCheck"
+    },
+    {
+      "apiPath": "/api/v1/routes/{routeId}/draft:validate",
+      "relPath": "/routes/{routeId}/draft:validate",
+      "name": "routesRouteIdDraftValidate"
+    },
+    {
+      "apiPath": "/api/v1/routes/{routeId}/revisions",
+      "relPath": "/routes/{routeId}/revisions",
+      "name": "routesRouteIdRevisions"
+    },
+    {
+      "apiPath": "/api/v1/sites",
+      "relPath": "/sites",
+      "name": "sites"
+    },
+    {
+      "apiPath": "/api/v1/sites/areas",
+      "relPath": "/sites/areas",
+      "name": "sitesAreas"
+    },
+    {
+      "apiPath": "/api/v1/sites/areas/{areaId}",
+      "relPath": "/sites/areas/{areaId}",
+      "name": "sitesAreasAreaId"
+    },
+    {
+      "apiPath": "/api/v1/sites/slam-maps",
+      "relPath": "/sites/slam-maps",
+      "name": "sitesSlamMaps"
+    },
+    {
+      "apiPath": "/api/v1/sites/{id}",
+      "relPath": "/sites/{id}",
+      "name": "sitesId"
+    },
+    {
+      "apiPath": "/api/v1/sites/{id}/areas",
+      "relPath": "/sites/{id}/areas",
+      "name": "sitesIdAreas"
+    },
+    {
+      "apiPath": "/api/v1/sites/{id}/slam-map",
+      "relPath": "/sites/{id}/slam-map",
+      "name": "sitesIdSlamMap"
+    },
+    {
+      "apiPath": "/api/v1/sites/{siteId}/areas/{areaId}",
+      "relPath": "/sites/{siteId}/areas/{areaId}",
+      "name": "sitesSiteIdAreasAreaId"
+    },
+    {
+      "apiPath": "/api/v1/tasks",
+      "relPath": "/tasks",
+      "name": "tasks"
+    },
+    {
+      "apiPath": "/api/v1/tasks/active",
+      "relPath": "/tasks/active",
+      "name": "tasksActive"
+    },
+    {
+      "apiPath": "/api/v1/tasks/events/{eventId}",
+      "relPath": "/tasks/events/{eventId}",
+      "name": "tasksEventsEventId"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}",
+      "relPath": "/tasks/{id}",
+      "name": "tasksId"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/cancel",
+      "relPath": "/tasks/{id}/cancel",
+      "name": "tasksIdCancel"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/dispatch",
+      "relPath": "/tasks/{id}/dispatch",
+      "name": "tasksIdDispatch"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/events",
+      "relPath": "/tasks/{id}/events",
+      "name": "tasksIdEvents"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/execution",
+      "relPath": "/tasks/{id}/execution",
+      "name": "tasksIdExecution"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/pause",
+      "relPath": "/tasks/{id}/pause",
+      "name": "tasksIdPause"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/resume",
+      "relPath": "/tasks/{id}/resume",
+      "name": "tasksIdResume"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/start",
+      "relPath": "/tasks/{id}/start",
+      "name": "tasksIdStart"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/start-eligibility",
+      "relPath": "/tasks/{id}/start-eligibility",
+      "name": "tasksIdStartEligibility"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/takeover",
+      "relPath": "/tasks/{id}/takeover",
+      "name": "tasksIdTakeover"
+    },
+    {
+      "apiPath": "/api/v1/users",
+      "relPath": "/users",
+      "name": "users"
+    },
+    {
+      "apiPath": "/api/v1/users/me",
+      "relPath": "/users/me",
+      "name": "usersMe"
+    },
+    {
+      "apiPath": "/api/v1/users/me/activities",
+      "relPath": "/users/me/activities",
+      "name": "usersMeActivities"
+    },
+    {
+      "apiPath": "/api/v1/users/me/preferences",
+      "relPath": "/users/me/preferences",
+      "name": "usersMePreferences"
+    },
+    {
+      "apiPath": "/api/v1/users/{id}/enabled",
+      "relPath": "/users/{id}/enabled",
+      "name": "usersIdEnabled"
+    },
+    {
+      "apiPath": "/api/v1/users/{id}/role",
+      "relPath": "/users/{id}/role",
+      "name": "usersIdRole"
+    },
+    {
+      "apiPath": "/api/v1/work-orders",
+      "relPath": "/work-orders",
+      "name": "workOrders"
+    },
+    {
+      "apiPath": "/api/v1/work-orders/from-alarm/{alarmId}",
+      "relPath": "/work-orders/from-alarm/{alarmId}",
+      "name": "workOrdersFromAlarmAlarmId"
+    },
+    {
+      "apiPath": "/api/v1/work-orders/{id}",
+      "relPath": "/work-orders/{id}",
+      "name": "workOrdersId"
+    },
+    {
+      "apiPath": "/api/v1/work-orders/{id}/claim",
+      "relPath": "/work-orders/{id}/claim",
+      "name": "workOrdersIdClaim"
+    },
+    {
+      "apiPath": "/api/v1/work-orders/{id}/status",
+      "relPath": "/work-orders/{id}/status",
+      "name": "workOrdersIdStatus"
+    }
+  ]
+}

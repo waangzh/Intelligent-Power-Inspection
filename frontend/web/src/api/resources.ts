@@ -1,4 +1,5 @@
 import { http } from '@/api/http'
+import { openapiClient } from '@/generated/api-client'
 import type {
   Alarm,
   AlarmWorkOrderPolicy,
@@ -104,12 +105,6 @@ export const resourcesApi = {
     http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/takeover`, { reason }, { 'Idempotency-Key': idempotencyKey }),
   cancelTask: (id: string, idempotencyKey: string) =>
     http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/cancel`, undefined, { 'Idempotency-Key': idempotencyKey }),
-  emergencyStopTask: (id: string, reason: string, idempotencyKey: string) =>
-    http.post<TaskExecution>(
-      `/tasks/${encodeURIComponent(id)}/emergency-stop`,
-      { reason },
-      { 'Idempotency-Key': idempotencyKey },
-    ),
   taskEvents: (id: string, query: ListQuery = {}) => http.get<PageResult<TaskEvent>>(`/tasks/${id}/events${listQueryString(query)}`),
   getTaskEvent: (id: string) => http.get<TaskEvent>(`/tasks/events/${id}`),
   listRecords: (query: ListQuery = {}) => http.get<PageResult<InspectionRecord>>(`/records${listQueryString(query)}`),
@@ -119,9 +114,9 @@ export const resourcesApi = {
   getAlarm: (id: string) => http.get<Alarm>(`/alarms/${encodeURIComponent(id)}`),
   acknowledgeAlarm: (id: string) => http.post<Alarm>(`/alarms/${id}/ack`),
   acknowledgeAllAlarms: () => http.post<Alarm[]>('/alarms/ack-all'),
-  getAlarmWorkOrderPolicy: () => http.get<AlarmWorkOrderPolicy>('/alarms/work-order-policy'),
+  getAlarmWorkOrderPolicy: () => openapiClient.alarms.getWorkOrderPolicy(),
   updateAlarmWorkOrderPolicy: (policy: Pick<AlarmWorkOrderPolicy, 'rules'>) =>
-    http.put<AlarmWorkOrderPolicy>('/alarms/work-order-policy', policy),
+    openapiClient.alarms.updateWorkOrderPolicy(policy.rules),
   retryAlarmWorkOrder: (id: string) => http.post<Alarm>(`/alarms/${id}/retry-work-order`),
 
   listWorkOrders: (query: ListQuery = {}) => http.get<PageResult<WorkOrder>>(`/work-orders${listQueryString(query)}`),

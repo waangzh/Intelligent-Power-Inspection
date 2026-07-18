@@ -21,6 +21,8 @@ import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.task.TaskService;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -110,6 +112,39 @@ class PowerInspectionApplicationTests {
     mockMvc.perform(post("/api/v1/alarms/alarm_seed_003/ack").header("Authorization", bearer(adminToken)))
       .andExpect(status().isForbidden())
       .andExpect(jsonPath("$.message").value("无权限访问"));
+  }
+
+  @Test
+  void loginPermissionsMatchGeneratedManifest() throws Exception {
+    Path manifestPath = Path.of("..", "shared", "generated", "permissions.json");
+    JsonNode manifest = objectMapper.readTree(Files.readString(manifestPath, StandardCharsets.UTF_8));
+    for (String role : List.of("ADMIN", "DISPATCHER", "VIEWER")) {
+      String password = "ADMIN".equals(role) ? "Admin@123" : "DISPATCHER".equals(role) ? "Disp@123" : "View@123";
+      String username = role.toLowerCase();
+      String token = login(username, password);
+      String body = mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(token)))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getContentAsString(StandardCharsets.UTF_8);
+      JsonNode permissions = objectMapper.readTree(body).path("data").path("permissions");
+      JsonNode expected = manifest.path("byRole").path(role);
+      if (permissions.size() != expected.size()) {
+        throw new AssertionError(role + " permissions size mismatch: api=" + permissions.size() + " manifest=" + expected.size());
+      }
+      for (JsonNode perm : expected) {
+        boolean found = false;
+        for (JsonNode actual : permissions) {
+          if (perm.asText().equals(actual.asText())) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          throw new AssertionError(role + " missing permission from manifest: " + perm.asText());
+        }
+      }
+    }
   }
 
   @Test
@@ -313,16 +348,7 @@ class PowerInspectionApplicationTests {
     mockMvc.perform(post("/api/v1/detection-templates")
         .header("Authorization", bearer(adminToken))
         .contentType(MediaType.APPLICATION_JSON)
-        .content(json(
-          "id", "tpl_test_api",
-          "name", "接口测试模板",
-          "scope", "ROUTE",
-          "items", java.util.List.of(Map.of(
-            "type", "PERSON",
-            "enabled", true,
-            "prompt", "测试提示词"
-          ))
-        )))
+        .content(json("id", "tpl_test_api", "name", "接口测试模板", "scope", "ROUTE", "types", java.util.List.of("PERSON"), "prompt", "测试提示词")))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.id").value("tpl_test_api"));
 

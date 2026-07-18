@@ -1,5 +1,6 @@
 const apiConfig = require('../config/api')
 const http = require('../utils/request')
+const { openapiClient } = require('../generated/api-client')
 const mock = require('./mock/store')
 const { uid, loadFromStorage } = require('../utils/storage')
 const { ROUTE_DETECTIONS, CHECKPOINT_DETECTIONS } = require('../utils/constants')
@@ -25,8 +26,22 @@ async function getWorkOrderById(id) {
 }
 
 function useMock() {
-  return apiConfig.useMock
+  return apiConfig.useMock === true && apiConfig.mockMode !== 'openapi'
 }
+
+/**
+ * 后端列表接口统一返回分页对象 { items, total, page, size, hasMore }，
+ * 而 Mock 层历史上返回裸数组。小程序界面按“一次性拿到全量列表”设计，未做分页 UI，
+ * 因此这里统一解包 + 用后端允许的最大分页 size 请求，避免真机对接后端时
+ * 出现 TypeError: xxx.filter/map/slice is not a function，以及被默认分页(20条)截断。
+ */
+function unwrapList(res) {
+  if (Array.isArray(res)) return res
+  if (res && Array.isArray(res.items)) return res.items
+  return []
+}
+
+const LIST_ALL_QUERY = { size: 200 }
 
 function delay(ms = 200) {
   return new Promise((r) => setTimeout(r, ms))
@@ -35,7 +50,7 @@ function delay(ms = 200) {
 // ==================== Auth ====================
 async function login(username, password, remember = true) {
   if (useMock()) return mock.login(username, password, remember)
-  const data = await http.post('/auth/login', { username, password, remember })
+  const data = await openapiClient.auth.login(username, password, remember)
   wx.setStorageSync('pi_session', data)
   return data
 }
@@ -60,7 +75,7 @@ async function refreshMe() {
   if (useMock()) return getSession()
   const session = getSession()
   if (!session?.token) return null
-  const data = await http.get('/auth/me')
+  const data = await openapiClient.auth.me()
   const next = {
     ...session,
     user: data.user,
@@ -136,6 +151,18 @@ async function updateUserRole(userId, role) {
   return http.patch(`/users/${userId}/role`, { role })
 }
 
+async function toggleUserEnabled(userId, enabled) {
+  if (useMock()) {
+    const users = mock.getState().users
+    const idx = users.findIndex((u) => u.id === userId)
+    if (idx < 0) throw new Error('用户不存在')
+    users[idx] = { ...users[idx], enabled }
+    mock.save(mock.KEYS.users, users)
+    return users[idx]
+  }
+  return http.patch(`/users/${userId}/enabled`, { enabled })
+}
+
 async function getPreferences() {
   const session = getSession()
   if (!session) return null
@@ -160,12 +187,12 @@ async function getActivities() {
 // ==================== Sites ====================
 async function getSites() {
   if (useMock()) return mock.getState().sites
-  return http.get('/sites')
+  return unwrapList(await http.get('/sites', LIST_ALL_QUERY))
 }
 
 async function getAreas() {
   if (useMock()) return mock.getState().areas
-  return http.get('/sites/areas')
+  return unwrapList(await http.get('/sites/areas', LIST_ALL_QUERY))
 }
 
 async function saveSite(site) {
@@ -182,7 +209,7 @@ async function saveSite(site) {
     mock.save(mock.KEYS.sites, sites)
     return site
   }
-  return site.id ? http.put(`/sites/${site.id}`, site) : http.post('/sites', site)
+  return site.id ? http.patch(`/sites/${site.id}`, site) : http.post('/sites', site)
 }
 
 async function removeSite(id) {
@@ -298,7 +325,7 @@ function defaultDetectionItems(types) {
 
 async function getRoutes() {
   if (useMock()) return mock.getState().routes
-  return http.get('/routes')
+  return unwrapList(await http.get('/routes', LIST_ALL_QUERY))
 }
 
 async function saveRoute(route) {
@@ -348,12 +375,12 @@ async function removeRoute(id) {
 // ==================== Tasks ====================
 async function getTasks() {
   if (useMock()) return mock.getState().tasks
-  return http.get('/tasks')
+  return unwrapList(await http.get('/tasks', LIST_ALL_QUERY))
 }
 
 async function getRecords() {
   if (useMock()) return mock.getState().records
-  return http.get('/records')
+  return unwrapList(await http.get('/records', LIST_ALL_QUERY))
 }
 
 async function getTaskEvents(taskId) {
@@ -361,7 +388,7 @@ async function getTaskEvents(taskId) {
     return mock.getState().events.filter((e) => e.taskId === taskId)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
   }
-  return http.get(`/tasks/${taskId}/events`)
+  return unwrapList(await http.get(`/tasks/${taskId}/events`, LIST_ALL_QUERY))
 }
 
 async function createTask(name, routeId, robotId) {
@@ -402,22 +429,13 @@ async function takeoverTask(id) {
 
 async function cancelTask(id) {
   if (useMock()) { mock.setTaskStatus(id, 'CANCELLED'); return }
-  await http.post(`/tasks/${id}/cancel`, undefined, { 'Idempotency-Key': `mp-cancel-${Date.now()}` })
-}
-
-async function emergencyStopTask(id, reason) {
-  if (useMock()) { mock.setTaskStatus(id, 'ESTOPPED'); return }
-  await http.post(
-    `/tasks/${id}/emergency-stop`,
-    { reason },
-    { 'Idempotency-Key': `mp-estop-${Date.now()}` },
-  )
+  await http.post(`/tasks/${id}/cancel`)
 }
 
 // ==================== Alarms ====================
 async function getAlarms() {
   if (useMock()) return mock.getState().alarms
-  return http.get('/alarms')
+  return unwrapList(await http.get('/alarms', LIST_ALL_QUERY))
 }
 
 async function acknowledgeAlarm(id) {
@@ -445,7 +463,7 @@ async function getAlarmWorkOrderPolicy() {
     const alarmPolicy = require('../utils/alarm-policy')
     return { id: 'default', rules: alarmPolicy.loadPolicy() }
   }
-  return http.get('/alarms/work-order-policy')
+  return openapiClient.alarms.getWorkOrderPolicy()
 }
 
 async function updateAlarmWorkOrderPolicy(rules) {
@@ -454,7 +472,7 @@ async function updateAlarmWorkOrderPolicy(rules) {
     alarmPolicy.savePolicy(rules)
     return { id: 'default', rules: alarmPolicy.loadPolicy() }
   }
-  return http.put('/alarms/work-order-policy', { rules })
+  return openapiClient.alarms.updateWorkOrderPolicy(rules)
 }
 
 // ==================== Work Orders ====================
@@ -472,8 +490,15 @@ async function patchWorkOrderQuiet(id, patch) {
 
 async function getWorkOrders() {
   let raw
-  if (useMock()) raw = mock.getState().workOrders
-  else raw = await http.get('/work-orders')
+  if (useMock()) {
+    raw = mock.getState().workOrders
+  } else if (!sessionPermissions().includes('workorder:view')) {
+    // 观察员等角色没有工单权限，后端会对 GET /work-orders 一律返回 403。
+    // 提前短路，避免每次切换 tab 触发的角标刷新都打一次注定失败的请求、刷屏 403 日志。
+    raw = []
+  } else {
+    raw = unwrapList(await http.get('/work-orders', LIST_ALL_QUERY))
+  }
 
   const normalized = raw.map(normalizeWorkOrder)
   await Promise.all(
@@ -638,7 +663,7 @@ async function submitWorkOrderReview(id, form) {
 // ==================== Robots ====================
 async function getRobots() {
   if (useMock()) return mock.getState().robots
-  return http.get('/robots')
+  return unwrapList(await http.get('/robots', LIST_ALL_QUERY))
 }
 
 async function addRobot(robot) {
@@ -667,7 +692,7 @@ async function removeRobot(id) {
 // ==================== Detection ====================
 async function getDetectionTemplates() {
   if (useMock()) return mock.getState().detectionTemplates
-  return http.get('/detection-templates')
+  return unwrapList(await http.get('/detection-templates', LIST_ALL_QUERY))
 }
 
 async function addDetectionTemplate(tpl) {
@@ -697,7 +722,8 @@ async function getNotifications(userId) {
     const list = mock.getState().notifications
     return list.filter((n) => n.userId === userId || n.userId === '*')
   }
-  return http.get('/notifications')
+  // 后端按当前登录用户（JWT）自动过滤，无需也不支持传 userId 查询参数
+  return unwrapList(await http.get('/notifications', LIST_ALL_QUERY))
 }
 
 async function markNotificationRead(id) {
@@ -717,7 +743,7 @@ async function markAllNotificationsRead(userId) {
     mock.save(mock.KEYS.notifications, list)
     return
   }
-  await http.post('/notifications/read-all')
+  await http.patch('/notifications/read-all')
 }
 
 async function removeNotification(id) {
@@ -751,6 +777,7 @@ module.exports = {
   changePassword,
   listUsers,
   updateUserRole,
+  toggleUserEnabled,
   getPreferences,
   savePreferences,
   getActivities,
@@ -780,7 +807,6 @@ module.exports = {
   resumeTask,
   takeoverTask,
   cancelTask,
-  emergencyStopTask,
   getAlarms,
   acknowledgeAlarm,
   acknowledgeAllAlarms,
