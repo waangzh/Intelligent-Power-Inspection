@@ -58,8 +58,11 @@ logs/
 # Agent local instructions
 .claude/
 AGENTS.md
-agents.md
+CLAUDE.md
 **/AGENTS.md
-**/agents.md
+**/CLAUDE.md
+
+# Agent memory
+.agent/
 
 /docs
