@@ -36,7 +36,11 @@ export const detectionTemplates = '/api/v1/detection-templates' as const
 export const detectionTemplatesId = '/api/v1/detection-templates/{id}' as const
 export const detectionsManual = '/api/v1/detections/manual' as const
 export const detectionsManualRequestId = '/api/v1/detections/manual/{requestId}' as const
+export const detectionsRobotImage = '/api/v1/detections/robot-image' as const
+export const detectionsRuns = '/api/v1/detections/runs' as const
+export const detectionsRunsId = '/api/v1/detections/runs/{id}' as const
 export const health = '/api/v1/health' as const
+export const internalRobotInspectionImages = '/api/v1/internal/robot-inspection-images' as const
 export const internalRobotMapAssets = '/api/v1/internal/robot-map-assets' as const
 export const mapAssets = '/api/v1/map-assets' as const
 export const mapAssetsId = '/api/v1/map-assets/{id}' as const
@@ -49,6 +53,9 @@ export const notificationsId = '/api/v1/notifications/{id}' as const
 export const notificationsIdRead = '/api/v1/notifications/{id}/read' as const
 export const records = '/api/v1/records' as const
 export const recordsExport = '/api/v1/records/export' as const
+export const robotInspectionImages = '/api/v1/robot-inspection-images' as const
+export const robotInspectionImagesImport = '/api/v1/robot-inspection-images/import' as const
+export const robotInspectionImagesId = '/api/v1/robot-inspection-images/{id}' as const
 export const robots = '/api/v1/robots' as const
 export const robotsStatus = '/api/v1/robots/status' as const
 export const robotsId = '/api/v1/robots/{id}' as const
@@ -80,6 +87,7 @@ export const tasksEventsEventId = '/api/v1/tasks/events/{eventId}' as const
 export const tasksId = '/api/v1/tasks/{id}' as const
 export const tasksIdCancel = '/api/v1/tasks/{id}/cancel' as const
 export const tasksIdDispatch = '/api/v1/tasks/{id}/dispatch' as const
+export const tasksIdEmergencyStop = '/api/v1/tasks/{id}/emergency-stop' as const
 export const tasksIdEvents = '/api/v1/tasks/{id}/events' as const
 export const tasksIdExecution = '/api/v1/tasks/{id}/execution' as const
 export const tasksIdPause = '/api/v1/tasks/{id}/pause' as const
@@ -137,7 +145,11 @@ export const API_PATHS = {
   detectionTemplatesId: '/api/v1/detection-templates/{id}',
   detectionsManual: '/api/v1/detections/manual',
   detectionsManualRequestId: '/api/v1/detections/manual/{requestId}',
+  detectionsRobotImage: '/api/v1/detections/robot-image',
+  detectionsRuns: '/api/v1/detections/runs',
+  detectionsRunsId: '/api/v1/detections/runs/{id}',
   health: '/api/v1/health',
+  internalRobotInspectionImages: '/api/v1/internal/robot-inspection-images',
   internalRobotMapAssets: '/api/v1/internal/robot-map-assets',
   mapAssets: '/api/v1/map-assets',
   mapAssetsId: '/api/v1/map-assets/{id}',
@@ -150,6 +162,9 @@ export const API_PATHS = {
   notificationsIdRead: '/api/v1/notifications/{id}/read',
   records: '/api/v1/records',
   recordsExport: '/api/v1/records/export',
+  robotInspectionImages: '/api/v1/robot-inspection-images',
+  robotInspectionImagesImport: '/api/v1/robot-inspection-images/import',
+  robotInspectionImagesId: '/api/v1/robot-inspection-images/{id}',
   robots: '/api/v1/robots',
   robotsStatus: '/api/v1/robots/status',
   robotsId: '/api/v1/robots/{id}',
@@ -181,6 +196,7 @@ export const API_PATHS = {
   tasksId: '/api/v1/tasks/{id}',
   tasksIdCancel: '/api/v1/tasks/{id}/cancel',
   tasksIdDispatch: '/api/v1/tasks/{id}/dispatch',
+  tasksIdEmergencyStop: '/api/v1/tasks/{id}/emergency-stop',
   tasksIdEvents: '/api/v1/tasks/{id}/events',
   tasksIdExecution: '/api/v1/tasks/{id}/execution',
   tasksIdPause: '/api/v1/tasks/{id}/pause',
