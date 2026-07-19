@@ -3,6 +3,7 @@ const { profileMenuItems } = require('../../../config/menu')
 const { syncTabBar } = require('../../../utils/tab-page')
 const { isTabPage } = require('../../../config/tab-bar')
 const { ROLE_LABELS } = require('../../../utils/constants')
+const { hasPermission } = require('../../../utils/permission')
 
 Page({
   data: {
@@ -20,12 +21,14 @@ Page({
     if (!app.requireAuth('/pages/profile/info/index')) return
     syncTabBar(this)
     const user = app.globalData.user
+    const permissions = app.globalData.permissions
     this.setData({
       user,
       roleLabel: ROLE_LABELS[user.role],
       form: { displayName: user.displayName || '', phone: user.phone || '', bio: user.bio || '' },
       createdLabel: user.createdAt ? user.createdAt.slice(0, 16).replace('T', ' ') : '',
       unreadNotifications: app.globalData.unreadNotifications,
+      profileMenu: profileMenuItems.filter((item) => !item.permission || hasPermission(permissions, item.permission)),
     })
     app.refreshBadges()
   },

@@ -4,6 +4,8 @@
 
 设备地图上传使用 `POST /robot-api/v1/map-assets`：Bridge 校验设备 Token 和大小，写入受控临时目录后通过 `httpx` 流式转发到 Spring 内部接口。生产启用需设置 `BRIDGE_MAP_UPLOAD_ENABLED=true`、上传超时/大小和 `BRIDGE_MAP_UPLOAD_TEMP_DIR`；所有退出路径都会清理临时文件。
 
+巡检图片上传使用 `POST /robot-api/v1/inspection-images`。机器人提交 `image`、`executionId`、`taskId`、`checkpointId`、`capturedAt`、`imageSha256` 和持久化生成的 `Idempotency-Key`；机器人身份只由设备 Token 确定，不能在表单中指定 `robotId`。启用前设置 `BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED=true`，Bridge 校验哈希和大小后转发到 Spring，并在所有退出路径清理临时文件。
+
 ## 本地快速验证
 
 ```bash

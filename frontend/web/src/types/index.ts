@@ -416,3 +416,39 @@ export interface ManualDetectionResponse {
   startedAt?: string
   completedAt?: string
 }
+
+export interface RobotInspectionImage {
+  id: string
+  source: 'ADMIN_IMPORT' | 'ROBOT_BRIDGE'
+  robotId: string
+  robotName: string
+  taskId: string
+  taskName: string
+  executionId?: string
+  routeId: string
+  routeRevisionId?: string
+  checkpointId: string
+  checkpointName: string
+  capturedAt: string
+  contentType: string
+  width?: number
+  height?: number
+  sizeBytes: number
+  sha256: string
+  status: 'AVAILABLE' | 'ORIGINAL_PURGED'
+  originalAvailable: boolean
+  imageUrl?: string
+  createdAt: string
+  originalPurgedAt?: string
+}
+
+export interface DetectionRun extends Omit<ManualDetectionResponse, 'inputImageUrl'> {
+  runId: string
+  sourceType: 'LOCAL_UPLOAD' | 'ROBOT_IMAGE'
+  imageId?: string
+  taskId?: string
+  checkpointId?: string
+  detections: DetectionItem[]
+  inputImageUrl?: string
+  originalAvailable?: boolean
+}

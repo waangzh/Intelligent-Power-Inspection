@@ -102,6 +102,29 @@
           <div v-else class="empty-hint">暂无执行记录，下发任务后将自动生成</div>
           <ListPagination :total="taskStore.eventTotals[taskId] ?? 0" :page="eventPage" @change="loadEventPage" />
         </el-card>
+
+        <el-card shadow="never" style="margin-top: 16px">
+          <template #header>模型检测结果</template>
+          <div v-if="taskRuns.length" class="detection-run-list">
+            <article v-for="run in taskRuns" :key="run.runId" class="detection-run-item">
+              <div class="run-meta">
+                <strong>{{ run.checkpointId || '未关联检查点' }}</strong>
+                <el-tag size="small" :type="run.status === 'SUCCEEDED' ? 'success' : run.status === 'FAILED' ? 'danger' : 'warning'">
+                  {{ run.status === 'SUCCEEDED' ? '成功' : run.status === 'FAILED' ? '失败' : '检测中' }}
+                </el-tag>
+                <span>{{ run.createdAt ? fmt(run.createdAt) : '-' }}</span>
+              </div>
+              <p v-if="run.errorMessage" class="muted">{{ run.errorMessage }}</p>
+              <p v-if="run.originalAvailable === false" class="muted">原始图片已按保留策略清理</p>
+              <div class="run-images">
+                <img v-if="run.inputImageUrl" :src="run.inputImageUrl" alt="机器人原始图片" />
+                <img v-if="run.resultImageUrl" :src="run.resultImageUrl" alt="LocateAnything 标注结果" />
+              </div>
+              <p class="muted">定位结果 {{ run.findings.length }} 项；定位结果不等于异常结论</p>
+            </article>
+          </div>
+          <div v-else class="empty-hint">暂无模型检测结果</div>
+        </el-card>
       </el-col>
 
       <el-col :span="10">
@@ -147,12 +170,14 @@ import { useRobotStore } from '@/stores/robot'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
-import type { TaskEvent } from '@/types'
+import { useDetectionStore } from '@/stores/detection'
+import type { DetectionRun, TaskEvent } from '@/types'
 import { DEPLOYMENT_STATE_LABELS } from '@/utils/routeDeployment'
 
 const router = useRouter()
 const routeParam = useRoute()
 const taskStore = useTaskStore()
+const detectionStore = useDetectionStore()
 const eventPage = ref(0)
 const routeStore = useRouteStore()
 const robotStore = useRobotStore()
@@ -165,6 +190,7 @@ const task = computed(() => taskStore.getTaskById(taskId.value))
 const route = computed(() => (task.value ? routeStore.getRouteById(task.value.routeId) : undefined))
 const robot = computed(() => (task.value ? robotStore.getRobotById(task.value.robotId) : undefined))
 const events = computed(() => taskStore.getEventsByTask(taskId.value))
+const taskRuns = computed<DetectionRun[]>(() => detectionStore.runs.filter((run) => run.taskId === taskId.value))
 
 function loadEventPage(page: number) {
   eventPage.value = page
@@ -323,5 +349,44 @@ function openAgent() {
   margin-top: 8px;
   max-width: 200px;
   border-radius: 6px;
+}
+
+.detection-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detection-run-item {
+  padding: 10px;
+  border: 1px solid #d7dde8;
+  background: #f8fafc;
+}
+
+.run-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.run-meta span {
+  margin-left: auto;
+  color: #909399;
+  font-size: 12px;
+}
+
+.run-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.run-images img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  background: #0f172a;
 }
 </style>

@@ -44,6 +44,9 @@ class ManualDetectionControllerTests {
   @Autowired
   ObjectMapper objectMapper;
 
+  @Autowired
+  DetectionRunRepository detectionRunRepository;
+
   @MockBean
   LocateAnythingGateway locateAnythingGateway;
 
@@ -104,6 +107,9 @@ class ManualDetectionControllerTests {
       .andExpect(jsonPath("$.data.findings[0].bbox[0]").value(12))
       .andExpect(jsonPath("$.data.warnings[0]").value("模型输出已截断"));
     assertThat(finished.path("status").asText()).isEqualTo("SUCCEEDED");
+    DetectionRunEntity persisted = detectionRunRepository.findById(requestId).orElseThrow();
+    assertThat(persisted.getSourceType()).isEqualTo("LOCAL_UPLOAD");
+    assertThat(persisted.getStatus()).isEqualTo("SUCCEEDED");
   }
 
   private byte[] testImage() throws Exception {

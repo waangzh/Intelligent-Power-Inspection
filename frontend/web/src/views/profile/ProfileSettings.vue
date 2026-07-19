@@ -35,8 +35,8 @@
 
       <div v-if="can('alarm:policy')" class="settings-group">
         <h4 class="group-title">告警转工单策略</h4>
-        <p class="group-desc">按告警级别配置自动或人工转工单，保存后立即生效</p>
-        <AlarmEscalationPolicy />
+        <p class="group-desc">按告警级别配置自动或人工转工单，保存后写入后端并立即生效</p>
+        <AlarmEscalationPolicy v-model:rules="policyRules" />
       </div>
     </el-form>
 
@@ -52,14 +52,17 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import AlarmEscalationPolicy from '@/components/AlarmEscalationPolicy.vue'
 import { usePermission } from '@/composables/usePermission'
+import { useAlarmStore } from '@/stores/alarm'
 import { useAuthStore } from '@/stores/auth'
 import { useProfileStore } from '@/stores/profile'
 import { useSiteStore } from '@/stores/site'
 import type { UserPreferences } from '@/types/auth'
+import type { AlarmSeverity, AlarmWorkOrderMode } from '@/types'
 
 const authStore = useAuthStore()
 const profileStore = useProfileStore()
 const siteStore = useSiteStore()
+const alarmStore = useAlarmStore()
 const { can } = usePermission()
 const saving = ref(false)
 
@@ -71,10 +74,21 @@ const form = reactive<UserPreferences>({
   sidebarCollapsed: false,
 })
 
-function loadPrefs() {
+const policyRules = reactive<Record<AlarmSeverity, AlarmWorkOrderMode>>({
+  CRITICAL: 'AUTO',
+  HIGH: 'AUTO',
+  MEDIUM: 'MANUAL',
+  LOW: 'MANUAL',
+})
+
+async function loadPrefs() {
   if (!authStore.user) return
   const prefs = profileStore.loadPreferences(authStore.user.id)
   Object.assign(form, prefs)
+  if (can('alarm:policy')) {
+    await alarmStore.loadWorkOrderPolicy()
+    Object.assign(policyRules, alarmStore.workOrderPolicy.rules)
+  }
 }
 
 async function handleSave() {
@@ -83,6 +97,9 @@ async function handleSave() {
   saving.value = true
   try {
     await profileStore.savePreferences(authStore.user.id, { ...form })
+    if (can('alarm:policy')) {
+      await alarmStore.saveWorkOrderPolicy({ ...policyRules })
+    }
     ElMessage.success('偏好设置已保存')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '保存失败')

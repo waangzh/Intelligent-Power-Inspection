@@ -1,0 +1,15 @@
+.user-row { display: flex; align-items: center; gap: 20rpx; margin-bottom: 16rpx; }
+.user-meta { flex: 1; min-width: 0; }
+.user-name { font-size: 30rpx; font-weight: 700; color: var(--pi-text); margin-right: 12rpx; }
+.info-row { display: flex; justify-content: space-between; padding: 10rpx 0; border-bottom: 1rpx solid var(--pi-border-soft); }
+.user-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid var(--pi-border-soft);
+}
+.role-picker-wrap { display: flex; align-items: center; gap: 12rpx; }
+.picker-val { color: var(--pi-primary); font-size: 26rpx; }
+.action-danger { color: var(--pi-danger); font-size: 26rpx; }

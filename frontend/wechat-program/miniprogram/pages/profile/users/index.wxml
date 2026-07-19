@@ -1,0 +1,47 @@
+<view class="container">
+  <page-header title="用户管理" description="管理系统用户与角色分配（仅管理员）" />
+
+  <view class="card user-item" wx:for="{{users}}" wx:key="id">
+    <view class="user-row">
+      <user-avatar displayName="{{item.displayName}}" avatarUrl="{{item.avatarUrl}}" seed="{{item.id}}" size="72" />
+      <view class="user-meta">
+        <view class="flex-between">
+          <text class="user-name">{{item.displayName}}</text>
+          <text wx:if="{{item.isSelf}}" class="tag tag-info">当前用户</text>
+          <text wx:else class="tag {{item.enabled ? 'tag-success' : 'tag-danger'}}">{{item.statusLabel}}</text>
+        </view>
+        <text class="muted">@{{item.username}}{{item.bio ? '  ·  ' + item.bio : ''}}</text>
+      </view>
+    </view>
+
+    <view class="info-row"><text class="muted">手机号</text><text>{{item.phone || '未填写'}}</text></view>
+    <view class="info-row"><text class="muted">注册时间</text><text>{{item.createdLabel}}</text></view>
+
+    <view class="user-actions">
+      <view class="role-picker-wrap">
+        <text class="muted">角色</text>
+        <picker
+          wx:if="{{!item.isSelf}}"
+          mode="selector"
+          range="{{roleOptions}}"
+          range-key="label"
+          value="{{item.roleIndex}}"
+          data-id="{{item.id}}"
+          bindchange="onRoleChange"
+        >
+          <view class="picker-val">{{item.roleLabel}} ▾</view>
+        </picker>
+        <text wx:else class="tag tag-primary">{{item.roleLabel}}</text>
+      </view>
+      <text
+        wx:if="{{!item.isSelf}}"
+        class="{{item.enabled ? 'action-danger' : 'link'}}"
+        bindtap="toggleEnabled"
+        data-id="{{item.id}}"
+        data-enabled="{{item.enabled}}"
+      >{{item.enabled ? '禁用' : '启用'}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{!loading && !users.length}}" class="empty-hint">暂无用户</view>
+</view>

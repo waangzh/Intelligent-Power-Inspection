@@ -1,0 +1,54 @@
+# AUTO-GENERATED — 领域枚举 OpenAPI 片段（由 backend 约束生成）
+components:
+  schemas:
+    UserRole:
+      type: string
+      enum:
+        - ADMIN
+        - DISPATCHER
+        - VIEWER
+    TaskStatus:
+      type: string
+      enum:
+        - CREATED
+        - DISPATCHED
+        - RUNNING
+        - PAUSED
+        - MANUAL_TAKEOVER
+        - COMPLETED
+        - CANCELLED
+    WorkOrderStatus:
+      type: string
+      enum:
+        - PENDING
+        - PROCESSING
+        - REVIEW
+        - CLOSED
+        - CANCELLED
+    WorkOrderPriority:
+      type: string
+      enum:
+        - URGENT
+        - HIGH
+        - MEDIUM
+        - LOW
+    WorkOrderReviewConclusion:
+      type: string
+      enum:
+        - RESOLVED
+        - PARTIALLY_RESOLVED
+        - UNRESOLVED
+        - FALSE_ALARM
+    AlarmSeverity:
+      type: string
+      enum:
+        - LOW
+        - MEDIUM
+        - HIGH
+        - CRITICAL
+    RobotStatus:
+      type: string
+      enum:
+        - ONLINE
+        - OFFLINE
+        - BUSY

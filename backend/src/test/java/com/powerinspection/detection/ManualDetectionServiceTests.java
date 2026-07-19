@@ -1,7 +1,11 @@
 package com.powerinspection.detection;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.config.ModelFileWebConfig;
 import com.powerinspection.model.LocateAnythingFinding;
 import com.powerinspection.model.LocateAnythingGateway;
@@ -14,6 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
@@ -78,7 +84,20 @@ class ManualDetectionServiceTests {
     ModelProperties properties = new ModelProperties();
     properties.getLocateAnything().setBaseUrl(modelBaseUrl);
     properties.getLocateAnything().setTimeoutSeconds(5);
-    service = new ManualDetectionService(gateway, properties);
+    Map<String, DetectionRunEntity> runs = new ConcurrentHashMap<>();
+    DetectionRunRepository repository = mock(DetectionRunRepository.class);
+    when(repository.saveAndFlush(any())).thenAnswer(invocation -> {
+      DetectionRunEntity run = invocation.getArgument(0);
+      runs.put(run.getId(), run);
+      return run;
+    });
+    when(repository.save(any())).thenAnswer(invocation -> {
+      DetectionRunEntity run = invocation.getArgument(0);
+      runs.put(run.getId(), run);
+      return run;
+    });
+    when(repository.findById(any())).thenAnswer(invocation -> Optional.ofNullable(runs.get(invocation.getArgument(0))));
+    service = new ManualDetectionService(gateway, properties, repository, new ObjectMapper());
 
     service.submit(
       REQUEST_ID,

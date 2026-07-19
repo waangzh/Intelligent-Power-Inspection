@@ -1,10 +1,13 @@
 import { http } from '@/api/http'
+import { openapiClient } from '@/generated/api-client'
 import type {
   Alarm,
   AlarmWorkOrderPolicy,
   Area,
   Checkpoint,
   DetectionTemplate,
+  DetectionItem,
+  DetectionRun,
   InspectionRecord,
   InspectionTask,
   TaskExecution,
@@ -14,6 +17,7 @@ import type {
   MapAssetQuery,
   MapAssetReviewInput,
   Robot,
+  RobotInspectionImage,
   Route,
   RouteRevision,
   TaskEvent,
@@ -104,12 +108,6 @@ export const resourcesApi = {
     http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/takeover`, { reason }, { 'Idempotency-Key': idempotencyKey }),
   cancelTask: (id: string, idempotencyKey: string) =>
     http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/cancel`, undefined, { 'Idempotency-Key': idempotencyKey }),
-  emergencyStopTask: (id: string, reason: string, idempotencyKey: string) =>
-    http.post<TaskExecution>(
-      `/tasks/${encodeURIComponent(id)}/emergency-stop`,
-      { reason },
-      { 'Idempotency-Key': idempotencyKey },
-    ),
   taskEvents: (id: string, query: ListQuery = {}) => http.get<PageResult<TaskEvent>>(`/tasks/${id}/events${listQueryString(query)}`),
   getTaskEvent: (id: string) => http.get<TaskEvent>(`/tasks/events/${id}`),
   listRecords: (query: ListQuery = {}) => http.get<PageResult<InspectionRecord>>(`/records${listQueryString(query)}`),
@@ -119,9 +117,9 @@ export const resourcesApi = {
   getAlarm: (id: string) => http.get<Alarm>(`/alarms/${encodeURIComponent(id)}`),
   acknowledgeAlarm: (id: string) => http.post<Alarm>(`/alarms/${id}/ack`),
   acknowledgeAllAlarms: () => http.post<Alarm[]>('/alarms/ack-all'),
-  getAlarmWorkOrderPolicy: () => http.get<AlarmWorkOrderPolicy>('/alarms/work-order-policy'),
+  getAlarmWorkOrderPolicy: () => openapiClient.alarms.getWorkOrderPolicy(),
   updateAlarmWorkOrderPolicy: (policy: Pick<AlarmWorkOrderPolicy, 'rules'>) =>
-    http.put<AlarmWorkOrderPolicy>('/alarms/work-order-policy', policy),
+    openapiClient.alarms.updateWorkOrderPolicy(policy.rules),
   retryAlarmWorkOrder: (id: string) => http.post<Alarm>(`/alarms/${id}/retry-work-order`),
 
   listWorkOrders: (query: ListQuery = {}) => http.get<PageResult<WorkOrder>>(`/work-orders${listQueryString(query)}`),
@@ -159,6 +157,15 @@ export const resourcesApi = {
   removeDetectionTemplate: (id: string) => http.delete<void>(`/detection-templates/${id}`),
   manualLocateDetection: (form: FormData) => http.postForm<ManualDetectionResponse>(`/detections/manual`, form),
   getManualLocateDetection: (requestId: string) => http.get<ManualDetectionResponse>(`/detections/manual/${requestId}`),
+  listRobotInspectionImages: (query: ListQuery = {}) =>
+    http.get<PageResult<RobotInspectionImage>>(`/robot-inspection-images${listQueryString(query)}`),
+  importRobotInspectionImage: (form: FormData) =>
+    http.postForm<RobotInspectionImage>('/robot-inspection-images/import', form),
+  detectRobotInspectionImage: (imageId: string, detections: DetectionItem[]) =>
+    http.post<DetectionRun>('/detections/robot-image', { imageId, detections }),
+  listDetectionRuns: (query: ListQuery = {}) =>
+    http.get<PageResult<DetectionRun>>(`/detections/runs${listQueryString(query)}`),
+  getDetectionRun: (runId: string) => http.get<DetectionRun>(`/detections/runs/${encodeURIComponent(runId)}`),
 
   listNotifications: (query: ListQuery = {}) => http.get<PageResult<AppNotification>>(`/notifications${listQueryString(query)}`),
   getNotification: (id: string) => http.get<AppNotification>(`/notifications/${encodeURIComponent(id)}`),

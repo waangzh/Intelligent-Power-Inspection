@@ -8,7 +8,8 @@
     "test": "vitest run",
     "build": "vue-tsc --noEmit -p tsconfig.app.json && vue-tsc --noEmit -p tsconfig.node.json && vite build --configLoader runner",
     "preview": "vite preview",
-    "permissions:check": "node ../../scripts/permissions/check.mjs"
+    "permissions:check": "node ../../scripts/permissions/check.mjs",
+    "codegen:check": "npm --prefix ../.. run codegen:check"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

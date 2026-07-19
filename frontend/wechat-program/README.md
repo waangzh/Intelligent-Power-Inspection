@@ -8,32 +8,43 @@
 2. 导入本项目目录：`frontend/wechat-program`
 3. AppID 可使用测试号（`project.config.json` 中 `touristappid`）
 4. 启动后端（见仓库根目录 README）
-5. 编译运行（**默认对接真实后端**）
+5. 在仓库根目录生成运行配置并编译（**默认对接真实后端**）：
 
-## 对接共用后端（默认）
-
-`miniprogram/config/api.js` 默认 `useMock: false`，请求 `http://localhost:8080/api/v1`。
+```bash
+npm run miniprogram:env
+```
 
 开发阶段在微信开发者工具中：详情 → 本地设置 → 勾选「不校验合法域名」。
 
-## 演示模式（无后端时）
+## 对接共用后端（默认）
 
-复制本地配置示例并启用 Mock：
+`npm run miniprogram:env` 会生成 `miniprogram/config/build-env.js`（`useMock: false`），请求 `http://localhost:8080/api/v1`。
+
+## 演示模式
+
+### wx.storage 本地 Mock（无后端）
 
 ```bash
-cp miniprogram/config/api.local.example.js miniprogram/config/api.local.js
+npm run miniprogram:env:mock
 ```
 
-`api.local.js` 已加入 `.gitignore`，不会提交到 Git。演示账号与 web 端相同：`admin` / `Admin@123` 等。
+演示账号与 web 端相同：`admin` / `Admin@123` 等。Mock 权限矩阵来自 `generated/permissions.js`（codegen，与 backend 一致）。
 
-## 权限
-
-运行时权限来自后端 `/auth/login`、`/auth/me` 返回的 `permissions[]`。Mock 演示登录使用 `miniprogram/generated/permissions.js`（由 backend codegen 生成，勿手工维护）。
-
-仓库根目录校验三端一致性：
+### OpenAPI Mock Server（Prism）
 
 ```bash
-npm run permissions:check
+npm run mock:openapi          # 需后端 /v3/api-docs 可访问
+npm run miniprogram:env:openapi
+```
+
+## 权限与领域枚举
+
+- 运行时权限来自 `/auth/login`、`/auth/me` 的 `permissions[]`
+- 状态枚举（任务/工单/告警等）来自 `miniprogram/generated/domain-enums.js`
+- 仓库根目录校验三端一致性：
+
+```bash
+npm run codegen:check
 ```
 
 ## 目录结构
@@ -41,34 +52,21 @@ npm run permissions:check
 ```text
 wechat-program/
 ├─ docs/API.md              # 接口文档
-├─ scripts/                 # 本地校验脚本
 ├─ project.config.json
 └─ miniprogram/
    ├─ app.js / app.json
-   ├─ config/               # api、api.local.example、menu、theme
+   ├─ config/               # api、build-env（生成）、api.local.example
+   ├─ generated/            # permissions.js、domain-enums.js（codegen）
    ├─ services/             # 业务层（mock + HTTP）
-   ├─ utils/                 # request、permission、analytics
-   ├─ components/            # page-header、user-avatar 等
-   └─ pages/                 # 全部业务页面
+   ├─ utils/
+   └─ pages/
 ```
 
-## 功能模块
-
-| 模块 | 页面 |
-|------|------|
-| 认证 | 登录、注册 |
-| Tab 栏 | 总览、监控、告警（含工单入口）、任务、我的 |
-| 个人中心 | 我的信息、头像、安全、记录、设置、消息中心 |
-
-## 接口文档
-
-详见 [docs/API.md](./docs/API.md)
-
-## 与 web 端差异
+## 与 Web 端对齐
 
 | 项目 | 说明 |
-|------|------|
-| 3D 地图 | 小程序简化为 2D / 列表展示 |
-| 数据存储 | mock 模式用 wx.storage，与 web localStorage 不互通 |
-| Agent 模块 | 小程序暂未实现 Agent 页面 |
+| --- | --- |
 | 共用后端 | 默认 `useMock: false`，两端数据一致 |
+| 权限 codegen | `npm run permissions:generate` |
+| 枚举 codegen | `npm run domain:generate` |
+| Mock 开关 | 构建变量 `USE_MOCK`，不写死在源码 |

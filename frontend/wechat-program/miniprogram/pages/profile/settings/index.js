@@ -34,7 +34,7 @@ Page({
         const policy = await api.getAlarmWorkOrderPolicy()
         policyRules = policy.rules
       } catch (e) {
-        policyRules = alarmPolicy.loadPolicy()
+        policyRules = alarmPolicy.DEFAULT_POLICY
       }
     }
     const { ALARM_SEVERITY_LABELS } = require('../../../utils/constants')

@@ -6,10 +6,10 @@
         <span class="policy-hint">{{ row.hint }}</span>
       </div>
       <el-radio-group
-        :model-value="policyStore.policy[row.severity]"
+        :model-value="rules[row.severity]"
         size="default"
         class="policy-radio"
-        @change="(v: EscalationMode) => onPolicyChange(row.severity, v)"
+        @change="(v: AlarmWorkOrderMode) => onPolicyChange(row.severity, v)"
       >
         <el-radio-button value="AUTO">自动转工单</el-radio-button>
         <el-radio-button value="MANUAL">人工转工单</el-radio-button>
@@ -19,11 +19,10 @@
 </template>
 
 <script setup lang="ts">
-import { useAlarmPolicyStore, type EscalationMode } from '@/stores/alarmPolicy'
-import type { AlarmSeverity } from '@/types'
+import type { AlarmSeverity, AlarmWorkOrderMode } from '@/types'
 import { ALARM_SEVERITY_LABELS } from '@/types'
 
-const policyStore = useAlarmPolicyStore()
+const rules = defineModel<Record<AlarmSeverity, AlarmWorkOrderMode>>('rules', { required: true })
 
 const policyRows = [
   { severity: 'CRITICAL' as AlarmSeverity, hint: '紧急告警到达后自动创建工单' },
@@ -36,8 +35,8 @@ function severityType(s: AlarmSeverity) {
   return { LOW: 'info', MEDIUM: 'warning', HIGH: 'warning', CRITICAL: 'danger' }[s] as 'info' | 'warning' | 'danger'
 }
 
-function onPolicyChange(severity: AlarmSeverity, mode: EscalationMode) {
-  policyStore.setMode(severity, mode)
+function onPolicyChange(severity: AlarmSeverity, mode: AlarmWorkOrderMode) {
+  rules.value = { ...rules.value, [severity]: mode }
 }
 </script>
 

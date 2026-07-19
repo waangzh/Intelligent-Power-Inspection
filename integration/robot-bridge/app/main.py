@@ -51,6 +51,11 @@ def create_app() -> FastAPI:
     upload_pgm_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_PGM_MAX_BYTES", str(100 * 1024 * 1024)))
     upload_request_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_REQUEST_MAX_BYTES", str(110 * 1024 * 1024)))
     upload_temp_root = Path(os.environ.get("BRIDGE_MAP_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/map-upload-tmp")).expanduser()
+    inspection_upload_enabled = os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+    inspection_upload_max = int(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_MAX_BYTES", str(20 * 1024 * 1024)))
+    inspection_upload_temp_root = Path(os.environ.get(
+        "BRIDGE_INSPECTION_IMAGE_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/inspection-image-upload-tmp"
+    )).expanduser()
     store = Store(os.environ.get("ROBOT_BRIDGE_STORAGE_PATH", "~/.local/share/ylhb/robot-bridge.db"))
     app.state.store = store
 
@@ -350,6 +355,85 @@ def create_app() -> FastAPI:
         finally:
             await yaml_file.close()
             await pgm_file.close()
+            shutil.rmtree(temporary, ignore_errors=True)
+
+    @app.post("/robot-api/v1/inspection-images")
+    async def upload_inspection_image(
+        request: Request,
+        image: UploadFile = File(),
+        execution_id: str = Form(alias="executionId"),
+        task_id: str = Form(alias="taskId"),
+        checkpoint_id: str = Form(alias="checkpointId"),
+        captured_at: str = Form(alias="capturedAt"),
+        image_sha256: str = Form(alias="imageSha256"),
+        width: str = Form(default=""),
+        height: str = Form(default=""),
+    ):
+        if not inspection_upload_enabled:
+            raise BridgeError("UPLOAD_DISABLED", "inspection image upload is disabled", 503)
+        robot_id = token_robot(request)
+        idempotency_key = request.headers.get("idempotency-key", "").strip()
+        if not idempotency_key or len(idempotency_key) > 160:
+            raise BridgeError("INVALID_REQUEST", "valid Idempotency-Key is required")
+        if not all(value.strip() for value in (execution_id, task_id, checkpoint_id, captured_at)):
+            raise BridgeError("INVALID_REQUEST", "executionId, taskId, checkpointId and capturedAt are required")
+        if not valid_sha256(image_sha256):
+            raise BridgeError("INVALID_REQUEST", "imageSha256 must be SHA-256")
+        image_name = safe_name(image.filename, (".jpg", ".jpeg", ".png", ".webp", ".bmp"))
+        inspection_upload_temp_root.mkdir(parents=True, exist_ok=True)
+        temporary = Path(tempfile.mkdtemp(prefix="inspection-image-", dir=inspection_upload_temp_root))
+        image_path = temporary / image_name
+        try:
+            _, actual_sha = await save_upload(image, image_path, inspection_upload_max)
+            if not hmac.compare_digest(image_sha256.lower(), actual_sha):
+                raise BridgeError("CONTENT_MISMATCH", "inspection image hash mismatch", 409)
+            if not platform_url or not platform_token:
+                raise BridgeError("PLATFORM_UNREACHABLE", "platform configuration is missing", 503)
+            data = {
+                "executionId": execution_id.strip(),
+                "taskId": task_id.strip(),
+                "checkpointId": checkpoint_id.strip(),
+                "capturedAt": captured_at.strip(),
+                "imageSha256": actual_sha,
+            }
+            if width.strip():
+                data["width"] = width.strip()
+            if height.strip():
+                data["height"] = height.strip()
+            try:
+                with image_path.open("rb") as image_source:
+                    async with httpx.AsyncClient(
+                        timeout=httpx.Timeout(upload_read_timeout, connect=upload_connect_timeout), trust_env=False
+                    ) as client:
+                        response = await client.post(
+                            platform_url + "/api/v1/internal/robot-inspection-images",
+                            headers={
+                                "Authorization": f"Bearer {platform_token}",
+                                "X-Bridge-Robot-Id": robot_id,
+                                "Idempotency-Key": idempotency_key,
+                            },
+                            data=data,
+                            files={"image": (image_name, image_source, image.content_type or "application/octet-stream")},
+                        )
+            except httpx.HTTPError as exc:
+                raise BridgeError("PLATFORM_UNREACHABLE", f"platform upload failed: {type(exc).__name__}", 503) from exc
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise BridgeError("PLATFORM_UNREACHABLE", "platform returned invalid JSON", 503) from exc
+            if response.status_code >= 400:
+                return platform_error(response.status_code, payload)
+            saved = payload.get("data", payload)
+            return JSONResponse(status_code=response.status_code, content={
+                "imageId": saved.get("id"),
+                "status": saved.get("status"),
+                "source": saved.get("source"),
+                "executionId": saved.get("executionId"),
+                "taskId": saved.get("taskId"),
+                "checkpointId": saved.get("checkpointId"),
+            })
+        finally:
+            await image.close()
             shutil.rmtree(temporary, ignore_errors=True)
 
     @app.get("/robot-api/v1/deployments/{deployment_id}/{asset}")

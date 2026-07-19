@@ -13,7 +13,9 @@ App({
   },
 
   onLaunch() {
-    if (apiConfig.useMock) {
+    if (apiConfig.mockMode === 'openapi') {
+      console.warn('[power-inspection] OpenAPI Mock 模式：请求', apiConfig.baseUrl)
+    } else if (apiConfig.useMock) {
       console.warn('[power-inspection] 演示模式 useMock=true：数据来自本地 wx.storage，非真实后端')
     }
     this.restoreSession()
