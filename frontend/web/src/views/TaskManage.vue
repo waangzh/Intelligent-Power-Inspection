@@ -181,7 +181,7 @@ import { DEPLOYMENT_STATE_LABELS } from '@/utils/routeDeployment'
 const readyDeploymentLabel = DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT
 
 const router = useRouter()
-const { can, canAny } = usePermission()
+const { can } = usePermission()
 const taskPage = ref(0)
 
 function loadTaskPage(page: number) {

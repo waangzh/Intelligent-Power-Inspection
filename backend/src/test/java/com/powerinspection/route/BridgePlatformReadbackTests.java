@@ -81,9 +81,8 @@ class BridgePlatformReadbackTests {
       .andExpect(status().isUnauthorized());
     mockMvc.perform(get("/api/v1/map-assets/{id}", revision.getMapAssetId()))
       .andExpect(status().isUnauthorized());
-    // Bridge 凭据不是有效 JWT，命中需登录的接口时属于“未认证”而非“已登录但无权限”。
     mockMvc.perform(post("/api/v1/route-deployments/{id}/reconcile", deploymentId).header("Authorization", bearer()))
-      .andExpect(status().isUnauthorized());
+      .andExpect(status().isForbidden());
   }
 
   private String bearer() {

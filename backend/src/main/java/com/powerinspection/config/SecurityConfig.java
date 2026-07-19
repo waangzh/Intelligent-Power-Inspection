@@ -2,6 +2,7 @@ package com.powerinspection.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.common.ApiResponse;
+import com.powerinspection.robot.RobotBridgeIdMapper;
 import com.powerinspection.security.JwtAuthenticationFilter;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
@@ -72,12 +73,20 @@ public class SecurityConfig {
     return new BCryptPasswordEncoder();
   }
 
-  /** 未登录 / token 失效：统一返回 401 + ApiResponse JSON，而不是 Spring Security 默认的 403。 */
+  /**
+   * 未登录 / token 失效：统一返回 401 + ApiResponse JSON，而不是 Spring Security 默认的 403。
+   * Bridge 平台凭据不是标准登录态，命中需登录接口时视为“已识别但无权限”，保留 403。
+   */
   @Bean
-  AuthenticationEntryPoint authenticationEntryPoint(ObjectMapper objectMapper) {
-    return (request, response, authException) -> writeJsonError(
-      response, objectMapper, HttpStatus.UNAUTHORIZED, 401, "未登录或登录状态已失效"
-    );
+  AuthenticationEntryPoint authenticationEntryPoint(ObjectMapper objectMapper, RobotBridgeIdMapper robotBridgeIdMapper) {
+    return (request, response, authException) -> {
+      boolean bridgeRequest = robotBridgeIdMapper.isBridgePlatformRequest(request.getHeader("Authorization"));
+      if (bridgeRequest) {
+        writeJsonError(response, objectMapper, HttpStatus.FORBIDDEN, 403, "Bridge 凭据无权访问该接口");
+      } else {
+        writeJsonError(response, objectMapper, HttpStatus.UNAUTHORIZED, 401, "未登录或登录状态已失效");
+      }
+    };
   }
 
   /** 已登录但权限不足（Spring Security 层面拒绝，如非法 CORS/方法级校验）：返回 403 + ApiResponse JSON。 */
