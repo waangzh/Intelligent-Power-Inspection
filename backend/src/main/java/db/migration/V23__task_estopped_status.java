@@ -19,7 +19,15 @@ public class V23__task_estopped_status extends BaseJavaMigration {
       if (h2) {
         statement.execute("ALTER TABLE inspection_tasks DROP CONSTRAINT chk_inspection_tasks_status");
       } else {
-        statement.execute("ALTER TABLE inspection_tasks DROP CHECK chk_inspection_tasks_status");
+        try {
+          statement.execute("ALTER TABLE inspection_tasks DROP CONSTRAINT chk_inspection_tasks_status");
+        } catch (Exception e) {
+          try {
+            statement.execute("ALTER TABLE inspection_tasks DROP CHECK chk_inspection_tasks_status");
+          } catch (Exception e2) {
+            // MySQL < 8.0.16 不支持 CHECK 约束或 DROP CHECK/DROP CONSTRAINT 语法，忽略
+          }
+        }
       }
       statement.execute(
         "ALTER TABLE inspection_tasks ADD CONSTRAINT chk_inspection_tasks_status "
