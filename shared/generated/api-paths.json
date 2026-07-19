@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-19T00:55:44.657Z",
+  "generatedAt": "2026-07-19T02:00:22.007Z",
   "paths": [
     {
       "apiPath": "/api/v1/agent-actions/{actionId}",
@@ -187,9 +187,29 @@
       "name": "detectionsManualRequestId"
     },
     {
+      "apiPath": "/api/v1/detections/robot-image",
+      "relPath": "/detections/robot-image",
+      "name": "detectionsRobotImage"
+    },
+    {
+      "apiPath": "/api/v1/detections/runs",
+      "relPath": "/detections/runs",
+      "name": "detectionsRuns"
+    },
+    {
+      "apiPath": "/api/v1/detections/runs/{id}",
+      "relPath": "/detections/runs/{id}",
+      "name": "detectionsRunsId"
+    },
+    {
       "apiPath": "/api/v1/health",
       "relPath": "/health",
       "name": "health"
+    },
+    {
+      "apiPath": "/api/v1/internal/robot-inspection-images",
+      "relPath": "/internal/robot-inspection-images",
+      "name": "internalRobotInspectionImages"
     },
     {
       "apiPath": "/api/v1/internal/robot-map-assets",
@@ -250,6 +270,21 @@
       "apiPath": "/api/v1/records/export",
       "relPath": "/records/export",
       "name": "recordsExport"
+    },
+    {
+      "apiPath": "/api/v1/robot-inspection-images",
+      "relPath": "/robot-inspection-images",
+      "name": "robotInspectionImages"
+    },
+    {
+      "apiPath": "/api/v1/robot-inspection-images/import",
+      "relPath": "/robot-inspection-images/import",
+      "name": "robotInspectionImagesImport"
+    },
+    {
+      "apiPath": "/api/v1/robot-inspection-images/{id}",
+      "relPath": "/robot-inspection-images/{id}",
+      "name": "robotInspectionImagesId"
     },
     {
       "apiPath": "/api/v1/robots",
@@ -405,6 +440,11 @@
       "apiPath": "/api/v1/tasks/{id}/dispatch",
       "relPath": "/tasks/{id}/dispatch",
       "name": "tasksIdDispatch"
+    },
+    {
+      "apiPath": "/api/v1/tasks/{id}/emergency-stop",
+      "relPath": "/tasks/{id}/emergency-stop",
+      "name": "tasksIdEmergencyStop"
     },
     {
       "apiPath": "/api/v1/tasks/{id}/events",

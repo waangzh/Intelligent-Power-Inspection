@@ -36,7 +36,11 @@ const detectionTemplates = '/api/v1/detection-templates'
 const detectionTemplatesId = '/api/v1/detection-templates/{id}'
 const detectionsManual = '/api/v1/detections/manual'
 const detectionsManualRequestId = '/api/v1/detections/manual/{requestId}'
+const detectionsRobotImage = '/api/v1/detections/robot-image'
+const detectionsRuns = '/api/v1/detections/runs'
+const detectionsRunsId = '/api/v1/detections/runs/{id}'
 const health = '/api/v1/health'
+const internalRobotInspectionImages = '/api/v1/internal/robot-inspection-images'
 const internalRobotMapAssets = '/api/v1/internal/robot-map-assets'
 const mapAssets = '/api/v1/map-assets'
 const mapAssetsId = '/api/v1/map-assets/{id}'
@@ -49,6 +53,9 @@ const notificationsId = '/api/v1/notifications/{id}'
 const notificationsIdRead = '/api/v1/notifications/{id}/read'
 const records = '/api/v1/records'
 const recordsExport = '/api/v1/records/export'
+const robotInspectionImages = '/api/v1/robot-inspection-images'
+const robotInspectionImagesImport = '/api/v1/robot-inspection-images/import'
+const robotInspectionImagesId = '/api/v1/robot-inspection-images/{id}'
 const robots = '/api/v1/robots'
 const robotsStatus = '/api/v1/robots/status'
 const robotsId = '/api/v1/robots/{id}'
@@ -80,6 +87,7 @@ const tasksEventsEventId = '/api/v1/tasks/events/{eventId}'
 const tasksId = '/api/v1/tasks/{id}'
 const tasksIdCancel = '/api/v1/tasks/{id}/cancel'
 const tasksIdDispatch = '/api/v1/tasks/{id}/dispatch'
+const tasksIdEmergencyStop = '/api/v1/tasks/{id}/emergency-stop'
 const tasksIdEvents = '/api/v1/tasks/{id}/events'
 const tasksIdExecution = '/api/v1/tasks/{id}/execution'
 const tasksIdPause = '/api/v1/tasks/{id}/pause'
@@ -141,7 +149,11 @@ module.exports = {
   detectionTemplatesId,
   detectionsManual,
   detectionsManualRequestId,
+  detectionsRobotImage,
+  detectionsRuns,
+  detectionsRunsId,
   health,
+  internalRobotInspectionImages,
   internalRobotMapAssets,
   mapAssets,
   mapAssetsId,
@@ -154,6 +166,9 @@ module.exports = {
   notificationsIdRead,
   records,
   recordsExport,
+  robotInspectionImages,
+  robotInspectionImagesImport,
+  robotInspectionImagesId,
   robots,
   robotsStatus,
   robotsId,
@@ -185,6 +200,7 @@ module.exports = {
   tasksId,
   tasksIdCancel,
   tasksIdDispatch,
+  tasksIdEmergencyStop,
   tasksIdEvents,
   tasksIdExecution,
   tasksIdPause,
@@ -241,7 +257,11 @@ module.exports = {
     detectionTemplatesId: '/api/v1/detection-templates/{id}',
     detectionsManual: '/api/v1/detections/manual',
     detectionsManualRequestId: '/api/v1/detections/manual/{requestId}',
+    detectionsRobotImage: '/api/v1/detections/robot-image',
+    detectionsRuns: '/api/v1/detections/runs',
+    detectionsRunsId: '/api/v1/detections/runs/{id}',
     health: '/api/v1/health',
+    internalRobotInspectionImages: '/api/v1/internal/robot-inspection-images',
     internalRobotMapAssets: '/api/v1/internal/robot-map-assets',
     mapAssets: '/api/v1/map-assets',
     mapAssetsId: '/api/v1/map-assets/{id}',
@@ -254,6 +274,9 @@ module.exports = {
     notificationsIdRead: '/api/v1/notifications/{id}/read',
     records: '/api/v1/records',
     recordsExport: '/api/v1/records/export',
+    robotInspectionImages: '/api/v1/robot-inspection-images',
+    robotInspectionImagesImport: '/api/v1/robot-inspection-images/import',
+    robotInspectionImagesId: '/api/v1/robot-inspection-images/{id}',
     robots: '/api/v1/robots',
     robotsStatus: '/api/v1/robots/status',
     robotsId: '/api/v1/robots/{id}',
@@ -285,6 +308,7 @@ module.exports = {
     tasksId: '/api/v1/tasks/{id}',
     tasksIdCancel: '/api/v1/tasks/{id}/cancel',
     tasksIdDispatch: '/api/v1/tasks/{id}/dispatch',
+    tasksIdEmergencyStop: '/api/v1/tasks/{id}/emergency-stop',
     tasksIdEvents: '/api/v1/tasks/{id}/events',
     tasksIdExecution: '/api/v1/tasks/{id}/execution',
     tasksIdPause: '/api/v1/tasks/{id}/pause',

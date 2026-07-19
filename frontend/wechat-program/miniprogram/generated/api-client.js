@@ -66,7 +66,10 @@ const openapiClient = {
   },
   detections: {
     detect(body) { return post(buildPath(API_PATHS.detectionsManual), body) },
-    get2(requestId, query) { return get(buildPath(API_PATHS.detectionsManualRequestId, { requestId }), query) },
+    get4(requestId, query) { return get(buildPath(API_PATHS.detectionsManualRequestId, { requestId }), query) },
+    detectRobotImage(body) { return post(buildPath(API_PATHS.detectionsRobotImage), body) },
+    getRuns(query) { return get(buildPath(API_PATHS.detectionsRuns), query) },
+    get3(id, query) { return get(buildPath(API_PATHS.detectionsRunsId, { id }), query) },
   },
   detectionTemplates: {
     templates(query) { return get(buildPath(API_PATHS.detectionTemplates), query) },
@@ -79,6 +82,7 @@ const openapiClient = {
     health(query) { return get(buildPath(API_PATHS.health), query) },
   },
   internal: {
+    upload2(body) { return post(buildPath(API_PATHS.internalRobotInspectionImages), body) },
     upload1(body) { return post(buildPath(API_PATHS.internalRobotMapAssets), body) },
   },
   mapAssets: {
@@ -100,6 +104,11 @@ const openapiClient = {
   records: {
     getRecords(query) { return get(buildPath(API_PATHS.records), query) },
     exportCsv(body) { return post(buildPath(API_PATHS.recordsExport), body) },
+  },
+  robotInspectionImages: {
+    getRobotInspectionImages(query) { return get(buildPath(API_PATHS.robotInspectionImages), query) },
+    get2(id, query) { return get(buildPath(API_PATHS.robotInspectionImagesId, { id }), query) },
+    importImage(body) { return post(buildPath(API_PATHS.robotInspectionImagesImport), body) },
   },
   robots: {
     listRobots(query) { return get(buildPath(API_PATHS.robots), query) },
@@ -163,6 +172,7 @@ const openapiClient = {
     updateTask(id, body) { return patch(buildPath(API_PATHS.tasksId, { id }), body) },
     cancel(id, body) { return post(buildPath(API_PATHS.tasksIdCancel, { id }), body) },
     dispatch(id, body) { return post(buildPath(API_PATHS.tasksIdDispatch, { id }), body) },
+    emergencyStop(id, body) { return post(buildPath(API_PATHS.tasksIdEmergencyStop, { id }), body) },
     events(id, query) { return get(buildPath(API_PATHS.tasksIdEvents, { id }), query) },
     execution(id, query) { return get(buildPath(API_PATHS.tasksIdExecution, { id }), query) },
     pause(id, body) { return post(buildPath(API_PATHS.tasksIdPause, { id }), body) },
