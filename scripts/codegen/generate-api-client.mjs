@@ -109,6 +109,185 @@ const authMe = pick('/api/v1/auth/me')
 const authRefresh = pick('/api/v1/auth/refresh')
 const alarmPolicy = pick('/api/v1/alarms/work-order-policy')
 
+const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
+const GENERIC_OPERATION_IDS = new Set([
+  'create', 'update', 'delete', 'list', 'get', 'route', 'orders', 'sites', 'tasks',
+  'routes', 'robots', 'alarms', 'notifications', 'records', 'role', 'enabled',
+])
+
+function pathParamNames(apiPath) {
+  return [...apiPath.matchAll(/\{([^}]+)\}/g)].map((m) => m[1])
+}
+
+function toGroupName(apiPath) {
+  const first = apiPath.replace(/^\/api\/v1\//, '').split('/')[0]
+  return first.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+}
+
+function toCamelCase(slug) {
+  return slug
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join('')
+}
+
+function deriveMethodName(httpMethod, apiPath, operationId, usedInGroup) {
+  let base = operationId
+  if (!base || /^list_\d+$/.test(base) || GENERIC_OPERATION_IDS.has(base)) {
+    const literals = apiPath.replace(/^\/api\/v1\//, '').split('/').filter((seg) => seg && !seg.startsWith('{'))
+    const tail = literals.slice(1).join('_') || literals[0] || 'root'
+    base = `${httpMethod}_${tail.replace(/[^a-zA-Z0-9]+/g, '_')}`
+  }
+  base = toCamelCase(base.replace(/:/g, '_'))
+  if (!base) base = `${httpMethod}Root`
+  let name = base.charAt(0).toLowerCase() + base.slice(1)
+  let i = 2
+  while (usedInGroup.has(name)) {
+    name = `${base.charAt(0).toLowerCase() + base.slice(1)}${i++}`
+  }
+  usedInGroup.add(name)
+  return name
+}
+
+function genMpMethodBody(op) {
+  const { httpMethod, pathConstName, params, methodName } = op
+  const httpFn = httpMethod === 'delete' ? 'del' : httpMethod
+  const pathArgs = params.length ? `{ ${params.join(', ')} }` : null
+  const build = pathArgs
+    ? `buildPath(API_PATHS.${pathConstName}, ${pathArgs})`
+    : `buildPath(API_PATHS.${pathConstName})`
+
+  if (params.length === 0) {
+    if (httpMethod === 'get') return `${methodName}(query) { return ${httpFn}(${build}, query) }`
+    if (httpMethod === 'delete') return `${methodName}() { return ${httpFn}(${build}) }`
+    return `${methodName}(body) { return ${httpFn}(${build}, body) }`
+  }
+  const sig = [...params, httpMethod === 'get' ? 'query' : 'body'].join(', ')
+  if (httpMethod === 'get') {
+    return `${methodName}(${sig}) { return ${httpFn}(${build}, query) }`
+  }
+  if (httpMethod === 'delete') {
+    return `${methodName}(${params.join(', ')}) { return ${httpFn}(${build}) }`
+  }
+  return `${methodName}(${sig}) { return ${httpFn}(${build}, body) }`
+}
+
+/** 小程序 services 层使用的友好别名 → OpenAPI 路径 + HTTP 方法 */
+const MP_SERVICE_ENDPOINTS = [
+  ['auth.register', '/api/v1/auth/register', 'post'],
+  ['auth.logout', '/api/v1/auth/logout', 'post'],
+  ['auth.changePassword', '/api/v1/auth/password', 'put'],
+  ['users.list', '/api/v1/users', 'get'],
+  ['users.updateMe', '/api/v1/users/me', 'patch'],
+  ['users.updateRole', '/api/v1/users/{id}/role', 'patch'],
+  ['users.toggleEnabled', '/api/v1/users/{id}/enabled', 'patch'],
+  ['users.getPreferences', '/api/v1/users/me/preferences', 'get'],
+  ['users.savePreferences', '/api/v1/users/me/preferences', 'put'],
+  ['users.getActivities', '/api/v1/users/me/activities', 'get'],
+  ['sites.list', '/api/v1/sites', 'get'],
+  ['sites.listAreas', '/api/v1/sites/areas', 'get'],
+  ['sites.create', '/api/v1/sites', 'post'],
+  ['sites.update', '/api/v1/sites/{id}', 'patch'],
+  ['sites.remove', '/api/v1/sites/{id}', 'delete'],
+  ['sites.createArea', '/api/v1/sites/{id}/areas', 'post'],
+  ['sites.removeArea', '/api/v1/sites/areas/{areaId}', 'delete'],
+  ['sites.getSlamMap', '/api/v1/sites/{id}/slam-map', 'get'],
+  ['sites.saveSlamMap', '/api/v1/sites/{id}/slam-map', 'put'],
+  ['sites.removeSlamMap', '/api/v1/sites/{id}/slam-map', 'delete'],
+  ['sites.listSlamMaps', '/api/v1/sites/slam-maps', 'get'],
+  ['routes.list', '/api/v1/routes', 'get'],
+  ['routes.create', '/api/v1/routes', 'post'],
+  ['routes.replace', '/api/v1/routes/{id}', 'put'],
+  ['routes.remove', '/api/v1/routes/{id}', 'delete'],
+  ['tasks.list', '/api/v1/tasks', 'get'],
+  ['tasks.create', '/api/v1/tasks', 'post'],
+  ['tasks.dispatch', '/api/v1/tasks/{id}/dispatch', 'post'],
+  ['tasks.pause', '/api/v1/tasks/{id}/pause', 'post'],
+  ['tasks.resume', '/api/v1/tasks/{id}/resume', 'post'],
+  ['tasks.takeover', '/api/v1/tasks/{id}/takeover', 'post'],
+  ['tasks.cancel', '/api/v1/tasks/{id}/cancel', 'post'],
+  ['tasks.listEvents', '/api/v1/tasks/{id}/events', 'get'],
+  ['records.list', '/api/v1/records', 'get'],
+  ['alarms.list', '/api/v1/alarms', 'get'],
+  ['alarms.ack', '/api/v1/alarms/{id}/ack', 'post'],
+  ['alarms.ackAll', '/api/v1/alarms/ack-all', 'post'],
+  ['workOrders.list', '/api/v1/work-orders', 'get'],
+  ['workOrders.patch', '/api/v1/work-orders/{id}', 'patch'],
+  ['workOrders.createFromAlarm', '/api/v1/work-orders/from-alarm/{alarmId}', 'post'],
+  ['workOrders.claim', '/api/v1/work-orders/{id}/claim', 'post'],
+  ['workOrders.updateStatus', '/api/v1/work-orders/{id}/status', 'patch'],
+  ['robots.list', '/api/v1/robots', 'get'],
+  ['robots.create', '/api/v1/robots', 'post'],
+  ['robots.remove', '/api/v1/robots/{id}', 'delete'],
+  ['detectionTemplates.list', '/api/v1/detection-templates', 'get'],
+  ['detectionTemplates.create', '/api/v1/detection-templates', 'post'],
+  ['detectionTemplates.remove', '/api/v1/detection-templates/{id}', 'delete'],
+  ['notifications.list', '/api/v1/notifications', 'get'],
+  ['notifications.markRead', '/api/v1/notifications/{id}/read', 'patch'],
+  ['notifications.markAllRead', '/api/v1/notifications/read-all', 'patch'],
+  ['notifications.remove', '/api/v1/notifications/{id}', 'delete'],
+]
+
+const mpOperations = []
+for (const entry of pathEntries) {
+  const methods = paths[entry.apiPath] || {}
+  for (const httpMethod of Object.keys(methods)) {
+    if (!HTTP_METHODS.has(httpMethod)) continue
+    const op = methods[httpMethod]
+    mpOperations.push({
+      apiPath: entry.apiPath,
+      pathConstName: entry.name,
+      httpMethod,
+      operationId: op.operationId || '',
+      params: pathParamNames(entry.apiPath),
+      group: toGroupName(entry.apiPath),
+    })
+  }
+}
+
+const mpGroups = new Map()
+for (const op of mpOperations) {
+  if (!mpGroups.has(op.group)) mpGroups.set(op.group, { used: new Set(), ops: [] })
+  const bucket = mpGroups.get(op.group)
+  op.methodName = deriveMethodName(op.httpMethod, op.apiPath, op.operationId, bucket.used)
+  bucket.ops.push(op)
+}
+
+const mpOpIndex = new Map()
+for (const op of mpOperations) {
+  mpOpIndex.set(`${op.httpMethod.toUpperCase()} ${op.apiPath}`, op)
+}
+
+const serviceAliasGroups = new Map()
+for (const [alias, apiPath, httpMethod] of MP_SERVICE_ENDPOINTS) {
+  const op = mpOpIndex.get(`${httpMethod.toUpperCase()} ${apiPath}`)
+  if (!op) {
+    throw new Error(`MP_SERVICE_ENDPOINTS 未匹配 openapi: ${httpMethod.toUpperCase()} ${apiPath} (${alias})`)
+  }
+  const [group, name] = alias.split('.')
+  if (!serviceAliasGroups.has(group)) serviceAliasGroups.set(group, [])
+  serviceAliasGroups.get(group).push(
+    `    ${name}: (...args) => openapiClient.${op.group}.${op.methodName}(...args),`,
+  )
+}
+
+const mpServicesBlock = [...serviceAliasGroups.entries()]
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([group, lines]) => `  ${group}: {\n${lines.join('\n')}\n  },`)
+  .join('\n')
+
+const mpGroupBlocks = [...mpGroups.entries()]
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([group, { ops }]) => {
+    const methods = ops
+      .sort((a, b) => a.apiPath.localeCompare(b.apiPath) || a.httpMethod.localeCompare(b.httpMethod))
+      .map((op) => `    ${genMpMethodBody(op)},`)
+      .join('\n')
+    return `  ${group}: {\n${methods}\n  },`
+  })
+  .join('\n')
+
 const webClientTs = `${banner}import { http } from '@/api/http'
 import { API_PATHS } from '@/generated/api-paths'
 import type { AuthSession } from '@/types/auth'
@@ -138,28 +317,33 @@ export { API_PATHS }
 `
 fs.writeFileSync(webClientPath, webClientTs, 'utf8')
 
-const mpClientJs = `${banner}const { get, post, put } = require('../utils/request')
-const paths = require('./api-paths')
+const mpClientJs = `${banner}const { get, post, put, patch, del } = require('../utils/request')
+const { API_PATHS, apiRel } = require('./api-paths')
 
-function rel(apiPath) {
-  return paths.apiRel(apiPath)
+function buildPath(apiPath, params = {}) {
+  let relPath = apiRel(apiPath)
+  for (const [key, value] of Object.entries(params)) {
+    relPath = relPath.replace(\`{\${key}}\`, encodeURIComponent(String(value)))
+  }
+  return relPath
 }
 
-/** OpenAPI 对齐的 thin client — 路径与 Web generated/api-client 一致 */
+/** OpenAPI 自动生成 — 路径与 backend openapi.json 一致；业务层优先用 services 别名 */
 const openapiClient = {
-  auth: {
-    login: (username, password, remember = false) =>
-      post(rel('${authLogin?.apiPath || '/api/v1/auth/login'}'), { username, password, remember }),
-    me: () => get(rel('${authMe?.apiPath || '/api/v1/auth/me'}')),
-    refresh: () => post(rel('${authRefresh?.apiPath || '/api/v1/auth/refresh'}')),
-  },
-  alarms: {
-    getWorkOrderPolicy: () => get(rel('${alarmPolicy?.apiPath || '/api/v1/alarms/work-order-policy'}')),
-    updateWorkOrderPolicy: (rules) => put(rel('${alarmPolicy?.apiPath || '/api/v1/alarms/work-order-policy'}'), { rules }),
-  },
+${mpGroupBlocks}
 }
 
-module.exports = { openapiClient, ...paths }
+openapiClient.auth.login = (username, password, remember = false) =>
+  post(buildPath(API_PATHS.authLogin), { username, password, remember })
+openapiClient.alarms.getWorkOrderPolicy = () => get(buildPath(API_PATHS.alarmsWorkOrderPolicy))
+openapiClient.alarms.updateWorkOrderPolicy = (rules) => put(buildPath(API_PATHS.alarmsWorkOrderPolicy), { rules })
+
+/** 小程序 services 层稳定别名（避免 operationId 变动影响业务代码） */
+const services = {
+${mpServicesBlock}
+}
+
+module.exports = { openapiClient, services, API_PATHS, apiRel }
 `
 fs.writeFileSync(mpClientPath, mpClientJs, 'utf8')
 

@@ -100,8 +100,6 @@ Page({
     const canCreate = workOrderPerm.canCreateWorkOrder(user, perms)
     let pendingAlarms = []
     if (canCreate) {
-      const alarmsBefore = await api.getAlarms()
-      await api.tryAutoConvertPendingAlarms(alarmsBefore, user)
       const [alarms, ordersForAlarm] = await Promise.all([
         api.getAlarms(),
         api.getWorkOrders(),

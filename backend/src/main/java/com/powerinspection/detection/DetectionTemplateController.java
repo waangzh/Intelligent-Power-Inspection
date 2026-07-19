@@ -69,7 +69,7 @@ public class DetectionTemplateController extends CrudSupport {
   @PostMapping
   public ApiResponse<Map<String, Object>> addTemplate(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.DETECTION_MANAGE);
-    return ApiResponse.ok(create(DataCategory.DETECTION_TEMPLATE, "tpl", normalizeForSave(body)));
+    return ApiResponse.ok(create(DataCategory.DETECTION_TEMPLATE, "tpl", normalizeForSave(upgradeInputShape(body))));
   }
 
   @PatchMapping("/{id}")
@@ -85,6 +85,25 @@ public class DetectionTemplateController extends CrudSupport {
     permissionService.require(currentUser.get(), Permission.DETECTION_MANAGE);
     delete(DataCategory.DETECTION_TEMPLATE, id);
     return ApiResponse.ok();
+  }
+
+  /** 创建/更新请求体：仅把 legacy `types` 升级为 `items`，不替客户端补默认提示词。 */
+  private Map<String, Object> upgradeInputShape(Map<String, Object> source) {
+    if (source.get("items") instanceof List<?> storedItems && !storedItems.isEmpty()) {
+      return source;
+    }
+    Map<String, Object> upgraded = new LinkedHashMap<>(source);
+    Map<?, ?> prompts = source.get("prompts") instanceof Map<?, ?> map ? map : Map.of();
+    List<Map<String, Object>> items = new ArrayList<>();
+    if (source.get("types") instanceof List<?> types) {
+      for (Object rawType : types) {
+        String type = text(rawType);
+        Object configuredPrompt = prompts.get(type);
+        items.add(item(type, true, configuredPrompt == null ? DEFAULT_PROMPTS.get(type) : text(configuredPrompt), null));
+      }
+    }
+    upgraded.put("items", items);
+    return upgraded;
   }
 
   private Map<String, Object> normalizeStored(Map<String, Object> source) {

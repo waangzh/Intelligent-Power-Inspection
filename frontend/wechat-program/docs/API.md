@@ -12,21 +12,20 @@
 ```
 小程序页面 (pages/*)
     ↓
-services/index.js        ← 统一业务入口
+services/index.js        ← 统一业务入口（generated api-client）
     ↓
-┌──────────────────┬────────────────────┬─────────────────────────┐
-│ mockMode=storage │ mockMode=none      │ mockMode=openapi        │
-│ wx.storage 演示  │ HTTP → 共用后端    │ HTTP → Prism Mock       │
-│ mock/store.js    │ utils/request.js   │ utils/request.js        │
-└──────────────────┴────────────────────┴─────────────────────────┘
+┌─────────────────────────┬─────────────────────────┐
+│ mockMode=none           │ mockMode=openapi        │
+│ HTTP → 共用后端         │ HTTP → Prism Mock       │
+│ utils/request.js        │ utils/request.js        │
+└─────────────────────────┴─────────────────────────┘
 ```
 
 
 | 配置项       | 来源                          | 说明                                      |
 | --------- | --------------------------- | --------------------------------------- |
 | `baseUrl` | `build-env.js` / `api.local.js` | 后端根路径，默认 `http://localhost:8080/api/v1` |
-| `useMock` | **`npm run miniprogram:env`** 生成 | `true` 仅 wx.storage 演示；源码中不写死 `true` |
-| `mockMode`| 同上                          | `none` / `storage` / `openapi`          |
+| `mockMode`| **`npm run miniprogram:env`** 生成 | `none`（真实后端）/ `openapi`（Prism 演示） |
 | `timeout` | `api.js`                      | 请求超时毫秒数                                 |
 
 
@@ -39,22 +38,16 @@ services/index.js        ← 统一业务入口
 npm run miniprogram:env
 ```
 
-或在 `miniprogram/config/api.local.js` 中仅覆盖 `baseUrl`（勿设置 `useMock`）。
+或在 `miniprogram/config/api.local.js` 中仅覆盖 `baseUrl`（勿设置 `mockMode`）。
 
-### 启用 wx.storage 演示（无后端）
-
-```bash
-npm run miniprogram:env:mock
-```
-
-### 启用 OpenAPI Mock Server（Prism）
+### 启用 OpenAPI Mock Server（Prism，无后端演示）
 
 ```bash
-# 终端 1：启动后端 + Prism
+# 终端 1：启动 Prism
 npm run mock:openapi
 
 # 终端 2：生成小程序 env
-npm run miniprogram:env:openapi
+npm run miniprogram:env:mock
 ```
 
 ---
@@ -103,8 +96,9 @@ Content-Type: application/json
 
 **存储 Key**：`pi_session`（wx.storage）
 
-### 3.2 演示账号（mock 模式）
+### 3.2 演示账号（后端 test profile）
 
+与 Web 端一致，见仓库根目录 README「默认账号」：
 
 | 用户名          | 密码          | 角色         |
 | ------------ | ----------- | ---------- |
@@ -118,7 +112,7 @@ Content-Type: application/json
 ### 3.3 Service 方法 — `services/index.js`
 
 
-| 方法                                     | HTTP（useMock: false）        | 说明            |
+| 方法                                     | HTTP                        | 说明            |
 | -------------------------------------- | --------------------------- | ------------- |
 | `login(username, password, remember?)` | `POST /auth/login`          | 登录并写入 session |
 | `register(form)`                       | `POST /auth/register`       | 注册，默认 VIEWER  |
@@ -208,8 +202,6 @@ type Permission =
 | `cancelTask(id)`                     | `POST /tasks/{id}/cancel`   | 取消            |
 
 
-**Mock 任务模拟**（`mock/store.js`）：RUNNING 时每 1.5s 进度 +4%，更新机器人位置，随机告警，到点写事件，100% 自动完成并生成记录。
-
 ### 5.4 告警
 
 
@@ -231,7 +223,6 @@ type Permission =
 | `createWorkOrderFromAlarm(alarm, creator)`  | `POST /work-orders/from-alarm/{alarmId}` | 从告警创建                              |
 | `claimWorkOrder(id)`                        | `POST /work-orders/{id}/claim`        | 调度员接单，仅此接口会写入 assigneeId/assigneeName |
 | `updateWorkOrderStatus(id, status, extra?)` | `PATCH /work-orders/{id}/status`      | 状态流转，`extra.review` 需符合后端 conclusion/onsiteFinding/handlingMeasures/followUpPlan 结构 |
-| `patchWorkOrderQuiet(id, patch)`            | `PATCH /work-orders/{id}`             | 仅修改工单本身信息（如优先级），仅接单调度员本人可调用 |
 
 
 状态：`PENDING → PROCESSING（仅通过 claim）→ REVIEW → CLOSED`，`REVIEW → PROCESSING`（管理员退回重做），`PENDING/PROCESSING → CANCELLED`（管理员取消，需 `workorder:review` 权限）
@@ -260,22 +251,13 @@ type Permission =
 
 
 
-## 6. wx.storage Key（mock 模式）
+## 6. 本地存储 Key
 
-与 web 端 `localStorage` key **命名一致**（便于后续迁移到同一后端后废弃）：
+小程序客户端仅持久化登录会话：
 
-
-| Key                                          | 内容     |
-| -------------------------------------------- | ------ |
-| `pi_session`                                 | 登录会话   |
-| `pi_users` / `pi_credentials`                | 用户与密码  |
-| `pi_user_prefs` / `pi_user_activities`       | 偏好与活动  |
-| `pi_sites` / `pi_areas`                      | 站点与区域  |
-| `pi_routes`                                  | 巡检路线   |
-| `pi_tasks` / `pi_records` / `pi_task_events` | 任务相关   |
-| `pi_alarms` / `pi_work_orders`               | 告警与工单  |
-| `pi_robots` / `pi_detection_templates`       | 机器人与检测 |
-| `pi_notifications`                           | 通知     |
+| Key          | 内容   |
+| ------------ | ---- |
+| `pi_session` | 登录会话 |
 
 
 ---

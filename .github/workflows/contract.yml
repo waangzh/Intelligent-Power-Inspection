@@ -31,6 +31,6 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
-      - name: Run auth/permission contract tests
+      - name: Run backend contract tests
         working-directory: backend
-        run: mvn -q test -Dtest=PowerInspectionApplicationTests#defaultUsersCanLoginAndRolePermissionsAreEnforced+loginPermissionsMatchGeneratedManifest
+        run: mvn -q test -Dtest=PowerInspectionApplicationTests

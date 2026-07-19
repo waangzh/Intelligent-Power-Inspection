@@ -2,8 +2,8 @@
 /**
  * 根据构建环境变量生成小程序 config/build-env.js（不提交 Git）。
  *
- *   USE_MOCK=true  npm run miniprogram:env        # 演示模式
- *   npm run miniprogram:env                       # 默认 useMock=false
+ *   npm run miniprogram:env              # 默认 mockMode=none
+ *   npm run miniprogram:env:mock         # mockMode=openapi → :4010
  *
  * 可选：API_BASE_URL=https://host/api/v1
  */
@@ -23,13 +23,22 @@ function parseBool(value, fallback = false) {
   throw new Error(`无法解析布尔环境变量: ${value}`)
 }
 
-const useMock = parseBool(process.env.USE_MOCK, false)
-const mockMode = process.env.MOCK_MODE || (useMock ? 'storage' : 'none')
-const baseUrl = process.env.API_BASE_URL || 'http://localhost:8080/api/v1'
+const useMockLegacy = parseBool(process.env.USE_MOCK, false)
+let mockMode = process.env.MOCK_MODE || (useMockLegacy ? 'openapi' : 'none')
+if (mockMode === 'storage') {
+  throw new Error('MOCK_MODE=storage 已移除，请使用 npm run miniprogram:env:mock（OpenAPI Prism）')
+}
+if (!['none', 'openapi'].includes(mockMode)) {
+  throw new Error(`不支持的 MOCK_MODE=${mockMode}，仅允许 none / openapi`)
+}
+
+const defaultBaseUrl = mockMode === 'openapi'
+  ? 'http://localhost:4010/api/v1'
+  : 'http://localhost:8080/api/v1'
+const baseUrl = process.env.API_BASE_URL || defaultBaseUrl
 
 const content = `/** AUTO-GENERATED — 请勿手工编辑。运行: npm run miniprogram:env */
 module.exports = {
-  useMock: ${useMock},
   mockMode: '${mockMode}',
   baseUrl: '${baseUrl.replace(/'/g, "\\'")}',
 }
@@ -37,7 +46,7 @@ module.exports = {
 
 fs.mkdirSync(path.dirname(outPath), { recursive: true })
 fs.writeFileSync(outPath, content, 'utf8')
-console.log(`Wrote ${path.relative(repoRoot, outPath)} (useMock=${useMock}, mockMode=${mockMode})`)
-if (useMock && mockMode === 'storage') {
-  console.warn('提示：无后端演示优先使用 npm run miniprogram:env:openapi + npm run mock:openapi，避免 wx.storage 业务分叉')
+console.log(`Wrote ${path.relative(repoRoot, outPath)} (mockMode=${mockMode})`)
+if (mockMode === 'openapi') {
+  console.warn('OpenAPI Mock 模式：请先运行 npm run mock:openapi，再编译小程序')
 }

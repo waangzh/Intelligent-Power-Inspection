@@ -15,8 +15,6 @@ App({
   onLaunch() {
     if (apiConfig.mockMode === 'openapi') {
       console.warn('[power-inspection] OpenAPI Mock 模式：请求', apiConfig.baseUrl)
-    } else if (apiConfig.useMock) {
-      console.warn('[power-inspection] 演示模式 useMock=true：数据来自本地 wx.storage，非真实后端')
     }
     this.restoreSession()
   },
@@ -25,11 +23,16 @@ App({
     const session = api.getSession()
     if (session) {
       this.applySession(session)
-      if (!apiConfig.useMock) {
-        api.refreshMe().then((fresh) => {
-          if (fresh) this.applySession(fresh)
-        }).catch(() => {})
-      }
+      api.refreshMe().then((fresh) => {
+        if (fresh) this.applySession(fresh)
+      }).catch(() => {
+        // request.js 已根据响应特征区分“token 失效”与“网络抖动”：
+        // 前者会清掉 pi_session，此时才需要退出登录态；网络抖动时 session 仍在，
+        // 保留乐观展示，避免偶发超时就把用户强制登出。
+        if (!api.getSession()) {
+          this.clearUser()
+        }
+      })
     }
   },
 
