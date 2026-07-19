@@ -23,17 +23,13 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 @SpringBootTest
 class RefreshTokenServiceTests {
-  @Autowired
-  RefreshTokenService refreshTokenService;
+  @Autowired RefreshTokenService refreshTokenService;
 
-  @Autowired
-  RefreshTokenRepository refreshTokenRepository;
+  @Autowired RefreshTokenRepository refreshTokenRepository;
 
-  @Autowired
-  UserRepository userRepository;
+  @Autowired UserRepository userRepository;
 
-  @Autowired
-  TokenService tokenService;
+  @Autowired TokenService tokenService;
 
   private UserEntity admin;
 
@@ -54,17 +50,18 @@ class RefreshTokenServiceTests {
     assertThat(rotated.refresh().entity().getAuthTimeEpochSeconds()).isEqualTo(oldAuthTime);
     String refreshedAccessToken = tokenService.create(rotated.user(), rotated.authTime());
     assertThatThrownBy(() -> tokenService.requireRecentAuth(refreshedAccessToken))
-      .isInstanceOf(ApiException.class)
-      .satisfies(error -> assertThat(((ApiException) error).status().value()).isEqualTo(403));
+        .isInstanceOf(ApiException.class)
+        .satisfies(error -> assertThat(((ApiException) error).status().value()).isEqualTo(403));
   }
 
   @Test
   void reauthenticationRotationUpdatesPasswordAuthenticationTime() {
-    RefreshTokenService.IssuedRefresh issued = refreshTokenService.issue(admin, true, 1_700_000_000L);
+    RefreshTokenService.IssuedRefresh issued =
+        refreshTokenService.issue(admin, true, 1_700_000_000L);
     long recentAuthTime = 1_800_000_000L;
 
     RefreshTokenService.RotatedSession rotated =
-      refreshTokenService.rotateAfterReauthentication(issued.rawToken(), recentAuthTime);
+        refreshTokenService.rotateAfterReauthentication(issued.rawToken(), recentAuthTime);
 
     assertThat(rotated.authTime()).isEqualTo(recentAuthTime);
     assertThat(rotated.refresh().entity().getAuthTimeEpochSeconds()).isEqualTo(recentAuthTime);
@@ -73,19 +70,20 @@ class RefreshTokenServiceTests {
   @Test
   void concurrentRotationAllowsOnlyOneSuccess() throws Exception {
     RefreshTokenService.IssuedRefresh issued =
-      refreshTokenService.issue(admin, true, 1_700_000_000L);
+        refreshTokenService.issue(admin, true, 1_700_000_000L);
     CountDownLatch ready = new CountDownLatch(2);
     CountDownLatch start = new CountDownLatch(1);
-    Callable<String> rotation = () -> {
-      ready.countDown();
-      start.await(5, TimeUnit.SECONDS);
-      try {
-        refreshTokenService.rotate(issued.rawToken());
-        return "SUCCEEDED";
-      } catch (ApiException ex) {
-        return "HTTP_" + ex.status().value();
-      }
-    };
+    Callable<String> rotation =
+        () -> {
+          ready.countDown();
+          start.await(5, TimeUnit.SECONDS);
+          try {
+            refreshTokenService.rotate(issued.rawToken());
+            return "SUCCEEDED";
+          } catch (ApiException ex) {
+            return "HTTP_" + ex.status().value();
+          }
+        };
 
     ExecutorService workers = Executors.newFixedThreadPool(2);
     try {
@@ -95,7 +93,7 @@ class RefreshTokenServiceTests {
       start.countDown();
 
       assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
-        .containsExactlyInAnyOrder("SUCCEEDED", "HTTP_401");
+          .containsExactlyInAnyOrder("SUCCEEDED", "HTTP_401");
     } finally {
       workers.shutdownNow();
     }

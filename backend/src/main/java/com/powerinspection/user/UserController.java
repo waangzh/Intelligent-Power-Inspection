@@ -46,14 +46,16 @@ public class UserController {
   @GetMapping
   public ApiResponse<List<UserDto>> list() {
     permissionService.require(currentUser.get(), Permission.USER_MANAGE);
-    return ApiResponse.ok(userRepository.findAll().stream()
-      .sorted(Comparator.comparing(UserEntity::getCreatedAt))
-      .map(UserDto::from)
-      .toList());
+    return ApiResponse.ok(
+        userRepository.findAll().stream()
+            .sorted(Comparator.comparing(UserEntity::getCreatedAt))
+            .map(UserDto::from)
+            .toList());
   }
 
   @PatchMapping("/{id}/role")
-  public ApiResponse<UserDto> role(@PathVariable String id, @Valid @RequestBody RoleRequest request) {
+  public ApiResponse<UserDto> role(
+      @PathVariable String id, @Valid @RequestBody RoleRequest request) {
     permissionService.require(currentUser.get(), Permission.USER_MANAGE);
     UserEntity user = userRepository.findById(id).orElseThrow(() -> ApiException.notFound("用户不存在"));
     user.setRole(request.role());
@@ -62,7 +64,8 @@ public class UserController {
   }
 
   @PatchMapping("/{id}/enabled")
-  public ApiResponse<UserDto> enabled(@PathVariable String id, @RequestBody EnabledRequest request) {
+  public ApiResponse<UserDto> enabled(
+      @PathVariable String id, @RequestBody EnabledRequest request) {
     permissionService.require(currentUser.get(), Permission.USER_MANAGE);
     UserEntity user = userRepository.findById(id).orElseThrow(() -> ApiException.notFound("用户不存在"));
     user.setEnabled(request.enabled());
