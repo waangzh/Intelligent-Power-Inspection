@@ -36,20 +36,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DomainStoreService {
-  private static final Set<String> DOMAIN = Set.of(
-    DataCategory.SITE,
-    DataCategory.ROUTE,
-    DataCategory.ROBOT,
-    DataCategory.TASK,
-    DataCategory.RECORD,
-    DataCategory.EVENT,
-    DataCategory.ALARM,
-    DataCategory.WORK_ORDER,
-    DataCategory.NOTIFICATION
-  );
+  private static final Set<String> DOMAIN =
+      Set.of(
+          DataCategory.SITE,
+          DataCategory.ROUTE,
+          DataCategory.ROBOT,
+          DataCategory.TASK,
+          DataCategory.RECORD,
+          DataCategory.EVENT,
+          DataCategory.ALARM,
+          DataCategory.WORK_ORDER,
+          DataCategory.NOTIFICATION);
 
-  @PersistenceContext
-  private EntityManager entityManager;
+  @PersistenceContext private EntityManager entityManager;
 
   public static boolean supports(String category) {
     return category != null && DOMAIN.contains(category);
@@ -70,8 +69,14 @@ public class DomainStoreService {
   }
 
   public PageResult<Map<String, Object>> page(
-      String category, int page, int size, String sort, String direction,
-      String updatedAfter, String search, Map<String, String> filters) {
+      String category,
+      int page,
+      int size,
+      String sort,
+      String direction,
+      String updatedAfter,
+      String search,
+      Map<String, String> filters) {
     @SuppressWarnings("unchecked")
     Class<Object> type = (Class<Object>) entityType(category);
     int safePage = Math.max(0, page);
@@ -82,43 +87,54 @@ public class DomainStoreService {
     CriteriaBuilder cb = entityManager.getCriteriaBuilder();
     CriteriaQuery<Object> dataQuery = cb.createQuery(type);
     Root<Object> root = dataQuery.from(type);
-    List<Predicate> predicates = buildPredicates(cb, root, category, updatedAfter, null, null, search, filters);
+    List<Predicate> predicates =
+        buildPredicates(cb, root, category, updatedAfter, null, null, search, filters);
     dataQuery.select(root);
     dataQuery.where(predicates.toArray(Predicate[]::new));
     Path<?> sortPath = root.get(sortProperty);
     dataQuery.orderBy(
-      asc ? cb.asc(sortPath) : cb.desc(sortPath),
-      asc ? cb.asc(root.get("id")) : cb.desc(root.get("id"))
-    );
+        asc ? cb.asc(sortPath) : cb.desc(sortPath),
+        asc ? cb.asc(root.get("id")) : cb.desc(root.get("id")));
 
     TypedQuery<Object> typed = entityManager.createQuery(dataQuery);
     if (safeSize != Integer.MAX_VALUE) {
       typed.setFirstResult(safePage * safeSize);
       typed.setMaxResults(safeSize);
     }
-    List<Map<String, Object>> items = typed.getResultList().stream()
-      .map(entity -> toMap(category, entity))
-      .toList();
+    List<Map<String, Object>> items =
+        typed.getResultList().stream().map(entity -> toMap(category, entity)).toList();
 
     CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
     Root<?> countRoot = countQuery.from(type);
     countQuery.select(cb.count(countRoot));
-    countQuery.where(buildPredicates(cb, countRoot, category, updatedAfter, null, null, search, filters).toArray(Predicate[]::new));
+    countQuery.where(
+        buildPredicates(cb, countRoot, category, updatedAfter, null, null, search, filters)
+            .toArray(Predicate[]::new));
     long total = entityManager.createQuery(countQuery).getSingleResult();
     boolean hasNext = safeSize != Integer.MAX_VALUE && (long) (safePage + 1) * safeSize < total;
-    String nextCursor = hasNext && !items.isEmpty()
-      ? String.valueOf(items.get(items.size() - 1).getOrDefault("updatedAt", ""))
-      : null;
-    return new PageResult<>(items, total, safePage, safeSize == Integer.MAX_VALUE ? items.size() : safeSize, hasNext, nextCursor);
+    String nextCursor =
+        hasNext && !items.isEmpty()
+            ? String.valueOf(items.get(items.size() - 1).getOrDefault("updatedAt", ""))
+            : null;
+    return new PageResult<>(
+        items,
+        total,
+        safePage,
+        safeSize == Integer.MAX_VALUE ? items.size() : safeSize,
+        hasNext,
+        nextCursor);
   }
 
-  public long count(String category, String createdAfter, String createdBefore, Map<String, String> filters) {
+  public long count(
+      String category, String createdAfter, String createdBefore, Map<String, String> filters) {
     Class<?> type = entityType(category);
     CriteriaBuilder cb = entityManager.getCriteriaBuilder();
     CriteriaQuery<Long> query = cb.createQuery(Long.class);
     Root<?> root = query.from(type);
     query.select(cb.count(root));
-    query.where(buildPredicates(cb, root, category, null, createdAfter, createdBefore, null, filters).toArray(Predicate[]::new));
+    query.where(
+        buildPredicates(cb, root, category, null, createdAfter, createdBefore, null, filters)
+            .toArray(Predicate[]::new));
     return entityManager.createQuery(query).getSingleResult();
   }
 
@@ -164,9 +180,10 @@ public class DomainStoreService {
       return toMap(category, entityManager.find(entityType(category), id));
     } catch (ObjectOptimisticLockingFailureException | OptimisticLockException ex) {
       throw ApiException.conflict("数据已被其他人修改，请刷新后重试");
-    } catch (DataIntegrityViolationException | org.hibernate.exception.ConstraintViolationException ex) {
+    } catch (DataIntegrityViolationException
+        | org.hibernate.exception.ConstraintViolationException ex) {
       String message = mostSpecificMessage(ex);
-      if (message != null && message.toLowerCase().contains("active_robot")) {
+      if (message != null && message.toLowerCase().contains("uq_inspection_tasks_active_robot")) {
         throw ApiException.conflict("机器人已有执行中的任务");
       }
       if (message != null && message.toLowerCase().contains("uq_work_orders_alarm")) {
@@ -196,9 +213,10 @@ public class DomainStoreService {
   @Transactional
   public void delete(String category, String id) {
     if (DataCategory.WORK_ORDER.equals(category)) {
-      entityManager.createQuery("delete from WorkOrderTransitionEntity t where t.workOrderId = :id")
-        .setParameter("id", id)
-        .executeUpdate();
+      entityManager
+          .createQuery("delete from WorkOrderTransitionEntity t where t.workOrderId = :id")
+          .setParameter("id", id)
+          .executeUpdate();
     }
     if (DataCategory.ROBOT.equals(category)) {
       RobotTelemetryEntity telemetry = entityManager.find(RobotTelemetryEntity.class, id);
@@ -216,10 +234,10 @@ public class DomainStoreService {
   @Transactional
   public void deleteWhere(String category, String field, String value) {
     list(category).stream()
-      .filter(item -> value.equals(text(item.get(field))))
-      .map(item -> text(item.get("id")))
-      .filter(id -> id != null && !id.isBlank())
-      .forEach(id -> delete(category, id));
+        .filter(item -> value.equals(text(item.get(field))))
+        .map(item -> text(item.get("id")))
+        .filter(id -> id != null && !id.isBlank())
+        .forEach(id -> delete(category, id));
   }
 
   private void syncRobotTelemetry(String robotId, Object telemetry) {
@@ -271,46 +289,48 @@ public class DomainStoreService {
         Path<String> assigneeName = root.get("assigneeName");
         Path<String> createdByName = root.get("createdByName");
         Predicate noAssigneeId = cb.or(cb.isNull(assigneeId), cb.equal(assigneeId, ""));
-        Predicate unassignedName = cb.or(
-          cb.isNull(assigneeName), cb.equal(assigneeName, ""), cb.equal(assigneeName, createdByName));
-        Predicate ownLegacy = viewerName == null || viewerName.isBlank()
-          ? cb.disjunction()
-          : cb.and(noAssigneeId, cb.equal(assigneeName, viewerName));
-        predicates.add(cb.or(
-          cb.equal(assigneeId, viewerId),
-          ownLegacy,
-          cb.and(noAssigneeId, unassignedName)
-        ));
+        Predicate unassignedName =
+            cb.or(
+                cb.isNull(assigneeName),
+                cb.equal(assigneeName, ""),
+                cb.equal(assigneeName, createdByName));
+        Predicate ownLegacy =
+            viewerName == null || viewerName.isBlank()
+                ? cb.disjunction()
+                : cb.and(noAssigneeId, cb.equal(assigneeName, viewerName));
+        predicates.add(
+            cb.or(cb.equal(assigneeId, viewerId), ownLegacy, cb.and(noAssigneeId, unassignedName)));
       }
     }
     if (filters != null) {
-      filters.forEach((field, value) -> {
-        if (field == null || value == null || value.isBlank()) {
-          return;
-        }
-        String attribute = mapFilterAttribute(category, field);
-        if (attribute == null || !hasAttribute(root, attribute)) {
-          return;
-        }
-        String[] parts = value.split(",");
-        List<Predicate> alternatives = new ArrayList<>();
-        for (String part : parts) {
-          String token = part.trim();
-          if (token.isEmpty()) continue;
-          Path<?> path = root.get(attribute);
-          Class<?> javaType = path.getJavaType();
-          if (javaType == Boolean.class || javaType == boolean.class) {
-            alternatives.add(cb.equal(path, Boolean.parseBoolean(token)));
-          } else if (Number.class.isAssignableFrom(javaType)) {
-            alternatives.add(cb.equal(path, Long.parseLong(token)));
-          } else {
-            alternatives.add(cb.equal(path, token));
-          }
-        }
-        if (!alternatives.isEmpty()) {
-          predicates.add(cb.or(alternatives.toArray(Predicate[]::new)));
-        }
-      });
+      filters.forEach(
+          (field, value) -> {
+            if (field == null || value == null || value.isBlank()) {
+              return;
+            }
+            String attribute = mapFilterAttribute(category, field);
+            if (attribute == null || !hasAttribute(root, attribute)) {
+              return;
+            }
+            String[] parts = value.split(",");
+            List<Predicate> alternatives = new ArrayList<>();
+            for (String part : parts) {
+              String token = part.trim();
+              if (token.isEmpty()) continue;
+              Path<?> path = root.get(attribute);
+              Class<?> javaType = path.getJavaType();
+              if (javaType == Boolean.class || javaType == boolean.class) {
+                alternatives.add(cb.equal(path, Boolean.parseBoolean(token)));
+              } else if (Number.class.isAssignableFrom(javaType)) {
+                alternatives.add(cb.equal(path, Long.parseLong(token)));
+              } else {
+                alternatives.add(cb.equal(path, token));
+              }
+            }
+            if (!alternatives.isEmpty()) {
+              predicates.add(cb.or(alternatives.toArray(Predicate[]::new)));
+            }
+          });
     }
     return predicates;
   }
@@ -331,7 +351,8 @@ public class DomainStoreService {
   private List<Expression<String>> searchFields(Root<?> root, String category) {
     List<Expression<String>> fields = new ArrayList<>();
     switch (category) {
-      case DataCategory.SITE, DataCategory.ROUTE, DataCategory.ROBOT, DataCategory.TASK -> addString(fields, root, "name");
+      case DataCategory.SITE, DataCategory.ROUTE, DataCategory.ROBOT, DataCategory.TASK ->
+          addString(fields, root, "name");
       case DataCategory.ALARM -> {
         addString(fields, root, "message");
         addString(fields, root, "type");
@@ -356,8 +377,7 @@ public class DomainStoreService {
         addString(fields, root, "routeName");
         addString(fields, root, "summary");
       }
-      default -> {
-      }
+      default -> {}
     }
     return fields;
   }
@@ -441,24 +461,26 @@ public class DomainStoreService {
   }
 
   private Map<String, Object> toMap(String category, Object entity) {
-    Map<String, Object> map = switch (category) {
-      case DataCategory.SITE -> ((SiteEntity) entity).toMap();
-      case DataCategory.ROUTE -> ((RouteEntity) entity).toMap();
-      case DataCategory.ROBOT -> ((RobotEntity) entity).toMap();
-      case DataCategory.TASK -> ((InspectionTaskEntity) entity).toMap();
-      case DataCategory.RECORD -> ((InspectionRecordEntity) entity).toMap();
-      case DataCategory.EVENT -> ((TaskEventEntity) entity).toMap();
-      case DataCategory.ALARM -> ((AlarmEntity) entity).toMap();
-      case DataCategory.WORK_ORDER -> ((WorkOrderEntity) entity).toMap();
-      case DataCategory.NOTIFICATION -> ((NotificationEntity) entity).toMap();
-      default -> throw ApiException.badRequest("不支持的领域类别: " + category);
-    };
+    Map<String, Object> map =
+        switch (category) {
+          case DataCategory.SITE -> ((SiteEntity) entity).toMap();
+          case DataCategory.ROUTE -> ((RouteEntity) entity).toMap();
+          case DataCategory.ROBOT -> ((RobotEntity) entity).toMap();
+          case DataCategory.TASK -> ((InspectionTaskEntity) entity).toMap();
+          case DataCategory.RECORD -> ((InspectionRecordEntity) entity).toMap();
+          case DataCategory.EVENT -> ((TaskEventEntity) entity).toMap();
+          case DataCategory.ALARM -> ((AlarmEntity) entity).toMap();
+          case DataCategory.WORK_ORDER -> ((WorkOrderEntity) entity).toMap();
+          case DataCategory.NOTIFICATION -> ((NotificationEntity) entity).toMap();
+          default -> throw ApiException.badRequest("不支持的领域类别: " + category);
+        };
     Long version = readVersion(entity);
     if (version != null) {
       map.put("version", version);
     }
     if (DataCategory.ROBOT.equals(category)) {
-      RobotTelemetryEntity telemetry = entityManager.find(RobotTelemetryEntity.class, map.get("id"));
+      RobotTelemetryEntity telemetry =
+          entityManager.find(RobotTelemetryEntity.class, map.get("id"));
       if (telemetry != null) {
         map.put("telemetry", telemetry.toMap());
       }
