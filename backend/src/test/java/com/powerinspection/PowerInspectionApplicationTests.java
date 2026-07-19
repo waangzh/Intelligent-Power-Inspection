@@ -128,11 +128,7 @@ class PowerInspectionApplicationTests {
         "id":"task_test_001",
         "name":"接口测试巡检",
         "routeId":"route_task_dispatch_test",
-        "robotId":"robot_001",
-        "status":"CREATED",
-        "progress":0,
-        "currentCheckpointSeq":0,
-        "createdAt":"2026-06-18T00:00:00Z"
+        "robotId":"robot_001"
       }
       """;
 
@@ -369,11 +365,7 @@ class PowerInspectionApplicationTests {
           "id", "task_flow_api",
           "name", "完整流程巡检",
           "routeId", routeId,
-          "robotId", "robot_001",
-          "status", "CREATED",
-          "progress", 96,
-          "currentCheckpointSeq", 0,
-          "createdAt", "2026-06-18T00:00:00Z"
+          "robotId", "robot_001"
         )))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.id").value("task_flow_api"));

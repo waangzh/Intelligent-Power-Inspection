@@ -3,6 +3,7 @@ package com.powerinspection.task;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -71,6 +72,6 @@ class TaskServiceTests {
 
     assertEquals("exec-1", saved.get("executionId"));
     assertEquals(TaskExecutionStatus.CREATED.name(), saved.get("status"));
-    verify(taskExecutionService).bind(body, revision);
+    verify(taskExecutionService).bind(any(), eq(revision));
   }
 }

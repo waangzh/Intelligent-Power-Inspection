@@ -37,6 +37,15 @@ import org.springframework.stereotype.Service;
 @Service
 public class TaskService {
   private static final List<String> ACTIVE_STATUSES = List.of("DISPATCHED", "RUNNING", "PAUSED", "MANUAL_TAKEOVER");
+  private static final Set<String> DELETABLE_STATUSES = Set.of("CREATED", "COMPLETED", "CANCELLED", "ESTOPPED");
+  private static final Set<String> SERVER_MANAGED_FIELDS = Set.of(
+    "status", "progress", "currentCheckpointSeq", "startedAt", "completedAt", "createdAt", "updatedAt",
+    "activeRobotKey", "executionId", "routeContentSha256", "mapImageSha256", "siteId",
+    "emergencyStopReason", "emergencyStoppedBy", "deploymentId"
+  );
+  private static final Set<String> CLIENT_CREATABLE_FIELDS = Set.of(
+    "id", "name", "routeId", "robotId", "routeRevisionId", "note"
+  );
   private static final Set<String> REVISION_MANAGED_FIELDS = Set.of(
     "routeRevisionId", "routeId", "robotId", "executionId", "routeContentSha256", "mapImageSha256", "status"
   );
@@ -128,38 +137,41 @@ public class TaskService {
 
   @Transactional
   public Map<String, Object> createTask(Map<String, Object> body) {
-    if (text(body.get("name")) == null || text(body.get("name")).isBlank()) {
+    Map<String, Object> payload = sanitizeCreatePayload(body);
+    if (text(payload.get("name")) == null || text(payload.get("name")).isBlank()) {
       throw ApiException.badRequest("请填写任务名称");
     }
-    body.putIfAbsent("id", Ids.next("task"));
-    body.putIfAbsent("status", "CREATED");
-    body.putIfAbsent("progress", 0);
-    body.putIfAbsent("currentCheckpointSeq", 0);
-    body.putIfAbsent("createdAt", Instant.now().toString());
-    RouteRevisionEntity revision = attachRouteRevision(body);
-    validateTaskBinding(body);
-    if (revision != null) {
-      TaskExecutionEntity execution = taskExecutionService.bind(body, revision);
-      body.put("executionId", execution.getExecutionId());
-      body.put("routeContentSha256", execution.getRouteContentSha256());
-      body.put("mapImageSha256", execution.getMapImageSha256());
+    String taskId = text(payload.get("id"));
+    if (taskId == null || taskId.isBlank()) {
+      payload.put("id", Ids.next("task"));
+    } else {
+      requireFreshTaskId(taskId);
+      payload.put("id", taskId);
     }
-    return saveTask(body);
+    payload.put("status", "CREATED");
+    payload.put("progress", 0);
+    payload.put("currentCheckpointSeq", 0);
+    payload.put("createdAt", Instant.now().toString());
+    RouteRevisionEntity revision = attachRouteRevision(payload);
+    validateTaskBinding(payload);
+    if (revision != null) {
+      TaskExecutionEntity execution = taskExecutionService.bind(payload, revision);
+      payload.put("executionId", execution.getExecutionId());
+      payload.put("routeContentSha256", execution.getRouteContentSha256());
+      payload.put("mapImageSha256", execution.getMapImageSha256());
+    }
+    return saveTask(payload);
   }
 
   @Transactional
   public Map<String, Object> updateTask(String id, Map<String, Object> body) {
     Map<String, Object> current = dataStore.get(DataCategory.TASK, id);
-    if (hasRouteRevision(current)) {
-      String managedField = body.keySet().stream().filter(REVISION_MANAGED_FIELDS::contains).findFirst().orElse(null);
-      if (managedField != null) {
-        throw ApiException.badRequest("已绑定路线修订的任务不能通过通用更新接口修改 " + managedField);
-      }
-    }
-    if (ACTIVE_STATUSES.contains(text(current.get("status"))) && (body.containsKey("routeId") || body.containsKey("robotId"))) {
+    Map<String, Object> patch = sanitizeUpdatePayload(current, body);
+    if (ACTIVE_STATUSES.contains(text(current.get("status")))
+        && (patch.containsKey("routeId") || patch.containsKey("robotId"))) {
       throw ApiException.badRequest("任务执行中不能更换路线或机器人");
     }
-    Map<String, Object> task = dataStore.patch(DataCategory.TASK, id, body);
+    Map<String, Object> task = dataStore.patch(DataCategory.TASK, id, patch);
     validateTaskBinding(task);
     publishChange("task", id, "/topic/tasks/" + id, "/topic/tasks");
     return task;
@@ -167,6 +179,8 @@ public class TaskService {
 
   @Transactional
   public void deleteTask(String id) {
+    Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
+    requireDeletable(task);
     dataStore.deleteWhere(DataCategory.EVENT, "taskId", id);
     taskExecutionService.delete(id);
     dataStore.delete(DataCategory.TASK, id);
@@ -497,6 +511,21 @@ public class TaskService {
     Map<String, Object> route = requireRoute(task);
     Map<String, Object> robot = requireRobot(task);
     validateRouteAndRobotSite(route, robot);
+    String routeSiteId = text(route.get("siteId"));
+    if (routeSiteId != null && !routeSiteId.isBlank()) {
+      task.put("siteId", routeSiteId);
+    } else {
+      task.remove("siteId");
+    }
+  }
+
+  private void requireFreshTaskId(String taskId) {
+    if (taskId.length() > 64 || !taskId.matches("[A-Za-z0-9_-]+")) {
+      throw ApiException.badRequest("任务 id 不合法");
+    }
+    if (dataStore.exists(DataCategory.TASK, taskId)) {
+      throw ApiException.conflict("任务已存在，不能通过创建接口覆盖");
+    }
   }
 
   private RouteRevisionEntity attachRouteRevision(Map<String, Object> task) {
@@ -516,6 +545,80 @@ public class TaskService {
     task.put("routeContentSha256", revision.getContentSha256());
     task.put("mapImageSha256", revision.getMapImageSha256());
     return revision;
+  }
+
+  private Map<String, Object> sanitizeCreatePayload(Map<String, Object> body) {
+    if (body == null || body.isEmpty()) {
+      throw ApiException.badRequest("请提供任务创建参数");
+    }
+    rejectServerManagedFields(body, "创建");
+    rejectUnknownFields(body, CLIENT_CREATABLE_FIELDS, "创建");
+    Map<String, Object> payload = new LinkedHashMap<>();
+    for (String field : CLIENT_CREATABLE_FIELDS) {
+      if (body.containsKey(field)) {
+        payload.put(field, body.get(field));
+      }
+    }
+    return payload;
+  }
+
+  private Map<String, Object> sanitizeUpdatePayload(Map<String, Object> current, Map<String, Object> body) {
+    if (body == null || body.isEmpty()) {
+      throw ApiException.badRequest("请提供任务更新参数");
+    }
+    // version 仅用于乐观锁，不是业务状态字段。
+    Map<String, Object> withoutVersion = new LinkedHashMap<>(body);
+    Object version = withoutVersion.remove("version");
+    rejectServerManagedFields(withoutVersion, "更新");
+    if (hasRouteRevision(current)) {
+      String managedField = withoutVersion.keySet().stream().filter(REVISION_MANAGED_FIELDS::contains).findFirst().orElse(null);
+      if (managedField != null) {
+        throw ApiException.badRequest("已绑定路线修订的任务不能通过通用更新接口修改 " + managedField);
+      }
+    }
+    Set<String> allowed = allowedUpdateFields(current);
+    rejectUnknownFields(withoutVersion, allowed, "更新");
+    Map<String, Object> patch = new LinkedHashMap<>();
+    for (String field : allowed) {
+      if (withoutVersion.containsKey(field)) {
+        patch.put(field, withoutVersion.get(field));
+      }
+    }
+    if (version != null) {
+      patch.put("version", version);
+    }
+    return patch;
+  }
+
+  private Set<String> allowedUpdateFields(Map<String, Object> current) {
+    Set<String> allowed = new java.util.LinkedHashSet<>(Set.of("name", "note"));
+    if ("CREATED".equals(text(current.get("status"))) && !hasRouteRevision(current)) {
+      allowed.add("routeId");
+      allowed.add("robotId");
+    }
+    return allowed;
+  }
+
+  private void requireDeletable(Map<String, Object> task) {
+    String status = text(task.get("status"));
+    if (!DELETABLE_STATUSES.contains(status)) {
+      throw ApiException.badRequest("当前状态不允许删除任务");
+    }
+    taskExecutionService.requireDeletable(text(task.get("id")));
+  }
+
+  private static void rejectServerManagedFields(Map<String, Object> body, String action) {
+    String managedField = body.keySet().stream().filter(SERVER_MANAGED_FIELDS::contains).findFirst().orElse(null);
+    if (managedField != null) {
+      throw ApiException.badRequest(action + "任务不能指定服务端字段 " + managedField);
+    }
+  }
+
+  private static void rejectUnknownFields(Map<String, Object> body, Set<String> allowed, String action) {
+    String unknown = body.keySet().stream().filter(field -> !allowed.contains(field)).findFirst().orElse(null);
+    if (unknown != null) {
+      throw ApiException.badRequest(action + "任务不支持字段 " + unknown);
+    }
   }
 
   private boolean hasRouteRevision(Map<String, Object> task) {

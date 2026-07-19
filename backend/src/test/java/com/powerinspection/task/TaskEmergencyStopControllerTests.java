@@ -61,10 +61,7 @@ class TaskEmergencyStopControllerTests {
               "id":"%s",
               "name":"急停接口测试",
               "routeId":"%s",
-              "robotId":"%s",
-              "status":"CREATED",
-              "progress":0,
-              "currentCheckpointSeq":0
+              "robotId":"%s"
             }
             """.formatted(taskId, routeId, robotId)))
         .andExpect(status().isOk())
@@ -118,10 +115,7 @@ class TaskEmergencyStopControllerTests {
               "id":"%s",
               "name":"急停权限测试",
               "routeId":"%s",
-              "robotId":"%s",
-              "status":"CREATED",
-              "progress":0,
-              "currentCheckpointSeq":0
+              "robotId":"%s"
             }
             """.formatted(taskId, routeId, robotId)))
         .andExpect(status().isOk());
