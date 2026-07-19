@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-18T09:58:21.405Z",
+  "generatedAt": "2026-07-19T01:26:16.557Z",
   "schemas": [
     "ActionDecisionRequest",
     "ActionResponse",
@@ -53,6 +53,7 @@
     "RegisterRequest",
     "RobotHeartbeatStatusPage",
     "RobotHeartbeatStatusView",
+    "RobotImageDetectionRequest",
     "RoleRequest",
     "RunDetail",
     "RunQuestionResponse",

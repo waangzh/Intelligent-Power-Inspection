@@ -344,7 +344,12 @@ class PowerInspectionApplicationTests {
     mockMvc.perform(post("/api/v1/detection-templates")
         .header("Authorization", bearer(adminToken))
         .contentType(MediaType.APPLICATION_JSON)
-        .content(json("id", "tpl_test_api", "name", "接口测试模板", "scope", "ROUTE", "types", java.util.List.of("PERSON"), "prompt", "测试提示词")))
+        .content(json(
+          "id", "tpl_test_api",
+          "name", "接口测试模板",
+          "scope", "ROUTE",
+          "items", java.util.List.of(map("type", "PERSON", "enabled", true, "prompt", "测试提示词"))
+        )))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.id").value("tpl_test_api"));
 
