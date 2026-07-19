@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../..')
 const apiJsPath = path.join(repoRoot, 'frontend/wechat-program/miniprogram/config/api.js')
 const servicesPath = path.join(repoRoot, 'frontend/wechat-program/miniprogram/services/index.js')
+const storagePath = path.join(repoRoot, 'frontend/wechat-program/miniprogram/utils/storage.js')
 const buildEnvPath = path.join(repoRoot, 'frontend/wechat-program/miniprogram/config/build-env.js')
 
 let ok = true
@@ -25,6 +26,42 @@ try {
   const servicesSource = fs.readFileSync(servicesPath, 'utf8')
   if (/mock\/store/.test(servicesSource) || /\buseMock\b/.test(servicesSource)) {
     throw new Error('services/index.js 不得再引用 mock/store 或 useMock')
+  }
+  const storageSource = fs.readFileSync(storagePath, 'utf8')
+  if (/validateUsername/.test(servicesSource) && !/function validateUsername/.test(storageSource)) {
+    throw new Error('services/index.js 依赖 utils/storage.js 中的用户校验函数，但 storage.js 未导出 validateUsername')
+  }
+
+  const exportNames = [...servicesSource.matchAll(/^\s{2}(\w+),?\s*$/gm)].map((m) => m[1])
+  const exportSet = new Set(exportNames)
+  const scanRoots = [
+    path.join(repoRoot, 'frontend/wechat-program/miniprogram/pages'),
+    path.join(repoRoot, 'frontend/wechat-program/miniprogram/components'),
+    path.join(repoRoot, 'frontend/wechat-program/miniprogram/app.js'),
+    path.join(repoRoot, 'frontend/wechat-program/miniprogram/utils/slam-map.js'),
+  ]
+  const apiCalls = new Set()
+  function scanApiCalls(filePath) {
+    const source = fs.readFileSync(filePath, 'utf8')
+    if (!source.includes('services/index')) return
+    for (const match of source.matchAll(/api\.(\w+)/g)) apiCalls.add(match[1])
+  }
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return
+    if (fs.statSync(dir).isFile()) {
+      if (dir.endsWith('.js')) scanApiCalls(dir)
+      return
+    }
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (entry.isFile() && entry.name.endsWith('.js')) scanApiCalls(full)
+    }
+  }
+  for (const root of scanRoots) walk(root)
+  const missingApi = [...apiCalls].filter((name) => !exportSet.has(name)).sort()
+  if (missingApi.length) {
+    throw new Error(`services/index.js 缺少页面调用的 API：${missingApi.join(', ')}`)
   }
 
   if (fs.existsSync(buildEnvPath)) {
