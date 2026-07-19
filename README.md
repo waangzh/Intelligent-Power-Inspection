@@ -312,9 +312,9 @@ npm run permissions:generate   # 从 backend 生成 manifest / TS / JS / OpenAPI
 npm run permissions:check      # 校验权限定义
 npm run domain:generate        # 从 backend 约束生成任务/工单/告警等枚举
 npm run domain:check           # 校验领域枚举
-npm run miniprogram:env        # 生成 build-env.js（useMock=false）
-npm run miniprogram:env:mock   # 生成 build-env.js（useMock=true，wx.storage 演示）
-npm run mock:openapi           # 启动 Prism OpenAPI Mock（需后端 /v3/api-docs）
+npm run miniprogram:env        # 生成 build-env.js（mockMode=none）
+npm run miniprogram:env:mock   # OpenAPI Prism Mock（:4010，推荐演示）
+npm run mock:openapi           # 启动 Prism（默认读 shared/generated/openapi.json）
 npm run openapi:export         # 导出完整 openapi.json（需后端运行）
 npm run api:generate           # 由 openapi.json 生成 Web api-types.ts
 ```

@@ -18,23 +18,15 @@ npm run miniprogram:env
 
 ## 对接共用后端（默认）
 
-`npm run miniprogram:env` 会生成 `miniprogram/config/build-env.js`（`useMock: false`），请求 `http://localhost:8080/api/v1`。
+`npm run miniprogram:env` 会生成 `miniprogram/config/build-env.js`（`mockMode: none`），请求 `http://localhost:8080/api/v1`。
 
-## 演示模式
+## 演示模式（OpenAPI Mock Server / Prism）
 
-### wx.storage 本地 Mock（无后端）
-
-```bash
-npm run miniprogram:env:mock
-```
-
-演示账号与 web 端相同：`admin` / `Admin@123` 等。Mock 权限矩阵来自 `generated/permissions.js`（codegen，与 backend 一致）。
-
-### OpenAPI Mock Server（Prism）
+无后端时可用 OpenAPI Mock 演示 UI：
 
 ```bash
-npm run mock:openapi          # 需后端 /v3/api-docs 可访问
-npm run miniprogram:env:openapi
+npm run mock:openapi          # 使用仓库内 openapi.json，无需 backend
+npm run miniprogram:env:mock  # 与 miniprogram:env:openapi 相同，指向 :4010
 ```
 
 ## 权限与领域枚举
@@ -56,8 +48,8 @@ wechat-program/
 └─ miniprogram/
    ├─ app.js / app.json
    ├─ config/               # api、build-env（生成）、api.local.example
-   ├─ generated/            # permissions.js、domain-enums.js（codegen）
-   ├─ services/             # 业务层（mock + HTTP）
+   ├─ generated/            # permissions.js、domain-enums.js、api-client.js（codegen）
+   ├─ services/             # 业务层（generated api-client services）
    ├─ utils/
    └─ pages/
 ```
@@ -66,7 +58,7 @@ wechat-program/
 
 | 项目 | 说明 |
 | --- | --- |
-| 共用后端 | 默认 `useMock: false`，两端数据一致 |
+| 共用后端 | 默认 `mockMode: none`，两端数据一致 |
 | 权限 codegen | `npm run permissions:generate` |
 | 枚举 codegen | `npm run domain:generate` |
-| Mock 开关 | 构建变量 `USE_MOCK`，不写死在源码 |
+| Mock 演示 | `npm run miniprogram:env:mock` → OpenAPI Prism |
