@@ -1,10 +1,12 @@
 package com.powerinspection.config;
 
+import com.powerinspection.robot.RobotBridgeIdMapper;
 import com.powerinspection.security.JwtAuthenticationFilter;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -20,12 +22,17 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableWebSecurity
 public class SecurityConfig {
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+  SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter,
+      RobotBridgeIdMapper robotBridgeIdMapper) throws Exception {
     return http
       .csrf(csrf -> csrf.disable())
       .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
       .cors(cors -> {})
       .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+      .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
+        boolean bridgeRequest = robotBridgeIdMapper.isBridgePlatformRequest(request.getHeader("Authorization"));
+        response.setStatus(bridgeRequest ? HttpStatus.FORBIDDEN.value() : HttpStatus.UNAUTHORIZED.value());
+      }))
       .authorizeHttpRequests(auth -> auth
         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
         .requestMatchers(
