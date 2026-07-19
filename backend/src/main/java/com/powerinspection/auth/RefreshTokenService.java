@@ -16,11 +16,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class RefreshTokenService {
-  public record IssuedRefresh(String rawToken, RefreshTokenEntity entity, Instant expiresAt) {
-  }
+  public record IssuedRefresh(String rawToken, RefreshTokenEntity entity, Instant expiresAt) {}
 
-  public record RotatedSession(UserEntity user, IssuedRefresh refresh, long authTime) {
-  }
+  public record RotatedSession(UserEntity user, IssuedRefresh refresh, long authTime) {}
 
   private final RefreshTokenRepository repository;
   private final UserRepository userRepository;
@@ -38,7 +36,10 @@ public class RefreshTokenService {
 
   @Transactional
   public IssuedRefresh issue(UserEntity user, boolean remember, long authTimeEpochSeconds) {
-    long ttl = remember ? jwtProperties.getRefreshRememberTtlSeconds() : jwtProperties.getRefreshSessionTtlSeconds();
+    long ttl =
+        remember
+            ? jwtProperties.getRefreshRememberTtlSeconds()
+            : jwtProperties.getRefreshSessionTtlSeconds();
     Instant expiresAt = Instant.now().plusSeconds(ttl);
     String raw = randomToken();
     RefreshTokenEntity entity = new RefreshTokenEntity();
@@ -65,8 +66,10 @@ public class RefreshTokenService {
   }
 
   private RotatedSession rotate(String rawToken, Long replacementAuthTimeEpochSeconds) {
-    RefreshTokenEntity current = repository.findByTokenHashForUpdate(hash(rawToken))
-      .orElseThrow(() -> ApiException.unauthorized("刷新凭证无效"));
+    RefreshTokenEntity current =
+        repository
+            .findByTokenHashForUpdate(hash(rawToken))
+            .orElseThrow(() -> ApiException.unauthorized("刷新凭证无效"));
     if (current.getRevokedAt() != null) {
       repository.revokeFamily(current.getFamilyId(), Instant.now().toString());
       throw ApiException.unauthorized("刷新凭证已失效，请重新登录");
@@ -77,8 +80,10 @@ public class RefreshTokenService {
       repository.save(current);
       throw ApiException.unauthorized("登录已过期，请重新登录");
     }
-    UserEntity user = userRepository.findById(current.getUserId())
-      .orElseThrow(() -> ApiException.unauthorized("用户不存在"));
+    UserEntity user =
+        userRepository
+            .findById(current.getUserId())
+            .orElseThrow(() -> ApiException.unauthorized("用户不存在"));
     if (!Boolean.TRUE.equals(user.getEnabled())) {
       revokeAllForUser(user.getId());
       throw ApiException.forbidden("用户已被禁用");
@@ -92,9 +97,10 @@ public class RefreshTokenService {
     next.setFamilyId(current.getFamilyId());
     next.setRemember(current.isRemember());
     next.setExpiresAt(current.getExpiresAt());
-    long authTime = replacementAuthTimeEpochSeconds == null
-      ? current.getAuthTimeEpochSeconds()
-      : replacementAuthTimeEpochSeconds;
+    long authTime =
+        replacementAuthTimeEpochSeconds == null
+            ? current.getAuthTimeEpochSeconds()
+            : replacementAuthTimeEpochSeconds;
     next.setAuthTimeEpochSeconds(authTime);
     next.setCreatedAt(Instant.now().toString());
     repository.save(next);
@@ -111,12 +117,15 @@ public class RefreshTokenService {
     if (rawToken == null || rawToken.isBlank()) {
       return;
     }
-    repository.findByTokenHash(hash(rawToken)).ifPresent(token -> {
-      if (token.getRevokedAt() == null) {
-        token.setRevokedAt(Instant.now().toString());
-        repository.save(token);
-      }
-    });
+    repository
+        .findByTokenHash(hash(rawToken))
+        .ifPresent(
+            token -> {
+              if (token.getRevokedAt() == null) {
+                token.setRevokedAt(Instant.now().toString());
+                repository.save(token);
+              }
+            });
   }
 
   @Transactional
@@ -132,7 +141,8 @@ public class RefreshTokenService {
 
   private String hash(String raw) {
     try {
-      byte[] digest = MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8));
+      byte[] digest =
+          MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8));
       return HexFormat.of().formatHex(digest);
     } catch (Exception ex) {
       throw new IllegalStateException("无法计算刷新令牌摘要", ex);
