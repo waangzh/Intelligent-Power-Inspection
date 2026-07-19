@@ -10,8 +10,6 @@ import com.powerinspection.agent.persistence.AgentCaseRepository;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
-import com.powerinspection.user.Permission;
-import com.powerinspection.user.PermissionService;
 import com.powerinspection.user.UserEntity;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -23,12 +21,10 @@ public class CreateWorkOrderDraftActionHandler implements AgentActionHandler {
   private final AgentCaseRepository caseRepository;
   private final AgentToolService toolService;
   private final DataStoreService dataStore;
-  private final PermissionService permissionService;
   private final ObjectMapper objectMapper;
-  public CreateWorkOrderDraftActionHandler(AgentCaseRepository caseRepository, AgentToolService toolService, DataStoreService dataStore, PermissionService permissionService, ObjectMapper objectMapper) { this.caseRepository = caseRepository; this.toolService = toolService; this.dataStore = dataStore; this.permissionService = permissionService; this.objectMapper = objectMapper; }
+  public CreateWorkOrderDraftActionHandler(AgentCaseRepository caseRepository, AgentToolService toolService, DataStoreService dataStore, ObjectMapper objectMapper) { this.caseRepository = caseRepository; this.toolService = toolService; this.dataStore = dataStore; this.objectMapper = objectMapper; }
   @Override public boolean supports(AgentEnums.ActionType type) { return type == AgentEnums.ActionType.CREATE_WORK_ORDER_DRAFT; }
   @Override public Map<String, Object> execute(AgentActionEntity action, UserEntity user) {
-    permissionService.require(user, Permission.TASK_DISPATCH);
     AgentCaseEntity agentCase = caseRepository.findById(action.getCaseId()).orElseThrow(() -> ApiException.notFound("处置案件不存在"));
     Map<String, Object> payload = new LinkedHashMap<>(payload(action.getPayloadJson()));
     String alarmId = text(payload.get("alarmId")); String taskId = text(payload.get("taskId"));

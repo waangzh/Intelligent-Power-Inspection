@@ -1,7 +1,5 @@
 package com.powerinspection.agent;
 
-import com.powerinspection.agent.api.AgentDtos;
-import com.powerinspection.agent.domain.AgentEnums;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
@@ -55,7 +53,6 @@ public class AgentController {
   @PostMapping("/actions/{id}/confirm")
   public ApiResponse<Map<String, Object>> confirmAction(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
-    requireLegacyBusinessPermission(agentService.action(id).type());
     return ApiResponse.ok(agentService.confirmLegacyAction(id, currentUser.get()));
   }
 
@@ -63,17 +60,5 @@ public class AgentController {
   public ApiResponse<Map<String, Object>> rejectAction(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
     return ApiResponse.ok(agentService.rejectLegacyAction(id, currentUser.get()));
-  }
-
-  private void requireLegacyBusinessPermission(AgentEnums.ActionType type) {
-    if (type == AgentEnums.ActionType.CREATE_WORK_ORDER_DRAFT) {
-      permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
-    }
-    if (type == AgentEnums.ActionType.ACKNOWLEDGE_ALARM) {
-      permissionService.require(currentUser.get(), Permission.ALARM_ACK);
-    }
-    if (type == AgentEnums.ActionType.REQUEST_TASK_PAUSE) {
-      permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
-    }
   }
 }

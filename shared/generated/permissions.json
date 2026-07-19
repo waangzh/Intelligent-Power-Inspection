@@ -1,6 +1,6 @@
 {
   "source": "backend",
-  "generatedAt": "2026-07-18T07:31:39.651Z",
+  "generatedAt": "2026-07-19T00:55:06.189Z",
   "permissions": [
     "agent:admin",
     "agent:approve",
@@ -29,7 +29,6 @@
     "ADMIN": [
       "agent:admin",
       "agent:approve",
-      "agent:run",
       "agent:view",
       "alarm:policy",
       "detection:manage",
@@ -45,7 +44,6 @@
       "workorder:view"
     ],
     "DISPATCHER": [
-      "agent:approve",
       "agent:run",
       "agent:view",
       "alarm:ack",

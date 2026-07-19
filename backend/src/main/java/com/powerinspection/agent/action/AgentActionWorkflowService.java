@@ -59,7 +59,6 @@ public class AgentActionWorkflowService {
     forbidSelfApproval(action, user);
     requireRecentAuth();
     requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.PROPOSED);
-    requireBusinessPermission(action.getType(), user);
     AgentCaseEntity agentCase = agentCase(action); AgentRunEntity run = run(action);
     Map<String, Object> nextPayload = request.payload() == null || request.payload().isEmpty() ? proposalService.payload(action) : request.payload();
     ActionProposal proposal = proposalService.revalidatedProposal(action, agentCase, nextPayload);
@@ -78,9 +77,8 @@ public class AgentActionWorkflowService {
   public AgentActionEntity reject(String actionId, AgentDtos.ActionDecisionRequest request, UserEntity user) {
     permissionService.require(user, Permission.AGENT_APPROVE);
     AgentActionEntity action = action(actionId);
-    forbidSelfApproval(action, user);
     requireRecentAuth();
-    requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.PROPOSED); requireBusinessPermission(action.getType(), user);
+    requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.PROPOSED);
     action.setStatus(AgentEnums.ActionStatus.REJECTED); action.setRejectedById(user.getId()); action.setRejectedAt(Instant.now()); action.setRejectionComment(request.comment().trim()); action.setUpdatedAt(Instant.now()); action = save(action);
     AgentRunEntity run = run(action); recordStep(run, AgentEnums.StepType.ACTION_REJECTED, "动作已被人工拒绝", Map.of("actionId", action.getId())); syncState(agentCase(action), run); return action;
   }
@@ -91,7 +89,7 @@ public class AgentActionWorkflowService {
     AgentActionEntity action = action(actionId);
     forbidSelfApproval(action, user);
     requireRecentAuth();
-    requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.FAILED); requireBusinessPermission(action.getType(), user);
+    requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.FAILED);
     AgentCaseEntity agentCase = agentCase(action); AgentRunEntity run = run(action); ActionProposal proposal = proposalService.revalidatedProposal(action, agentCase, proposalService.payload(action)); AgentPolicyDecision policy = proposalService.policy(action, agentCase, run, proposal, user);
     applyPayloadAndPolicy(action, proposal, policy, null, user);
     if (policy.decision() == AgentEnums.PolicyDecisionType.DENY) { action.setStatus(AgentEnums.ActionStatus.REJECTED); action.setRejectedAt(Instant.now()); action.setRejectedById(user.getId()); action.setRejectionComment(policy.reason()); action = save(action); syncState(agentCase, run); return action; }
@@ -105,9 +103,9 @@ public class AgentActionWorkflowService {
     recordStep(run(action), AgentEnums.StepType.ACTION_APPROVED, "策略自动批准动作", Map.of("actionId", action.getId(), "policyCode", action.getPolicyCode())); return execute(action, user);
   }
 
-  private AgentActionEntity execute(AgentActionEntity action, UserEntity user) {
+  private AgentActionEntity execute(AgentActionEntity action, UserEntity authorizingUser) {
     AgentCaseEntity agentCase = agentCase(action); AgentRunEntity run = run(action);
-    ActionProposal proposal = proposalService.revalidatedProposal(action, agentCase, proposalService.payload(action)); AgentPolicyDecision policy = proposalService.policy(action, agentCase, run, proposal, user); applyPayloadAndPolicy(action, proposal, policy, null, user);
+    ActionProposal proposal = proposalService.revalidatedProposal(action, agentCase, proposalService.payload(action)); AgentPolicyDecision policy = proposalService.policy(action, agentCase, run, proposal, authorizingUser); applyPayloadAndPolicy(action, proposal, policy, null, authorizingUser);
     if (policy.decision() == AgentEnums.PolicyDecisionType.DENY || (action.getApprovedById() == null && policy.decision() == AgentEnums.PolicyDecisionType.REQUIRE_APPROVAL)) {
       action.setStatus(AgentEnums.ActionStatus.REJECTED); action.setRejectedAt(Instant.now()); action.setRejectionComment(policy.reason()); action = save(action); recordStep(run, AgentEnums.StepType.ACTION_REJECTED, "执行前策略拒绝动作", Map.of("actionId", action.getId(), "policyCode", policy.policyCode())); syncState(agentCase, run); return action;
     }
@@ -121,7 +119,7 @@ public class AgentActionWorkflowService {
     action.setStatus(AgentEnums.ActionStatus.EXECUTING); action.setExecutionStartedAt(Instant.now()); action.setUpdatedAt(Instant.now()); action = save(action);
     agentCase.setStatus(AgentEnums.CaseStatus.ACTION_EXECUTING); agentCase.setUpdatedAt(Instant.now()); caseRepository.save(agentCase); recordStep(run, AgentEnums.StepType.ACTION_STARTED, "动作正在执行", Map.of("actionId", action.getId()));
     try {
-      String result = json(executor.execute(action, user)); action.setStatus(AgentEnums.ActionStatus.SUCCEEDED); action.setResultJson(result); action.setExecutionCompletedAt(Instant.now()); action.setUpdatedAt(Instant.now()); action.setErrorCode(null); action.setErrorMessage(null); action = save(action); claimService.complete(claim.claim(), AgentEnums.ExecutionClaimStatus.SUCCEEDED, result); recordStep(run, AgentEnums.StepType.ACTION_SUCCEEDED, "动作执行成功", Map.of("actionId", action.getId()));
+      String result = json(executor.execute(action, authorizingUser)); action.setStatus(AgentEnums.ActionStatus.SUCCEEDED); action.setResultJson(result); action.setExecutionCompletedAt(Instant.now()); action.setUpdatedAt(Instant.now()); action.setErrorCode(null); action.setErrorMessage(null); action = save(action); claimService.complete(claim.claim(), AgentEnums.ExecutionClaimStatus.SUCCEEDED, result); recordStep(run, AgentEnums.StepType.ACTION_SUCCEEDED, "动作执行成功", Map.of("actionId", action.getId()));
     } catch (Exception ex) {
       action.setStatus(AgentEnums.ActionStatus.FAILED); action.setErrorCode("ACTION_EXECUTION_FAILED"); action.setErrorMessage(abbreviate(ex.getMessage(), 1000)); action.setExecutionCompletedAt(Instant.now()); action.setUpdatedAt(Instant.now()); action = save(action); claimService.complete(claim.claim(), AgentEnums.ExecutionClaimStatus.FAILED, null); recordStep(run, AgentEnums.StepType.ACTION_FAILED, "动作执行失败", Map.of("actionId", action.getId()));
     }
@@ -171,7 +169,6 @@ public class AgentActionWorkflowService {
   }
 
   private void requireVersionAndState(AgentActionEntity action, long expectedVersion, AgentEnums.ActionStatus expected) { if (action.getVersion() != expectedVersion || action.getStatus() != expected) throw ApiException.conflict("动作已被其他请求处理，请刷新后重试"); }
-  private void requireBusinessPermission(AgentEnums.ActionType type, UserEntity user) { if (type == AgentEnums.ActionType.CREATE_WORK_ORDER_DRAFT) permissionService.require(user, Permission.TASK_DISPATCH); if (type == AgentEnums.ActionType.ACKNOWLEDGE_ALARM) permissionService.require(user, Permission.ALARM_ACK); if (type == AgentEnums.ActionType.REQUEST_TASK_PAUSE) permissionService.require(user, Permission.TASK_CONTROL); }
   private AgentActionEntity action(String id) { return actionRepository.findById(id).orElseThrow(() -> ApiException.notFound("Agent 动作不存在")); }
   private AgentCaseEntity agentCase(AgentActionEntity action) { return caseRepository.findById(action.getCaseId()).orElseThrow(() -> ApiException.notFound("处置案件不存在")); }
   private AgentRunEntity run(AgentActionEntity action) { return runRepository.findById(action.getRunId()).orElseThrow(() -> ApiException.notFound("分析运行不存在")); }

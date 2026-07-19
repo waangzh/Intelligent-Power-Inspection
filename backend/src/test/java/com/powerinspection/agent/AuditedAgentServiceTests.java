@@ -74,8 +74,8 @@ class AuditedAgentServiceTests {
     approver.setUsername("agent-test-approver");
     approver.setPasswordHash("unused");
     approver.setDisplayName("测试审批员");
-    // Separate dispatcher: initiator cannot approve their own actions; ADMIN lacks TASK_DISPATCH.
-    approver.setRole(UserRole.DISPATCHER);
+    // Admin approves; dispatcher initiates. Maker-checker: initiator cannot approve own actions.
+    approver.setRole(UserRole.ADMIN);
     approver.setEnabled(true);
     approver.setCreatedAt(Instant.now().toString());
     userRepository.save(approver);

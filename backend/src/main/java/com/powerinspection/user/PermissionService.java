@@ -27,7 +27,6 @@ public class PermissionService {
       Permission.WORKORDER_REVIEW,
       Permission.ALARM_POLICY,
       Permission.AGENT_VIEW,
-      Permission.AGENT_RUN,
       Permission.AGENT_APPROVE,
       Permission.AGENT_ADMIN
     ));
@@ -44,8 +43,7 @@ public class PermissionService {
       Permission.WORKORDER_VIEW,
       Permission.WORKORDER_PROCESS,
       Permission.AGENT_VIEW,
-      Permission.AGENT_RUN,
-      Permission.AGENT_APPROVE
+      Permission.AGENT_RUN
     ));
     ROLE_PERMISSIONS.put(UserRole.VIEWER, EnumSet.of(Permission.TASK_VIEW));
   }

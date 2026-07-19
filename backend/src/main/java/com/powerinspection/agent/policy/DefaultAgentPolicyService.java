@@ -30,8 +30,10 @@ public class DefaultAgentPolicyService implements AgentPolicyService {
     try { type = AgentEnums.ActionType.valueOf(proposal.actionType()); }
     catch (Exception ex) { return deny(AgentEnums.RiskLevel.CRITICAL, "AGENT_ACTION_UNKNOWN", "动作类型不在受控白名单中。"); }
     UserEntity user = context.user();
-    if (user == null || !Boolean.TRUE.equals(user.getEnabled()) || !permissionService.has(user.getRole(), Permission.AGENT_RUN)) {
-      return deny(AgentEnums.RiskLevel.HIGH, "AGENT_RUN_PERMISSION_REQUIRED", "当前用户无权提出或执行 Agent 动作。");
+    if (user == null || !Boolean.TRUE.equals(user.getEnabled())
+        || !(permissionService.has(user.getRole(), Permission.AGENT_RUN)
+            || permissionService.has(user.getRole(), Permission.AGENT_APPROVE))) {
+      return deny(AgentEnums.RiskLevel.HIGH, "AGENT_RUN_PERMISSION_REQUIRED", "当前用户无权提出、审批或执行 Agent 动作。");
     }
     return switch (type) {
       case PUSH_NOTIFICATION_TO_SELF -> notification(context);
