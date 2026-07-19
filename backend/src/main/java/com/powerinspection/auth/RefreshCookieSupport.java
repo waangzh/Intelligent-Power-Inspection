@@ -25,12 +25,18 @@ public class RefreshCookieSupport {
     return null;
   }
 
-  public void write(HttpServletResponse response, String rawToken, boolean remember, Instant expiresAt, boolean secure) {
-    ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(COOKIE_NAME, rawToken)
-      .httpOnly(true)
-      .secure(secure)
-      .path("/api/v1/auth")
-      .sameSite("Lax");
+  public void write(
+      HttpServletResponse response,
+      String rawToken,
+      boolean remember,
+      Instant expiresAt,
+      boolean secure) {
+    ResponseCookie.ResponseCookieBuilder builder =
+        ResponseCookie.from(COOKIE_NAME, rawToken)
+            .httpOnly(true)
+            .secure(secure)
+            .path("/api/v1/auth")
+            .sameSite("Lax");
     if (remember) {
       long maxAge = Math.max(1, Duration.between(Instant.now(), expiresAt).getSeconds());
       builder.maxAge(maxAge);
@@ -40,13 +46,14 @@ public class RefreshCookieSupport {
   }
 
   public void clear(HttpServletResponse response, boolean secure) {
-    ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, "")
-      .httpOnly(true)
-      .secure(secure)
-      .path("/api/v1/auth")
-      .sameSite("Lax")
-      .maxAge(0)
-      .build();
+    ResponseCookie cookie =
+        ResponseCookie.from(COOKIE_NAME, "")
+            .httpOnly(true)
+            .secure(secure)
+            .path("/api/v1/auth")
+            .sameSite("Lax")
+            .maxAge(0)
+            .build();
     response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
   }
 
