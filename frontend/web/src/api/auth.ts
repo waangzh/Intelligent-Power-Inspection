@@ -1,4 +1,5 @@
 import { http } from '@/api/http'
+import { openapiClient } from '@/generated/api-client'
 import type { AuthSession, ProfileForm, RegisterForm, User, UserRole } from '@/types/auth'
 
 export function validateUsername(username: string): string | null {
@@ -22,7 +23,7 @@ export function validatePassword(password: string): string | null {
 }
 
 export async function loginApi(username: string, password: string, remember = false): Promise<AuthSession> {
-  return http.post<AuthSession>('/auth/login', { username, password, remember })
+  return openapiClient.auth.login(username, password, remember)
 }
 
 export async function registerApi(form: RegisterForm): Promise<User> {
@@ -42,6 +43,6 @@ export async function updateProfileApi(userId: string, form: ProfileForm): Promi
   return http.patch<User>('/users/me', form)
 }
 
-export async function toggleUserEnabledApi(userId: string, enabled: boolean): Promise<User> {
-  return http.patch<User>(`/users/${userId}/enabled`, { enabled })
+export async function toggleUserEnabledApi(userId: string, enabled: boolean): Promise<void> {
+  await http.patch<User>(`/users/${userId}/enabled`, { enabled })
 }

@@ -1,0 +1,96 @@
+{
+  "source": "backend",
+  "generatedAt": "2026-07-18T07:31:40.139Z",
+  "enums": {
+    "UserRole": [
+      "ADMIN",
+      "DISPATCHER",
+      "VIEWER"
+    ],
+    "TaskStatus": [
+      "CREATED",
+      "DISPATCHED",
+      "RUNNING",
+      "PAUSED",
+      "MANUAL_TAKEOVER",
+      "COMPLETED",
+      "CANCELLED"
+    ],
+    "WorkOrderStatus": [
+      "PENDING",
+      "PROCESSING",
+      "REVIEW",
+      "CLOSED",
+      "CANCELLED"
+    ],
+    "WorkOrderPriority": [
+      "URGENT",
+      "HIGH",
+      "MEDIUM",
+      "LOW"
+    ],
+    "WorkOrderReviewConclusion": [
+      "RESOLVED",
+      "PARTIALLY_RESOLVED",
+      "UNRESOLVED",
+      "FALSE_ALARM"
+    ],
+    "AlarmSeverity": [
+      "LOW",
+      "MEDIUM",
+      "HIGH",
+      "CRITICAL"
+    ],
+    "RobotStatus": [
+      "ONLINE",
+      "OFFLINE",
+      "BUSY"
+    ]
+  },
+  "labels": {
+    "UserRole": {
+      "ADMIN": "管理员",
+      "DISPATCHER": "调度员",
+      "VIEWER": "观察员"
+    },
+    "TaskStatus": {
+      "CREATED": "已创建",
+      "DISPATCHED": "已下发",
+      "RUNNING": "执行中",
+      "PAUSED": "已暂停",
+      "MANUAL_TAKEOVER": "人工接管",
+      "COMPLETED": "已完成",
+      "CANCELLED": "已取消"
+    },
+    "WorkOrderStatus": {
+      "PENDING": "待处理",
+      "PROCESSING": "处理中",
+      "REVIEW": "待复核",
+      "CLOSED": "已关闭",
+      "CANCELLED": "已取消"
+    },
+    "WorkOrderPriority": {
+      "LOW": "低",
+      "MEDIUM": "中",
+      "HIGH": "高",
+      "URGENT": "紧急"
+    },
+    "WorkOrderReviewConclusion": {
+      "RESOLVED": "已消缺",
+      "PARTIALLY_RESOLVED": "部分消缺",
+      "UNRESOLVED": "未消缺",
+      "FALSE_ALARM": "误报"
+    },
+    "AlarmSeverity": {
+      "LOW": "低",
+      "MEDIUM": "中",
+      "HIGH": "高",
+      "CRITICAL": "紧急"
+    },
+    "RobotStatus": {
+      "ONLINE": "在线",
+      "OFFLINE": "离线",
+      "BUSY": "忙碌"
+    }
+  }
+}

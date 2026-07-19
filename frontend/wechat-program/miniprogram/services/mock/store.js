@@ -1,7 +1,8 @@
 const { loadFromStorage, saveToStorage, uid } = require('../../utils/storage')
 /**
- * Mock 演示数据层 — 仅 useMock=true 时使用。
- * 权限与状态机以 utils/permission.js 及后端集成测试为准，勿在此扩展独有业务规则。
+ * Mock 演示数据层 — 仅 mockMode=storage 时使用。
+ * 权限来自 generated/permissions.js；领域枚举来自 generated/domain-enums.js。
+ * 勿在此维护与 backend 不一致的业务规则；长期方向是 OpenAPI Mock Server（npm run mock:openapi）。
  */
 const { DETECTION_LABELS } = require('../../utils/constants')
 const { permissionsForRole } = require('../../generated/permissions')
@@ -337,15 +338,13 @@ function setTaskStatus(id, status) {
     tasks[idx] = { ...task, status }
     stopSimulation()
     addEvent(id, 'PAUSE', '调度员已人工接管机器人')
-  } else if (status === 'CANCELLED' || status === 'COMPLETED' || status === 'ESTOPPED') {
+  } else if (status === 'CANCELLED' || status === 'COMPLETED') {
     stopSimulation()
     tasks[idx] = { ...task, status, completedAt: now, progress: status === 'COMPLETED' ? 100 : task.progress }
     updateRobot(task.robotId, { status: 'ONLINE', currentTaskId: undefined })
     if (status === 'COMPLETED') {
       addEvent(id, 'COMPLETE', '巡检任务已全部完成')
       finishRecord(id)
-    } else if (status === 'ESTOPPED') {
-      addEvent(id, 'ESTOP', '远程急停已执行')
     }
   } else {
     tasks[idx] = { ...task, status }

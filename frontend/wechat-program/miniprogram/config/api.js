@@ -1,26 +1,38 @@
 /**
  * API 配置 — 与网页端共用同一后端
- * 默认对接真实后端；本地演示请复制 api.local.example.js 为 api.local.js
+ *
+ * useMock 仅通过构建变量启用（npm run miniprogram:env），不在此文件写死 true。
+ * 本地改 baseUrl 可用 api.local.js（不含 useMock）。
  */
 const defaults = {
-  /** 后端 REST API 根路径，与 web 端 docs/API.md 一致 */
   baseUrl: 'http://localhost:8080/api/v1',
-
-  /**
-   * false: 请求共用后端 HTTP 接口（默认）
-   * true:  使用本地 mock（wx.storage 演示，需 api.local.js 显式开启）
-   */
   useMock: false,
-
-  /** 请求超时（毫秒） */
+  /** storage: wx.storage 本地演示；openapi: 对接 Prism Mock Server */
+  mockMode: 'none',
   timeout: 15000,
+}
+
+let buildEnv = {}
+try {
+  buildEnv = require('./build-env.js')
+} catch (e) {
+  // 未运行 miniprogram:env 时使用默认值（useMock=false）
 }
 
 let local = {}
 try {
   local = require('./api.local.js')
 } catch (e) {
-  // 无本地覆盖时使用默认值
+  // 无本地覆盖
 }
 
-module.exports = { ...defaults, ...local }
+if (local.useMock !== undefined) {
+  console.warn('[power-inspection] api.local.js 中的 useMock 已废弃，请使用: USE_MOCK=true npm run miniprogram:env')
+}
+
+const merged = { ...defaults, ...buildEnv, ...local }
+if (local.useMock !== undefined) {
+  merged.useMock = local.useMock
+}
+
+module.exports = merged

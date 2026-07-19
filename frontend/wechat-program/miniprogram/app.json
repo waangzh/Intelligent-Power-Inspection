@@ -14,7 +14,8 @@
     "pages/profile/avatar/index",
     "pages/profile/security/index",
     "pages/profile/activity/index",
-    "pages/profile/settings/index"
+    "pages/profile/settings/index",
+    "pages/profile/users/index"
   ],
   "window": {
     "navigationBarBackgroundColor": "#071e42",

@@ -184,7 +184,7 @@ mvn spring-boot:run
 
 ### 方式三：微信小程序
 
-用微信开发者工具打开 `frontend/wechat-program/`，默认对接真实后端。无后端演示时复制 `miniprogram/config/api.local.example.js` 为 `api.local.js` 并设置 `useMock: true`。
+用微信开发者工具打开 `frontend/wechat-program/`，先执行 `npm run miniprogram:env` 生成运行配置，默认对接真实后端。无后端演示时使用 `npm run miniprogram:env:mock`。
 
 ### 方式四：Python AI 服务联调
 
@@ -289,21 +289,39 @@ Web / 小程序
 
 ## 权限点
 
-权限以 **后端 `Permission` 枚举 + `PermissionService`** 为唯一事实来源。登录后 `/auth/login`、`/auth/me` 返回 `permissions[]`；Web 与小程序运行时只使用该数组，不再内置角色矩阵。
+权限以 **后端 `Permission` 枚举 + `PermissionService`** 为唯一事实来源。登录后 `/auth/login`、`/auth/me` 返回 `permissions[]`；Web 与小程序运行时只使用该数组，不再内置角色矩阵。告警转工单策略统一读写 `/alarms/work-order-policy`（Web 不再使用 `localStorage` 保存策略）。
 
 静态类型与 Mock 演示数据由 codegen 生成：
 
 ```bash
+npm run codegen                # 权限 + 领域枚举 + 小程序 build-env
+npm run codegen:check          # 校验 backend ↔ shared/generated ↔ Web ↔ 小程序
 npm run permissions:generate   # 从 backend 生成 manifest / TS / JS / OpenAPI 片段
-npm run permissions:check      # 校验 backend ↔ shared/generated ↔ Web ↔ 小程序
+npm run permissions:check      # 校验权限定义
+npm run domain:generate        # 从 backend 约束生成任务/工单/告警等枚举
+npm run domain:check           # 校验领域枚举
+npm run miniprogram:env        # 生成 build-env.js（useMock=false）
+npm run miniprogram:env:mock   # 生成 build-env.js（useMock=true，wx.storage 演示）
+npm run mock:openapi           # 启动 Prism OpenAPI Mock（需后端 /v3/api-docs）
+npm run openapi:export         # 导出完整 openapi.json（需后端运行）
+npm run api:generate           # 由 openapi.json 生成 Web api-types.ts
 ```
 
 生成物路径：
 
+- `shared/generated/openapi.json`（`npm run openapi:export`）
+- `shared/generated/api-paths.json` / `dto-schemas.json`
+- `frontend/web/src/generated/api-types.ts` / `api-client.ts` / `dto-types.ts`
+- `frontend/wechat-program/miniprogram/generated/api-client.js` / `api-paths.js`
 - `shared/generated/permissions.json`
+- `shared/generated/domain-enums.json`
 - `shared/generated/openapi-permissions.yaml`
+- `shared/generated/openapi-domain-enums.yaml`
 - `frontend/web/src/generated/permissions.ts`
+- `frontend/web/src/generated/domain-enums.ts`
 - `frontend/wechat-program/miniprogram/generated/permissions.js`
+- `frontend/wechat-program/miniprogram/generated/domain-enums.js`
+- `frontend/wechat-program/miniprogram/config/build-env.js`（本地生成，不提交）
 
 OpenAPI 文档（含权限 enum）：后端启动后访问 `/swagger-ui.html`。
 
@@ -335,14 +353,25 @@ WebSocket/STOMP 端点 `ws://localhost:8080/ws`，主要 topic：
 | MySQL 启动 | `mvn spring-boot:run` |
 | 前端开发 | `cd frontend/web && npm install && npm run dev` |
 | 前端构建 | `npm run build` |
-| 权限校验 | `npm run permissions:check` |
+| 契约/codegen 校验 | `npm run codegen:check` |
+| OpenAPI 导出 | `npm run openapi:export` |
+| API 类型生成 | `npm run api:generate` |
+| API 契约用法校验 | `npm run api:contract:check`（静态比对手写 http 调用与 openapi.json） |
 | 权限 codegen | `npm run permissions:generate` |
+| 领域枚举 codegen | `npm run domain:generate` |
+| 小程序 env | `npm run miniprogram:env` |
 | 启动 AI 服务 | `uvicorn app:app --host 0.0.0.0 --port 9001` |
 
 ## 常见问题
 
 ### 后端提示 Java 版本不正确
-Spring Boot 3 需要 JDK 17+。先检查 `java -version`，必要时切换 `JAVA_HOME`。
+Spring Boot 3 需要 JDK 17+。先检查 `java -version`，必要时切换 `JAVA_HOME`（Maven 默认可能仍指向 JDK 8）。Windows 示例：
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
+cd backend
+mvn spring-boot:test-run
+```
 
 ### 连接 MySQL 失败
 确认 MySQL 已启动、数据库已创建，且 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` 正确。快速演示可用 H2。

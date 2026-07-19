@@ -3,7 +3,7 @@
 > **项目**：`power-inspection-wechat`  
 > **版本**：1.0.0  
 > **后端**：与网页端（`frontend/web`）**共用同一 REST API**（`/api/v1`）  
-> **演示模式**：复制 `config/api.local.example.js` 为 `config/api.local.js` 并设置 `useMock: true`，使用本地 wx.storage 模拟
+> **Mock**：仅通过构建变量启用（见下文），默认对接真实后端
 
 ---
 
@@ -14,41 +14,48 @@
     ↓
 services/index.js        ← 统一业务入口
     ↓
-┌─────────────────┬──────────────────────┐
-│ useMock: true   │ useMock: false       │
-│ mock/store.js   │ utils/request.js     │
-│ wx.storage      │ HTTP → 共用后端      │
-└─────────────────┴──────────────────────┘
+┌──────────────────┬────────────────────┬─────────────────────────┐
+│ mockMode=storage │ mockMode=none      │ mockMode=openapi        │
+│ wx.storage 演示  │ HTTP → 共用后端    │ HTTP → Prism Mock       │
+│ mock/store.js    │ utils/request.js   │ utils/request.js        │
+└──────────────────┴────────────────────┴─────────────────────────┘
 ```
 
 
-| 配置项       | 文件                          | 说明                                      |
+| 配置项       | 来源                          | 说明                                      |
 | --------- | --------------------------- | --------------------------------------- |
-| `baseUrl` | `miniprogram/config/api.js` | 后端根路径，默认 `http://localhost:8080/api/v1` |
-| `useMock` | `api.js` 默认 `false`；`api.local.js` 可覆盖 | `true` 本地演示；`false` 对接共用后端（默认）              |
-| `timeout` | 同上                          | 请求超时毫秒数                                 |
+| `baseUrl` | `build-env.js` / `api.local.js` | 后端根路径，默认 `http://localhost:8080/api/v1` |
+| `useMock` | **`npm run miniprogram:env`** 生成 | `true` 仅 wx.storage 演示；源码中不写死 `true` |
+| `mockMode`| 同上                          | `none` / `storage` / `openapi`          |
+| `timeout` | `api.js`                      | 请求超时毫秒数                                 |
 
 
 
 
 ### 切换为共用后端（默认）
 
-默认已对接后端。若需改地址，在 `miniprogram/config/api.local.js` 中覆盖：
-
-```javascript
-module.exports = {
-  baseUrl: 'https://your-api.example.com/api/v1',
-  useMock: false,
-}
+```bash
+# 仓库根目录
+npm run miniprogram:env
 ```
 
-### 启用演示模式（无后端）
+或在 `miniprogram/config/api.local.js` 中仅覆盖 `baseUrl`（勿设置 `useMock`）。
+
+### 启用 wx.storage 演示（无后端）
 
 ```bash
-cp miniprogram/config/api.local.example.js miniprogram/config/api.local.js
+npm run miniprogram:env:mock
 ```
 
-微信开发者工具 → 详情 → 本地设置 → 勾选「不校验合法域名」（开发阶段）
+### 启用 OpenAPI Mock Server（Prism）
+
+```bash
+# 终端 1：启动后端 + Prism
+npm run mock:openapi
+
+# 终端 2：生成小程序 env
+npm run miniprogram:env:openapi
+```
 
 ---
 
@@ -121,6 +128,7 @@ Content-Type: application/json
 | `changePassword(form)`                 | `PUT /auth/password`        | 修改密码          |
 | `listUsers()`                          | `GET /users`                | 用户列表          |
 | `updateUserRole(userId, role)`         | `PATCH /users/{id}/role`    | 改角色           |
+| `toggleUserEnabled(userId, enabled)`   | `PATCH /users/{id}/enabled` | 启用/禁用用户（`pages/profile/users`，仅管理员） |
 | `getPreferences()`                     | `GET /users/me/preferences` | 读取偏好          |
 | `savePreferences(prefs)`               | `PUT /users/me/preferences` | 保存偏好          |
 | `getActivities()`                      | `GET /users/me/activities`  | 活动记录          |
@@ -289,6 +297,7 @@ type Permission =
 | `pages/tasks/index`         | `/tasks`         | `task:view`      |
 | `pages/tasks/detail/index`  | `/tasks/:id`     | `task:view`      |
 | `pages/profile/*/index`     | `/profile/*`     | 登录               |
+| `pages/profile/users/index` | `/users`         | `user:manage` + `ADMIN` |
 | `pages/forbidden/index`     | `/403`           | 登录               |
 
 
@@ -346,7 +355,7 @@ type Permission =
 
 | API                 | 状态               |
 | ------------------- | ---------------- |
-| `toggleUserEnabled` | 占位，web 端亦未实现 |
+| `toggleUserEnabled` | 已实现（`PATCH /users/{id}/enabled`），见 `pages/profile/users`（仅管理员，web 端 UI 未接入，但接口已通用） |
 | `assignWorkOrder`   | 已实现，见 `services/index.js` 与工单页指派弹窗 |
 
 

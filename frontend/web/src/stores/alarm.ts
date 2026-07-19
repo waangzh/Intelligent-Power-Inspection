@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
+import { openapiClient } from '@/generated/api-client'
 import type { Alarm, AlarmSeverity, AlarmWorkOrderMode, AlarmWorkOrderPolicy, Checkpoint, DetectionType, InspectionTask } from '@/types'
 import { DETECTION_LABELS } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -37,7 +38,7 @@ export const useAlarmStore = defineStore('alarm', () => {
     alarms.value = result.items
     total.value = result.total
     try {
-      workOrderPolicy.value = await resourcesApi.getAlarmWorkOrderPolicy()
+      workOrderPolicy.value = await openapiClient.alarms.getWorkOrderPolicy()
     } catch {
       // 无法读取策略时继续使用默认规则，告警列表不受影响。
     }
@@ -147,8 +148,17 @@ export const useAlarmStore = defineStore('alarm', () => {
     return updated
   }
 
+  async function loadWorkOrderPolicy() {
+    try {
+      workOrderPolicy.value = await openapiClient.alarms.getWorkOrderPolicy()
+    } catch {
+      // 保留当前默认/缓存规则
+    }
+    return workOrderPolicy.value
+  }
+
   async function saveWorkOrderPolicy(rules: Record<AlarmSeverity, AlarmWorkOrderMode>) {
-    workOrderPolicy.value = await resourcesApi.updateAlarmWorkOrderPolicy({ rules })
+    workOrderPolicy.value = await openapiClient.alarms.updateWorkOrderPolicy(rules)
     return workOrderPolicy.value
   }
 
@@ -158,6 +168,7 @@ export const useAlarmStore = defineStore('alarm', () => {
     workOrderPolicy,
     unacknowledgedCount,
     load,
+    loadWorkOrderPolicy,
     addAlarm,
     acknowledge,
     acknowledgeAll,

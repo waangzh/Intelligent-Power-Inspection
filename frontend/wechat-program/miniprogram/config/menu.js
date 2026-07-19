@@ -4,6 +4,8 @@ const profileMenuItems = [
   { path: '/pages/profile/security/index', label: '账号安全' },
   { path: '/pages/profile/activity/index', label: '我的记录' },
   { path: '/pages/profile/settings/index', label: '偏好设置' },
+  // 仅管理员可见：与网页端 /users 对齐的用户管理入口
+  { path: '/pages/profile/users/index', label: '用户管理', permission: 'user:manage' },
 ]
 
 /** web 通知 link → 小程序 path */
