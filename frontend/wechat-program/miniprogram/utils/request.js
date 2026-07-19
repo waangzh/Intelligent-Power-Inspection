@@ -21,13 +21,18 @@ function request({ url, method = 'GET', data, auth = true, headers = {} }) {
         ...headers,
       },
       success(res) {
-        if (res.statusCode === 401) {
+        const body = res.data
+        // 业务层的权限拒绝（如观察员访问工单）会经 GlobalExceptionHandler 包装成
+        // { code, message, data } 返回；而 token 失效/缺失时 Spring Security 直接
+        // 在认证层拦截，返回的是框架默认错误体（无 code 字段）。用是否带 code 区分
+        // 两种 403，避免把“认证失效”误判为普通业务失败，导致坏 token 被反复携带发出。
+        const hasAppEnvelope = body && typeof body === 'object' && 'code' in body
+        if (res.statusCode === 401 || (res.statusCode === 403 && !hasAppEnvelope)) {
           wx.removeStorageSync('pi_session')
           reject(new Error('登录已过期，请重新登录'))
           return
         }
-        const body = res.data
-        if (body && typeof body === 'object' && 'code' in body) {
+        if (hasAppEnvelope) {
           if (body.code === 0) {
             resolve(body.data)
           } else {

@@ -29,24 +29,25 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/detection-templates")
 public class DetectionTemplateController extends CrudSupport {
-  private static final Map<String, Set<String>> SCOPE_TYPES = Map.of(
-    "ROUTE", Set.of("PERSON", "HELMET", "OBSTACLE", "FIRE"),
-    "CHECKPOINT", Set.of("SWITCH", "METER", "OIL_LEAK", "FIRE", "FOREIGN_OBJECT")
-  );
-  private static final Map<String, String> DEFAULT_PROMPTS = Map.of(
-    "PERSON", "巡检区域内的人员",
-    "HELMET", "人员头部佩戴的安全帽",
-    "OBSTACLE", "机器人行进路线上的障碍物",
-    "FIRE", "图像中清晰可见的火焰、火光或明显烟雾区域",
-    "SWITCH", "变电设备上的刀闸开关操作手柄、连杆及触头区域",
-    "METER", "圆形机械压力表的完整表盘和指针区域",
-    "OIL_LEAK", "变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域",
-    "FOREIGN_OBJECT", "设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物"
-  );
+  private static final Map<String, Set<String>> SCOPE_TYPES =
+      Map.of(
+          "ROUTE", Set.of("PERSON", "HELMET", "OBSTACLE", "FIRE"),
+          "CHECKPOINT", Set.of("SWITCH", "METER", "OIL_LEAK", "FIRE", "FOREIGN_OBJECT"));
+  private static final Map<String, String> DEFAULT_PROMPTS =
+      Map.of(
+          "PERSON", "巡检区域内的人员",
+          "HELMET", "人员头部佩戴的安全帽",
+          "OBSTACLE", "机器人行进路线上的障碍物",
+          "FIRE", "图像中清晰可见的火焰、火光或明显烟雾区域",
+          "SWITCH", "变电设备上的刀闸开关操作手柄、连杆及触头区域",
+          "METER", "圆形机械压力表的完整表盘和指针区域",
+          "OIL_LEAK", "变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域",
+          "FOREIGN_OBJECT", "设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物");
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public DetectionTemplateController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser) {
+  public DetectionTemplateController(
+      DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser) {
     super(dataStore);
     this.permissionService = permissionService;
     this.currentUser = currentUser;
@@ -55,10 +56,16 @@ public class DetectionTemplateController extends CrudSupport {
   @GetMapping
   public ApiResponse<PageResult<Map<String, Object>>> templates(ListQuery query) {
     permissionService.require(currentUser.get(), Permission.DETECTION_MANAGE);
-    PageResult<Map<String, Object>> result = page(DataCategory.DETECTION_TEMPLATE, query, "type", "enabled");
-    return ApiResponse.ok(new PageResult<>(
-        result.items().stream().map(this::normalizeStored).toList(),
-        result.total(), result.page(), result.size(), result.hasMore(), result.nextCursor()));
+    PageResult<Map<String, Object>> result =
+        page(DataCategory.DETECTION_TEMPLATE, query, "type", "enabled");
+    return ApiResponse.ok(
+        new PageResult<>(
+            result.items().stream().map(this::normalizeStored).toList(),
+            result.total(),
+            result.page(),
+            result.size(),
+            result.hasMore(),
+            result.nextCursor()));
   }
 
   @GetMapping("/{id}")
@@ -69,13 +76,16 @@ public class DetectionTemplateController extends CrudSupport {
   @PostMapping
   public ApiResponse<Map<String, Object>> addTemplate(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.DETECTION_MANAGE);
-    return ApiResponse.ok(create(DataCategory.DETECTION_TEMPLATE, "tpl", normalizeForSave(body)));
+    return ApiResponse.ok(
+        create(DataCategory.DETECTION_TEMPLATE, "tpl", normalizeForSave(upgradeInputShape(body))));
   }
 
   @PatchMapping("/{id}")
-  public ApiResponse<Map<String, Object>> updateTemplate(@PathVariable String id, @RequestBody Map<String, Object> body) {
+  public ApiResponse<Map<String, Object>> updateTemplate(
+      @PathVariable String id, @RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.DETECTION_MANAGE);
-    Map<String, Object> merged = new LinkedHashMap<>(normalizeStored(dataStore.get(DataCategory.DETECTION_TEMPLATE, id)));
+    Map<String, Object> merged =
+        new LinkedHashMap<>(normalizeStored(dataStore.get(DataCategory.DETECTION_TEMPLATE, id)));
     merged.putAll(body);
     return ApiResponse.ok(update(DataCategory.DETECTION_TEMPLATE, id, normalizeForSave(merged)));
   }
@@ -85,6 +95,30 @@ public class DetectionTemplateController extends CrudSupport {
     permissionService.require(currentUser.get(), Permission.DETECTION_MANAGE);
     delete(DataCategory.DETECTION_TEMPLATE, id);
     return ApiResponse.ok();
+  }
+
+  /** 创建/更新请求体：仅把 legacy `types` 升级为 `items`，不替客户端补默认提示词。 */
+  private Map<String, Object> upgradeInputShape(Map<String, Object> source) {
+    if (source.get("items") instanceof List<?> storedItems && !storedItems.isEmpty()) {
+      return source;
+    }
+    Map<String, Object> upgraded = new LinkedHashMap<>(source);
+    Map<?, ?> prompts = source.get("prompts") instanceof Map<?, ?> map ? map : Map.of();
+    List<Map<String, Object>> items = new ArrayList<>();
+    if (source.get("types") instanceof List<?> types) {
+      for (Object rawType : types) {
+        String type = text(rawType);
+        Object configuredPrompt = prompts.get(type);
+        items.add(
+            item(
+                type,
+                true,
+                configuredPrompt == null ? DEFAULT_PROMPTS.get(type) : text(configuredPrompt),
+                null));
+      }
+    }
+    upgraded.put("items", items);
+    return upgraded;
   }
 
   private Map<String, Object> normalizeStored(Map<String, Object> source) {
@@ -109,7 +143,12 @@ public class DetectionTemplateController extends CrudSupport {
       for (Object rawType : types) {
         String type = text(rawType);
         Object configuredPrompt = prompts.get(type);
-        items.add(item(type, true, configuredPrompt == null ? DEFAULT_PROMPTS.get(type) : text(configuredPrompt), null));
+        items.add(
+            item(
+                type,
+                true,
+                configuredPrompt == null ? DEFAULT_PROMPTS.get(type) : text(configuredPrompt),
+                null));
       }
     }
     upgraded.put("items", items);
@@ -150,9 +189,10 @@ public class DetectionTemplateController extends CrudSupport {
       }
       String normalizedPrompt = prompt == null ? "" : prompt.trim();
       String displayLabel = text(raw.get("displayLabel"));
-      String normalizedDisplayLabel = displayLabel == null || displayLabel.isBlank()
-        ? DetectionItems.displayLabel(type)
-        : displayLabel.trim();
+      String normalizedDisplayLabel =
+          displayLabel == null || displayLabel.isBlank()
+              ? DetectionItems.displayLabel(type)
+              : displayLabel.trim();
       items.add(item(type, enabled, normalizedPrompt, normalizedDisplayLabel));
       if (!normalizedPrompt.isBlank()) {
         prompts.put(type, normalizedPrompt);
@@ -163,7 +203,9 @@ public class DetectionTemplateController extends CrudSupport {
     copyIfPresent(source, normalized, "id");
     normalized.put("name", name.trim());
     normalized.put("scope", scope);
-    normalized.put("description", text(source.get("description")) == null ? "" : text(source.get("description")).trim());
+    normalized.put(
+        "description",
+        text(source.get("description")) == null ? "" : text(source.get("description")).trim());
     normalized.put("items", items);
     normalized.put("types", List.copyOf(types));
     normalized.put("prompts", prompts);
@@ -171,11 +213,16 @@ public class DetectionTemplateController extends CrudSupport {
     return normalized;
   }
 
-  private Map<String, Object> item(String type, boolean enabled, String prompt, String displayLabel) {
+  private Map<String, Object> item(
+      String type, boolean enabled, String prompt, String displayLabel) {
     Map<String, Object> item = new LinkedHashMap<>();
     item.put("type", type);
     item.put("enabled", enabled);
-    item.put("displayLabel", displayLabel == null || displayLabel.isBlank() ? DetectionItems.displayLabel(type) : displayLabel.trim());
+    item.put(
+        "displayLabel",
+        displayLabel == null || displayLabel.isBlank()
+            ? DetectionItems.displayLabel(type)
+            : displayLabel.trim());
     item.put("prompt", prompt == null ? "" : prompt);
     item.put("threshold", 0.75);
     return item;

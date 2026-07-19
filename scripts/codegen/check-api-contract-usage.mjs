@@ -20,8 +20,9 @@ const targets = [
   'frontend/web/src/api/resources.ts',
   'frontend/web/src/api/profile.ts',
   'frontend/web/src/api/auth.ts',
-  'frontend/wechat-program/miniprogram/services/index.js',
 ]
+
+const mpServicesPath = 'frontend/wechat-program/miniprogram/services/index.js'
 
 /** http 方法别名 → 标准 HTTP method */
 const METHOD_ALIAS = {
@@ -108,16 +109,18 @@ function matches(callSegments, method) {
   })
 }
 
-const CALL_REGEX = /\bhttp\.(get|post|put|patch|delete|del|postForm)\(\s*(`[^`]*`|'[^']*'|"[^"]*")/g
+// 允许 TypeScript 泛型：http.get<T>(...) / http.post<PageResult<T>>(...)
+const CALL_REGEX = /\bhttp\.(get|post|put|patch|delete|del|postForm)(?:<[^>]*>)?\(\s*(`[^`]*`|'[^']*'|"[^"]*")/g
 
 let ok = true
 let checked = 0
+const byFile = {}
 
 for (const rel of targets) {
   const full = path.join(repoRoot, rel)
   if (!fs.existsSync(full)) continue
   const source = fs.readFileSync(full, 'utf8')
-  const lines = source.split('\n')
+  byFile[rel] = 0
 
   let m
   CALL_REGEX.lastIndex = 0
@@ -130,6 +133,7 @@ for (const rel of targets) {
     const normalized = normalizeCallPath(literal)
     const callSegments = toSegments(normalized)
     checked += 1
+    byFile[rel] += 1
 
     if (!matches(callSegments, method)) {
       ok = false
@@ -141,8 +145,23 @@ for (const rel of targets) {
   }
 }
 
+const mpServicesFull = path.join(repoRoot, mpServicesPath)
+if (fs.existsSync(mpServicesFull)) {
+  const mpServicesSource = fs.readFileSync(mpServicesFull, 'utf8')
+  if (/\bhttp\.(get|post|put|patch|delete|del)\(/.test(mpServicesSource)) {
+    ok = false
+    console.error(`${mpServicesPath} 不得手写 http 调用，请使用 generated/api-client 的 services 别名`)
+  } else {
+    console.log('小程序 services 层校验通过：无手写 http 调用')
+  }
+}
+
 if (ok) {
-  console.log(`API 契约用法校验通过（检查 ${checked} 处手写调用，均匹配 openapi.json）`)
+  const breakdown = Object.entries(byFile)
+    .filter(([, n]) => n > 0)
+    .map(([file, n]) => `${path.basename(file)}=${n}`)
+    .join(', ')
+  console.log(`API 契约用法校验通过（检查 ${checked} 处手写调用，均匹配 openapi.json${breakdown ? `；${breakdown}` : ''}）`)
 } else {
   console.error('\n提示：如确认后端已支持该接口，请重新运行 npm run api:export-and-generate 同步 openapi.json；否则请修正调用的路径/方法。')
 }
