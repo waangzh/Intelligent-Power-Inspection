@@ -54,7 +54,8 @@ public class AuthController {
   }
 
   @PostMapping("/refresh")
-  public ApiResponse<LoginResponse> refresh(HttpServletRequest request, HttpServletResponse response) {
+  public ApiResponse<LoginResponse> refresh(
+      HttpServletRequest request, HttpServletResponse response) {
     return ApiResponse.ok(authService.refresh(request, response));
   }
 
@@ -63,7 +64,8 @@ public class AuthController {
       @Valid @RequestBody ReauthRequest request,
       HttpServletRequest httpRequest,
       HttpServletResponse httpResponse) {
-    return ApiResponse.ok(authService.reauth(currentUser.get(), request.password(), httpRequest, httpResponse));
+    return ApiResponse.ok(
+        authService.reauth(currentUser.get(), request.password(), httpRequest, httpResponse));
   }
 
   @PostMapping("/logout")

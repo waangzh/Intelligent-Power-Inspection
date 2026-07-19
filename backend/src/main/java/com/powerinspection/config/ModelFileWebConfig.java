@@ -7,12 +7,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class ModelFileWebConfig implements WebMvcConfigurer {
-  public static final Path MODEL_FILE_ROOT = Path.of("runtime-storage").toAbsolutePath().normalize();
+  public static final Path MODEL_FILE_ROOT =
+      Path.of("runtime-storage").toAbsolutePath().normalize();
 
   @Override
   public void addResourceHandlers(ResourceHandlerRegistry registry) {
-    registry.addResourceHandler("/model-files/**")
-      .addResourceLocations(modelFileRootLocation());
+    registry.addResourceHandler("/model-files/**").addResourceLocations(modelFileRootLocation());
   }
 
   private String modelFileRootLocation() {

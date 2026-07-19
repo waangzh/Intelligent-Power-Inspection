@@ -1,8 +1,8 @@
 package com.powerinspection.auth;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
-import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -19,10 +19,12 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
   List<RefreshTokenEntity> findByUserIdAndRevokedAtIsNull(String userId);
 
   @Modifying(clearAutomatically = true)
-  @Query("update RefreshTokenEntity t set t.revokedAt = :revokedAt where t.userId = :userId and t.revokedAt is null")
+  @Query(
+      "update RefreshTokenEntity t set t.revokedAt = :revokedAt where t.userId = :userId and t.revokedAt is null")
   int revokeAllActiveForUser(@Param("userId") String userId, @Param("revokedAt") String revokedAt);
 
   @Modifying(clearAutomatically = true)
-  @Query("update RefreshTokenEntity t set t.revokedAt = :revokedAt where t.familyId = :familyId and t.revokedAt is null")
+  @Query(
+      "update RefreshTokenEntity t set t.revokedAt = :revokedAt where t.familyId = :familyId and t.revokedAt is null")
   int revokeFamily(@Param("familyId") String familyId, @Param("revokedAt") String revokedAt);
 }

@@ -62,8 +62,8 @@ public class TokenService {
       if (!constantTimeEquals(expected, parts[2])) {
         throw ApiException.unauthorized("Token 无效");
       }
-      Map<String, Object> payload = objectMapper.readValue(base64Decode(parts[1]), new TypeReference<>() {
-      });
+      Map<String, Object> payload =
+          objectMapper.readValue(base64Decode(parts[1]), new TypeReference<>() {});
       Number exp = (Number) payload.get("exp");
       if (exp == null || exp.longValue() < Instant.now().getEpochSecond()) {
         throw ApiException.unauthorized("登录已过期");
@@ -119,7 +119,9 @@ public class TokenService {
 
   private String sign(String value) throws Exception {
     Mac mac = Mac.getInstance("HmacSHA256");
-    mac.init(new SecretKeySpec(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+    mac.init(
+        new SecretKeySpec(
+            jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
     return base64Encode(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
   }
 
