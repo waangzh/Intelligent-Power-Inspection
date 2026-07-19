@@ -166,7 +166,7 @@ public class DomainStoreService {
       throw ApiException.conflict("数据已被其他人修改，请刷新后重试");
     } catch (DataIntegrityViolationException | org.hibernate.exception.ConstraintViolationException ex) {
       String message = mostSpecificMessage(ex);
-      if (message != null && message.toLowerCase().contains("active_robot")) {
+      if (message != null && message.toLowerCase().contains("uq_inspection_tasks_active_robot")) {
         throw ApiException.conflict("机器人已有执行中的任务");
       }
       if (message != null && message.toLowerCase().contains("uq_work_orders_alarm")) {
