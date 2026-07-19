@@ -5,15 +5,22 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.jwt")
 public class JwtProperties {
   private String secret = "dev-secret-change-me";
+
   /** Access token TTL (seconds). */
   private long accessTtlSeconds = 900;
+
   /** Refresh token TTL when remember=false (session cookie; absolute server expiry). */
   private long refreshSessionTtlSeconds = 28800;
+
   /** Refresh token TTL when remember=true. */
   private long refreshRememberTtlSeconds = 604800;
+
   /** High-risk actions require password-auth within this window. */
   private long reauthWindowSeconds = 900;
-  /** @deprecated use accessTtlSeconds */
+
+  /**
+   * @deprecated use accessTtlSeconds
+   */
   private Long ttlSeconds;
 
   public String getSecret() {

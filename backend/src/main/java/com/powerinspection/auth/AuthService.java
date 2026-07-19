@@ -53,17 +53,16 @@ public class AuthService {
   private final SmsProperties smsProperties;
 
   public AuthService(
-    UserRepository userRepository,
-    UserPreferenceRepository preferenceRepository,
-    UserActivityRepository activityRepository,
-    PasswordEncoder passwordEncoder,
-    TokenService tokenService,
-    UserAccessService userAccessService,
-    RefreshTokenService refreshTokenService,
-    RefreshCookieSupport refreshCookieSupport,
-    SmsVerificationService smsVerificationService,
-    SmsProperties smsProperties
-  ) {
+      UserRepository userRepository,
+      UserPreferenceRepository preferenceRepository,
+      UserActivityRepository activityRepository,
+      PasswordEncoder passwordEncoder,
+      TokenService tokenService,
+      UserAccessService userAccessService,
+      RefreshTokenService refreshTokenService,
+      RefreshCookieSupport refreshCookieSupport,
+      SmsVerificationService smsVerificationService,
+      SmsProperties smsProperties) {
     this.userRepository = userRepository;
     this.preferenceRepository = preferenceRepository;
     this.activityRepository = activityRepository;
@@ -76,9 +75,12 @@ public class AuthService {
     this.smsProperties = smsProperties;
   }
 
-  public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
-    UserEntity user = userRepository.findByUsername(request.username().trim())
-      .orElseThrow(() -> ApiException.badRequest("用户名或密码错误"));
+  public LoginResponse login(
+      LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+    UserEntity user =
+        userRepository
+            .findByUsername(request.username().trim())
+            .orElseThrow(() -> ApiException.badRequest("用户名或密码错误"));
     if (!Boolean.TRUE.equals(user.getEnabled())) {
       throw ApiException.forbidden("用户已被禁用");
     }
@@ -88,23 +90,22 @@ public class AuthService {
     logActivity(user.getId(), "LOGIN", "登录系统");
     long authTime = Instant.now().getEpochSecond();
     String access = tokenService.create(user, authTime);
-    RefreshTokenService.IssuedRefresh refresh = refreshTokenService.issue(user, request.remember(), authTime);
+    RefreshTokenService.IssuedRefresh refresh =
+        refreshTokenService.issue(user, request.remember(), authTime);
     refreshCookieSupport.write(
-      httpResponse,
-      refresh.rawToken(),
-      request.remember(),
-      refresh.expiresAt(),
-      refreshCookieSupport.secureRequest(httpRequest)
-    );
+        httpResponse,
+        refresh.rawToken(),
+        request.remember(),
+        refresh.expiresAt(),
+        refreshCookieSupport.secureRequest(httpRequest));
     MeResponse accessInfo = userAccessService.me(user);
     return new LoginResponse(
-      access,
-      accessInfo.user(),
-      accessInfo.permissions(),
-      accessInfo.scopes(),
-      accessInfo.features(),
-      tokenService.accessExpiresAtEpochMilli()
-    );
+        access,
+        accessInfo.user(),
+        accessInfo.permissions(),
+        accessInfo.scopes(),
+        accessInfo.features(),
+        tokenService.accessExpiresAtEpochMilli());
   }
 
   public LoginResponse refresh(HttpServletRequest request, HttpServletResponse response) {
@@ -115,24 +116,23 @@ public class AuthService {
     RefreshTokenService.RotatedSession rotated = refreshTokenService.rotate(raw);
     String access = tokenService.create(rotated.user(), rotated.authTime());
     refreshCookieSupport.write(
-      response,
-      rotated.refresh().rawToken(),
-      rotated.refresh().entity().isRemember(),
-      rotated.refresh().expiresAt(),
-      refreshCookieSupport.secureRequest(request)
-    );
+        response,
+        rotated.refresh().rawToken(),
+        rotated.refresh().entity().isRemember(),
+        rotated.refresh().expiresAt(),
+        refreshCookieSupport.secureRequest(request));
     MeResponse accessInfo = userAccessService.me(rotated.user());
     return new LoginResponse(
-      access,
-      accessInfo.user(),
-      accessInfo.permissions(),
-      accessInfo.scopes(),
-      accessInfo.features(),
-      tokenService.accessExpiresAtEpochMilli()
-    );
+        access,
+        accessInfo.user(),
+        accessInfo.permissions(),
+        accessInfo.scopes(),
+        accessInfo.features(),
+        tokenService.accessExpiresAtEpochMilli());
   }
 
-  public LoginResponse reauth(UserEntity user, String password, HttpServletRequest request, HttpServletResponse response) {
+  public LoginResponse reauth(
+      UserEntity user, String password, HttpServletRequest request, HttpServletResponse response) {
     if (!passwordEncoder.matches(password, user.getPasswordHash())) {
       throw ApiException.badRequest("密码不正确");
     }
@@ -142,15 +142,14 @@ public class AuthService {
     if (existingRefresh != null && !existingRefresh.isBlank()) {
       try {
         RefreshTokenService.RotatedSession rotated =
-          refreshTokenService.rotateAfterReauthentication(existingRefresh, authTime);
+            refreshTokenService.rotateAfterReauthentication(existingRefresh, authTime);
         access = tokenService.create(rotated.user(), authTime);
         refreshCookieSupport.write(
-          response,
-          rotated.refresh().rawToken(),
-          rotated.refresh().entity().isRemember(),
-          rotated.refresh().expiresAt(),
-          refreshCookieSupport.secureRequest(request)
-        );
+            response,
+            rotated.refresh().rawToken(),
+            rotated.refresh().entity().isRemember(),
+            rotated.refresh().expiresAt(),
+            refreshCookieSupport.secureRequest(request));
       } catch (ApiException ignored) {
         // keep access token even if refresh rotation fails
       }
@@ -158,13 +157,12 @@ public class AuthService {
     MeResponse accessInfo = userAccessService.me(user);
     logActivity(user.getId(), "LOGIN", "完成高风险操作再认证");
     return new LoginResponse(
-      access,
-      accessInfo.user(),
-      accessInfo.permissions(),
-      accessInfo.scopes(),
-      accessInfo.features(),
-      tokenService.accessExpiresAtEpochMilli()
-    );
+        access,
+        accessInfo.user(),
+        accessInfo.permissions(),
+        accessInfo.scopes(),
+        accessInfo.features(),
+        tokenService.accessExpiresAtEpochMilli());
   }
 
   @Transactional
@@ -302,7 +300,10 @@ public class AuthService {
     }
     user.setUpdatedAt(Instant.now().toString());
     UserEntity saved = userRepository.save(user);
-    logActivity(user.getId(), request.avatarUrl() != null ? "AVATAR" : "PROFILE", request.avatarUrl() != null ? "更新了个人头像" : "更新了个人资料");
+    logActivity(
+        user.getId(),
+        request.avatarUrl() != null ? "AVATAR" : "PROFILE",
+        request.avatarUrl() != null ? "更新了个人头像" : "更新了个人资料");
     return UserDto.from(saved);
   }
 
@@ -318,7 +319,8 @@ public class AuthService {
     user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
     user.incrementTokenVersion();
     user.setUpdatedAt(Instant.now().toString());
-    // Flush before revoke: @Modifying clearAutomatically would otherwise drop unflushed password hash.
+    // Flush before revoke: @Modifying clearAutomatically would otherwise drop unflushed password
+    // hash.
     userRepository.saveAndFlush(user);
     refreshTokenService.revokeAllForUser(user.getId());
     logActivity(user.getId(), "PASSWORD", "修改了登录密码");
@@ -342,7 +344,9 @@ public class AuthService {
   }
 
   public List<UserActivityDto> activities(String userId) {
-    return activityRepository.findTop200ByUserIdOrderByCreatedAtDesc(userId).stream().map(UserActivityDto::from).toList();
+    return activityRepository.findTop200ByUserIdOrderByCreatedAtDesc(userId).stream()
+        .map(UserActivityDto::from)
+        .toList();
   }
 
   @Transactional
@@ -357,16 +361,20 @@ public class AuthService {
   }
 
   private UserPreferenceEntity ensurePreferences(String userId) {
-    return preferenceRepository.findById(userId).orElseGet(() -> {
-      UserPreferenceEntity entity = new UserPreferenceEntity();
-      entity.setUserId(userId);
-      return preferenceRepository.save(entity);
-    });
+    return preferenceRepository
+        .findById(userId)
+        .orElseGet(
+            () -> {
+              UserPreferenceEntity entity = new UserPreferenceEntity();
+              entity.setUserId(userId);
+              return preferenceRepository.save(entity);
+            });
   }
 
   private void validateUsername(String username) {
     if (!USERNAME.matcher(username).matches()) {
-      throw ApiException.badRequest(username.length() < 4 || username.length() > 20 ? "用户名长度为 4～20 位" : "用户名只能包含字母、数字和下划线");
+      throw ApiException.badRequest(
+          username.length() < 4 || username.length() > 20 ? "用户名长度为 4～20 位" : "用户名只能包含字母、数字和下划线");
     }
   }
 
