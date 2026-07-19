@@ -77,3 +77,23 @@ app:
     max-attempts: ${ROUTE_DEPLOYMENT_MAX_ATTEMPTS:5}
     initial-backoff-seconds: ${ROUTE_DEPLOYMENT_INITIAL_BACKOFF_SECONDS:5}
     max-backoff-seconds: ${ROUTE_DEPLOYMENT_MAX_BACKOFF_SECONDS:300}
+  # 注册短信：mock=本地；pnvs=阿里云号码认证短信认证（个人免资质，用控制台赠送签名/模板）；off=关闭
+  sms:
+    mode: ${APP_SMS_MODE:mock}
+    # 勿在仓库中填写真实 AccessKey；本地用环境变量或 gitignore 的 application.yml
+    access-key-id: ${ALIYUN_PNVS_ACCESS_KEY_ID:}
+    access-key-secret: ${ALIYUN_PNVS_ACCESS_KEY_SECRET:}
+    # 号码认证控制台「赠送签名」，例如：恒创联众
+    sign-name: ${ALIYUN_PNVS_SIGN_NAME:${ALIYUN_SMS_SIGN_NAME:}}
+    # 号码认证控制台「赠送模板」CODE，例如：100001（注册）
+    template-code: ${ALIYUN_PNVS_TEMPLATE_CODE:${ALIYUN_SMS_TEMPLATE_CODE:}}
+    # 找回密码赠送模板，例如：100003；留空则复用 template-code
+    reset-template-code: ${ALIYUN_PNVS_RESET_TEMPLATE_CODE:}
+    template-param-name: ${ALIYUN_PNVS_TEMPLATE_PARAM_NAME:code}
+    template-min-param-name: ${ALIYUN_PNVS_TEMPLATE_MIN_PARAM_NAME:min}
+    scheme-name: ${ALIYUN_PNVS_SCHEME_NAME:}
+    endpoint: ${ALIYUN_PNVS_ENDPOINT:dypnsapi.aliyuncs.com}
+    code-length: 6
+    code-ttl-seconds: 300
+    resend-interval-seconds: 30
+    daily-limit-per-phone: 10

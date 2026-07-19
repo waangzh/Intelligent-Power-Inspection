@@ -62,7 +62,7 @@
           <div class="panel-title">机器人状态</div>
           <div v-for="r in robotStore.robots" :key="r.id" class="robot-row">
             <span>{{ r.name }}</span>
-            <el-tag size="small" :type="r.status === 'ONLINE' ? 'success' : r.status === 'BUSY' ? 'warning' : 'info'">{{ r.status }}</el-tag>
+            <el-tag size="small" :type="robotPresenceType(r)">{{ robotPresenceLabel(r) }}</el-tag>
             <span class="patrol-text">{{ patrolStateLabel(r.telemetry?.patrolState) }}</span>
           </div>
         </div>
@@ -96,18 +96,20 @@ import Map2D from '@/components/Map2D.vue'
 import { useAnalytics } from '@/composables/useAnalytics'
 import { useAlarmStore } from '@/stores/alarm'
 import { useRobotStore } from '@/stores/robot'
+import { useRobotHeartbeatStore } from '@/stores/robotHeartbeat'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
 import { useWorkOrderStore } from '@/stores/workOrder'
 import { ALARM_SEVERITY_LABELS } from '@/types'
-import { patrolStateLabel } from '@/utils/robotStatus'
+import { isRobotOnline, patrolStateLabel } from '@/utils/robotStatus'
 
 const router = useRouter()
 const siteStore = useSiteStore()
 const routeStore = useRouteStore()
 const taskStore = useTaskStore()
 const robotStore = useRobotStore()
+const heartbeatStore = useRobotHeartbeatStore()
 const alarmStore = useAlarmStore()
 const workOrderStore = useWorkOrderStore()
 const { weeklyAlarmCounts, completionRate, robotOnlineRate } = useAnalytics()
@@ -131,7 +133,13 @@ const robotPosition = computed(() => robotStore.robots.find((r) => r.siteId === 
 
 const kpis = computed(() => [
   { label: '站点', value: siteStore.sites.length, color: '#64b5ff' },
-  { label: '在线机器人', value: robotStore.robots.filter((r) => r.status !== 'OFFLINE').length, color: '#67c23a' },
+  {
+    label: '在线机器人',
+    value: heartbeatStore.loaded
+      ? heartbeatStore.onlineCount
+      : robotStore.robots.filter((r) => isRobotOnline(r, heartbeatStore.isOnline(r.id))).length,
+    color: '#67c23a',
+  },
   { label: '未确认告警', value: alarmStore.unacknowledgedCount, color: '#f56c6c' },
   { label: '在线率', value: `${robotOnlineRate.value}%`, color: '#ffd700' },
 ])
@@ -206,10 +214,25 @@ function tickClock() {
   clock.value = new Date().toLocaleString('zh-CN', { hour12: false })
 }
 
+function robotPresenceOnline(robot: typeof robotStore.robots[number]) {
+  return isRobotOnline(robot, heartbeatStore.loaded ? heartbeatStore.isOnline(robot.id) : false)
+}
+
+function robotPresenceLabel(robot: typeof robotStore.robots[number]) {
+  if (!robotPresenceOnline(robot)) return 'OFFLINE'
+  return robot.status === 'BUSY' ? 'BUSY' : 'ONLINE'
+}
+
+function robotPresenceType(robot: typeof robotStore.robots[number]) {
+  const label = robotPresenceLabel(robot)
+  return label === 'ONLINE' ? 'success' : label === 'BUSY' ? 'warning' : 'info'
+}
+
 onMounted(() => {
   tickClock()
   timer = setInterval(tickClock, 1000)
   document.body.style.overflow = 'hidden'
+  void heartbeatStore.refresh()
 })
 
 onUnmounted(() => {

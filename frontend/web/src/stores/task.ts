@@ -146,17 +146,13 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   async function createTask(name: string, routeId: string, robotId: string, routeRevisionId: string) {
-    const task: InspectionTask = {
+    const task = {
       id: uid('task'),
       name,
       routeId,
       robotId,
-      status: 'CREATED',
-      progress: 0,
-      currentCheckpointSeq: 0,
-      createdAt: new Date().toISOString(),
       routeRevisionId,
-    }
+    } as InspectionTask
     const saved = await resourcesApi.createTask(task)
     updateLocalTask(saved)
     if (saved.executionId) await refreshExecution(saved.id)

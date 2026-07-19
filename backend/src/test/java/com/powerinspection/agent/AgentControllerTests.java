@@ -53,7 +53,7 @@ class AgentControllerTests {
   @BeforeEach
   void setUpData() {
     saveUser("agent_controller_dispatcher", "dispatcher", "Disp@123", UserRole.DISPATCHER);
-    saveUser("agent_controller_approver", "approver", "Appr@123", UserRole.DISPATCHER);
+    saveUser("agent_controller_approver", "approver", "Appr@123", UserRole.ADMIN);
     saveUser("agent_controller_viewer", "viewer", "View@123", UserRole.VIEWER);
     saveAlarm(HIGH_ALARM_ID, "HIGH", "agent controller high alarm");
     saveAlarm(MEDIUM_ALARM_ID, "MEDIUM", "agent controller medium alarm");

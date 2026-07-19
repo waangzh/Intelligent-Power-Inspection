@@ -1,9 +1,11 @@
 import { computed } from 'vue'
 import { useAlarmStore } from '@/stores/alarm'
 import { useRobotStore } from '@/stores/robot'
+import { useRobotHeartbeatStore } from '@/stores/robotHeartbeat'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
+import { isRobotOnline } from '@/utils/robotStatus'
 
 const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
@@ -81,11 +83,18 @@ export function useAnalytics() {
     return Math.round((completedTasks.value / total) * 100)
   })
 
+  const heartbeatStore = useRobotHeartbeatStore()
+  const onlineRobotCount = computed(() => {
+    if (heartbeatStore.loaded) return heartbeatStore.onlineCount
+    return robotStore.robots.filter((r) => isRobotOnline(r, heartbeatStore.isOnline(r.id))).length
+  })
+  const robotTotalCount = computed(() => (
+    heartbeatStore.loaded ? heartbeatStore.totalCount : robotStore.robots.length
+  ))
   const robotOnlineRate = computed(() => {
-    const total = robotStore.robots.length
+    const total = robotTotalCount.value
     if (total === 0) return 0
-    const online = robotStore.robots.filter((r) => r.status !== 'OFFLINE').length
-    return Math.round((online / total) * 100)
+    return Math.round((onlineRobotCount.value / total) * 100)
   })
 
   const siteInspectionCounts = computed(() =>
@@ -109,12 +118,11 @@ export function useAnalytics() {
       taskStore.tasks.filter((t) => isInRange(t.createdAt, thisWeekStart, now)).length,
       taskStore.tasks.filter((t) => isInRange(t.createdAt, lastWeekStart, lastWeekEnd)).length,
     )
-    const online = robotStore.robots.filter((r) => r.status !== 'OFFLINE').length
     return [
       { label: '累计巡检任务', value: totalTasks.value, trend: taskTrend.text, up: taskTrend.up },
       { label: '本周告警', value: thisWeekAlarms.value, trend: alarmTrend.text, up: !alarmTrend.up },
       { label: '任务完成率', value: `${completionRate.value}%`, trend: `已完成 ${completedTasks.value} 项`, up: completionRate.value >= 80 },
-      { label: '机器人在线率', value: `${robotOnlineRate.value}%`, trend: `${online}/${robotStore.robots.length} 在线`, up: robotOnlineRate.value >= 50 },
+      { label: '机器人在线率', value: `${robotOnlineRate.value}%`, trend: `${onlineRobotCount.value}/${robotTotalCount.value} 在线`, up: robotOnlineRate.value >= 50 },
     ]
   })
 

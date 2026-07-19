@@ -98,20 +98,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import ChartCard from '@/components/ChartCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TaskCompletionGauge from '@/components/TaskCompletionGauge.vue'
 import { useAnalytics } from '@/composables/useAnalytics'
 import { useAlarmStore } from '@/stores/alarm'
 import { useRobotStore } from '@/stores/robot'
+import { useRobotHeartbeatStore } from '@/stores/robotHeartbeat'
 import { useTaskStore } from '@/stores/task'
 import { ALARM_SEVERITY_LABELS, DETECTION_LABELS } from '@/types'
+import { isRobotOnline } from '@/utils/robotStatus'
 
 const taskStore = useTaskStore()
 const alarmStore = useAlarmStore()
 const robotStore = useRobotStore()
+const heartbeatStore = useRobotHeartbeatStore()
 const { kpis, weeklyAlarmCounts, siteInspectionCounts, completionRate, completedTasks, totalTasks } = useAnalytics()
+onMounted(() => { void heartbeatStore.refresh() })
 const kpiIcons = ['Tickets', 'Bell', 'DataAnalysis', 'Cpu']
 
 const taskProgressStatus = computed(() => {
@@ -177,7 +181,7 @@ const severityOption = computed(() => ({
 
 const robotHealthRows = computed(() => robotStore.robots.map((robot, index) => {
   const telemetry = robot.telemetry
-  const online = robot.status !== 'OFFLINE'
+  const online = isRobotOnline(robot, heartbeatStore.loaded ? heartbeatStore.isOnline(robot.id) : false)
   const score = !online
     ? 0
     : telemetry?.bridgeReachable === false

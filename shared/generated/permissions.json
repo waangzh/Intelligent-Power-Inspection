@@ -29,7 +29,6 @@
     "ADMIN": [
       "agent:admin",
       "agent:approve",
-      "agent:run",
       "agent:view",
       "alarm:policy",
       "detection:manage",
@@ -45,7 +44,6 @@
       "workorder:view"
     ],
     "DISPATCHER": [
-      "agent:approve",
       "agent:run",
       "agent:view",
       "alarm:ack",

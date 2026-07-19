@@ -35,8 +35,10 @@ public class ManualDetectionService {
   private static final String STATUS_SUCCEEDED = "SUCCEEDED";
   private static final String STATUS_FAILED = "FAILED";
   private static final int MAX_ANNOTATED_IMAGE_BYTES = 20 * 1024 * 1024;
-  private static final Path RESULT_DIR = ModelFileWebConfig.MODEL_FILE_ROOT.resolve("locate-anything").resolve("results");
-  private static final TypeReference<List<LocateAnythingFinding>> FINDING_LIST = new TypeReference<>() {};
+  private static final Path RESULT_DIR =
+      ModelFileWebConfig.MODEL_FILE_ROOT.resolve("locate-anything").resolve("results");
+  private static final TypeReference<List<LocateAnythingFinding>> FINDING_LIST =
+      new TypeReference<>() {};
   private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
 
   private final LocateAnythingGateway locateAnythingGateway;
@@ -45,14 +47,19 @@ public class ManualDetectionService {
   private final URI modelBaseUri;
   private final Duration modelTimeout;
   private final HttpClient httpClient;
-  private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
-    Thread thread = new Thread(runnable, "manual-detection-worker");
-    thread.setDaemon(true);
-    return thread;
-  });
+  private final ExecutorService executor =
+      Executors.newSingleThreadExecutor(
+          runnable -> {
+            Thread thread = new Thread(runnable, "manual-detection-worker");
+            thread.setDaemon(true);
+            return thread;
+          });
 
-  public ManualDetectionService(LocateAnythingGateway locateAnythingGateway, ModelProperties modelProperties,
-      DetectionRunRepository repository, ObjectMapper objectMapper) {
+  public ManualDetectionService(
+      LocateAnythingGateway locateAnythingGateway,
+      ModelProperties modelProperties,
+      DetectionRunRepository repository,
+      ObjectMapper objectMapper) {
     this.locateAnythingGateway = locateAnythingGateway;
     this.repository = repository;
     this.objectMapper = objectMapper;
@@ -81,12 +88,22 @@ public class ManualDetectionService {
     job.setCreatedAt(createdAt);
     job.setUpdatedAt(createdAt);
     job = repository.saveAndFlush(job);
-    executor.submit(() -> runDetection(requestId, publicInputImageUrl, modelInputImageUrl, publicResultBaseUrl, imageWidth, imageHeight, detections));
+    executor.submit(
+        () ->
+            runDetection(
+                requestId,
+                publicInputImageUrl,
+                modelInputImageUrl,
+                publicResultBaseUrl,
+                imageWidth,
+                imageHeight,
+                detections));
     return toResponse(job);
   }
 
   public ManualDetectionController.ManualDetectionResponse get(String requestId) {
-    return toResponse(repository.findById(requestId).orElseThrow(() -> ApiException.notFound("检测任务不存在")));
+    return toResponse(
+        repository.findById(requestId).orElseThrow(() -> ApiException.notFound("检测任务不存在")));
   }
 
   private void runDetection(
@@ -103,29 +120,50 @@ public class ManualDetectionService {
     current.setStartedAt(startedAt);
     current.setUpdatedAt(startedAt);
     current = repository.saveAndFlush(current);
+    String finalStatus = STATUS_SUCCEEDED;
     try {
-      Map<String, Object> task = map("id", requestId, "name", "Manual LocateAnything Detection", "createdAt", Instant.now().toString());
+      Map<String, Object> task =
+          map(
+              "id",
+              requestId,
+              "name",
+              "Manual LocateAnything Detection",
+              "createdAt",
+              Instant.now().toString());
       Map<String, Object> route = map("id", "manual_route", "name", "Manual Detection");
       Map<String, Object> checkpoint = map("id", "manual_checkpoint", "name", "Manual Upload");
-      LocateAnythingResult result = locateAnythingGateway.detectCheckpoint(
-        new LocateAnythingRequest(task, route, checkpoint, modelInputImageUrl, imageWidth, imageHeight, detections)
-      );
-      String advertisedResultImageUrl = firstText(result.resultImageUrl(), result.findings().stream()
-        .map(LocateAnythingFinding::imageUrl)
-        .filter(value -> value != null && !value.isBlank())
-        .findFirst()
-        .orElse(null));
-      String resultImageUrl = rehostAnnotatedImage(requestId, publicResultBaseUrl, advertisedResultImageUrl);
+      LocateAnythingResult result =
+          locateAnythingGateway.detectCheckpoint(
+              new LocateAnythingRequest(
+                  task,
+                  route,
+                  checkpoint,
+                  modelInputImageUrl,
+                  imageWidth,
+                  imageHeight,
+                  detections));
+      String advertisedResultImageUrl =
+          firstText(
+              result.resultImageUrl(),
+              result.findings().stream()
+                  .map(LocateAnythingFinding::imageUrl)
+                  .filter(value -> value != null && !value.isBlank())
+                  .findFirst()
+                  .orElse(null));
+      String resultImageUrl =
+          rehostAnnotatedImage(requestId, publicResultBaseUrl, advertisedResultImageUrl);
       List<LocateAnythingFinding> findings = withResultImage(result.findings(), resultImageUrl);
-      current.setStatus(STATUS_SUCCEEDED);
       current.setResultImageUrl(resultImageUrl);
-      current.setResultStorageKey(resultImageUrl == null ? null : "locate-anything/results/" + requestId + "_annotated" + extension(resultImageUrl));
+      current.setResultStorageKey(
+          resultImageUrl == null
+              ? null
+              : "locate-anything/results/" + requestId + "_annotated" + extension(resultImageUrl));
       current.setFindingsJson(json(findings));
       current.setWarningsJson(json(result.warnings()));
       current.setErrorMessage(null);
     } catch (Exception ex) {
       String message = ex.getMessage() == null ? "模型检测失败" : ex.getMessage();
-      current.setStatus(STATUS_FAILED);
+      finalStatus = STATUS_FAILED;
       current.setResultImageUrl(null);
       current.setFindingsJson("[]");
       current.setWarningsJson(json(List.of(message)));
@@ -134,10 +172,12 @@ public class ManualDetectionService {
     String completedAt = Instant.now().toString();
     current.setCompletedAt(completedAt);
     current.setUpdatedAt(completedAt);
+    current.setStatus(finalStatus);
     repository.save(current);
   }
 
-  private String rehostAnnotatedImage(String requestId, String publicResultBaseUrl, String imageUrl) {
+  private String rehostAnnotatedImage(
+      String requestId, String publicResultBaseUrl, String imageUrl) {
     if (imageUrl == null || imageUrl.isBlank()) {
       return null;
     }
@@ -146,23 +186,27 @@ public class ManualDetectionService {
     return appendPath(publicResultBaseUrl, filename);
   }
 
-  private List<LocateAnythingFinding> withResultImage(List<LocateAnythingFinding> findings, String resultImageUrl) {
+  private List<LocateAnythingFinding> withResultImage(
+      List<LocateAnythingFinding> findings, String resultImageUrl) {
     if (resultImageUrl == null || resultImageUrl.isBlank()) {
       return findings;
     }
-    return findings.stream().map(finding -> {
-      Map<String, Object> rawResult = new LinkedHashMap<>(finding.rawResult() == null ? Map.of() : finding.rawResult());
-      rawResult.put("imageUrl", resultImageUrl);
-      return new LocateAnythingFinding(
-        finding.type(),
-        finding.prompt(),
-        finding.score(),
-        finding.bbox(),
-        finding.label(),
-        resultImageUrl,
-        rawResult
-      );
-    }).toList();
+    return findings.stream()
+        .map(
+            finding -> {
+              Map<String, Object> rawResult =
+                  new LinkedHashMap<>(finding.rawResult() == null ? Map.of() : finding.rawResult());
+              rawResult.put("imageUrl", resultImageUrl);
+              return new LocateAnythingFinding(
+                  finding.type(),
+                  finding.prompt(),
+                  finding.score(),
+                  finding.bbox(),
+                  finding.label(),
+                  resultImageUrl,
+                  rawResult);
+            })
+        .toList();
   }
 
   private String firstText(String preferred, String fallback) {
@@ -171,17 +215,20 @@ public class ManualDetectionService {
 
   private void downloadAnnotatedImage(String imageUrl, String filename) {
     URI advertisedSource = URI.create(imageUrl);
-    if (advertisedSource.getPath() == null || !advertisedSource.getPath().startsWith("/files/annotated/")) {
+    if (advertisedSource.getPath() == null
+        || !advertisedSource.getPath().startsWith("/files/annotated/")) {
       throw new ModelServiceException("LocateAnything 标注图地址非法");
     }
     URI source = modelBaseUri.resolve(advertisedSource.getPath());
     try {
       HttpRequest request = HttpRequest.newBuilder(source).timeout(modelTimeout).GET().build();
-      HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+      HttpResponse<byte[]> response =
+          httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
       if (response.statusCode() < 200 || response.statusCode() >= 300) {
         throw new ModelServiceException("LocateAnything 标注图下载失败: HTTP " + response.statusCode());
       }
-      String contentType = response.headers().firstValue("Content-Type").orElse("").toLowerCase(Locale.ROOT);
+      String contentType =
+          response.headers().firstValue("Content-Type").orElse("").toLowerCase(Locale.ROOT);
       if (!contentType.startsWith("image/")) {
         throw new ModelServiceException("LocateAnything 标注图响应类型非法");
       }
@@ -247,15 +294,20 @@ public class ManualDetectionService {
 
   private ManualDetectionController.ManualDetectionResponse toResponse(DetectionRunEntity job) {
     return new ManualDetectionController.ManualDetectionResponse(
-      job.getId(), job.getStatus(), job.getInputImageUrl(), job.getResultImageUrl(),
-      read(job.getFindingsJson(), FINDING_LIST, List.of()),
-      read(job.getWarningsJson(), STRING_LIST, List.of()),
-      job.getErrorMessage(), job.getCreatedAt(), job.getStartedAt(), job.getCompletedAt());
+        job.getId(),
+        job.getStatus(),
+        job.getInputImageUrl(),
+        job.getResultImageUrl(),
+        read(job.getFindingsJson(), FINDING_LIST, List.of()),
+        read(job.getWarningsJson(), STRING_LIST, List.of()),
+        job.getErrorMessage(),
+        job.getCreatedAt(),
+        job.getStartedAt(),
+        job.getCompletedAt());
   }
 
   @PreDestroy
   void shutdown() {
     executor.shutdownNow();
   }
-
 }

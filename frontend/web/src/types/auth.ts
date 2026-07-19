@@ -62,6 +62,7 @@ export interface RegisterForm {
   confirmPassword: string
   displayName: string
   phone?: string
+  smsCode?: string
   agreed: boolean
 }
 

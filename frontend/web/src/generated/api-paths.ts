@@ -28,9 +28,11 @@ export const authLogin = '/api/v1/auth/login' as const
 export const authLogout = '/api/v1/auth/logout' as const
 export const authMe = '/api/v1/auth/me' as const
 export const authPassword = '/api/v1/auth/password' as const
+export const authPasswordReset = '/api/v1/auth/password/reset' as const
 export const authReauth = '/api/v1/auth/reauth' as const
 export const authRefresh = '/api/v1/auth/refresh' as const
 export const authRegister = '/api/v1/auth/register' as const
+export const authSmsSend = '/api/v1/auth/sms/send' as const
 export const dashboardOverview = '/api/v1/dashboard/overview' as const
 export const detectionTemplates = '/api/v1/detection-templates' as const
 export const detectionTemplatesId = '/api/v1/detection-templates/{id}' as const
@@ -137,9 +139,11 @@ export const API_PATHS = {
   authLogout: '/api/v1/auth/logout',
   authMe: '/api/v1/auth/me',
   authPassword: '/api/v1/auth/password',
+  authPasswordReset: '/api/v1/auth/password/reset',
   authReauth: '/api/v1/auth/reauth',
   authRefresh: '/api/v1/auth/refresh',
   authRegister: '/api/v1/auth/register',
+  authSmsSend: '/api/v1/auth/sms/send',
   dashboardOverview: '/api/v1/dashboard/overview',
   detectionTemplates: '/api/v1/detection-templates',
   detectionTemplatesId: '/api/v1/detection-templates/{id}',

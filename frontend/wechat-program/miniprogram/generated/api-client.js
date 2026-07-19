@@ -57,9 +57,11 @@ const openapiClient = {
     me(query) { return get(buildPath(API_PATHS.authMe), query) },
     updateMe1(body) { return patch(buildPath(API_PATHS.authMe), body) },
     changePassword(body) { return put(buildPath(API_PATHS.authPassword), body) },
+    resetPassword(body) { return post(buildPath(API_PATHS.authPasswordReset), body) },
     reauth(body) { return post(buildPath(API_PATHS.authReauth), body) },
     refresh(body) { return post(buildPath(API_PATHS.authRefresh), body) },
     register(body) { return post(buildPath(API_PATHS.authRegister), body) },
+    sendSms(body) { return post(buildPath(API_PATHS.authSmsSend), body) },
   },
   dashboard: {
     overview(query) { return get(buildPath(API_PATHS.dashboardOverview), query) },
