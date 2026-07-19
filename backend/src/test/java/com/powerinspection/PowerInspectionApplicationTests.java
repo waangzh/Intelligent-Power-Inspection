@@ -193,6 +193,8 @@ class PowerInspectionApplicationTests {
     String password = "Tester123";
     String newPassword = "Tester456";
 
+    String phone = "13800009999";
+    String smsCode = sendRegisterSmsCode(phone);
     mockMvc.perform(post("/api/v1/auth/register")
         .contentType(MediaType.APPLICATION_JSON)
         .content(json(
@@ -200,7 +202,8 @@ class PowerInspectionApplicationTests {
           "password", password,
           "confirmPassword", password,
           "displayName", "测试用户",
-          "phone", "13800009999",
+          "phone", phone,
+          "smsCode", smsCode,
           "agreed", true
         )))
       .andExpect(status().isOk())
@@ -575,6 +578,18 @@ class PowerInspectionApplicationTests {
       .getContentAsString(StandardCharsets.UTF_8);
     JsonNode root = objectMapper.readTree(response);
     return root.path("data").path("token").asText();
+  }
+
+  private String sendRegisterSmsCode(String phone) throws Exception {
+    String response = mockMvc.perform(post("/api/v1/auth/sms/send")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(json("phone", phone, "purpose", "REGISTER")))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.debugCode").isNotEmpty())
+      .andReturn()
+      .getResponse()
+      .getContentAsString(StandardCharsets.UTF_8);
+    return objectMapper.readTree(response).path("data").path("debugCode").asText();
   }
 
   private String bearer(String token) {

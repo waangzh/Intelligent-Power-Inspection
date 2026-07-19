@@ -6,9 +6,16 @@ import com.powerinspection.auth.AuthDtos.LoginResponse;
 import com.powerinspection.auth.AuthDtos.MeResponse;
 import com.powerinspection.auth.AuthDtos.ProfileRequest;
 import com.powerinspection.auth.AuthDtos.RegisterRequest;
+import com.powerinspection.auth.AuthDtos.ResetPasswordRequest;
+import com.powerinspection.auth.AuthDtos.SendSmsRequest;
+import com.powerinspection.auth.AuthDtos.SendSmsResponse;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
 import com.powerinspection.security.TokenService;
+import com.powerinspection.sms.SmsMode;
+import com.powerinspection.sms.SmsPurpose;
+import com.powerinspection.sms.SmsProperties;
+import com.powerinspection.sms.SmsVerificationService;
 import com.powerinspection.user.UserActivityDto;
 import com.powerinspection.user.UserActivityEntity;
 import com.powerinspection.user.UserActivityRepository;
@@ -42,6 +49,8 @@ public class AuthService {
   private final UserAccessService userAccessService;
   private final RefreshTokenService refreshTokenService;
   private final RefreshCookieSupport refreshCookieSupport;
+  private final SmsVerificationService smsVerificationService;
+  private final SmsProperties smsProperties;
 
   public AuthService(
     UserRepository userRepository,
@@ -51,7 +60,9 @@ public class AuthService {
     TokenService tokenService,
     UserAccessService userAccessService,
     RefreshTokenService refreshTokenService,
-    RefreshCookieSupport refreshCookieSupport
+    RefreshCookieSupport refreshCookieSupport,
+    SmsVerificationService smsVerificationService,
+    SmsProperties smsProperties
   ) {
     this.userRepository = userRepository;
     this.preferenceRepository = preferenceRepository;
@@ -61,6 +72,8 @@ public class AuthService {
     this.userAccessService = userAccessService;
     this.refreshTokenService = refreshTokenService;
     this.refreshCookieSupport = refreshCookieSupport;
+    this.smsVerificationService = smsVerificationService;
+    this.smsProperties = smsProperties;
   }
 
   public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
@@ -165,6 +178,25 @@ public class AuthService {
     refreshCookieSupport.clear(response, refreshCookieSupport.secureRequest(request));
   }
 
+  public SendSmsResponse sendSms(SendSmsRequest request) {
+    SmsPurpose purpose = resolvePurpose(request.purpose());
+    if (purpose == SmsPurpose.RESET_PASSWORD) {
+      String phone = SmsVerificationService.normalizePhone(request.phone());
+      requireSingleUserByPhone(phone);
+    }
+    SmsVerificationService.SendResult result = smsVerificationService.sendCode(request.phone(), purpose);
+    String message = smsProperties.resolvedMode() == SmsMode.MOCK
+      ? "验证码已生成（开发模式，见 debugCode）"
+      : "验证码已发送";
+    return new SendSmsResponse(
+      result.phone(),
+      result.resendIntervalSeconds(),
+      result.expiresInSeconds(),
+      result.debugCode(),
+      message
+    );
+  }
+
   @Transactional
   public UserDto register(RegisterRequest request) {
     String username = request.username().trim();
@@ -179,13 +211,20 @@ public class AuthService {
     if (userRepository.existsByUsername(username)) {
       throw ApiException.badRequest("用户名已被注册");
     }
+
+    String phone = blankToNull(request.phone());
+    if (smsProperties.verificationRequired()) {
+      phone = SmsVerificationService.normalizePhone(request.phone());
+      smsVerificationService.consumeCode(phone, SmsPurpose.REGISTER, request.smsCode());
+    }
+
     UserEntity user = new UserEntity();
     user.setId(Ids.next("user"));
     user.setUsername(username);
     user.setPasswordHash(passwordEncoder.encode(request.password()));
     user.setDisplayName(request.displayName().trim());
     user.setRole(UserRole.VIEWER);
-    user.setPhone(blankToNull(request.phone()));
+    user.setPhone(phone);
     user.setBio("");
     user.setAvatarUrl(defaultAvatar(user.getDisplayName(), user.getId()));
     user.setEnabled(true);
@@ -193,6 +232,52 @@ public class AuthService {
     UserEntity saved = userRepository.save(user);
     ensurePreferences(saved.getId());
     return UserDto.from(saved);
+  }
+
+  @Transactional
+  public void resetPassword(ResetPasswordRequest request) {
+    if (!smsProperties.verificationRequired()) {
+      throw ApiException.badRequest("当前未启用短信验证码，无法找回密码");
+    }
+    if (!request.newPassword().equals(request.confirmPassword())) {
+      throw ApiException.badRequest("两次输入的新密码不一致");
+    }
+    validatePassword(request.newPassword());
+
+    String phone = SmsVerificationService.normalizePhone(request.phone());
+    smsVerificationService.consumeCode(phone, SmsPurpose.RESET_PASSWORD, request.smsCode());
+    UserEntity user = requireSingleUserByPhone(phone);
+    if (!Boolean.TRUE.equals(user.getEnabled())) {
+      throw ApiException.badRequest("账号已禁用，无法重置密码");
+    }
+
+    user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+    user.incrementTokenVersion();
+    user.setUpdatedAt(Instant.now().toString());
+    userRepository.saveAndFlush(user);
+    refreshTokenService.revokeAllForUser(user.getId());
+    logActivity(user.getId(), "PASSWORD", "通过短信验证码重置了登录密码");
+  }
+
+  private UserEntity requireSingleUserByPhone(String phone) {
+    List<UserEntity> users = userRepository.findByPhone(phone);
+    if (users.isEmpty()) {
+      throw ApiException.badRequest("该手机号未绑定账号");
+    }
+    if (users.size() > 1) {
+      throw ApiException.badRequest("该手机号绑定了多个账号，请联系管理员处理");
+    }
+    return users.get(0);
+  }
+
+  private static SmsPurpose resolvePurpose(String raw) {
+    if (raw == null || raw.isBlank() || "REGISTER".equalsIgnoreCase(raw.trim())) {
+      return SmsPurpose.REGISTER;
+    }
+    if ("RESET_PASSWORD".equalsIgnoreCase(raw.trim())) {
+      return SmsPurpose.RESET_PASSWORD;
+    }
+    throw ApiException.badRequest("不支持的验证码用途");
   }
 
   @Transactional

@@ -31,3 +31,9 @@ app:
     allow-registration: false
     bridge-robot-id-mappings:
       robot_001: robot-001
+  sms:
+    # 默认 mock，避免单测误发真短信；本地真发可设 APP_SMS_MODE=pnvs
+    mode: ${APP_SMS_MODE:mock}
+    # 本地 H2(test) 与正式一致默认 30s；单测若需加速可设 APP_SMS_RESEND_INTERVAL_SECONDS=1
+    resend-interval-seconds: ${APP_SMS_RESEND_INTERVAL_SECONDS:30}
+    daily-limit-per-phone: 100

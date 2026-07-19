@@ -21,7 +21,23 @@ public final class AuthDtos {
     @NotBlank(message = "请再次输入密码") String confirmPassword,
     @NotBlank(message = "请填写姓名") String displayName,
     String phone,
+    String smsCode,
     boolean agreed
+  ) {
+  }
+
+  public record SendSmsRequest(
+    @NotBlank(message = "请输入手机号") String phone,
+    String purpose
+  ) {
+  }
+
+  public record SendSmsResponse(
+    String phone,
+    long resendIntervalSeconds,
+    long expiresInSeconds,
+    String debugCode,
+    String message
   ) {
   }
 
@@ -51,6 +67,14 @@ public final class AuthDtos {
 
   public record ChangePasswordRequest(
     @NotBlank(message = "请输入原密码") String oldPassword,
+    @NotBlank(message = "请输入新密码") String newPassword,
+    @NotBlank(message = "请再次输入新密码") String confirmPassword
+  ) {
+  }
+
+  public record ResetPasswordRequest(
+    @NotBlank(message = "请输入手机号") String phone,
+    @NotBlank(message = "请输入短信验证码") String smsCode,
     @NotBlank(message = "请输入新密码") String newPassword,
     @NotBlank(message = "请再次输入新密码") String confirmPassword
   ) {

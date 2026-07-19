@@ -7,6 +7,9 @@ import com.powerinspection.auth.AuthDtos.MeResponse;
 import com.powerinspection.auth.AuthDtos.ProfileRequest;
 import com.powerinspection.auth.AuthDtos.ReauthRequest;
 import com.powerinspection.auth.AuthDtos.RegisterRequest;
+import com.powerinspection.auth.AuthDtos.ResetPasswordRequest;
+import com.powerinspection.auth.AuthDtos.SendSmsRequest;
+import com.powerinspection.auth.AuthDtos.SendSmsResponse;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.UserDto;
@@ -48,9 +51,20 @@ public class AuthController {
     return ApiResponse.ok(authService.login(request, httpRequest, httpResponse));
   }
 
+  @PostMapping("/sms/send")
+  public ApiResponse<SendSmsResponse> sendSms(@Valid @RequestBody SendSmsRequest request) {
+    return ApiResponse.ok(authService.sendSms(request));
+  }
+
   @PostMapping("/register")
   public ApiResponse<UserDto> register(@Valid @RequestBody RegisterRequest request) {
     return ApiResponse.ok(authService.register(request));
+  }
+
+  @PostMapping("/password/reset")
+  public ApiResponse<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+    authService.resetPassword(request);
+    return ApiResponse.ok();
   }
 
   @PostMapping("/refresh")

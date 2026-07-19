@@ -102,6 +102,8 @@ async function request<T>(path: string, init: RequestInit = {}, retried = false)
   const isPublicAuth =
     path.startsWith('/auth/login') ||
     path.startsWith('/auth/register') ||
+    path.startsWith('/auth/sms/') ||
+    path.startsWith('/auth/password/reset') ||
     path.startsWith('/auth/refresh')
   const allowsAutomaticRefresh = !path.startsWith('/auth/logout')
   const token = isPublicAuth ? null : authToken()

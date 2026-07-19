@@ -68,6 +68,8 @@ class TokenVersionSecurityTests {
   @Test
   void passwordChangeInvalidatesPreviousAccessToken() throws Exception {
     String username = "tv_pwd_" + System.currentTimeMillis();
+    String phone = "1390000" + String.format("%04d", (int) (System.currentTimeMillis() % 10000));
+    String smsCode = sendRegisterSmsCode(phone);
     mockMvc.perform(post("/api/v1/auth/register")
         .contentType(MediaType.APPLICATION_JSON)
         .content("""
@@ -76,9 +78,11 @@ class TokenVersionSecurityTests {
             "password":"Tester123",
             "confirmPassword":"Tester123",
             "displayName":"Token Version",
+            "phone":"%s",
+            "smsCode":"%s",
             "agreed":true
           }
-          """.formatted(username)))
+          """.formatted(username, phone, smsCode)))
       .andExpect(status().isOk());
 
     String oldToken = login(username, "Tester123");
@@ -139,5 +143,15 @@ class TokenVersionSecurityTests {
       .andReturn();
     JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
     return root.path("data").path("token").asText();
+  }
+
+  private String sendRegisterSmsCode(String phone) throws Exception {
+    MvcResult result = mockMvc.perform(post("/api/v1/auth/sms/send")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"phone\":\"" + phone + "\",\"purpose\":\"REGISTER\"}"))
+      .andExpect(status().isOk())
+      .andReturn();
+    return objectMapper.readTree(result.getResponse().getContentAsString())
+      .path("data").path("debugCode").asText();
   }
 }
