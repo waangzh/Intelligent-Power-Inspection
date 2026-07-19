@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../..')
 const apiJsPath = path.join(repoRoot, 'frontend/wechat-program/miniprogram/config/api.js')
 const servicesPath = path.join(repoRoot, 'frontend/wechat-program/miniprogram/services/index.js')
+const storagePath = path.join(repoRoot, 'frontend/wechat-program/miniprogram/utils/storage.js')
 const buildEnvPath = path.join(repoRoot, 'frontend/wechat-program/miniprogram/config/build-env.js')
 
 let ok = true
@@ -25,6 +26,10 @@ try {
   const servicesSource = fs.readFileSync(servicesPath, 'utf8')
   if (/mock\/store/.test(servicesSource) || /\buseMock\b/.test(servicesSource)) {
     throw new Error('services/index.js 不得再引用 mock/store 或 useMock')
+  }
+  const storageSource = fs.readFileSync(storagePath, 'utf8')
+  if (/validateUsername/.test(servicesSource) && !/function validateUsername/.test(storageSource)) {
+    throw new Error('services/index.js 依赖 utils/storage.js 中的用户校验函数，但 storage.js 未导出 validateUsername')
   }
 
   if (fs.existsSync(buildEnvPath)) {

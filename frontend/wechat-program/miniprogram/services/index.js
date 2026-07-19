@@ -1,14 +1,14 @@
 const { openapiClient, services } = require('../generated/api-client')
-const { uid } = require('../utils/storage')
+const {
+  uid,
+  validateUsername,
+  validatePassword,
+  generateDefaultAvatar,
+} = require('../utils/storage')
 const { ROUTE_DETECTIONS } = require('../utils/constants')
 const { createEmptyRosRoute } = require('../utils/ros-route')
 const { resolutionSummary, buildReviewFromResolveForm } = require('../utils/work-order')
 const workOrderPerm = require('../utils/work-order-permission')
-const {
-  validateUsername,
-  validatePassword,
-  generateDefaultAvatar,
-} = require('../utils/user-profile')
 
 function currentUser() {
   const session = getSession()
@@ -65,6 +65,10 @@ async function login(username, password, remember = true) {
 
 async function register(form) {
   return services.auth.register(form)
+}
+
+async function sendRegisterSms(phone) {
+  return openapiClient.auth.sendSms({ phone: String(phone || '').trim(), purpose: 'REGISTER' })
 }
 
 function normalizeSession(session) {
@@ -406,6 +410,7 @@ async function fetchDashboard() {
 module.exports = {
   login,
   register,
+  sendRegisterSms,
   getSession,
   refreshMe,
   logout,
