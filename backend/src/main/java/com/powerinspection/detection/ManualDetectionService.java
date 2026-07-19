@@ -103,6 +103,7 @@ public class ManualDetectionService {
     current.setStartedAt(startedAt);
     current.setUpdatedAt(startedAt);
     current = repository.saveAndFlush(current);
+    String finalStatus = STATUS_SUCCEEDED;
     try {
       Map<String, Object> task = map("id", requestId, "name", "Manual LocateAnything Detection", "createdAt", Instant.now().toString());
       Map<String, Object> route = map("id", "manual_route", "name", "Manual Detection");
@@ -117,7 +118,6 @@ public class ManualDetectionService {
         .orElse(null));
       String resultImageUrl = rehostAnnotatedImage(requestId, publicResultBaseUrl, advertisedResultImageUrl);
       List<LocateAnythingFinding> findings = withResultImage(result.findings(), resultImageUrl);
-      current.setStatus(STATUS_SUCCEEDED);
       current.setResultImageUrl(resultImageUrl);
       current.setResultStorageKey(resultImageUrl == null ? null : "locate-anything/results/" + requestId + "_annotated" + extension(resultImageUrl));
       current.setFindingsJson(json(findings));
@@ -125,7 +125,7 @@ public class ManualDetectionService {
       current.setErrorMessage(null);
     } catch (Exception ex) {
       String message = ex.getMessage() == null ? "模型检测失败" : ex.getMessage();
-      current.setStatus(STATUS_FAILED);
+      finalStatus = STATUS_FAILED;
       current.setResultImageUrl(null);
       current.setFindingsJson("[]");
       current.setWarningsJson(json(List.of(message)));
@@ -134,6 +134,7 @@ public class ManualDetectionService {
     String completedAt = Instant.now().toString();
     current.setCompletedAt(completedAt);
     current.setUpdatedAt(completedAt);
+    current.setStatus(finalStatus);
     repository.save(current);
   }
 
