@@ -40,10 +40,10 @@ Page({
 
   async load() {
     try {
-      const [alarms, orders] = await Promise.all([
-        api.getAlarms(),
-        api.getWorkOrders().catch(() => []),
-      ])
+      const { alarms, orders } = await api.tryAutoConvertPendingAlarms().catch(() => ({
+        alarms: [],
+        orders: [],
+      }))
       const workOrderByAlarm = {}
       orders.forEach((o) => {
         if (o.alarmId) workOrderByAlarm[o.alarmId] = o

@@ -1,0 +1,26 @@
+<view class="auth-page">
+  <view class="auth-card">
+    <view class="brand">找回密码</view>
+    <text class="subtitle">输入绑定手机号，短信验证通过后设置新密码</text>
+    <view class="form-item">
+      <input class="input" type="number" maxlength="11" placeholder="手机号" value="{{form.phone}}" data-k="phone" bindinput="onInput" />
+    </view>
+    <view class="form-item sms-row">
+      <input class="input sms-input" type="number" maxlength="8" placeholder="短信验证码" value="{{form.smsCode}}" data-k="smsCode" bindinput="onInput" />
+      <view
+        class="sms-btn {{smsSending || smsCooldown > 0 ? 'sms-btn--disabled' : ''}}"
+        bindtap="handleSendSms"
+      >
+        <text class="sms-btn-text">{{smsBtnLabel}}</text>
+      </view>
+    </view>
+    <view class="form-item">
+      <input class="input" password placeholder="新密码（至少 8 位，含字母和数字）" value="{{form.newPassword}}" data-k="newPassword" bindinput="onInput" />
+    </view>
+    <view class="form-item">
+      <input class="input" password placeholder="确认新密码" value="{{form.confirmPassword}}" data-k="confirmPassword" bindinput="onInput" />
+    </view>
+    <button class="submit btn-primary" plain hover-class="none" loading="{{loading}}" disabled="{{loading}}" bindtap="handleReset">重置密码</button>
+    <view class="footer">想起密码了？<text class="link" bindtap="goLogin">返回登录</text></view>
+  </view>
+</view>
