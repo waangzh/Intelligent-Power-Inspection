@@ -16,6 +16,10 @@
     <button class="submit btn-primary" loading="{{loading}}" bindtap="handleLogin">登 录</button>
 
     <view class="footer">
+      <text class="link" bindtap="goForgotPassword">忘记密码？</text>
+    </view>
+
+    <view class="footer">
       还没有账号？<text class="link" bindtap="goRegister">立即注册</text>
     </view>
 

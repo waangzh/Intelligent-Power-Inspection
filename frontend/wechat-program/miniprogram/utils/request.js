@@ -1,6 +1,20 @@
 const apiConfig = require('../config/api')
 
 /**
+ * 与 Web 端 http.ts 一致：登录/注册/短信等公开接口不携带 Bearer，避免过期 token 触发 403。
+ */
+function isPublicAuthPath(url) {
+  const path = String(url || '').split('?')[0]
+  return (
+    path.startsWith('/auth/login') ||
+    path.startsWith('/auth/register') ||
+    path.startsWith('/auth/sms/') ||
+    path.startsWith('/auth/password/reset') ||
+    path.startsWith('/auth/refresh')
+  )
+}
+
+/**
  * 统一 HTTP 请求 — 与网页端共用后端 /api/v1
  * 响应格式: { code: 0, message: 'ok', data: T }
  */
@@ -8,6 +22,7 @@ function request({ url, method = 'GET', data, auth = true, headers = {} }) {
   const { baseUrl, timeout } = apiConfig
   const session = wx.getStorageSync('pi_session')
   const token = session && session.token
+  const skipAuth = auth === false || isPublicAuthPath(url)
 
   return new Promise((resolve, reject) => {
     wx.request({
@@ -17,7 +32,7 @@ function request({ url, method = 'GET', data, auth = true, headers = {} }) {
       timeout,
       header: {
         'Content-Type': 'application/json',
-        ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(!skipAuth && token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
       success(res) {
@@ -27,9 +42,13 @@ function request({ url, method = 'GET', data, auth = true, headers = {} }) {
         // 在认证层拦截，返回的是框架默认错误体（无 code 字段）。用是否带 code 区分
         // 两种 403，避免把“认证失效”误判为普通业务失败，导致坏 token 被反复携带发出。
         const hasAppEnvelope = body && typeof body === 'object' && 'code' in body
-        if (res.statusCode === 401 || (res.statusCode === 403 && !hasAppEnvelope)) {
+        if (res.statusCode === 401 || (res.statusCode === 403 && !hasAppEnvelope && !isPublicAuthPath(url))) {
           wx.removeStorageSync('pi_session')
           reject(new Error('登录已过期，请重新登录'))
+          return
+        }
+        if (res.statusCode === 403 && !hasAppEnvelope && isPublicAuthPath(url)) {
+          reject(new Error('后端未提供短信接口，请更新代码并重启后端（需含 /auth/sms/send）'))
           return
         }
         if (hasAppEnvelope) {
