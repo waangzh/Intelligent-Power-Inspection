@@ -42,11 +42,11 @@ export function canAccess(
 export const ROLE_SUMMARIES: Record<UserRole, { title: string; scope: string }> = {
   ADMIN: {
     title: '系统治理者',
-    scope: '用户与策略配置、告警转工单与复核、Agent 审批；可应急急停，不执行日常巡检调度',
+    scope: '用户与策略配置、告警转工单与复核、Agent 审批；可应急急停；不发起 Agent 运行、不执行日常调度',
   },
   DISPATCHER: {
     title: '值班运维者',
-    scope: '任务创建下发、告警确认处置、接单处理并提交复核、Agent 执行；不可改角色与复核关闭',
+    scope: '任务创建下发、告警确认处置、接单处理并提交复核、发起 Agent 分析；不可审批 Agent 动作、不可改角色与复核关闭',
   },
   VIEWER: {
     title: '监督查阅者',

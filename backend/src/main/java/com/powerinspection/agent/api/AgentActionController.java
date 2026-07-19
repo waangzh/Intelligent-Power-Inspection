@@ -1,7 +1,6 @@
 package com.powerinspection.agent.api;
 
 import com.powerinspection.agent.AuditedAgentService;
-import com.powerinspection.agent.domain.AgentEnums;
 import com.powerinspection.common.ApiResponse;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
@@ -21,7 +20,10 @@ public class AgentActionController {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public AgentActionController(AuditedAgentService agentService, PermissionService permissionService, CurrentUser currentUser) {
+  public AgentActionController(
+      AuditedAgentService agentService,
+      PermissionService permissionService,
+      CurrentUser currentUser) {
     this.agentService = agentService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
@@ -34,35 +36,23 @@ public class AgentActionController {
   }
 
   @PostMapping("/{actionId}/approve")
-  public ApiResponse<AgentDtos.ActionResponse> approve(@PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
+  public ApiResponse<AgentDtos.ActionResponse> approve(
+      @PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
     permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
-    requireBusinessPermission(agentService.action(actionId).type());
     return ApiResponse.ok(agentService.approveAction(actionId, request, currentUser.get()));
   }
 
   @PostMapping("/{actionId}/reject")
-  public ApiResponse<AgentDtos.ActionResponse> reject(@PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
+  public ApiResponse<AgentDtos.ActionResponse> reject(
+      @PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
     permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
-    requireBusinessPermission(agentService.action(actionId).type());
     return ApiResponse.ok(agentService.rejectAction(actionId, request, currentUser.get()));
   }
 
   @PostMapping("/{actionId}/retry")
-  public ApiResponse<AgentDtos.ActionResponse> retry(@PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
+  public ApiResponse<AgentDtos.ActionResponse> retry(
+      @PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
     permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
-    requireBusinessPermission(agentService.action(actionId).type());
     return ApiResponse.ok(agentService.retryAction(actionId, request, currentUser.get()));
-  }
-
-  private void requireBusinessPermission(AgentEnums.ActionType type) {
-    if (type == AgentEnums.ActionType.CREATE_WORK_ORDER_DRAFT) {
-      permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
-    }
-    if (type == AgentEnums.ActionType.ACKNOWLEDGE_ALARM) {
-      permissionService.require(currentUser.get(), Permission.ALARM_ACK);
-    }
-    if (type == AgentEnums.ActionType.REQUEST_TASK_PAUSE) {
-      permissionService.require(currentUser.get(), Permission.TASK_CONTROL);
-    }
   }
 }

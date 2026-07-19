@@ -26,6 +26,31 @@ export async function loginApi(username: string, password: string, remember = fa
   return openapiClient.auth.login(username, password, remember)
 }
 
+export interface SendSmsResult {
+  phone: string
+  resendIntervalSeconds: number
+  expiresInSeconds: number
+  debugCode?: string | null
+  message?: string
+}
+
+export async function sendRegisterSmsApi(phone: string): Promise<SendSmsResult> {
+  return http.post<SendSmsResult>('/auth/sms/send', { phone, purpose: 'REGISTER' })
+}
+
+export async function sendResetPasswordSmsApi(phone: string): Promise<SendSmsResult> {
+  return http.post<SendSmsResult>('/auth/sms/send', { phone, purpose: 'RESET_PASSWORD' })
+}
+
+export async function resetPasswordApi(payload: {
+  phone: string
+  smsCode: string
+  newPassword: string
+  confirmPassword: string
+}): Promise<void> {
+  await http.post<void>('/auth/password/reset', payload)
+}
+
 export async function registerApi(form: RegisterForm): Promise<User> {
   return http.post<User>('/auth/register', form)
 }

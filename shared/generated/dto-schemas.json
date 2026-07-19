@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-19T02:32:06.594Z",
+  "generatedAt": "2026-07-19T07:26:19.080Z",
   "schemas": [
     "ActionDecisionRequest",
     "ActionResponse",
@@ -25,6 +25,7 @@
     "ApiResponseRunDetail",
     "ApiResponseRunQuestionResponse",
     "ApiResponseRunSummary",
+    "ApiResponseSendSmsResponse",
     "ApiResponseUserDto",
     "ApiResponseUserPreferencesDto",
     "ApiResponseVoid",
@@ -51,6 +52,7 @@
     "ProfileRequest",
     "ReauthRequest",
     "RegisterRequest",
+    "ResetPasswordRequest",
     "RobotHeartbeatStatusPage",
     "RobotHeartbeatStatusView",
     "RobotImageDetectionRequest",
@@ -58,6 +60,8 @@
     "RunDetail",
     "RunQuestionResponse",
     "RunSummary",
+    "SendSmsRequest",
+    "SendSmsResponse",
     "Source",
     "StartRunRequest",
     "StepResponse",

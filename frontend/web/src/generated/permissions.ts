@@ -31,7 +31,6 @@ export const PERMISSIONS_BY_ROLE: Record<'ADMIN' | 'DISPATCHER' | 'VIEWER', Perm
   ADMIN: [
     'agent:admin',
     'agent:approve',
-    'agent:run',
     'agent:view',
     'alarm:policy',
     'detection:manage',
@@ -47,7 +46,6 @@ export const PERMISSIONS_BY_ROLE: Record<'ADMIN' | 'DISPATCHER' | 'VIEWER', Perm
     'workorder:view',
   ],
   DISPATCHER: [
-    'agent:approve',
     'agent:run',
     'agent:view',
     'alarm:ack',

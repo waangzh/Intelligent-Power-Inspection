@@ -26,21 +26,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 @ActiveProfiles("test")
-@TestPropertySource(properties = {
-  "app.robot.mode=simulation",
-  "app.robot.allow-registration=false"
-})
+@TestPropertySource(
+    properties = {"app.robot.mode=simulation", "app.robot.allow-registration=false"})
 @SpringBootTest
 @AutoConfigureMockMvc
 class TaskEmergencyStopControllerTests {
-  @Autowired
-  MockMvc mockMvc;
+  @Autowired MockMvc mockMvc;
 
-  @Autowired
-  ObjectMapper objectMapper;
+  @Autowired ObjectMapper objectMapper;
 
-  @Autowired
-  DataStoreService dataStore;
+  @Autowired DataStoreService dataStore;
 
   @Test
   void adminCanEmergencyStopSimulationTaskWithReason() throws Exception {
@@ -53,47 +48,56 @@ class TaskEmergencyStopControllerTests {
     ensureFixtures(routeId, robotId);
 
     try {
-      mockMvc.perform(post("/api/v1/tasks")
-          .header("Authorization", "Bearer " + dispatcherToken)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("""
+      mockMvc
+          .perform(
+              post("/api/v1/tasks")
+                  .header("Authorization", "Bearer " + dispatcherToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      """
             {
               "id":"%s",
               "name":"急停接口测试",
               "routeId":"%s",
-              "robotId":"%s",
-              "status":"CREATED",
-              "progress":0,
-              "currentCheckpointSeq":0
+              "robotId":"%s"
             }
-            """.formatted(taskId, routeId, robotId)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("CREATED"));
+            """
+                          .formatted(taskId, routeId, robotId)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.status").value("CREATED"));
 
-      mockMvc.perform(post("/api/v1/tasks/" + taskId + "/dispatch")
-          .header("Authorization", "Bearer " + dispatcherToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("DISPATCHED"));
+      mockMvc
+          .perform(
+              post("/api/v1/tasks/" + taskId + "/dispatch")
+                  .header("Authorization", "Bearer " + dispatcherToken))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.status").value("DISPATCHED"));
 
-      mockMvc.perform(post("/api/v1/tasks/" + taskId + "/emergency-stop")
-          .header("Authorization", "Bearer " + adminToken)
-          .header("Idempotency-Key", "estop-" + suffix)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("{\"reason\":\"现场人员闯入，立即停机\"}"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("ESTOPPED"))
-        .andExpect(jsonPath("$.data.emergencyStopReason").value("现场人员闯入，立即停机"));
+      mockMvc
+          .perform(
+              post("/api/v1/tasks/" + taskId + "/emergency-stop")
+                  .header("Authorization", "Bearer " + adminToken)
+                  .header("Idempotency-Key", "estop-" + suffix)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"reason\":\"现场人员闯入，立即停机\"}"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.status").value("ESTOPPED"))
+          .andExpect(jsonPath("$.data.emergencyStopReason").value("现场人员闯入，立即停机"));
 
-      mockMvc.perform(get("/api/v1/tasks/" + taskId + "/events")
-          .header("Authorization", "Bearer " + adminToken))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.items[*].type", hasItem("ESTOP")));
+      mockMvc
+          .perform(
+              get("/api/v1/tasks/" + taskId + "/events")
+                  .header("Authorization", "Bearer " + adminToken))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.items[*].type", hasItem("ESTOP")));
 
-      mockMvc.perform(post("/api/v1/tasks/" + taskId + "/cancel")
-          .header("Authorization", "Bearer " + adminToken)
-          .header("Idempotency-Key", "cancel-" + suffix)
-          .contentType(MediaType.APPLICATION_JSON))
-        .andExpect(status().isForbidden());
+      mockMvc
+          .perform(
+              post("/api/v1/tasks/" + taskId + "/cancel")
+                  .header("Authorization", "Bearer " + adminToken)
+                  .header("Idempotency-Key", "cancel-" + suffix)
+                  .contentType(MediaType.APPLICATION_JSON))
+          .andExpect(status().isForbidden());
     } finally {
       cleanup(taskId, robotId, routeId);
     }
@@ -110,36 +114,41 @@ class TaskEmergencyStopControllerTests {
     ensureFixtures(routeId, robotId);
 
     try {
-      mockMvc.perform(post("/api/v1/tasks")
-          .header("Authorization", "Bearer " + dispatcherToken)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("""
+      mockMvc
+          .perform(
+              post("/api/v1/tasks")
+                  .header("Authorization", "Bearer " + dispatcherToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      """
             {
               "id":"%s",
               "name":"急停权限测试",
               "routeId":"%s",
-              "robotId":"%s",
-              "status":"CREATED",
-              "progress":0,
-              "currentCheckpointSeq":0
+              "robotId":"%s"
             }
-            """.formatted(taskId, routeId, robotId)))
-        .andExpect(status().isOk());
+            """
+                          .formatted(taskId, routeId, robotId)))
+          .andExpect(status().isOk());
 
-      mockMvc.perform(post("/api/v1/tasks/" + taskId + "/emergency-stop")
-          .header("Authorization", "Bearer " + adminToken)
-          .header("Idempotency-Key", "estop-blank-" + suffix)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("{\"reason\":\"   \"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message", containsString("原因")));
+      mockMvc
+          .perform(
+              post("/api/v1/tasks/" + taskId + "/emergency-stop")
+                  .header("Authorization", "Bearer " + adminToken)
+                  .header("Idempotency-Key", "estop-blank-" + suffix)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"reason\":\"   \"}"))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message", containsString("原因")));
 
-      mockMvc.perform(post("/api/v1/tasks/" + taskId + "/emergency-stop")
-          .header("Authorization", "Bearer " + dispatcherToken)
-          .header("Idempotency-Key", "estop-disp-" + suffix)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("{\"reason\":\"调度员不应有急停权限\"}"))
-        .andExpect(status().isForbidden());
+      mockMvc
+          .perform(
+              post("/api/v1/tasks/" + taskId + "/emergency-stop")
+                  .header("Authorization", "Bearer " + dispatcherToken)
+                  .header("Idempotency-Key", "estop-disp-" + suffix)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"reason\":\"调度员不应有急停权限\"}"))
+          .andExpect(status().isForbidden());
     } finally {
       cleanup(taskId, robotId, routeId);
     }
@@ -147,24 +156,28 @@ class TaskEmergencyStopControllerTests {
 
   private void ensureFixtures(String routeId, String robotId) {
     if (dataStore.find(DataCategory.ROUTE, routeId) == null) {
-      dataStore.upsert(DataCategory.ROUTE, map(
-        "id", routeId,
-        "siteId", "site_001",
-        "name", "急停测试路线",
-        "path", List.of(
-          map("lat", 30.2741, "lng", 120.1551),
-          map("lat", 30.2744, "lng", 120.1554)
-        ),
-        "checkpoints", List.of()
-      ));
+      dataStore.upsert(
+          DataCategory.ROUTE,
+          map(
+              "id",
+              routeId,
+              "siteId",
+              "site_001",
+              "name",
+              "急停测试路线",
+              "path",
+              List.of(map("lat", 30.2741, "lng", 120.1551), map("lat", 30.2744, "lng", 120.1554)),
+              "checkpoints",
+              List.of()));
     }
     if (dataStore.find(DataCategory.ROBOT, robotId) == null) {
-      dataStore.upsert(DataCategory.ROBOT, map(
-        "id", robotId,
-        "siteId", "site_001",
-        "name", "急停测试机器人",
-        "status", "ONLINE"
-      ));
+      dataStore.upsert(
+          DataCategory.ROBOT,
+          map(
+              "id", robotId,
+              "siteId", "site_001",
+              "name", "急停测试机器人",
+              "status", "ONLINE"));
     }
   }
 
@@ -189,11 +202,19 @@ class TaskEmergencyStopControllerTests {
   }
 
   private String login(String username, String password) throws Exception {
-    MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"username\":\"" + username + "\",\"password\":\"" + password + "\",\"remember\":true}"))
-      .andExpect(status().isOk())
-      .andReturn();
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/login")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        "{\"username\":\""
+                            + username
+                            + "\",\"password\":\""
+                            + password
+                            + "\",\"remember\":true}"))
+            .andExpect(status().isOk())
+            .andReturn();
     JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
     return root.path("data").path("token").asText();
   }

@@ -33,6 +33,12 @@ const router = createRouter({
       children: [{ path: '', name: 'Register', component: () => import('@/views/auth/Register.vue') }],
     },
     {
+      path: '/forgot-password',
+      component: () => import('@/layouts/AuthLayout.vue'),
+      meta: { public: true, title: '找回密码' },
+      children: [{ path: '', name: 'ForgotPassword', component: () => import('@/views/auth/ForgotPassword.vue') }],
+    },
+    {
       path: '/',
       component: () => import('@/layouts/MainLayout.vue'),
       meta: { requiresAuth: true },

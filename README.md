@@ -182,6 +182,18 @@ $env:JWT_SECRET="dev-secret-change-me"
 mvn spring-boot:run
 ```
 
+注册页默认启用短信验证码（`app.sms.mode=mock`：本地不发真短信，接口返回 `debugCode`）。真发短信走**阿里云号码认证 → 短信认证**（个人可免企业资质，使用控制台赠送签名/模板）：
+
+```powershell
+$env:APP_SMS_MODE="pnvs"
+$env:ALIYUN_PNVS_ACCESS_KEY_ID="<AccessKeyId>"
+$env:ALIYUN_PNVS_ACCESS_KEY_SECRET="<AccessKeySecret>"
+$env:ALIYUN_PNVS_SIGN_NAME="恒创联众"          # 控制台赠送签名，以你账号为准
+$env:ALIYUN_PNVS_TEMPLATE_CODE="100001"      # 控制台赠送模板 CODE
+```
+
+在 [号码认证控制台](https://dypns.console.aliyun.com/) → 短信认证参数配置 查看赠送签名/模板；需开通短信认证并保证套餐包或账户余额充足。也可写入本地 `backend/src/main/resources/application.yml`（已 gitignore，参考 `application.example.yml`）。
+
 ### 方式三：微信小程序
 
 用微信开发者工具打开 `frontend/wechat-program/`，先执行 `npm run miniprogram:env` 生成运行配置，默认对接真实后端。无后端演示时使用 `npm run miniprogram:env:mock`。

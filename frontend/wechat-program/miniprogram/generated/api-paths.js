@@ -28,9 +28,11 @@ const authLogin = '/api/v1/auth/login'
 const authLogout = '/api/v1/auth/logout'
 const authMe = '/api/v1/auth/me'
 const authPassword = '/api/v1/auth/password'
+const authPasswordReset = '/api/v1/auth/password/reset'
 const authReauth = '/api/v1/auth/reauth'
 const authRefresh = '/api/v1/auth/refresh'
 const authRegister = '/api/v1/auth/register'
+const authSmsSend = '/api/v1/auth/sms/send'
 const dashboardOverview = '/api/v1/dashboard/overview'
 const detectionTemplates = '/api/v1/detection-templates'
 const detectionTemplatesId = '/api/v1/detection-templates/{id}'
@@ -141,9 +143,11 @@ module.exports = {
   authLogout,
   authMe,
   authPassword,
+  authPasswordReset,
   authReauth,
   authRefresh,
   authRegister,
+  authSmsSend,
   dashboardOverview,
   detectionTemplates,
   detectionTemplatesId,
@@ -249,9 +253,11 @@ module.exports = {
     authLogout: '/api/v1/auth/logout',
     authMe: '/api/v1/auth/me',
     authPassword: '/api/v1/auth/password',
+    authPasswordReset: '/api/v1/auth/password/reset',
     authReauth: '/api/v1/auth/reauth',
     authRefresh: '/api/v1/auth/refresh',
     authRegister: '/api/v1/auth/register',
+    authSmsSend: '/api/v1/auth/sms/send',
     dashboardOverview: '/api/v1/dashboard/overview',
     detectionTemplates: '/api/v1/detection-templates',
     detectionTemplatesId: '/api/v1/detection-templates/{id}',

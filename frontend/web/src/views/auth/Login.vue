@@ -20,6 +20,7 @@
       <el-form-item>
         <div class="form-row">
           <el-checkbox v-model="form.remember">记住我（7 天）</el-checkbox>
+          <router-link class="forgot-link" to="/forgot-password">找回密码</router-link>
         </div>
       </el-form-item>
       <el-form-item>
@@ -106,5 +107,15 @@ async function handleLogin() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.forgot-link {
+  color: var(--el-color-primary);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
 }
 </style>
