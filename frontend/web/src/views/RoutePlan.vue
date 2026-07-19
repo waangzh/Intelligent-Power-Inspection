@@ -172,7 +172,7 @@
             </el-table>
           </template>
         </el-card>
-        <div v-if="!draftValidation" class="empty-panel">
+        <div v-if="!currentRoute" class="empty-panel">
           <div class="empty-hint">请选择或创建巡检路线</div>
         </div>
       </el-col>

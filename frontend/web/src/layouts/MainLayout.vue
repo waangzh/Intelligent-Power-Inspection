@@ -15,7 +15,13 @@
             :collapse-transition="false"
             class="sidebar-menu"
           >
-            <el-menu-item v-for="item in group.items" :key="item.path" :index="item.path">
+            <el-menu-item
+              v-for="item in group.items"
+              :key="item.path"
+              :index="item.path"
+              @mouseenter="preloadRouteView(item.path)"
+              @focusin="preloadRouteView(item.path)"
+            >
               <el-icon><component :is="item.icon" /></el-icon>
               <span>{{ item.label }}</span>
             </el-menu-item>
@@ -101,7 +107,13 @@
           <template v-for="group in visibleMenuGroups" :key="group.title">
             <div class="menu-group-title">{{ group.title }}</div>
             <el-menu :default-active="route.path" router class="sidebar-menu" @select="mobileNavVisible = false">
-              <el-menu-item v-for="item in group.items" :key="item.path" :index="item.path">
+              <el-menu-item
+                v-for="item in group.items"
+                :key="item.path"
+                :index="item.path"
+                @mouseenter="preloadRouteView(item.path)"
+                @focusin="preloadRouteView(item.path)"
+              >
                 <el-icon><component :is="item.icon" /></el-icon>
                 <span>{{ item.label }}</span>
               </el-menu-item>
@@ -133,6 +145,7 @@ const authStore = useAuthStore()
 const isSidebarCollapsed = ref(false)
 const isMobile = ref(window.innerWidth < 900)
 const mobileNavVisible = ref(false)
+const preloadedRoutePaths = new Set<string>()
 
 const roleLabel = computed(() => (authStore.user ? ROLE_LABELS[authStore.user.role] : ''))
 
@@ -166,6 +179,17 @@ function toggleNavigation() {
     return
   }
   isSidebarCollapsed.value = !isSidebarCollapsed.value
+}
+
+function preloadRouteView(path: string) {
+  if (preloadedRoutePaths.has(path)) return
+  const component = router.resolve(path).matched.at(-1)?.components?.default
+  if (typeof component !== 'function') return
+
+  preloadedRoutePaths.add(path)
+  void (component as () => Promise<unknown>)().catch(() => {
+    preloadedRoutePaths.delete(path)
+  })
 }
 
 onMounted(() => window.addEventListener('resize', syncViewport))

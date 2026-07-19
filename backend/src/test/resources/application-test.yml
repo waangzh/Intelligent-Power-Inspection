@@ -11,6 +11,8 @@ spring:
     enabled: true
 
 app:
+  scheduling:
+    enabled: false
   jwt:
     secret: test-secret-for-power-inspection
     access-ttl-seconds: 3600
