@@ -47,11 +47,14 @@ public class TaskExecutionService {
   }
 
   public void requireDeletable(String taskId) {
-    repository.findById(taskId).ifPresent(execution -> {
-      if (!TaskExecutionStatus.CREATED.name().equals(execution.getStatus())
-          && !TaskExecutionStatus.TERMINAL.contains(execution.getStatus())) {
-        throw ApiException.badRequest("任务执行中不能删除");
-      }
-    });
+    repository
+        .findById(taskId)
+        .ifPresent(
+            execution -> {
+              if (!TaskExecutionStatus.CREATED.name().equals(execution.getStatus())
+                  && !TaskExecutionStatus.TERMINAL.contains(execution.getStatus())) {
+                throw ApiException.badRequest("任务执行中不能删除");
+              }
+            });
   }
 }

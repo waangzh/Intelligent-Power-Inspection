@@ -19,11 +19,16 @@ public class RobotHeartbeatService {
 
   private final RobotHeartbeatStatusRepository repository;
   private final DataStoreService dataStore;
+  private final RobotProperties properties;
   private final Duration timeout;
 
-  public RobotHeartbeatService(RobotHeartbeatStatusRepository repository, DataStoreService dataStore, RobotProperties properties) {
+  public RobotHeartbeatService(
+      RobotHeartbeatStatusRepository repository,
+      DataStoreService dataStore,
+      RobotProperties properties) {
     this.repository = repository;
     this.dataStore = dataStore;
+    this.properties = properties;
     this.timeout = Duration.ofSeconds(Math.max(1, properties.getHeartbeatTimeoutSeconds()));
   }
 
@@ -69,7 +74,9 @@ public class RobotHeartbeatService {
 
   @Transactional
   public void markBridgeUnreachable(Instant now) {
-    dataStore.list(DataCategory.ROBOT).forEach(identity -> markBridgeUnreachable(robotId(identity), now));
+    dataStore
+        .list(DataCategory.ROBOT)
+        .forEach(identity -> markBridgeUnreachable(robotId(identity), now));
   }
 
   @Transactional
@@ -112,7 +119,8 @@ public class RobotHeartbeatService {
   @Transactional
   public void refreshTimeouts(Instant now) {
     for (RobotHeartbeatStatusEntity status : repository.findAll()) {
-      if (status.getLastHeartbeatAt() == null || !RobotConnectionStatus.CONNECTED.name().equals(status.getConnectionStatus())) continue;
+      if (status.getLastHeartbeatAt() == null
+          || !RobotConnectionStatus.CONNECTED.name().equals(status.getConnectionStatus())) continue;
       if (status.getLastHeartbeatAt().plus(timeout).isAfter(now)) continue;
       status.setConnectionStatus(RobotConnectionStatus.OFFLINE.name());
       status.setOfflineReason("HEARTBEAT_TIMEOUT");
@@ -135,7 +143,8 @@ public class RobotHeartbeatService {
   }
 
   @Transactional
-  public RobotHeartbeatStatusPage list(Boolean online, String connectionStatus, String sort, String direction, int page, int size) {
+  public RobotHeartbeatStatusPage list(
+      Boolean online, String connectionStatus, String sort, String direction, int page, int size) {
     Instant now = Instant.now();
     refreshTimeouts(now);
     List<RobotHeartbeatStatusView> items = new ArrayList<>();
@@ -143,11 +152,16 @@ public class RobotHeartbeatService {
       RobotHeartbeatStatusEntity status = repository.findById(robotId(identity)).orElse(null);
       items.add(view(identity, status, now));
     }
-    items = items.stream()
-      .filter(item -> online == null || item.online() == online)
-      .filter(item -> connectionStatus == null || connectionStatus.isBlank() || item.connectionStatus().equalsIgnoreCase(connectionStatus))
-      .sorted(comparator(sort, direction))
-      .toList();
+    items =
+        items.stream()
+            .filter(item -> online == null || item.online() == online)
+            .filter(
+                item ->
+                    connectionStatus == null
+                        || connectionStatus.isBlank()
+                        || item.connectionStatus().equalsIgnoreCase(connectionStatus))
+            .sorted(comparator(sort, direction))
+            .toList();
     int safeSize = Math.min(100, Math.max(1, size));
     int safePage = Math.max(0, page);
     int from = Math.min(items.size(), safePage * safeSize);
@@ -173,8 +187,13 @@ public class RobotHeartbeatService {
     syncInventoryPresence(robotId, false);
   }
 
-  /** Keep inventory status aligned with heartbeat presence so dashboards do not trust seed ONLINE. */
+  /**
+   * Keep inventory status aligned with heartbeat presence in bridge mode only. Simulation keeps
+   * seed/task-driven ONLINE so dispatch demos and tests still work; dashboards should use heartbeat
+   * counts instead of inventory status.
+   */
   private void syncInventoryPresence(String robotId, boolean online) {
+    if (!properties.isBridgeMode()) return;
     Map<String, Object> robot = dataStore.find(DataCategory.ROBOT, robotId);
     if (robot == null) return;
     String current = text(robot.get("status"));
@@ -193,20 +212,23 @@ public class RobotHeartbeatService {
 
   private boolean isOnline(RobotHeartbeatStatusEntity status, Instant now) {
     return RobotConnectionStatus.CONNECTED.name().equals(status.getConnectionStatus())
-      && status.getLastHeartbeatAt() != null
-      && status.getLastHeartbeatAt().plus(timeout).isAfter(now);
+        && status.getLastHeartbeatAt() != null
+        && status.getLastHeartbeatAt().plus(timeout).isAfter(now);
   }
 
   private RobotHeartbeatStatusEntity status(String robotId, Instant now) {
-    return repository.findById(robotId).orElseGet(() -> {
-      RobotHeartbeatStatusEntity item = new RobotHeartbeatStatusEntity();
-      item.setRobotId(robotId);
-      item.setConnectionStatus(RobotConnectionStatus.UNKNOWN.name());
-      item.setOfflineReason("NO_HEARTBEAT");
-      item.setSourceName(SOURCE_NAME);
-      item.setStatusUpdatedAt(now);
-      return item;
-    });
+    return repository
+        .findById(robotId)
+        .orElseGet(
+            () -> {
+              RobotHeartbeatStatusEntity item = new RobotHeartbeatStatusEntity();
+              item.setRobotId(robotId);
+              item.setConnectionStatus(RobotConnectionStatus.UNKNOWN.name());
+              item.setOfflineReason("NO_HEARTBEAT");
+              item.setSourceName(SOURCE_NAME);
+              item.setStatusUpdatedAt(now);
+              return item;
+            });
   }
 
   private Map<String, Object> requireIdentity(String robotId) {
@@ -215,27 +237,66 @@ public class RobotHeartbeatService {
     return identity;
   }
 
-  private RobotHeartbeatStatusView view(Map<String, Object> identity, RobotHeartbeatStatusEntity status, Instant now) {
+  private RobotHeartbeatStatusView view(
+      Map<String, Object> identity, RobotHeartbeatStatusEntity status, Instant now) {
     if (status == null) {
-      return new RobotHeartbeatStatusView(robotId(identity), text(identity.get("serialNo")), text(identity.get("name")),
-        RobotConnectionStatus.UNKNOWN.name(), false, null, null, null, "NO_HEARTBEAT",
-        new RobotHeartbeatStatusView.Source(SOURCE_NAME, false), null, null, null, null, 0, null);
+      return new RobotHeartbeatStatusView(
+          robotId(identity),
+          text(identity.get("serialNo")),
+          text(identity.get("name")),
+          RobotConnectionStatus.UNKNOWN.name(),
+          false,
+          null,
+          null,
+          null,
+          "NO_HEARTBEAT",
+          new RobotHeartbeatStatusView.Source(SOURCE_NAME, false),
+          null,
+          null,
+          null,
+          null,
+          0,
+          null);
     }
     boolean online = isOnline(status, now);
-    return new RobotHeartbeatStatusView(robotId(identity), text(identity.get("serialNo")), text(identity.get("name")), status.getConnectionStatus(), online,
-      status.getLastHeartbeatAt(), status.getLastOnlineAt(), status.getStatusUpdatedAt(), status.getOfflineReason(),
-      new RobotHeartbeatStatusView.Source(status.getSourceName(), Boolean.TRUE.equals(status.getBridgeConfigured())),
-      status.getProtocolVersion(), status.getBootId(), status.getSoftwareVersion(), status.getRobotState(),
-      status.getAcceptedEventSequence(), status.getDiagnosticSummary());
+    return new RobotHeartbeatStatusView(
+        robotId(identity),
+        text(identity.get("serialNo")),
+        text(identity.get("name")),
+        status.getConnectionStatus(),
+        online,
+        status.getLastHeartbeatAt(),
+        status.getLastOnlineAt(),
+        status.getStatusUpdatedAt(),
+        status.getOfflineReason(),
+        new RobotHeartbeatStatusView.Source(
+            status.getSourceName(), Boolean.TRUE.equals(status.getBridgeConfigured())),
+        status.getProtocolVersion(),
+        status.getBootId(),
+        status.getSoftwareVersion(),
+        status.getRobotState(),
+        status.getAcceptedEventSequence(),
+        status.getDiagnosticSummary());
   }
 
   private Comparator<RobotHeartbeatStatusView> comparator(String sort, String direction) {
-    Comparator<RobotHeartbeatStatusView> comparator = switch (sort == null ? "" : sort) {
-      case "robotId" -> Comparator.comparing(RobotHeartbeatStatusView::robotId, Comparator.nullsLast(String::compareTo));
-      case "displayName" -> Comparator.comparing(RobotHeartbeatStatusView::displayName, Comparator.nullsLast(String::compareTo));
-      case "statusUpdatedAt" -> Comparator.comparing(RobotHeartbeatStatusView::statusUpdatedAt, Comparator.nullsLast(Instant::compareTo));
-      default -> Comparator.comparing(RobotHeartbeatStatusView::lastHeartbeatAt, Comparator.nullsLast(Instant::compareTo));
-    };
+    Comparator<RobotHeartbeatStatusView> comparator =
+        switch (sort == null ? "" : sort) {
+          case "robotId" ->
+              Comparator.comparing(
+                  RobotHeartbeatStatusView::robotId, Comparator.nullsLast(String::compareTo));
+          case "displayName" ->
+              Comparator.comparing(
+                  RobotHeartbeatStatusView::displayName, Comparator.nullsLast(String::compareTo));
+          case "statusUpdatedAt" ->
+              Comparator.comparing(
+                  RobotHeartbeatStatusView::statusUpdatedAt,
+                  Comparator.nullsLast(Instant::compareTo));
+          default ->
+              Comparator.comparing(
+                  RobotHeartbeatStatusView::lastHeartbeatAt,
+                  Comparator.nullsLast(Instant::compareTo));
+        };
     return "asc".equalsIgnoreCase(direction) ? comparator : comparator.reversed();
   }
 
@@ -253,10 +314,19 @@ public class RobotHeartbeatService {
   private void addDiagnostic(List<String> values, String key, Object value) {
     if (value == null || !(value instanceof Number || value instanceof String)) return;
     String normalized = String.valueOf(value).replaceAll("[\\r\\n]", " ").trim();
-    if (!normalized.isBlank()) values.add(key + "=" + normalized.substring(0, Math.min(80, normalized.length())));
+    if (!normalized.isBlank())
+      values.add(key + "=" + normalized.substring(0, Math.min(80, normalized.length())));
   }
 
-  private static String robotId(Map<String, Object> identity) { return text(identity.get("id")); }
-  private static String text(Object value) { return value == null ? null : String.valueOf(value); }
-  private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value; }
+  private static String robotId(Map<String, Object> identity) {
+    return text(identity.get("id"));
+  }
+
+  private static String text(Object value) {
+    return value == null ? null : String.valueOf(value);
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
 }

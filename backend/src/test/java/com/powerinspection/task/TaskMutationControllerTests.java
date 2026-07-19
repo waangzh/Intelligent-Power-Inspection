@@ -26,21 +26,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 @ActiveProfiles("test")
-@TestPropertySource(properties = {
-  "app.robot.mode=simulation",
-  "app.robot.allow-registration=false"
-})
+@TestPropertySource(
+    properties = {"app.robot.mode=simulation", "app.robot.allow-registration=false"})
 @SpringBootTest
 @AutoConfigureMockMvc
 class TaskMutationControllerTests {
-  @Autowired
-  MockMvc mockMvc;
+  @Autowired MockMvc mockMvc;
 
-  @Autowired
-  ObjectMapper objectMapper;
+  @Autowired ObjectMapper objectMapper;
 
-  @Autowired
-  DataStoreService dataStore;
+  @Autowired DataStoreService dataStore;
 
   @Test
   void createRejectsServerManagedFields() throws Exception {
@@ -48,10 +43,13 @@ class TaskMutationControllerTests {
     String routeId = ensureRoute();
 
     try {
-      mockMvc.perform(post("/api/v1/tasks")
-          .header("Authorization", "Bearer " + token)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("""
+      mockMvc
+          .perform(
+              post("/api/v1/tasks")
+                  .header("Authorization", "Bearer " + token)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      """
             {
               "name":"绕过状态机",
               "routeId":"%s",
@@ -60,9 +58,10 @@ class TaskMutationControllerTests {
               "progress":100,
               "completedAt":"2026-01-01T00:00:00Z"
             }
-            """.formatted(routeId)))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message", containsString("服务端字段")));
+            """
+                          .formatted(routeId)))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message", containsString("服务端字段")));
     } finally {
       dataStore.delete(DataCategory.ROUTE, routeId);
     }
@@ -78,35 +77,43 @@ class TaskMutationControllerTests {
     ensureFixtures(routeId, robotId);
 
     try {
-      mockMvc.perform(post("/api/v1/tasks")
-          .header("Authorization", "Bearer " + token)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("""
+      mockMvc
+          .perform(
+              post("/api/v1/tasks")
+                  .header("Authorization", "Bearer " + token)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      """
             {
               "id":"%s",
               "name":"状态机测试",
               "routeId":"%s",
               "robotId":"%s"
             }
-            """.formatted(taskId, routeId, robotId)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("CREATED"));
+            """
+                          .formatted(taskId, routeId, robotId)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.status").value("CREATED"));
 
-      mockMvc.perform(patch("/api/v1/tasks/" + taskId)
-          .header("Authorization", "Bearer " + token)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("{\"status\":\"RUNNING\",\"progress\":100}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message", containsString("服务端字段")));
+      mockMvc
+          .perform(
+              patch("/api/v1/tasks/" + taskId)
+                  .header("Authorization", "Bearer " + token)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"status\":\"RUNNING\",\"progress\":100}"))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message", containsString("服务端字段")));
 
-      mockMvc.perform(post("/api/v1/tasks/" + taskId + "/dispatch")
-          .header("Authorization", "Bearer " + token))
-        .andExpect(status().isOk());
+      mockMvc
+          .perform(
+              post("/api/v1/tasks/" + taskId + "/dispatch")
+                  .header("Authorization", "Bearer " + token))
+          .andExpect(status().isOk());
 
-      mockMvc.perform(delete("/api/v1/tasks/" + taskId)
-          .header("Authorization", "Bearer " + token))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message", containsString("删除")));
+      mockMvc
+          .perform(delete("/api/v1/tasks/" + taskId).header("Authorization", "Bearer " + token))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message", containsString("删除")));
     } finally {
       cleanup(taskId, robotId, routeId);
     }
@@ -122,10 +129,14 @@ class TaskMutationControllerTests {
     ensureFixtures(routeId, robotId);
 
     try {
-      String created = mockMvc.perform(post("/api/v1/tasks")
-          .header("Authorization", "Bearer " + token)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("""
+      String created =
+          mockMvc
+              .perform(
+                  post("/api/v1/tasks")
+                      .header("Authorization", "Bearer " + token)
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(
+                          """
             {
               "id":"%s",
               "name":"元数据测试",
@@ -133,21 +144,24 @@ class TaskMutationControllerTests {
               "robotId":"%s",
               "note":"初始备注"
             }
-            """.formatted(taskId, routeId, robotId)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getContentAsString();
+            """
+                              .formatted(taskId, routeId, robotId)))
+              .andExpect(status().isOk())
+              .andReturn()
+              .getResponse()
+              .getContentAsString();
       long version = objectMapper.readTree(created).path("data").path("version").asLong();
 
-      mockMvc.perform(patch("/api/v1/tasks/" + taskId)
-          .header("Authorization", "Bearer " + token)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("{\"name\":\"元数据测试-更新\",\"note\":\"更新备注\",\"version\":" + version + "}"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.name").value("元数据测试-更新"))
-        .andExpect(jsonPath("$.data.note").value("更新备注"))
-        .andExpect(jsonPath("$.data.status").value("CREATED"));
+      mockMvc
+          .perform(
+              patch("/api/v1/tasks/" + taskId)
+                  .header("Authorization", "Bearer " + token)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{\"name\":\"元数据测试-更新\",\"note\":\"更新备注\",\"version\":" + version + "}"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.name").value("元数据测试-更新"))
+          .andExpect(jsonPath("$.data.note").value("更新备注"))
+          .andExpect(jsonPath("$.data.status").value("CREATED"));
     } finally {
       cleanup(taskId, robotId, routeId);
     }
@@ -163,43 +177,55 @@ class TaskMutationControllerTests {
     ensureFixtures(routeId, robotId);
 
     try {
-      mockMvc.perform(post("/api/v1/tasks")
-          .header("Authorization", "Bearer " + token)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("""
+      mockMvc
+          .perform(
+              post("/api/v1/tasks")
+                  .header("Authorization", "Bearer " + token)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      """
             {
               "id":"%s",
               "name":"首次创建",
               "routeId":"%s",
               "robotId":"%s"
             }
-            """.formatted(taskId, routeId, robotId)))
-        .andExpect(status().isOk());
+            """
+                          .formatted(taskId, routeId, robotId)))
+          .andExpect(status().isOk());
 
-      mockMvc.perform(post("/api/v1/tasks/" + taskId + "/dispatch")
-          .header("Authorization", "Bearer " + token))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("DISPATCHED"));
+      mockMvc
+          .perform(
+              post("/api/v1/tasks/" + taskId + "/dispatch")
+                  .header("Authorization", "Bearer " + token))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.status").value("DISPATCHED"));
 
-      mockMvc.perform(post("/api/v1/tasks")
-          .header("Authorization", "Bearer " + token)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("""
+      mockMvc
+          .perform(
+              post("/api/v1/tasks")
+                  .header("Authorization", "Bearer " + token)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      """
             {
               "id":"%s",
               "name":"试图覆盖",
               "routeId":"%s",
               "robotId":"%s"
             }
-            """.formatted(taskId, routeId, robotId)))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.message", containsString("不能通过创建接口覆盖")));
+            """
+                          .formatted(taskId, routeId, robotId)))
+          .andExpect(status().isConflict())
+          .andExpect(jsonPath("$.message", containsString("不能通过创建接口覆盖")));
 
-      mockMvc.perform(post("/api/v1/tasks/" + taskId + "/cancel")
-          .header("Authorization", "Bearer " + token)
-          .header("Idempotency-Key", "cancel-idov-" + suffix))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+      mockMvc
+          .perform(
+              post("/api/v1/tasks/" + taskId + "/cancel")
+                  .header("Authorization", "Bearer " + token)
+                  .header("Idempotency-Key", "cancel-idov-" + suffix))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data.status").value("CANCELLED"));
     } finally {
       cleanup(taskId, robotId, routeId);
     }
@@ -210,53 +236,71 @@ class TaskMutationControllerTests {
     String token = login("dispatcher", "Disp@123");
     String routeId = ensureRoute();
     try {
-      mockMvc.perform(post("/api/v1/tasks")
-          .header("Authorization", "Bearer " + token)
-          .contentType(MediaType.APPLICATION_JSON)
-          .content("""
+      mockMvc
+          .perform(
+              post("/api/v1/tasks")
+                  .header("Authorization", "Bearer " + token)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      """
             {
               "name":"站点伪造",
               "routeId":"%s",
               "robotId":"robot_001",
               "siteId":"site_spoof"
             }
-            """.formatted(routeId)))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.message", containsString("服务端字段")));
+            """
+                          .formatted(routeId)))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.message", containsString("服务端字段")));
     } finally {
       dataStore.delete(DataCategory.ROUTE, routeId);
     }
   }
 
   private String ensureRoute() {
-    String routeId = "route_mut_guard_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-    dataStore.upsert(DataCategory.ROUTE, map(
-      "id", routeId,
-      "siteId", "site_001",
-      "name", "状态机测试路线",
-      "path", List.of(map("lat", 30.2741, "lng", 120.1551)),
-      "checkpoints", List.of()
-    ));
+    String routeId =
+        "route_mut_guard_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+    dataStore.upsert(
+        DataCategory.ROUTE,
+        map(
+            "id",
+            routeId,
+            "siteId",
+            "site_001",
+            "name",
+            "状态机测试路线",
+            "path",
+            List.of(map("lat", 30.2741, "lng", 120.1551)),
+            "checkpoints",
+            List.of()));
     return routeId;
   }
 
   private void ensureFixtures(String routeId, String robotId) {
     if (dataStore.find(DataCategory.ROUTE, routeId) == null) {
-      dataStore.upsert(DataCategory.ROUTE, map(
-        "id", routeId,
-        "siteId", "site_001",
-        "name", "状态机测试路线",
-        "path", List.of(map("lat", 30.2741, "lng", 120.1551)),
-        "checkpoints", List.of()
-      ));
+      dataStore.upsert(
+          DataCategory.ROUTE,
+          map(
+              "id",
+              routeId,
+              "siteId",
+              "site_001",
+              "name",
+              "状态机测试路线",
+              "path",
+              List.of(map("lat", 30.2741, "lng", 120.1551)),
+              "checkpoints",
+              List.of()));
     }
     if (dataStore.find(DataCategory.ROBOT, robotId) == null) {
-      dataStore.upsert(DataCategory.ROBOT, map(
-        "id", robotId,
-        "siteId", "site_001",
-        "name", "状态机测试机器人",
-        "status", "ONLINE"
-      ));
+      dataStore.upsert(
+          DataCategory.ROBOT,
+          map(
+              "id", robotId,
+              "siteId", "site_001",
+              "name", "状态机测试机器人",
+              "status", "ONLINE"));
     }
   }
 
@@ -281,11 +325,19 @@ class TaskMutationControllerTests {
   }
 
   private String login(String username, String password) throws Exception {
-    MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"username\":\"" + username + "\",\"password\":\"" + password + "\",\"remember\":true}"))
-      .andExpect(status().isOk())
-      .andReturn();
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/login")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        "{\"username\":\""
+                            + username
+                            + "\",\"password\":\""
+                            + password
+                            + "\",\"remember\":true}"))
+            .andExpect(status().isOk())
+            .andReturn();
     JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
     return root.path("data").path("token").asText();
   }

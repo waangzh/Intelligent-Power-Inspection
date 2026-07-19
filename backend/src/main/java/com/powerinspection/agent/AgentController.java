@@ -20,7 +20,10 @@ public class AgentController {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public AgentController(AuditedAgentService agentService, PermissionService permissionService, CurrentUser currentUser) {
+  public AgentController(
+      AuditedAgentService agentService,
+      PermissionService permissionService,
+      CurrentUser currentUser) {
     this.agentService = agentService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;

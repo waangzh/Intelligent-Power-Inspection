@@ -25,8 +25,7 @@ public final class AuthDtos {
       String smsCode,
       boolean agreed) {}
 
-  public record SendSmsRequest(
-      @NotBlank(message = "请输入手机号") String phone, String purpose) {}
+  public record SendSmsRequest(@NotBlank(message = "请输入手机号") String phone, String purpose) {}
 
   public record SendSmsResponse(
       String phone,

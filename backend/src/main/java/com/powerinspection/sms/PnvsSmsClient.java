@@ -14,9 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/**
- * Aliyun Phone Number Verification Service (号码认证) SMS auth API.
- */
+/** Aliyun Phone Number Verification Service (号码认证) SMS auth API. */
 @Component
 public class PnvsSmsClient {
   private static final Logger log = LoggerFactory.getLogger(PnvsSmsClient.class);
@@ -43,20 +41,22 @@ public class PnvsSmsClient {
     try {
       Map<String, String> params = new LinkedHashMap<>();
       params.put(properties.getTemplateParamName(), "##code##");
-      params.put(properties.getTemplateMinParamName(), String.valueOf(properties.templateMinMinutes()));
+      params.put(
+          properties.getTemplateMinParamName(), String.valueOf(properties.templateMinMinutes()));
 
-      SendSmsVerifyCodeRequest request = new SendSmsVerifyCodeRequest()
-        .setPhoneNumber(phone)
-        .setSignName(properties.getSignName())
-        .setTemplateCode(resolvedTemplate)
-        .setTemplateParam(objectMapper.writeValueAsString(params))
-        .setCodeType(1L)
-        .setCodeLength((long) properties.getCodeLength())
-        .setValidTime(properties.getCodeTtlSeconds())
-        .setInterval(properties.getResendIntervalSeconds())
-        .setDuplicatePolicy(1L)
-        .setReturnVerifyCode(false)
-        .setCountryCode("86");
+      SendSmsVerifyCodeRequest request =
+          new SendSmsVerifyCodeRequest()
+              .setPhoneNumber(phone)
+              .setSignName(properties.getSignName())
+              .setTemplateCode(resolvedTemplate)
+              .setTemplateParam(objectMapper.writeValueAsString(params))
+              .setCodeType(1L)
+              .setCodeLength((long) properties.getCodeLength())
+              .setValidTime(properties.getCodeTtlSeconds())
+              .setInterval(properties.getResendIntervalSeconds())
+              .setDuplicatePolicy(1L)
+              .setReturnVerifyCode(false)
+              .setCountryCode("86");
       if (!isBlank(properties.getSchemeName())) {
         request.setSchemeName(properties.getSchemeName());
       }
@@ -80,11 +80,12 @@ public class PnvsSmsClient {
   public void checkVerifyCode(String phone, String verifyCode) {
     ensureConfigured();
     try {
-      CheckSmsVerifyCodeRequest request = new CheckSmsVerifyCodeRequest()
-        .setPhoneNumber(phone)
-        .setVerifyCode(verifyCode)
-        .setCountryCode("86")
-        .setCaseAuthPolicy(1L);
+      CheckSmsVerifyCodeRequest request =
+          new CheckSmsVerifyCodeRequest()
+              .setPhoneNumber(phone)
+              .setVerifyCode(verifyCode)
+              .setCountryCode("86")
+              .setCaseAuthPolicy(1L);
       if (!isBlank(properties.getSchemeName())) {
         request.setSchemeName(properties.getSchemeName());
       }
@@ -93,9 +94,10 @@ public class PnvsSmsClient {
       String apiCode = response.getBody() == null ? null : response.getBody().getCode();
       String message = response.getBody() == null ? null : response.getBody().getMessage();
       Boolean success = response.getBody() == null ? null : response.getBody().getSuccess();
-      String verifyResult = response.getBody() == null || response.getBody().getModel() == null
-        ? null
-        : response.getBody().getModel().getVerifyResult();
+      String verifyResult =
+          response.getBody() == null || response.getBody().getModel() == null
+              ? null
+              : response.getBody().getModel().getVerifyResult();
 
       if (!Boolean.TRUE.equals(success) && !"OK".equalsIgnoreCase(apiCode)) {
         log.warn("PNVS check API failed phone={} code={} message={}", phone, apiCode, message);
@@ -128,9 +130,10 @@ public class PnvsSmsClient {
     }
     synchronized (this) {
       if (client == null) {
-        Config config = new Config()
-          .setAccessKeyId(properties.getAccessKeyId())
-          .setAccessKeySecret(properties.getAccessKeySecret());
+        Config config =
+            new Config()
+                .setAccessKeyId(properties.getAccessKeyId())
+                .setAccessKeySecret(properties.getAccessKeySecret());
         config.endpoint = properties.getEndpoint();
         client = new Client(config);
       }
@@ -143,7 +146,8 @@ public class PnvsSmsClient {
       return message == null || message.isBlank() ? "短信发送失败，请稍后重试" : message;
     }
     return switch (code) {
-      case "BUSINESS_LIMIT_CONTROL", "FREQUENCY_FAIL", "isv.BUSINESS_LIMIT_CONTROL" -> "发送过于频繁，请稍后再试";
+      case "BUSINESS_LIMIT_CONTROL", "FREQUENCY_FAIL", "isv.BUSINESS_LIMIT_CONTROL" ->
+          "发送过于频繁，请稍后再试";
       case "MOBILE_NUMBER_ILLEGAL", "isv.MOBILE_NUMBER_ILLEGAL" -> "手机号格式不正确";
       case "FUNCTION_NOT_OPENED" -> "未开通号码认证短信认证功能";
       case "INVALID_PARAMETERS" -> "短信参数不正确，请检查签名与模板配置";

@@ -41,7 +41,8 @@ public class SmsVerificationService {
       if (existing.lastSentAt.plusSeconds(properties.getResendIntervalSeconds()).isAfter(now)) {
         throw ApiException.badRequest("发送过于频繁，请稍后再试");
       }
-      if (sameUtcDay(existing.dayAnchor, now) && existing.dailyCount >= properties.getDailyLimitPerPhone()) {
+      if (sameUtcDay(existing.dayAnchor, now)
+          && existing.dailyCount >= properties.getDailyLimitPerPhone()) {
         throw ApiException.badRequest("今日发送次数已达上限");
       }
     }
@@ -63,16 +64,18 @@ public class SmsVerificationService {
       dailyCount = existing.dailyCount + 1;
       dayAnchor = existing.dayAnchor;
     }
-    challenges.put(key, new Challenge(
-      codeHash,
-      now.plusSeconds(properties.getCodeTtlSeconds()),
-      now,
-      dayAnchor,
-      dailyCount,
-      false
-    ));
+    challenges.put(
+        key,
+        new Challenge(
+            codeHash,
+            now.plusSeconds(properties.getCodeTtlSeconds()),
+            now,
+            dayAnchor,
+            dailyCount,
+            false));
 
-    return new SendResult(phone, properties.getResendIntervalSeconds(), properties.getCodeTtlSeconds(), debugCode);
+    return new SendResult(
+        phone, properties.getResendIntervalSeconds(), properties.getCodeTtlSeconds(), debugCode);
   }
 
   public void consumeCode(String rawPhone, SmsPurpose purpose, String rawCode) {
@@ -102,14 +105,15 @@ public class SmsVerificationService {
       pnvsSmsClient.checkVerifyCode(phone, code);
     }
 
-    challenges.put(key, new Challenge(
-      challenge.codeHash,
-      challenge.expiresAt,
-      challenge.lastSentAt,
-      challenge.dayAnchor,
-      challenge.dailyCount,
-      true
-    ));
+    challenges.put(
+        key,
+        new Challenge(
+            challenge.codeHash,
+            challenge.expiresAt,
+            challenge.lastSentAt,
+            challenge.dayAnchor,
+            challenge.dailyCount,
+            true));
   }
 
   public static String normalizePhone(String rawPhone) {
@@ -140,20 +144,19 @@ public class SmsVerificationService {
   }
 
   private static boolean sameUtcDay(Instant a, Instant b) {
-    return a.atZone(java.time.ZoneOffset.UTC).toLocalDate()
-      .equals(b.atZone(java.time.ZoneOffset.UTC).toLocalDate());
+    return a.atZone(java.time.ZoneOffset.UTC)
+        .toLocalDate()
+        .equals(b.atZone(java.time.ZoneOffset.UTC).toLocalDate());
   }
 
-  public record SendResult(String phone, long resendIntervalSeconds, long expiresInSeconds, String debugCode) {
-  }
+  public record SendResult(
+      String phone, long resendIntervalSeconds, long expiresInSeconds, String debugCode) {}
 
   private record Challenge(
-    String codeHash,
-    Instant expiresAt,
-    Instant lastSentAt,
-    Instant dayAnchor,
-    int dailyCount,
-    boolean consumed
-  ) {
-  }
+      String codeHash,
+      Instant expiresAt,
+      Instant lastSentAt,
+      Instant dayAnchor,
+      int dailyCount,
+      boolean consumed) {}
 }

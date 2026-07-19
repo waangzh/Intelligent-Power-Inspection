@@ -20,7 +20,10 @@ public class AgentActionController {
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public AgentActionController(AuditedAgentService agentService, PermissionService permissionService, CurrentUser currentUser) {
+  public AgentActionController(
+      AuditedAgentService agentService,
+      PermissionService permissionService,
+      CurrentUser currentUser) {
     this.agentService = agentService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
@@ -33,19 +36,22 @@ public class AgentActionController {
   }
 
   @PostMapping("/{actionId}/approve")
-  public ApiResponse<AgentDtos.ActionResponse> approve(@PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
+  public ApiResponse<AgentDtos.ActionResponse> approve(
+      @PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
     permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
     return ApiResponse.ok(agentService.approveAction(actionId, request, currentUser.get()));
   }
 
   @PostMapping("/{actionId}/reject")
-  public ApiResponse<AgentDtos.ActionResponse> reject(@PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
+  public ApiResponse<AgentDtos.ActionResponse> reject(
+      @PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
     permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
     return ApiResponse.ok(agentService.rejectAction(actionId, request, currentUser.get()));
   }
 
   @PostMapping("/{actionId}/retry")
-  public ApiResponse<AgentDtos.ActionResponse> retry(@PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
+  public ApiResponse<AgentDtos.ActionResponse> retry(
+      @PathVariable String actionId, @Valid @RequestBody AgentDtos.ActionDecisionRequest request) {
     permissionService.require(currentUser.get(), Permission.AGENT_APPROVE);
     return ApiResponse.ok(agentService.retryAction(actionId, request, currentUser.get()));
   }

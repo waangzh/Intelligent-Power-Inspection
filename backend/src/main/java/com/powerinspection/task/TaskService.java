@@ -1,18 +1,18 @@
 package com.powerinspection.task;
 
+import com.powerinspection.alarm.AlarmService;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
 import com.powerinspection.common.ListQuery;
 import com.powerinspection.common.PageResult;
 import com.powerinspection.common.ResourceChangeEvent;
-import com.powerinspection.alarm.AlarmService;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.model.DetectionItems;
 import com.powerinspection.model.LocateAnythingFinding;
 import com.powerinspection.model.LocateAnythingGateway;
 import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.LocateAnythingResult;
-import com.powerinspection.model.DetectionItems;
 import com.powerinspection.model.ModelServiceException;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotInspectionImage;
@@ -24,7 +24,6 @@ import com.powerinspection.route.RouteRevisionService;
 import com.powerinspection.user.UserEntity;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,40 +35,60 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class TaskService {
-  private static final List<String> ACTIVE_STATUSES = List.of("DISPATCHED", "RUNNING", "PAUSED", "MANUAL_TAKEOVER");
-  private static final Set<String> DELETABLE_STATUSES = Set.of("CREATED", "COMPLETED", "CANCELLED", "ESTOPPED");
-  private static final Set<String> SERVER_MANAGED_FIELDS = Set.of(
-    "status", "progress", "currentCheckpointSeq", "startedAt", "completedAt", "createdAt", "updatedAt",
-    "activeRobotKey", "executionId", "routeContentSha256", "mapImageSha256", "siteId",
-    "emergencyStopReason", "emergencyStoppedBy", "deploymentId"
-  );
-  private static final Set<String> CLIENT_CREATABLE_FIELDS = Set.of(
-    "id", "name", "routeId", "robotId", "routeRevisionId", "note"
-  );
-  private static final Set<String> REVISION_MANAGED_FIELDS = Set.of(
-    "routeRevisionId", "routeId", "robotId", "executionId", "routeContentSha256", "mapImageSha256", "status"
-  );
-  private static final List<String> ROUTE_ALARM_TYPES = List.of("PERSON", "HELMET", "FIRE", "OBSTACLE");
-  private static final Map<String, String> SEVERITY = Map.of(
-    "PERSON", "MEDIUM",
-    "HELMET", "HIGH",
-    "OBSTACLE", "MEDIUM",
-    "FIRE", "CRITICAL",
-    "SWITCH", "HIGH",
-    "METER", "LOW",
-    "OIL_LEAK", "HIGH",
-    "FOREIGN_OBJECT", "MEDIUM"
-  );
-  private static final Map<String, String> LABELS = Map.of(
-    "PERSON", "人员检测",
-    "HELMET", "安全帽检测",
-    "OBSTACLE", "障碍物检测",
-    "FIRE", "火源/烟雾检测",
-    "SWITCH", "开关/刀闸状态",
-    "METER", "表计/指示灯",
-    "OIL_LEAK", "漏油检测",
-    "FOREIGN_OBJECT", "异物检测"
-  );
+  private static final List<String> ACTIVE_STATUSES =
+      List.of("DISPATCHED", "RUNNING", "PAUSED", "MANUAL_TAKEOVER");
+  private static final Set<String> DELETABLE_STATUSES =
+      Set.of("CREATED", "COMPLETED", "CANCELLED", "ESTOPPED");
+  private static final Set<String> SERVER_MANAGED_FIELDS =
+      Set.of(
+          "status",
+          "progress",
+          "currentCheckpointSeq",
+          "startedAt",
+          "completedAt",
+          "createdAt",
+          "updatedAt",
+          "activeRobotKey",
+          "executionId",
+          "routeContentSha256",
+          "mapImageSha256",
+          "siteId",
+          "emergencyStopReason",
+          "emergencyStoppedBy",
+          "deploymentId");
+  private static final Set<String> CLIENT_CREATABLE_FIELDS =
+      Set.of("id", "name", "routeId", "robotId", "routeRevisionId", "note");
+  private static final Set<String> REVISION_MANAGED_FIELDS =
+      Set.of(
+          "routeRevisionId",
+          "routeId",
+          "robotId",
+          "executionId",
+          "routeContentSha256",
+          "mapImageSha256",
+          "status");
+  private static final List<String> ROUTE_ALARM_TYPES =
+      List.of("PERSON", "HELMET", "FIRE", "OBSTACLE");
+  private static final Map<String, String> SEVERITY =
+      Map.of(
+          "PERSON", "MEDIUM",
+          "HELMET", "HIGH",
+          "OBSTACLE", "MEDIUM",
+          "FIRE", "CRITICAL",
+          "SWITCH", "HIGH",
+          "METER", "LOW",
+          "OIL_LEAK", "HIGH",
+          "FOREIGN_OBJECT", "MEDIUM");
+  private static final Map<String, String> LABELS =
+      Map.of(
+          "PERSON", "人员检测",
+          "HELMET", "安全帽检测",
+          "OBSTACLE", "障碍物检测",
+          "FIRE", "火源/烟雾检测",
+          "SWITCH", "开关/刀闸状态",
+          "METER", "表计/指示灯",
+          "OIL_LEAK", "漏油检测",
+          "FOREIGN_OBJECT", "异物检测");
 
   private final DataStoreService dataStore;
   private final AlarmService alarmService;
@@ -106,9 +125,14 @@ public class TaskService {
 
   public PageResult<Map<String, Object>> tasks(ListQuery query) {
     return dataStore.page(
-      DataCategory.TASK, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
-      query.getUpdatedAfter(), query.getQ(), query.filters("siteId", "routeId", "robotId", "status")
-    );
+        DataCategory.TASK,
+        query.getPage(),
+        query.getSize(),
+        query.getSort(),
+        query.getDirection(),
+        query.getUpdatedAfter(),
+        query.getQ(),
+        query.filters("siteId", "routeId", "robotId", "status"));
   }
 
   public Map<String, Object> task(String id) {
@@ -120,15 +144,22 @@ public class TaskService {
   }
 
   public List<Map<String, Object>> events(String taskId) {
-    return dataStore.list(DataCategory.EVENT).stream().filter(event -> taskId.equals(text(event.get("taskId")))).toList();
+    return dataStore.list(DataCategory.EVENT).stream()
+        .filter(event -> taskId.equals(text(event.get("taskId"))))
+        .toList();
   }
 
   public PageResult<Map<String, Object>> events(String taskId, ListQuery query) {
     query.setTaskId(taskId);
     return dataStore.page(
-      DataCategory.EVENT, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
-      query.getUpdatedAfter(), query.getQ(), query.filters("taskId", "type")
-    );
+        DataCategory.EVENT,
+        query.getPage(),
+        query.getSize(),
+        query.getSort(),
+        query.getDirection(),
+        query.getUpdatedAfter(),
+        query.getQ(),
+        query.filters("taskId", "type"));
   }
 
   public Map<String, Object> event(String eventId) {
@@ -223,7 +254,9 @@ public class TaskService {
     Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
     requireSimulationTask(task);
     String status = text(task.get("status"));
-    if ("PAUSED".equals(status) || "MANUAL_TAKEOVER".equals(status) || "DISPATCHED".equals(status)) {
+    if ("PAUSED".equals(status)
+        || "MANUAL_TAKEOVER".equals(status)
+        || "DISPATCHED".equals(status)) {
       Map<String, Object> robot = requireRobot(task);
       if ("OFFLINE".equals(text(robot.get("status")))) {
         throw ApiException.badRequest("机器人离线，无法恢复任务");
@@ -257,7 +290,9 @@ public class TaskService {
   public Map<String, Object> cancel(String id) {
     Map<String, Object> task = dataStore.get(DataCategory.TASK, id);
     requireSimulationTask(task);
-    if ("COMPLETED".equals(task.get("status")) || "CANCELLED".equals(task.get("status")) || "ESTOPPED".equals(task.get("status"))) {
+    if ("COMPLETED".equals(task.get("status"))
+        || "CANCELLED".equals(task.get("status"))
+        || "ESTOPPED".equals(task.get("status"))) {
       throw ApiException.badRequest("已结束任务不能重复取消");
     }
     Map<String, Object> robot = requireRobot(task);
@@ -284,8 +319,12 @@ public class TaskService {
     }
     Map<String, Object> robot = requireRobot(task);
     robotGateway.emergencyStopTask(robot, task);
-    String operatorName = operator == null ? "系统"
-      : (operator.getDisplayName() == null || operator.getDisplayName().isBlank() ? operator.getUsername() : operator.getDisplayName());
+    String operatorName =
+        operator == null
+            ? "系统"
+            : (operator.getDisplayName() == null || operator.getDisplayName().isBlank()
+                ? operator.getUsername()
+                : operator.getDisplayName());
     task.put("status", "ESTOPPED");
     task.put("completedAt", Instant.now().toString());
     task.put("emergencyStopReason", reason);
@@ -330,7 +369,9 @@ public class TaskService {
     RobotProgressSnapshot progress = robotGateway.advanceTask(robot, task, route);
     int nextProgress = progress.progress();
     Map<String, Object> position = progress.position();
-    updateRobot(text(task.get("robotId")), map("position", position, "status", "BUSY", "currentTaskId", taskId));
+    updateRobot(
+        text(task.get("robotId")),
+        map("position", position, "status", "BUSY", "currentTaskId", taskId));
 
     List<Map<String, Object>> checkpoints = RouteExecutorSupport.compatibleCheckpoints(route);
     int newSeq = progress.currentCheckpointSeq();
@@ -344,7 +385,12 @@ public class TaskService {
       if (inspectionImage == null) {
         addEvent(taskId, "DETECT_SKIPPED", "机器人未返回真实巡检图像，已跳过视觉检测", cpName, null);
       } else {
-        addEvent(taskId, "INSPECT", "云台调整 P" + cp.get("pan") + "° T" + cp.get("tilt") + "°，已采集真实图像", cpName, inspectionImage.url());
+        addEvent(
+            taskId,
+            "INSPECT",
+            "云台调整 P" + cp.get("pan") + "° T" + cp.get("tilt") + "°，已采集真实图像",
+            cpName,
+            inspectionImage.url());
         addEvent(taskId, "DETECT", "调用 LocateAnything 执行检查点级检测", cpName, inspectionImage.url());
         detectCheckpoint(task, route, cp, inspectionImage);
       }
@@ -374,26 +420,44 @@ public class TaskService {
 
     Map<String, Object> robot = dataStore.find(DataCategory.ROBOT, text(task.get("robotId")));
     Map<String, Object> site = dataStore.find(DataCategory.SITE, text(route.get("siteId")));
-    long alarmCount = dataStore.list(DataCategory.ALARM).stream().filter(alarm -> taskId.equals(text(alarm.get("taskId")))).count();
+    long alarmCount =
+        dataStore.list(DataCategory.ALARM).stream()
+            .filter(alarm -> taskId.equals(text(alarm.get("taskId"))))
+            .count();
     String routeName = text(route.getOrDefault("name", "-"));
     String robotName = robot == null ? "-" : text(robot.getOrDefault("name", "-"));
     String siteName = site == null ? "未知站点" : text(site.getOrDefault("name", "未知站点"));
-    dataStore.upsert(DataCategory.RECORD, map(
-      "id", Ids.next("record"),
-      "taskId", taskId,
-      "siteId", text(route.get("siteId")),
-      "routeId", text(route.get("id")),
-      "robotId", text(task.get("robotId")),
-      "taskName", text(task.get("name")),
-      "routeName", routeName,
-      "robotName", robotName,
-      "alarmCount", alarmCount,
-      "checkpointCount", checkpointCount,
-      "duration", "1 分钟",
-      "summary", "完成 " + siteName + " 巡检，共 " + checkpointCount + " 个检查点，触发 " + alarmCount + " 条告警",
-      "completedAt", now,
-      "createdAt", now
-    ));
+    dataStore.upsert(
+        DataCategory.RECORD,
+        map(
+            "id",
+            Ids.next("record"),
+            "taskId",
+            taskId,
+            "siteId",
+            text(route.get("siteId")),
+            "routeId",
+            text(route.get("id")),
+            "robotId",
+            text(task.get("robotId")),
+            "taskName",
+            text(task.get("name")),
+            "routeName",
+            routeName,
+            "robotName",
+            robotName,
+            "alarmCount",
+            alarmCount,
+            "checkpointCount",
+            checkpointCount,
+            "duration",
+            "1 分钟",
+            "summary",
+            "完成 " + siteName + " 巡检，共 " + checkpointCount + " 个检查点，触发 " + alarmCount + " 条告警",
+            "completedAt",
+            now,
+            "createdAt",
+            now));
   }
 
   private Map<String, Object> saveTask(Map<String, Object> task) {
@@ -416,8 +480,20 @@ public class TaskService {
     publishChange("robot", robotId, "/topic/robots/" + robotId, "/topic/robots");
   }
 
-  private void addEvent(String taskId, String type, String message, String checkpointName, String imageUrl) {
-    Map<String, Object> event = map("id", Ids.next("evt"), "taskId", taskId, "type", type, "message", message, "createdAt", Instant.now().toString());
+  private void addEvent(
+      String taskId, String type, String message, String checkpointName, String imageUrl) {
+    Map<String, Object> event =
+        map(
+            "id",
+            Ids.next("evt"),
+            "taskId",
+            taskId,
+            "type",
+            type,
+            "message",
+            message,
+            "createdAt",
+            Instant.now().toString());
     if (checkpointName != null) {
       event.put("checkpointName", checkpointName);
     }
@@ -430,44 +506,121 @@ public class TaskService {
 
   private void maybeRouteAlarm(Map<String, Object> task, Map<String, Object> route) {
     String type = ROUTE_ALARM_TYPES.get(random.nextInt(ROUTE_ALARM_TYPES.size()));
-    String message = switch (type) {
-      case "PERSON" -> "路线行进中检测到未授权人员";
-      case "HELMET" -> "检测到作业人员未佩戴安全帽";
-      case "OBSTACLE" -> "前方检测到障碍物，机器人已减速避障";
-      default -> "路线视野内检测到疑似火源/烟雾";
-    };
-    createAlarm(text(task.get("id")), text(route.get("name")), null, type, message, "https://picsum.photos/seed/" + System.currentTimeMillis() + "/400/240");
+    String message =
+        switch (type) {
+          case "PERSON" -> "路线行进中检测到未授权人员";
+          case "HELMET" -> "检测到作业人员未佩戴安全帽";
+          case "OBSTACLE" -> "前方检测到障碍物，机器人已减速避障";
+          default -> "路线视野内检测到疑似火源/烟雾";
+        };
+    createAlarm(
+        text(task.get("id")),
+        text(route.get("name")),
+        null,
+        type,
+        message,
+        "https://picsum.photos/seed/" + System.currentTimeMillis() + "/400/240");
   }
 
-  private void detectCheckpoint(Map<String, Object> task, Map<String, Object> route, Map<String, Object> cp, RobotInspectionImage image) {
+  private void detectCheckpoint(
+      Map<String, Object> task,
+      Map<String, Object> route,
+      Map<String, Object> cp,
+      RobotInspectionImage image) {
     try {
-      LocateAnythingResult result = locateAnythingGateway.detectCheckpoint(
-        new LocateAnythingRequest(task, route, cp, image.url(), image.width(), image.height(), checkpointDetections(cp))
-      );
+      LocateAnythingResult result =
+          locateAnythingGateway.detectCheckpoint(
+              new LocateAnythingRequest(
+                  task,
+                  route,
+                  cp,
+                  image.url(),
+                  image.width(),
+                  image.height(),
+                  checkpointDetections(cp)));
       for (String warning : result.warnings()) {
-        addEvent(text(task.get("id")), "DETECT_WARNING", "LocateAnything 警告：" + warning, text(cp.get("name")), image.url());
+        addEvent(
+            text(task.get("id")),
+            "DETECT_WARNING",
+            "LocateAnything 警告：" + warning,
+            text(cp.get("name")),
+            image.url());
       }
       for (LocateAnythingFinding finding : result.findings()) {
         createCheckpointAlarm(task, route, cp, finding);
       }
     } catch (ModelServiceException ex) {
-      addEvent(text(task.get("id")), "DETECT_FAILED", "LocateAnything 检测失败：" + ex.getMessage(), text(cp.get("name")), image.url());
+      addEvent(
+          text(task.get("id")),
+          "DETECT_FAILED",
+          "LocateAnything 检测失败：" + ex.getMessage(),
+          text(cp.get("name")),
+          image.url());
     }
   }
 
-  private void createCheckpointAlarm(Map<String, Object> task, Map<String, Object> route, Map<String, Object> cp, LocateAnythingFinding finding) {
+  private void createCheckpointAlarm(
+      Map<String, Object> task,
+      Map<String, Object> route,
+      Map<String, Object> cp,
+      LocateAnythingFinding finding) {
     String type = finding.type();
     String prompt = finding.prompt();
-    String message = "检查点「" + cp.get("name") + "」" + LABELS.getOrDefault(type, type) + "异常" + (prompt == null ? "" : "（LocateAnything: " + prompt + "）");
-    createAlarm(text(task.get("id")), text(route.get("name")), text(cp.get("name")), type, message, finding.imageUrl(), findingToMap(finding));
+    String message =
+        "检查点「"
+            + cp.get("name")
+            + "」"
+            + LABELS.getOrDefault(type, type)
+            + "异常"
+            + (prompt == null ? "" : "（LocateAnything: " + prompt + "）");
+    createAlarm(
+        text(task.get("id")),
+        text(route.get("name")),
+        text(cp.get("name")),
+        type,
+        message,
+        finding.imageUrl(),
+        findingToMap(finding));
   }
 
-  private void createAlarm(String taskId, String routeName, String checkpointName, String type, String message, String imageUrl) {
+  private void createAlarm(
+      String taskId,
+      String routeName,
+      String checkpointName,
+      String type,
+      String message,
+      String imageUrl) {
     createAlarm(taskId, routeName, checkpointName, type, message, imageUrl, null);
   }
 
-  private void createAlarm(String taskId, String routeName, String checkpointName, String type, String message, String imageUrl, Map<String, Object> finding) {
-    Map<String, Object> alarm = map("id", Ids.next("alarm"), "taskId", taskId, "routeName", routeName, "type", type, "severity", SEVERITY.getOrDefault(type, "MEDIUM"), "message", message, "imageUrl", imageUrl, "acknowledged", false, "createdAt", Instant.now().toString());
+  private void createAlarm(
+      String taskId,
+      String routeName,
+      String checkpointName,
+      String type,
+      String message,
+      String imageUrl,
+      Map<String, Object> finding) {
+    Map<String, Object> alarm =
+        map(
+            "id",
+            Ids.next("alarm"),
+            "taskId",
+            taskId,
+            "routeName",
+            routeName,
+            "type",
+            type,
+            "severity",
+            SEVERITY.getOrDefault(type, "MEDIUM"),
+            "message",
+            message,
+            "imageUrl",
+            imageUrl,
+            "acknowledged",
+            false,
+            "createdAt",
+            Instant.now().toString());
     if (checkpointName != null) {
       alarm.put("checkpointName", checkpointName);
     }
@@ -486,14 +639,14 @@ public class TaskService {
   }
 
   private Map<String, Object> findingToMap(LocateAnythingFinding finding) {
-    Map<String, Object> item = map(
-      "type", finding.type(),
-      "prompt", finding.prompt(),
-      "score", finding.score(),
-      "bbox", finding.bbox(),
-      "label", finding.label(),
-      "imageUrl", finding.imageUrl()
-    );
+    Map<String, Object> item =
+        map(
+            "type", finding.type(),
+            "prompt", finding.prompt(),
+            "score", finding.score(),
+            "bbox", finding.bbox(),
+            "label", finding.label(),
+            "imageUrl", finding.imageUrl());
     if (finding.rawResult() != null) {
       item.put("rawResult", finding.rawResult());
     }
@@ -502,9 +655,9 @@ public class TaskService {
 
   public Map<String, Object> activeTask() {
     return dataStore.list(DataCategory.TASK).stream()
-      .filter(task -> ACTIVE_STATUSES.contains(text(task.get("status"))))
-      .findFirst()
-      .orElse(null);
+        .filter(task -> ACTIVE_STATUSES.contains(text(task.get("status"))))
+        .findFirst()
+        .orElse(null);
   }
 
   private void validateTaskBinding(Map<String, Object> task) {
@@ -562,7 +715,8 @@ public class TaskService {
     return payload;
   }
 
-  private Map<String, Object> sanitizeUpdatePayload(Map<String, Object> current, Map<String, Object> body) {
+  private Map<String, Object> sanitizeUpdatePayload(
+      Map<String, Object> current, Map<String, Object> body) {
     if (body == null || body.isEmpty()) {
       throw ApiException.badRequest("请提供任务更新参数");
     }
@@ -571,7 +725,11 @@ public class TaskService {
     Object version = withoutVersion.remove("version");
     rejectServerManagedFields(withoutVersion, "更新");
     if (hasRouteRevision(current)) {
-      String managedField = withoutVersion.keySet().stream().filter(REVISION_MANAGED_FIELDS::contains).findFirst().orElse(null);
+      String managedField =
+          withoutVersion.keySet().stream()
+              .filter(REVISION_MANAGED_FIELDS::contains)
+              .findFirst()
+              .orElse(null);
       if (managedField != null) {
         throw ApiException.badRequest("已绑定路线修订的任务不能通过通用更新接口修改 " + managedField);
       }
@@ -608,14 +766,17 @@ public class TaskService {
   }
 
   private static void rejectServerManagedFields(Map<String, Object> body, String action) {
-    String managedField = body.keySet().stream().filter(SERVER_MANAGED_FIELDS::contains).findFirst().orElse(null);
+    String managedField =
+        body.keySet().stream().filter(SERVER_MANAGED_FIELDS::contains).findFirst().orElse(null);
     if (managedField != null) {
       throw ApiException.badRequest(action + "任务不能指定服务端字段 " + managedField);
     }
   }
 
-  private static void rejectUnknownFields(Map<String, Object> body, Set<String> allowed, String action) {
-    String unknown = body.keySet().stream().filter(field -> !allowed.contains(field)).findFirst().orElse(null);
+  private static void rejectUnknownFields(
+      Map<String, Object> body, Set<String> allowed, String action) {
+    String unknown =
+        body.keySet().stream().filter(field -> !allowed.contains(field)).findFirst().orElse(null);
     if (unknown != null) {
       throw ApiException.badRequest(action + "任务不支持字段 " + unknown);
     }
@@ -667,9 +828,14 @@ public class TaskService {
     if (currentTaskId != null && !currentTaskId.isBlank() && !taskId.equals(currentTaskId)) {
       throw ApiException.badRequest("机器人已有执行中的任务");
     }
-    boolean occupied = dataStore.list(DataCategory.TASK).stream()
-      .anyMatch(task -> taskId.equals(text(task.get("id"))) ? false
-        : text(robot.get("id")).equals(text(task.get("robotId"))) && ACTIVE_STATUSES.contains(text(task.get("status"))));
+    boolean occupied =
+        dataStore.list(DataCategory.TASK).stream()
+            .anyMatch(
+                task ->
+                    taskId.equals(text(task.get("id")))
+                        ? false
+                        : text(robot.get("id")).equals(text(task.get("robotId")))
+                            && ACTIVE_STATUSES.contains(text(task.get("status"))));
     if (occupied) {
       throw ApiException.badRequest("机器人已有执行中的任务");
     }
@@ -717,7 +883,8 @@ public class TaskService {
     }
   }
 
-  private void publishChange(String resource, Object resourceId, String detailTopic, String collectionTopic) {
+  private void publishChange(
+      String resource, Object resourceId, String detailTopic, String collectionTopic) {
     ResourceChangeEvent event = ResourceChangeEvent.updated(resource, resourceId);
     messagingTemplate.convertAndSend(detailTopic, event);
     messagingTemplate.convertAndSend(collectionTopic, event);

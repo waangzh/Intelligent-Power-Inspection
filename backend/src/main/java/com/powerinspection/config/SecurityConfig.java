@@ -22,43 +22,64 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableWebSecurity
 public class SecurityConfig {
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter,
-      RobotBridgeIdMapper robotBridgeIdMapper) throws Exception {
-    return http
-      .csrf(csrf -> csrf.disable())
-      .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
-      .cors(cors -> {})
-      .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-      .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
-        boolean bridgeRequest = robotBridgeIdMapper.isBridgePlatformRequest(request.getHeader("Authorization"));
-        response.setStatus(bridgeRequest ? HttpStatus.FORBIDDEN.value() : HttpStatus.UNAUTHORIZED.value());
-      }))
-      .authorizeHttpRequests(auth -> auth
-        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-        .requestMatchers(
-          "/api/v1/health",
-          "/api/v1/auth/login",
-          "/api/v1/auth/register",
-          "/api/v1/auth/sms/send",
-          "/api/v1/auth/password/reset",
-          "/api/v1/auth/refresh",
-          "/ws/**",
-          "/model-files/**",
-          "/v3/api-docs",
-          "/v3/api-docs/**",
-          "/swagger-ui.html",
-          "/swagger-ui/**"
-        ).permitAll()
-        .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-map-assets").permitAll()
-        .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-inspection-images").permitAll()
-        .requestMatchers("/h2-console/**").permitAll()
-        .requestMatchers(HttpMethod.GET,
-          "/api/v1/route-deployments/*", "/api/v1/route-revisions/*",
-          "/api/v1/map-assets/*", "/api/v1/map-assets/*/yaml", "/api/v1/map-assets/*/pgm").permitAll()
-        .anyRequest().authenticated()
-      )
-      .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-      .build();
+  SecurityFilterChain securityFilterChain(
+      HttpSecurity http,
+      JwtAuthenticationFilter jwtAuthenticationFilter,
+      RobotBridgeIdMapper robotBridgeIdMapper)
+      throws Exception {
+    return http.csrf(csrf -> csrf.disable())
+        .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()))
+        .cors(cors -> {})
+        .sessionManagement(
+            session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .exceptionHandling(
+            exceptions ->
+                exceptions.authenticationEntryPoint(
+                    (request, response, exception) -> {
+                      boolean bridgeRequest =
+                          robotBridgeIdMapper.isBridgePlatformRequest(
+                              request.getHeader("Authorization"));
+                      response.setStatus(
+                          bridgeRequest
+                              ? HttpStatus.FORBIDDEN.value()
+                              : HttpStatus.UNAUTHORIZED.value());
+                    }))
+        .authorizeHttpRequests(
+            auth ->
+                auth.requestMatchers(HttpMethod.OPTIONS, "/**")
+                    .permitAll()
+                    .requestMatchers(
+                        "/api/v1/health",
+                        "/api/v1/auth/login",
+                        "/api/v1/auth/register",
+                        "/api/v1/auth/sms/send",
+                        "/api/v1/auth/password/reset",
+                        "/api/v1/auth/refresh",
+                        "/ws/**",
+                        "/model-files/**",
+                        "/v3/api-docs",
+                        "/v3/api-docs/**",
+                        "/swagger-ui.html",
+                        "/swagger-ui/**")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-map-assets")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-inspection-images")
+                    .permitAll()
+                    .requestMatchers("/h2-console/**")
+                    .permitAll()
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/v1/route-deployments/*",
+                        "/api/v1/route-revisions/*",
+                        "/api/v1/map-assets/*",
+                        "/api/v1/map-assets/*/yaml",
+                        "/api/v1/map-assets/*/pgm")
+                    .permitAll()
+                    .anyRequest()
+                    .authenticated())
+        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+        .build();
   }
 
   @Bean

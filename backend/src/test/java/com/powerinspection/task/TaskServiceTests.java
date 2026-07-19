@@ -40,13 +40,22 @@ class TaskServiceTests {
   void setUp() {
     RobotProperties properties = new RobotProperties();
     properties.setMode("bridge");
-    service = new TaskService(dataStore, alarmService, messagingTemplate, robotGateway, locateAnythingGateway,
-      routeRevisionService, taskExecutionService, properties);
+    service =
+        new TaskService(
+            dataStore,
+            alarmService,
+            messagingTemplate,
+            robotGateway,
+            locateAnythingGateway,
+            routeRevisionService,
+            taskExecutionService,
+            properties);
   }
 
   @Test
   void bridgeModeRejectsTaskWithoutRouteRevision() {
-    Map<String, Object> body = new HashMap<>(Map.of("name", "巡检", "routeId", "route-1", "robotId", "robot-1"));
+    Map<String, Object> body =
+        new HashMap<>(Map.of("name", "巡检", "routeId", "route-1", "robotId", "robot-1"));
 
     ApiException error = assertThrows(ApiException.class, () -> service.createTask(body));
 
@@ -56,17 +65,34 @@ class TaskServiceTests {
   @Test
   void validRevisionCreatesTaskAndImmutableExecutionBinding() {
     RouteRevisionEntity revision = new RouteRevisionEntity();
-    revision.setId("rev-1"); revision.setRouteId("route-1");
-    revision.setContentSha256("a".repeat(64)); revision.setMapImageSha256("b".repeat(64));
+    revision.setId("rev-1");
+    revision.setRouteId("route-1");
+    revision.setContentSha256("a".repeat(64));
+    revision.setMapImageSha256("b".repeat(64));
     TaskExecutionEntity execution = new TaskExecutionEntity();
-    execution.setExecutionId("exec-1"); execution.setRouteContentSha256("a".repeat(64)); execution.setMapImageSha256("b".repeat(64));
+    execution.setExecutionId("exec-1");
+    execution.setRouteContentSha256("a".repeat(64));
+    execution.setMapImageSha256("b".repeat(64));
     when(routeRevisionService.require("rev-1")).thenReturn(revision);
-    when(dataStore.find(DataCategory.ROUTE, "route-1")).thenReturn(Map.of("id", "route-1", "siteId", "site-1"));
-    when(dataStore.find(DataCategory.ROBOT, "robot-1")).thenReturn(Map.of("id", "robot-1", "siteId", "site-1"));
+    when(dataStore.find(DataCategory.ROUTE, "route-1"))
+        .thenReturn(Map.of("id", "route-1", "siteId", "site-1"));
+    when(dataStore.find(DataCategory.ROBOT, "robot-1"))
+        .thenReturn(Map.of("id", "robot-1", "siteId", "site-1"));
     when(taskExecutionService.bind(any(), any())).thenReturn(execution);
     when(dataStore.upsert(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
-    Map<String, Object> body = new HashMap<>(Map.of(
-      "id", "task-1", "name", "巡检", "routeId", "route-1", "routeRevisionId", "rev-1", "robotId", "robot-1"));
+    Map<String, Object> body =
+        new HashMap<>(
+            Map.of(
+                "id",
+                "task-1",
+                "name",
+                "巡检",
+                "routeId",
+                "route-1",
+                "routeRevisionId",
+                "rev-1",
+                "robotId",
+                "robot-1"));
 
     Map<String, Object> saved = service.createTask(body);
 

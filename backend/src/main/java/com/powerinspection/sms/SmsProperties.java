@@ -5,22 +5,28 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.sms")
 public class SmsProperties {
   /**
-   * off: register without SMS.
-   * mock: local codes (debugCode in response).
-   * pnvs: Aliyun 号码认证短信认证（个人可免资质，使用控制台赠送签名/模板）.
+   * off: register without SMS. mock: local codes (debugCode in response). pnvs: Aliyun
+   * 号码认证短信认证（个人可免资质，使用控制台赠送签名/模板）.
    */
   private String mode = "mock";
+
   private String accessKeyId = "";
   private String accessKeySecret = "";
+
   /** Console gift signature, e.g. 恒创联众. */
   private String signName = "";
+
   /** Console gift template for register, e.g. 100001. */
   private String templateCode = "";
+
   /** Console gift template for reset password, e.g. 100003. */
   private String resetTemplateCode = "";
+
   private String templateParamName = "code";
+
   /** Minutes variable in gift templates, usually {@code min}. */
   private String templateMinParamName = "min";
+
   private String schemeName = "";
   private String endpoint = "dypnsapi.aliyuncs.com";
   private int codeLength = 6;

@@ -21,16 +21,11 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@TestPropertySource(properties = {
-  "app.sms.mode=mock",
-  "app.sms.resend-interval-seconds=1"
-})
+@TestPropertySource(properties = {"app.sms.mode=mock", "app.sms.resend-interval-seconds=1"})
 class AuthPasswordResetTests {
-  @Autowired
-  private MockMvc mockMvc;
+  @Autowired private MockMvc mockMvc;
 
-  @Autowired
-  private ObjectMapper objectMapper;
+  @Autowired private ObjectMapper objectMapper;
 
   @Test
   void resetPasswordBySmsThenLoginWithNewPassword() throws Exception {
@@ -40,65 +35,80 @@ class AuthPasswordResetTests {
     String phone = "13900001111";
 
     String registerCode = sendSms(phone, "REGISTER");
-    mockMvc.perform(post("/api/v1/auth/register")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json(
-          "username", username,
-          "password", oldPassword,
-          "confirmPassword", oldPassword,
-          "displayName", "重置测试",
-          "phone", phone,
-          "smsCode", registerCode,
-          "agreed", true
-        )))
-      .andExpect(status().isOk());
+    mockMvc
+        .perform(
+            post("/api/v1/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    json(
+                        "username", username,
+                        "password", oldPassword,
+                        "confirmPassword", oldPassword,
+                        "displayName", "重置测试",
+                        "phone", phone,
+                        "smsCode", registerCode,
+                        "agreed", true)))
+        .andExpect(status().isOk());
 
-    mockMvc.perform(post("/api/v1/auth/login")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("username", username, "password", oldPassword, "remember", false)))
-      .andExpect(status().isOk());
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json("username", username, "password", oldPassword, "remember", false)))
+        .andExpect(status().isOk());
 
     String resetCode = sendSms(phone, "RESET_PASSWORD");
-    mockMvc.perform(post("/api/v1/auth/password/reset")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json(
-          "phone", phone,
-          "smsCode", resetCode,
-          "newPassword", newPassword,
-          "confirmPassword", newPassword
-        )))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.code").value(0));
+    mockMvc
+        .perform(
+            post("/api/v1/auth/password/reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    json(
+                        "phone", phone,
+                        "smsCode", resetCode,
+                        "newPassword", newPassword,
+                        "confirmPassword", newPassword)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.code").value(0));
 
-    mockMvc.perform(post("/api/v1/auth/login")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("username", username, "password", oldPassword, "remember", false)))
-      .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json("username", username, "password", oldPassword, "remember", false)))
+        .andExpect(status().isBadRequest());
 
-    mockMvc.perform(post("/api/v1/auth/login")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("username", username, "password", newPassword, "remember", false)))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.token").isNotEmpty());
+    mockMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json("username", username, "password", newPassword, "remember", false)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.token").isNotEmpty());
   }
 
   @Test
   void sendResetSmsRejectsUnboundPhone() throws Exception {
-    mockMvc.perform(post("/api/v1/auth/sms/send")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("phone", "13900002222", "purpose", "RESET_PASSWORD")))
-      .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post("/api/v1/auth/sms/send")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json("phone", "13900002222", "purpose", "RESET_PASSWORD")))
+        .andExpect(status().isBadRequest());
   }
 
   private String sendSms(String phone, String purpose) throws Exception {
-    String response = mockMvc.perform(post("/api/v1/auth/sms/send")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(json("phone", phone, "purpose", purpose)))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.debugCode").isNotEmpty())
-      .andReturn()
-      .getResponse()
-      .getContentAsString(StandardCharsets.UTF_8);
+    String response =
+        mockMvc
+            .perform(
+                post("/api/v1/auth/sms/send")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(json("phone", phone, "purpose", purpose)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.debugCode").isNotEmpty())
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
     JsonNode root = objectMapper.readTree(response);
     return root.path("data").path("debugCode").asText();
   }

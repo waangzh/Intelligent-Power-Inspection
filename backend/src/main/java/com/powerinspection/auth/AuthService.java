@@ -13,8 +13,8 @@ import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
 import com.powerinspection.security.TokenService;
 import com.powerinspection.sms.SmsMode;
-import com.powerinspection.sms.SmsPurpose;
 import com.powerinspection.sms.SmsProperties;
+import com.powerinspection.sms.SmsPurpose;
 import com.powerinspection.sms.SmsVerificationService;
 import com.powerinspection.user.UserActivityDto;
 import com.powerinspection.user.UserActivityEntity;
@@ -182,17 +182,16 @@ public class AuthService {
       String phone = SmsVerificationService.normalizePhone(request.phone());
       requireSingleUserByPhone(phone);
     }
-    SmsVerificationService.SendResult result = smsVerificationService.sendCode(request.phone(), purpose);
-    String message = smsProperties.resolvedMode() == SmsMode.MOCK
-      ? "验证码已生成（开发模式，见 debugCode）"
-      : "验证码已发送";
+    SmsVerificationService.SendResult result =
+        smsVerificationService.sendCode(request.phone(), purpose);
+    String message =
+        smsProperties.resolvedMode() == SmsMode.MOCK ? "验证码已生成（开发模式，见 debugCode）" : "验证码已发送";
     return new SendSmsResponse(
-      result.phone(),
-      result.resendIntervalSeconds(),
-      result.expiresInSeconds(),
-      result.debugCode(),
-      message
-    );
+        result.phone(),
+        result.resendIntervalSeconds(),
+        result.expiresInSeconds(),
+        result.debugCode(),
+        message);
   }
 
   @Transactional

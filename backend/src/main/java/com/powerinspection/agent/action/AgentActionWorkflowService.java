@@ -80,7 +80,6 @@ public class AgentActionWorkflowService {
     forbidSelfApproval(action, user);
     requireRecentAuth();
     requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.PROPOSED);
-    requireBusinessPermission(action.getType(), user);
     AgentCaseEntity agentCase = agentCase(action);
     AgentRunEntity run = run(action);
     Map<String, Object> nextPayload =
@@ -126,7 +125,6 @@ public class AgentActionWorkflowService {
     forbidSelfApproval(action, user);
     requireRecentAuth();
     requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.PROPOSED);
-    requireBusinessPermission(action.getType(), user);
     action.setStatus(AgentEnums.ActionStatus.REJECTED);
     action.setRejectedById(user.getId());
     action.setRejectedAt(Instant.now());
@@ -148,7 +146,6 @@ public class AgentActionWorkflowService {
     forbidSelfApproval(action, user);
     requireRecentAuth();
     requireVersionAndState(action, request.expectedVersion(), AgentEnums.ActionStatus.FAILED);
-    requireBusinessPermission(action.getType(), user);
     AgentCaseEntity agentCase = agentCase(action);
     AgentRunEntity run = run(action);
     ActionProposal proposal =
@@ -370,15 +367,6 @@ public class AgentActionWorkflowService {
       AgentActionEntity action, long expectedVersion, AgentEnums.ActionStatus expected) {
     if (action.getVersion() != expectedVersion || action.getStatus() != expected)
       throw ApiException.conflict("动作已被其他请求处理，请刷新后重试");
-  }
-
-  private void requireBusinessPermission(AgentEnums.ActionType type, UserEntity user) {
-    if (type == AgentEnums.ActionType.CREATE_WORK_ORDER_DRAFT)
-      permissionService.require(user, Permission.TASK_DISPATCH);
-    if (type == AgentEnums.ActionType.ACKNOWLEDGE_ALARM)
-      permissionService.require(user, Permission.ALARM_ACK);
-    if (type == AgentEnums.ActionType.REQUEST_TASK_PAUSE)
-      permissionService.require(user, Permission.TASK_CONTROL);
   }
 
   private AgentActionEntity action(String id) {
