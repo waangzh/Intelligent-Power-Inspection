@@ -33,7 +33,16 @@ export async function loadRouteData(routeName: unknown, params: Record<string, u
   if (name === 'Notifications') loaders.push(useNotificationStore().load())
   if (name === 'Sites') loaders.push(useSiteStore().loadSites())
   if (name === 'Robots') loaders.push(useSiteStore().loadSites(), useRobotStore().load())
-  if (name === 'Detection') loaders.push(useDetectionStore().load())
+  if (name === 'Detection') {
+    loaders.push(
+      useDetectionStore().load(),
+      useDetectionStore().loadImages(),
+      useDetectionStore().loadRuns(),
+      useTaskStore().loadDynamic({ size: 100 }),
+      useRouteStore().load(),
+      useRobotStore().load(undefined, { size: 100 }),
+    )
+  }
   if (name === 'Records') loaders.push(useTaskStore().loadRecords())
   if (name === 'Dashboard') realtime.push('task', 'robot', 'alarm')
   if (name === 'TaskDetail' && typeof params.id === 'string') {
@@ -43,6 +52,7 @@ export async function loadRouteData(routeName: unknown, params: Record<string, u
       useRobotStore().loadOne(task.robotId),
       useSiteStore().loadOne(route.siteId),
       useAlarmStore().load({ taskId: task.id }),
+      useDetectionStore().loadRuns({ taskId: task.id, size: 100 }),
     ])
     realtime.push('task', 'taskEvent', 'robot', 'alarm')
   }

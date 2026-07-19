@@ -41,6 +41,7 @@ public class SecurityConfig {
           "/swagger-ui/**"
         ).permitAll()
         .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-map-assets").permitAll()
+        .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-inspection-images").permitAll()
         .requestMatchers("/h2-console/**").permitAll()
         .requestMatchers(HttpMethod.GET,
           "/api/v1/route-deployments/*", "/api/v1/route-revisions/*",

@@ -23,6 +23,7 @@ flowchart LR
 
 ## 文档索引
 
+- [机器人巡检图片上传与检测策略联调](robot-inspection-image-upload-guide.md)：机器人图片上传、Bridge 转发、平台校验和检测策略人工检测闭环。
 - [Robot Platform Protocol v1](../protocol/robot-platform-v1.md)：唯一协议事实来源。
 - [机器人心跳接入与联调（P2a）](robot-heartbeat-operations.md)：身份模型、在线状态、平台只读 API 与无运动联调。
 - [后端对接](backend-robot-bridge.md)：Spring Client、状态同步、失败处理和改造清单。

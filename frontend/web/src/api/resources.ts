@@ -6,6 +6,8 @@ import type {
   Area,
   Checkpoint,
   DetectionTemplate,
+  DetectionItem,
+  DetectionRun,
   InspectionRecord,
   InspectionTask,
   TaskExecution,
@@ -15,6 +17,7 @@ import type {
   MapAssetQuery,
   MapAssetReviewInput,
   Robot,
+  RobotInspectionImage,
   Route,
   RouteRevision,
   TaskEvent,
@@ -154,6 +157,15 @@ export const resourcesApi = {
   removeDetectionTemplate: (id: string) => http.delete<void>(`/detection-templates/${id}`),
   manualLocateDetection: (form: FormData) => http.postForm<ManualDetectionResponse>(`/detections/manual`, form),
   getManualLocateDetection: (requestId: string) => http.get<ManualDetectionResponse>(`/detections/manual/${requestId}`),
+  listRobotInspectionImages: (query: ListQuery = {}) =>
+    http.get<PageResult<RobotInspectionImage>>(`/robot-inspection-images${listQueryString(query)}`),
+  importRobotInspectionImage: (form: FormData) =>
+    http.postForm<RobotInspectionImage>('/robot-inspection-images/import', form),
+  detectRobotInspectionImage: (imageId: string, detections: DetectionItem[]) =>
+    http.post<DetectionRun>('/detections/robot-image', { imageId, detections }),
+  listDetectionRuns: (query: ListQuery = {}) =>
+    http.get<PageResult<DetectionRun>>(`/detections/runs${listQueryString(query)}`),
+  getDetectionRun: (runId: string) => http.get<DetectionRun>(`/detections/runs/${encodeURIComponent(runId)}`),
 
   listNotifications: (query: ListQuery = {}) => http.get<PageResult<AppNotification>>(`/notifications${listQueryString(query)}`),
   getNotification: (id: string) => http.get<AppNotification>(`/notifications/${encodeURIComponent(id)}`),
