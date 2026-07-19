@@ -506,7 +506,7 @@ public class SeedDataInitializer implements ApplicationRunner {
   private void ensureSingleRobot() {
     String robotId = robotProperties.getRobotId();
     if (dataStore.find(DataCategory.ROBOT, robotId) != null) return;
-    robot(robotId, "电力巡检机器人", "Jetson Orin + ZLAC8015D", "YLHB-001", "site_001", "ONLINE", null, "ROS2 Humble");
+    robot(robotId, "电力巡检机器人", "Jetson Orin + ZLAC8015D", "YLHB-001", "site_001", "OFFLINE", null, "ROS2 Humble");
   }
 
   private void robot(String id, String name, String model, String serialNo, String siteId, String status, Map<String, Object> position, String firmware) {

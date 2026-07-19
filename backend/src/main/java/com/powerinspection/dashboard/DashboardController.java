@@ -4,6 +4,7 @@ import com.powerinspection.common.ApiResponse;
 import com.powerinspection.common.PageResult;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.robot.RobotHeartbeatService;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
@@ -20,11 +21,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/dashboard")
 public class DashboardController {
   private final DataStoreService dataStore;
+  private final RobotHeartbeatService robotHeartbeatService;
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
-  public DashboardController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser) {
+  public DashboardController(DataStoreService dataStore, RobotHeartbeatService robotHeartbeatService, PermissionService permissionService, CurrentUser currentUser) {
     this.dataStore = dataStore;
+    this.robotHeartbeatService = robotHeartbeatService;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
   }
@@ -36,7 +39,7 @@ public class DashboardController {
     long siteCount = count(DataCategory.SITE, Map.of());
     long routeCount = count(DataCategory.ROUTE, Map.of());
     long robotCount = count(DataCategory.ROBOT, Map.of());
-    long offlineRobots = count(DataCategory.ROBOT, Map.of("status", "OFFLINE"));
+    long onlineRobots = robotHeartbeatService.countOnline();
     long taskCount = count(DataCategory.TASK, Map.of());
     long completedTasks = count(DataCategory.TASK, Map.of("status", "COMPLETED"));
     long activeTasks = count(DataCategory.TASK, Map.of("status", "DISPATCHED,RUNNING,PAUSED,MANUAL_TAKEOVER"));
@@ -44,12 +47,12 @@ public class DashboardController {
     long acknowledgedAlarms = count(DataCategory.ALARM, Map.of("acknowledged", "true"));
     result.put("counts", Map.of(
       "sites", siteCount, "routes", routeCount, "robots", robotCount,
-      "onlineRobots", Math.max(0, robotCount - offlineRobots),
+      "onlineRobots", onlineRobots,
       "tasks", taskCount, "completedTasks", completedTasks, "activeTasks", activeTasks,
       "alarms", alarmCount, "unacknowledgedAlarms", Math.max(0, alarmCount - acknowledgedAlarms)
     ));
     result.put("rates", Map.of(
-      "robotOnline", percentage(robotCount - offlineRobots, robotCount),
+      "robotOnline", percentage(onlineRobots, robotCount),
       "taskCompletion", percentage(completedTasks, taskCount),
       "alarmHandled", alarmCount == 0 ? 100 : percentage(acknowledgedAlarms, alarmCount)
     ));

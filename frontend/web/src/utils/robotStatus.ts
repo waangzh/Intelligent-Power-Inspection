@@ -42,3 +42,10 @@ export function sensorFreshness(age?: number | null) {
 export function bridgeReachable(robot: Robot) {
   return robot.telemetry?.bridgeReachable === true && robot.telemetry?.online === true
 }
+
+/** Prefer heartbeat presence; fall back to inventory only when heartbeat is unknown. */
+export function isRobotOnline(robot: Robot, heartbeatOnline?: boolean | null) {
+  if (heartbeatOnline === true) return true
+  if (heartbeatOnline === false) return false
+  return robot.status === 'ONLINE' || robot.status === 'BUSY'
+}

@@ -14,7 +14,7 @@
         </div>
         <div class="welcome-online">
           <i />
-          {{ robotStore.robots.filter((robot) => robot.status !== 'OFFLINE').length }} / {{ robotStore.robots.length }} 机器人在线
+          {{ onlineRobotSummary }}
         </div>
         <div class="quick-actions">
           <el-button type="primary" plain size="small" @click="router.push('/tasks')">任务调度</el-button>
@@ -162,13 +162,14 @@ import { usePermission } from '@/composables/usePermission'
 import { useAlarmStore } from '@/stores/alarm'
 import { useAuthStore } from '@/stores/auth'
 import { useRobotStore } from '@/stores/robot'
+import { useRobotHeartbeatStore } from '@/stores/robotHeartbeat'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
 import { setPageRealtimeResources } from '@/stores/bootstrap'
 import type { Robot } from '@/types'
 import type { DashboardOverview } from '@/types/pagination'
-import { nav2StatusLabel, patrolStateLabel } from '@/utils/robotStatus'
+import { isRobotOnline, nav2StatusLabel, patrolStateLabel } from '@/utils/robotStatus'
 
 const router = useRouter()
 const { can } = usePermission()
@@ -177,8 +178,16 @@ const siteStore = useSiteStore()
 const routeStore = useRouteStore()
 const taskStore = useTaskStore()
 const robotStore = useRobotStore()
+const heartbeatStore = useRobotHeartbeatStore()
 const alarmStore = useAlarmStore()
 const overview = ref<DashboardOverview | null>(null)
+const onlineRobotSummary = computed(() => {
+  const total = overview.value?.counts.robots
+    ?? (heartbeatStore.loaded ? heartbeatStore.totalCount : robotStore.robots.length)
+  const online = overview.value?.counts.onlineRobots
+    ?? (heartbeatStore.loaded ? heartbeatStore.onlineCount : 0)
+  return `${online} / ${total} 机器人在线`
+})
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
 const statIcons = ['OfficeBuilding', 'MapLocation', 'Tickets', 'Bell']
 const completedTaskCount = computed(() => overview.value?.counts.completedTasks ?? 0)
@@ -294,10 +303,18 @@ const recentAlarms = computed(() => overview.value?.recentAlarms ?? [])
 const activeTasks = computed(() => overview.value?.activeTaskItems ?? [])
 
 async function loadOverview() {
-  const data = await resourcesApi.getDashboardOverview()
+  const [data] = await Promise.all([
+    resourcesApi.getDashboardOverview(),
+    heartbeatStore.refresh(),
+  ])
   overview.value = data
   siteStore.sites = data.siteItems
-  robotStore.robots = data.robotItems
+  robotStore.robots = data.robotItems.map((robot) => ({
+    ...robot,
+    status: isRobotOnline(robot, heartbeatStore.isOnline(robot.id))
+      ? (robot.status === 'BUSY' ? 'BUSY' : 'ONLINE')
+      : 'OFFLINE',
+  }))
   taskStore.tasks = data.activeTaskItems
   alarmStore.alarms = data.recentAlarms
   const routeIds = [...new Set(data.activeTaskItems.map((task) => task.routeId))]

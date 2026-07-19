@@ -47,6 +47,7 @@ public class RobotHeartbeatService {
       status.setBridgeConfigured(true);
       status.setStatusUpdatedAt(observedAt);
       repository.save(status);
+      syncInventoryPresence(snapshot.robotId(), isOnline(status, observedAt));
       return;
     }
     status.setLastHeartbeatAt(snapshot.lastHeartbeatAt());
@@ -63,6 +64,7 @@ public class RobotHeartbeatService {
     status.setDiagnosticSummary(diagnosticSummary(snapshot));
     status.setStatusUpdatedAt(observedAt);
     repository.save(status);
+    syncInventoryPresence(snapshot.robotId(), isOnline(status, observedAt));
   }
 
   @Transactional
@@ -79,6 +81,7 @@ public class RobotHeartbeatService {
     status.setSourceName(SOURCE_NAME);
     status.setStatusUpdatedAt(now);
     repository.save(status);
+    syncInventoryPresence(robotId, false);
   }
 
   @Transactional
@@ -91,6 +94,7 @@ public class RobotHeartbeatService {
     status.setBridgeConfigured(false);
     status.setStatusUpdatedAt(now);
     repository.save(status);
+    syncInventoryPresence(robotId, false);
   }
 
   @Transactional
@@ -102,6 +106,7 @@ public class RobotHeartbeatService {
     status.setBridgeConfigured(true);
     status.setStatusUpdatedAt(now);
     repository.save(status);
+    syncInventoryPresence(robotId, false);
   }
 
   @Transactional
@@ -113,7 +118,20 @@ public class RobotHeartbeatService {
       status.setOfflineReason("HEARTBEAT_TIMEOUT");
       status.setStatusUpdatedAt(now);
       repository.save(status);
+      syncInventoryPresence(status.getRobotId(), false);
     }
+  }
+
+  @Transactional
+  public long countOnline() {
+    Instant now = Instant.now();
+    refreshTimeouts(now);
+    long online = 0;
+    for (Map<String, Object> identity : dataStore.list(DataCategory.ROBOT)) {
+      RobotHeartbeatStatusEntity status = repository.findById(robotId(identity)).orElse(null);
+      if (view(identity, status, now).online()) online++;
+    }
+    return online;
   }
 
   @Transactional
@@ -152,6 +170,31 @@ public class RobotHeartbeatService {
     status.setBridgeConfigured(true);
     status.setStatusUpdatedAt(now);
     repository.save(status);
+    syncInventoryPresence(robotId, false);
+  }
+
+  /** Keep inventory status aligned with heartbeat presence so dashboards do not trust seed ONLINE. */
+  private void syncInventoryPresence(String robotId, boolean online) {
+    Map<String, Object> robot = dataStore.find(DataCategory.ROBOT, robotId);
+    if (robot == null) return;
+    String current = text(robot.get("status"));
+    if (current == null || current.isBlank()) current = "OFFLINE";
+    String next;
+    if (online) {
+      next = "BUSY".equals(current) ? "BUSY" : "ONLINE";
+    } else {
+      next = "OFFLINE";
+    }
+    if (next.equals(current)) return;
+    robot.put("status", next);
+    if (online) robot.put("lastOnlineAt", Instant.now().toString());
+    dataStore.upsert(DataCategory.ROBOT, robot);
+  }
+
+  private boolean isOnline(RobotHeartbeatStatusEntity status, Instant now) {
+    return RobotConnectionStatus.CONNECTED.name().equals(status.getConnectionStatus())
+      && status.getLastHeartbeatAt() != null
+      && status.getLastHeartbeatAt().plus(timeout).isAfter(now);
   }
 
   private RobotHeartbeatStatusEntity status(String robotId, Instant now) {
@@ -178,9 +221,7 @@ public class RobotHeartbeatService {
         RobotConnectionStatus.UNKNOWN.name(), false, null, null, null, "NO_HEARTBEAT",
         new RobotHeartbeatStatusView.Source(SOURCE_NAME, false), null, null, null, null, 0, null);
     }
-    boolean online = RobotConnectionStatus.CONNECTED.name().equals(status.getConnectionStatus())
-      && status.getLastHeartbeatAt() != null
-      && status.getLastHeartbeatAt().plus(timeout).isAfter(now);
+    boolean online = isOnline(status, now);
     return new RobotHeartbeatStatusView(robotId(identity), text(identity.get("serialNo")), text(identity.get("name")), status.getConnectionStatus(), online,
       status.getLastHeartbeatAt(), status.getLastOnlineAt(), status.getStatusUpdatedAt(), status.getOfflineReason(),
       new RobotHeartbeatStatusView.Source(status.getSourceName(), Boolean.TRUE.equals(status.getBridgeConfigured())),
