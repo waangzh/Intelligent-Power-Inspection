@@ -5,12 +5,15 @@ const { isTabPage } = require('../../../config/tab-bar')
 const { ROLE_LABELS } = require('../../../utils/constants')
 const { hasPermission } = require('../../../utils/permission')
 
+const AVATAR_MAX_SIZE = 2 * 1024 * 1024
+
 Page({
   data: {
     user: null,
     roleLabel: '',
     profileMenu: profileMenuItems,
     form: { displayName: '', phone: '', bio: '' },
+    avatarPreview: '',
     editing: false,
     createdLabel: '',
     unreadNotifications: 0,
@@ -26,6 +29,7 @@ Page({
       user,
       roleLabel: ROLE_LABELS[user.role],
       form: { displayName: user.displayName || '', phone: user.phone || '', bio: user.bio || '' },
+      avatarPreview: user.avatarUrl || '',
       createdLabel: user.createdAt ? user.createdAt.slice(0, 16).replace('T', ' ') : '',
       unreadNotifications: app.globalData.unreadNotifications,
       profileMenu: profileMenuItems.filter((item) => !item.permission || hasPermission(permissions, item.permission)),
@@ -39,10 +43,42 @@ Page({
       this.setData({
         editing: false,
         form: { displayName: user.displayName || '', phone: user.phone || '', bio: user.bio || '' },
+        avatarPreview: user.avatarUrl || '',
       })
     } else {
-      this.setData({ editing: true })
+      const user = this.data.user
+      this.setData({
+        editing: true,
+        avatarPreview: user.avatarUrl || '',
+      })
     }
+  },
+
+  chooseAvatar() {
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ['image'],
+      sizeType: ['compressed'],
+      success: (res) => {
+        const file = res.tempFiles[0]
+        if (file.size > AVATAR_MAX_SIZE) {
+          wx.showToast({ title: '图片不能超过 2MB', icon: 'none' })
+          return
+        }
+        wx.getFileSystemManager().readFile({
+          filePath: file.tempFilePath,
+          encoding: 'base64',
+          success: (r) => {
+            this.setData({ avatarPreview: `data:image/jpeg;base64,${r.data}` })
+          },
+          fail: () => wx.showToast({ title: '读取图片失败', icon: 'none' }),
+        })
+      },
+    })
+  },
+
+  resetAvatar() {
+    this.setData({ avatarPreview: '' })
   },
 
   onInput(e) {
@@ -61,10 +97,19 @@ Page({
       return
     }
     try {
-      const user = await api.updateProfile(this.data.form)
+      const payload = { ...this.data.form }
+      if (this.data.avatarPreview !== (this.data.user.avatarUrl || '')) {
+        payload.avatarUrl = this.data.avatarPreview
+      }
+      const user = await api.updateProfile(payload)
       getApp().setUser(user)
       wx.showToast({ title: '已保存' })
-      this.setData({ user, editing: false, roleLabel: ROLE_LABELS[user.role] })
+      this.setData({
+        user,
+        editing: false,
+        avatarPreview: user.avatarUrl || '',
+        roleLabel: ROLE_LABELS[user.role],
+      })
     } catch (e) {
       wx.showToast({ title: e.message || '保存失败', icon: 'none' })
     }
