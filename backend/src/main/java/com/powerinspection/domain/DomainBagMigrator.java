@@ -17,25 +17,25 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * One-time/compatibility import: copy legacy data_records payloads into formal domain tables,
- * then remove those bag rows so formal tables become the only source of truth.
+ * One-time/compatibility import: copy legacy data_records payloads into formal domain tables, then
+ * remove those bag rows so formal tables become the only source of truth.
  */
 @Component
 @Order(1)
 public class DomainBagMigrator implements ApplicationRunner {
   private static final Logger log = LoggerFactory.getLogger(DomainBagMigrator.class);
 
-  private static final List<String> CATEGORIES = List.of(
-    DataCategory.SITE,
-    DataCategory.ROUTE,
-    DataCategory.ROBOT,
-    DataCategory.TASK,
-    DataCategory.RECORD,
-    DataCategory.EVENT,
-    DataCategory.ALARM,
-    DataCategory.WORK_ORDER,
-    DataCategory.NOTIFICATION
-  );
+  private static final List<String> CATEGORIES =
+      List.of(
+          DataCategory.SITE,
+          DataCategory.ROUTE,
+          DataCategory.ROBOT,
+          DataCategory.TASK,
+          DataCategory.RECORD,
+          DataCategory.EVENT,
+          DataCategory.ALARM,
+          DataCategory.WORK_ORDER,
+          DataCategory.NOTIFICATION);
 
   private final DataRecordRepository dataRecordRepository;
   private final DomainStoreService domainStore;
@@ -65,14 +65,15 @@ public class DomainBagMigrator implements ApplicationRunner {
       }
       for (DataRecord record : records) {
         try {
-          transactionTemplate.executeWithoutResult(status -> {
-            Map<String, Object> payload = jsonStore.parseObject(record.getPayload());
-            if (payload.get("id") == null || String.valueOf(payload.get("id")).isBlank()) {
-              payload.put("id", record.getRecordId());
-            }
-            domainStore.upsert(category, payload);
-            dataRecordRepository.deleteByCategoryAndRecordId(category, record.getRecordId());
-          });
+          transactionTemplate.executeWithoutResult(
+              status -> {
+                Map<String, Object> payload = jsonStore.parseObject(record.getPayload());
+                if (payload.get("id") == null || String.valueOf(payload.get("id")).isBlank()) {
+                  payload.put("id", record.getRecordId());
+                }
+                domainStore.upsert(category, payload);
+                dataRecordRepository.deleteByCategoryAndRecordId(category, record.getRecordId());
+              });
           imported++;
           removed++;
         } catch (ApiException ex) {

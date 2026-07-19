@@ -19,17 +19,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 @SpringBootTest
 @ActiveProfiles("test")
 class DomainBagMigratorTests {
-  @Autowired
-  private DomainBagMigrator migrator;
+  @Autowired private DomainBagMigrator migrator;
 
-  @Autowired
-  private DataRecordRepository dataRecordRepository;
+  @Autowired private DataRecordRepository dataRecordRepository;
 
-  @Autowired
-  private DomainStoreService domainStore;
+  @Autowired private DomainStoreService domainStore;
 
-  @Autowired
-  private PlatformTransactionManager transactionManager;
+  @Autowired private PlatformTransactionManager transactionManager;
 
   @Test
   void preservesLegacyTaskWhenReferencedRouteIsMissing() throws Exception {
@@ -38,17 +34,21 @@ class DomainBagMigratorTests {
     String taskId = "legacy-task-" + suffix;
     String now = Instant.now().toString();
     try {
-      dataRecordRepository.save(legacyRecord(
-          DataCategory.SITE,
-          siteId,
-          "{\"id\":\"" + siteId + "\",\"name\":\"Legacy Site\"}",
-          now));
-      dataRecordRepository.save(legacyRecord(
-          DataCategory.TASK,
-          taskId,
-          "{\"id\":\"" + taskId + "\",\"name\":\"Legacy Task\","
-              + "\"routeId\":\"missing-route\",\"robotId\":\"missing-robot\"}",
-          now));
+      dataRecordRepository.save(
+          legacyRecord(
+              DataCategory.SITE,
+              siteId,
+              "{\"id\":\"" + siteId + "\",\"name\":\"Legacy Site\"}",
+              now));
+      dataRecordRepository.save(
+          legacyRecord(
+              DataCategory.TASK,
+              taskId,
+              "{\"id\":\""
+                  + taskId
+                  + "\",\"name\":\"Legacy Task\","
+                  + "\"routeId\":\"missing-route\",\"robotId\":\"missing-robot\"}",
+              now));
 
       migrator.run(new DefaultApplicationArguments());
 
@@ -57,11 +57,13 @@ class DomainBagMigratorTests {
       assertTrue(dataRecordRepository.existsByCategoryAndRecordId(DataCategory.TASK, taskId));
       assertTrue(domainStore.find(DataCategory.TASK, taskId) == null);
     } finally {
-      new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-        dataRecordRepository.deleteByCategoryAndRecordId(DataCategory.TASK, taskId);
-        dataRecordRepository.deleteByCategoryAndRecordId(DataCategory.SITE, siteId);
-        domainStore.delete(DataCategory.SITE, siteId);
-      });
+      new TransactionTemplate(transactionManager)
+          .executeWithoutResult(
+              status -> {
+                dataRecordRepository.deleteByCategoryAndRecordId(DataCategory.TASK, taskId);
+                dataRecordRepository.deleteByCategoryAndRecordId(DataCategory.SITE, siteId);
+                domainStore.delete(DataCategory.SITE, siteId);
+              });
     }
   }
 
