@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://112.124.49.152:8080/api/v1'
 const SESSION_KEY = 'pi_session'
 
 let refreshPromise: Promise<boolean> | null = null
