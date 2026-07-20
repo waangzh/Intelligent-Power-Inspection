@@ -6,5 +6,5 @@
  *   npm run miniprogram:env:mock
  */
 module.exports = {
-  baseUrl: 'http://localhost:8080/api/v1',
+  baseUrl: 'http://112.124.49.152:8080/api/v1',
 }
