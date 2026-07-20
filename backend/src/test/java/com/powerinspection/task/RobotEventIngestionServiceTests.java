@@ -65,6 +65,35 @@ class RobotEventIngestionServiceTests {
   }
 
   @Test
+  void localConfirmationWaitsUntilRouteStarted() {
+    execution.setStartMode(TaskStartMode.LOCAL_CONFIRM.name());
+
+    service.ingest("exec-1", event(1, "start_waiting_local_confirmation", Map.of()));
+    assertEquals(TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name(), execution.getStatus());
+    assertEquals("2026-07-14T00:00:00Z", execution.getRobotReadyAt());
+
+    service.ingest("exec-1", event(2, "local_start_confirmed", Map.of()));
+    assertEquals(TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name(), execution.getStatus());
+    assertEquals("2026-07-14T00:00:00Z", execution.getLocalConfirmedAt());
+
+    service.ingest("exec-1", event(3, "route_started", Map.of()));
+    assertEquals(TaskExecutionStatus.RUNNING.name(), execution.getStatus());
+    assertEquals("2026-07-14T00:00:00Z", execution.getStartedAt());
+  }
+
+  @Test
+  void routeStartedCanMoveWaitingLocalExecutionToRunningWithoutOptionalConfirmEvent() {
+    execution.setStartMode(TaskStartMode.LOCAL_CONFIRM.name());
+    execution.setStatus(TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name());
+    execution.setRobotReadyAt("2026-07-14T00:00:00Z");
+
+    service.ingest("exec-1", event(1, "route_started", Map.of()));
+
+    assertEquals(TaskExecutionStatus.RUNNING.name(), execution.getStatus());
+    assertEquals(execution.getStartedAt(), execution.getLocalConfirmedAt());
+  }
+
+  @Test
   void lateOrTerminalEventsDoNotRollBackExecution() {
     execution.setStatus(TaskExecutionStatus.COMPLETED.name());
     execution.setLastRobotSequence(5);

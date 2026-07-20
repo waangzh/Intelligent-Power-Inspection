@@ -29,14 +29,20 @@ function taskPage(items: InspectionTask[]) {
 function execution(status: TaskExecution['status'] = 'STARTING'): TaskExecution {
   return {
     taskId: 'task-1', executionId: 'exec-1', routeRevisionId: 'rev-1', robotId: 'robot-1', deploymentId: 'dep-1', executorRouteId: 'route-1',
-    routeContentSha256: 'a'.repeat(64), mapImageSha256: 'b'.repeat(64), status, currentTargetId: null, progress: 0,
+    routeContentSha256: 'a'.repeat(64), mapImageSha256: 'b'.repeat(64), status, startMode: 'REMOTE_IMMEDIATE', currentTargetId: null, progress: 0,
     lastRobotSequence: 0, lastEventAt: null, lastErrorCode: null, lastErrorMessage: null, manualReconciliationRequired: false,
     createdAt: '2026-07-14T00:00:00Z', updatedAt: '2026-07-14T00:00:00Z',
   }
 }
 
 function eligibility(eligible = true): TaskStartEligibility {
-  return { ...execution('CREATED'), eligible, ineligibleReason: eligible ? null : `部署尚未${DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT}` }
+  return {
+    ...execution('CREATED'),
+    eligible,
+    ineligibleReason: eligible ? null : `部署尚未${DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT}`,
+    supportsRemoteImmediateStart: true,
+    supportsLocalConfirmStart: true,
+  }
 }
 
 describe('任务执行轮询与启动状态', () => {
@@ -56,9 +62,9 @@ describe('任务执行轮询与启动状态', () => {
 
     await store.loadDynamic()
     await store.refreshExecution('task-1')
-    await store.startInspection('task-1')
+    await store.startInspection('task-1', 'LOCAL_CONFIRM')
 
-    expect(resourcesApi.startTask).toHaveBeenCalledWith('task-1', expect.any(String))
+    expect(resourcesApi.startTask).toHaveBeenCalledWith('task-1', 'LOCAL_CONFIRM', expect.any(String))
     expect(store.statusOf(task)).toBe('STARTING')
     store.stopExecutionPolling()
   })

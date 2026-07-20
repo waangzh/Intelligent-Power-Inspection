@@ -22,12 +22,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 真实路线执行的本地意图、资格核验和保守断联恢复。远端结果状态只能由事件摄取服务改变。 */
 @Service
 public class TaskExecutionLifecycleService {
+  private static final Logger log = LoggerFactory.getLogger(TaskExecutionLifecycleService.class);
   private final TaskExecutionRepository executions;
   private final TaskExecutionControlCommandRepository controlCommands;
   private final RouteRevisionRepository revisions;
@@ -51,10 +54,13 @@ public class TaskExecutionLifecycleService {
   }
 
   @Transactional
-  public Map<String, Object> start(String taskId, String idempotencyKey) {
+  public Map<String, Object> start(String taskId, String idempotencyKey, TaskStartMode requestedMode, String operatorId) {
+    TaskStartMode startMode = TaskStartMode.defaulted(requestedMode);
     requireKey(idempotencyKey);
     TaskExecutionEntity execution = requireExecutionForStart(taskId);
-    String fingerprint = fingerprint(taskId, execution);
+    log.info("event=task_start_requested taskId={} robotId={} executionId={} startMode={} operatorId={}",
+      taskId, execution.getRobotId(), execution.getExecutionId(), startMode, operatorId);
+    String fingerprint = fingerprint(taskId, execution, startMode);
     TaskExecutionEntity sameKey = executions.findByStartRequestId(idempotencyKey).orElse(null);
     if (sameKey != null) {
       if (!sameKey.getTaskId().equals(taskId) || !fingerprint.equals(sameKey.getStartRequestFingerprint())) {
@@ -68,13 +74,19 @@ public class TaskExecutionLifecycleService {
     if (!startable(execution)) {
       throw ApiException.conflict("当前执行不允许再次启动");
     }
-    StartContext context = requireStartContext(taskId, execution);
+    StartContext context = requireStartContext(taskId, execution, startMode);
     String now = Instant.now().toString();
     execution.setDeploymentId(context.deployment().getId());
     execution.setExecutorRouteId(context.executorRouteId());
     execution.setStartRequestId(idempotencyKey);
     execution.setStartRequestFingerprint(fingerprint);
     execution.setStartCommandId(null);
+    execution.setStartMode(startMode.name());
+    execution.setOperatorId(operatorId);
+    execution.setStartRequestedAt(now);
+    execution.setRobotReadyAt(null);
+    execution.setLocalConfirmedAt(null);
+    execution.setStartedAt(null);
     execution.setLastStartAttemptAt(null);
     execution.setStatus(TaskExecutionStatus.STARTING.name());
     execution.setLastErrorCode(null);
@@ -82,19 +94,28 @@ public class TaskExecutionLifecycleService {
     execution.setManualReconciliationRequired(false);
     execution.setUpdatedAt(now);
     executions.save(execution);
+    log.info("event=task_start_accepted taskId={} robotId={} executionId={} deploymentId={} requestId={} startMode={} operatorId={} executionStatus={}",
+      taskId, execution.getRobotId(), execution.getExecutionId(), execution.getDeploymentId(), idempotencyKey,
+      startMode, operatorId, execution.getStatus());
     return detail(execution);
   }
 
   public Map<String, Object> eligibility(String taskId) {
     TaskExecutionEntity execution = requireExecution(taskId);
     Map<String, Object> result = detail(execution);
+    Map<String, Object> robot = dataStore.get(DataCategory.ROBOT, execution.getRobotId());
+    boolean supportsRemote = supports(robot, "supportsRemoteImmediateStart", true);
+    boolean supportsLocal = supports(robot, "supportsLocalConfirmStart", false);
+    result.put("supportsRemoteImmediateStart", supportsRemote);
+    result.put("supportsLocalConfirmStart", supportsLocal);
     if (execution.isManualReconciliationRequired()) {
       result.put("eligible", false);
       result.put("ineligibleReason", "存在未核对的机器人事件，禁止再次启动；请保留审计记录并创建新的执行任务");
       return result;
     }
     try {
-      StartContext context = requireStartContext(taskId, execution);
+      StartContext context = requireStartContext(taskId, execution,
+        supportsRemote ? TaskStartMode.REMOTE_IMMEDIATE : TaskStartMode.LOCAL_CONFIRM);
       boolean eligible = startable(execution);
       result.put("eligible", eligible);
       result.put("ineligibleReason", eligible ? null : "执行已不处于 CREATED 或 START_FAILED 状态");
@@ -131,7 +152,7 @@ public class TaskExecutionLifecycleService {
     execution.setUpdatedAt(now.toString());
     executions.save(execution);
     return new StartCommand(execution.getTaskId(), execution.getExecutionId(), execution.getRobotId(), execution.getDeploymentId(),
-      execution.getExecutorRouteId(), execution.getStartRequestId());
+      execution.getExecutorRouteId(), execution.getStartRequestId(), TaskStartMode.defaulted(parseStartMode(execution.getStartMode())));
   }
 
   @Transactional
@@ -146,6 +167,39 @@ public class TaskExecutionLifecycleService {
     execution.setStartCommandId(commandId);
     execution.setUpdatedAt(now.toString());
     executions.save(execution);
+    log.info("event=robot_start_command_dispatched taskId={} robotId={} executionId={} deploymentId={} requestId={} commandId={} startMode={} executionStatus={}",
+      execution.getTaskId(), execution.getRobotId(), executionId, execution.getDeploymentId(),
+      execution.getStartRequestId(), commandId, execution.getStartMode(), execution.getStatus());
+  }
+
+  @Transactional
+  public boolean timeoutIfNeeded(String executionId, Instant now, long startCommandTimeoutSeconds,
+      long routeStartTimeoutSeconds, long localConfirmTimeoutSeconds) {
+    TaskExecutionEntity execution = requireByExecutionId(executionId);
+    String code;
+    String message;
+    if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus())) {
+      if (!expired(execution.getStartRequestedAt(), now,
+          nonBlank(execution.getStartCommandId()) ? routeStartTimeoutSeconds : startCommandTimeoutSeconds)) return false;
+      code = nonBlank(execution.getStartCommandId()) ? "ROUTE_START_TIMEOUT" : "START_COMMAND_TIMEOUT";
+      message = nonBlank(execution.getStartCommandId()) ? "等待机器人 route_started 事件超时" : "启动命令下发超时";
+      execution.setStatus(TaskExecutionStatus.START_FAILED.name());
+    } else if (TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name().equals(execution.getStatus())) {
+      if (!expired(execution.getRobotReadyAt(), now, localConfirmTimeoutSeconds)) return false;
+      code = "LOCAL_CONFIRM_TIMEOUT";
+      message = "等待机器人本地确认启动超时";
+      execution.setStatus(TaskExecutionStatus.FAILED.name());
+    } else {
+      return false;
+    }
+    execution.setLastErrorCode(code);
+    execution.setLastErrorMessage(message);
+    execution.setUpdatedAt(now.toString());
+    executions.save(execution);
+    log.warn("event=task_execution_timeout taskId={} robotId={} executionId={} deploymentId={} requestId={} startMode={} executionStatus={} errorCode={}",
+      execution.getTaskId(), execution.getRobotId(), executionId, execution.getDeploymentId(),
+      execution.getStartRequestId(), execution.getStartMode(), execution.getStatus(), code);
+    return true;
   }
 
   @Transactional
@@ -193,7 +247,7 @@ public class TaskExecutionLifecycleService {
     TaskExecutionEntity execution = requireByExecutionId(executionId);
     if (!TaskExecutionStatus.RECOVERING.name().equals(execution.getStatus())) return;
     String previous = execution.getRecoveryStatus();
-    if (!List.of(TaskExecutionStatus.STARTING.name(), TaskExecutionStatus.RUNNING.name(), TaskExecutionStatus.PAUSING.name(),
+    if (!List.of(TaskExecutionStatus.STARTING.name(), TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name(), TaskExecutionStatus.RUNNING.name(), TaskExecutionStatus.PAUSING.name(),
         TaskExecutionStatus.PAUSED.name(), TaskExecutionStatus.RESUMING.name(), TaskExecutionStatus.CANCELLING.name(),
         TaskExecutionStatus.ESTOPPING.name(), TaskExecutionStatus.TAKEOVER_PENDING.name(),
         TaskExecutionStatus.MANUAL_TAKEOVER.name()).contains(previous)) {
@@ -226,6 +280,12 @@ public class TaskExecutionLifecycleService {
     result.put("routeContentSha256", item.getRouteContentSha256());
     result.put("mapImageSha256", item.getMapImageSha256());
     result.put("status", item.getStatus());
+    result.put("startMode", TaskStartMode.defaulted(parseStartMode(item.getStartMode())).name());
+    result.put("operatorId", item.getOperatorId());
+    result.put("startRequestedAt", item.getStartRequestedAt());
+    result.put("robotReadyAt", item.getRobotReadyAt());
+    result.put("localConfirmedAt", item.getLocalConfirmedAt());
+    result.put("startedAt", item.getStartedAt());
     result.put("currentTargetId", item.getCurrentTargetId());
     result.put("progress", item.getProgress());
     result.put("lastRobotSequence", item.getLastRobotSequence());
@@ -239,7 +299,7 @@ public class TaskExecutionLifecycleService {
     return result;
   }
 
-  private StartContext requireStartContext(String taskId, TaskExecutionEntity execution) {
+  private StartContext requireStartContext(String taskId, TaskExecutionEntity execution, TaskStartMode startMode) {
     if (!robotProperties.isBridgeMode()) throw ApiException.conflict("当前环境未启用 Bridge 执行模式");
     Map<String, Object> task = dataStore.get(DataCategory.TASK, taskId);
     if (!equals(task.get("routeRevisionId"), execution.getRouteRevisionId()) || !equals(task.get("robotId"), execution.getRobotId())
@@ -256,6 +316,13 @@ public class TaskExecutionLifecycleService {
     if (!heartbeat.source().bridgeConfigured()) throw ApiException.conflict("机器人未在 Bridge 配置");
     if (!heartbeat.online() || !RobotConnectionStatus.CONNECTED.name().equals(heartbeat.connectionStatus())) {
       throw ApiException.conflict("机器人离线或 Bridge 当前不可达");
+    }
+    Map<String, Object> robot = dataStore.get(DataCategory.ROBOT, execution.getRobotId());
+    if (startMode == TaskStartMode.LOCAL_CONFIRM && !supports(robot, "supportsLocalConfirmStart", false)) {
+      throw ApiException.conflict("ROBOT_START_MODE_UNSUPPORTED：机器人不支持本地确认启动");
+    }
+    if (startMode == TaskStartMode.REMOTE_IMMEDIATE && !supports(robot, "supportsRemoteImmediateStart", true)) {
+      throw ApiException.conflict("ROBOT_START_MODE_UNSUPPORTED：机器人不支持远程立即启动");
     }
     boolean occupied = executions.findByRobotIdAndStatusIn(execution.getRobotId(), TaskExecutionStatus.ACTIVE).stream()
       .anyMatch(item -> !Objects.equals(item.getExecutionId(), execution.getExecutionId()));
@@ -349,9 +416,9 @@ public class TaskExecutionLifecycleService {
     return result;
   }
 
-  private String fingerprint(String taskId, TaskExecutionEntity execution) {
+  private String fingerprint(String taskId, TaskExecutionEntity execution, TaskStartMode startMode) {
     String content = String.join("|", taskId, execution.getExecutionId(), execution.getRobotId(), execution.getRouteRevisionId(),
-      execution.getRouteContentSha256(), execution.getMapImageSha256());
+      execution.getRouteContentSha256(), execution.getMapImageSha256(), startMode.name());
     try {
       byte[] bytes = MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8));
       StringBuilder out = new StringBuilder();
@@ -365,6 +432,10 @@ public class TaskExecutionLifecycleService {
   }
   private static boolean recent(String value, Instant now) {
     try { return Instant.parse(value).plusSeconds(2).isAfter(now); } catch (Exception ignored) { return false; }
+  }
+  private static boolean expired(String value, Instant now, long timeoutSeconds) {
+    try { return Instant.parse(value).plusSeconds(Math.max(1, timeoutSeconds)).isBefore(now); }
+    catch (Exception ignored) { return false; }
   }
   private static void startFailed(TaskExecutionEntity item, String code, String message, Instant now, boolean manual) {
     item.setStatus(TaskExecutionStatus.START_FAILED.name());
@@ -390,9 +461,16 @@ public class TaskExecutionLifecycleService {
   }
   private static String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }
   private static boolean equals(Object actual, String expected) { return Objects.equals(text(actual), expected); }
+  private static boolean supports(Map<String, Object> robot, String field, boolean defaultValue) {
+    return robot.containsKey(field) ? Boolean.TRUE.equals(robot.get(field)) : defaultValue;
+  }
+  private static TaskStartMode parseStartMode(String value) {
+    try { return TaskStartMode.valueOf(value); } catch (Exception ignored) { return TaskStartMode.REMOTE_IMMEDIATE; }
+  }
 
   private record StartContext(RouteDeploymentEntity deployment, String executorRouteId) {}
-  public record StartCommand(String taskId, String executionId, String robotId, String deploymentId, String executorRouteId, String requestId) {
+  public record StartCommand(String taskId, String executionId, String robotId, String deploymentId, String executorRouteId,
+      String requestId, TaskStartMode startMode) {
     public Map<String, Object> bridgePayload() {
       Map<String, Object> payload = new LinkedHashMap<>();
       payload.put("taskId", taskId);
@@ -401,6 +479,7 @@ public class TaskExecutionLifecycleService {
       payload.put("executionId", executionId);
       payload.put("requestId", requestId);
       payload.put("executorRouteId", executorRouteId);
+      payload.put("startMode", startMode.name());
       return payload;
     }
   }

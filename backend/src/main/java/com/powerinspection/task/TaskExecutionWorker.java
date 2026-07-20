@@ -9,8 +9,11 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -19,10 +22,17 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(prefix = "app.robot", name = "mode", havingValue = "bridge")
 public class TaskExecutionWorker {
+  private static final Logger log = LoggerFactory.getLogger(TaskExecutionWorker.class);
   private final TaskExecutionLifecycleService lifecycle;
   private final TaskExecutionControlService controls;
   private final RobotEventIngestionService ingestion;
   private final RobotBridgeExecutionClient bridge;
+  @Value("${app.task-execution.start-command-timeout-seconds:120}")
+  private long startCommandTimeoutSeconds = 120;
+  @Value("${app.task-execution.route-start-timeout-seconds:300}")
+  private long routeStartTimeoutSeconds = 300;
+  @Value("${app.task-execution.local-confirm-timeout-seconds:1800}")
+  private long localConfirmTimeoutSeconds = 1800;
 
   public TaskExecutionWorker(TaskExecutionLifecycleService lifecycle, TaskExecutionControlService controls,
       RobotEventIngestionService ingestion, RobotBridgeExecutionClient bridge) {
@@ -41,8 +51,9 @@ public class TaskExecutionWorker {
   public void runOnce() {
     for (String executionId : lifecycle.nonTerminalExecutionIds()) {
       try { synchronize(executionId); }
-      catch (RuntimeException ignored) {
-        // 单个执行异常不得阻塞其他机器人；状态已由下方的受控路径保存或等待下次对账。
+      catch (RuntimeException ex) {
+        log.warn("event=task_execution_worker_failed executionId={} errorType={} message={}",
+          executionId, ex.getClass().getSimpleName(), ex.getMessage());
       }
     }
   }
@@ -51,6 +62,8 @@ public class TaskExecutionWorker {
     TaskExecutionEntity execution = lifecycle.findByExecutionId(executionId);
     if (execution == null || TaskExecutionStatus.CREATED.name().equals(execution.getStatus())
         || execution.isManualReconciliationRequired()) return;
+    if (lifecycle.timeoutIfNeeded(executionId, Instant.now(), startCommandTimeoutSeconds,
+        routeStartTimeoutSeconds, localConfirmTimeoutSeconds)) return;
     if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus()) || controls.needsStartDelivery(executionId)) deliverStart(execution);
     execution = lifecycle.findByExecutionId(executionId);
     if (execution == null || TaskExecutionStatus.TERMINAL.contains(execution.getStatus())) return;
@@ -65,6 +78,8 @@ public class TaskExecutionWorker {
   private void deliverStart(TaskExecutionEntity execution) {
     TaskExecutionLifecycleService.StartCommand command = lifecycle.claimStartAttempt(execution.getExecutionId(), Instant.now());
     if (command == null) return;
+    log.info("event=robot_start_command_dispatching taskId={} robotId={} executionId={} deploymentId={} requestId={} startMode={}",
+      command.taskId(), command.robotId(), command.executionId(), command.deploymentId(), command.requestId(), command.startMode());
     try {
       RobotBridgeExecutionStartResult result = bridge.start(command.executionId(), command.bridgePayload());
       if (!result.accepted() || !Objects.equals(command.executionId(), result.executionId()) || !"QUEUED".equals(result.state()) || result.commandId().isBlank()) {
@@ -74,6 +89,8 @@ public class TaskExecutionWorker {
       lifecycle.accepted(command.executionId(), result.commandId(), Instant.now());
     } catch (RobotBridgeExecutionException ex) {
       if (ex.getDisposition() == RobotBridgeExecutionException.Disposition.EXPLICIT_FAILURE) {
+        log.error("event=robot_start_command_dispatch_failed robotId={} executionId={} deploymentId={} requestId={} startMode={} errorCode={}",
+          command.robotId(), command.executionId(), command.deploymentId(), command.requestId(), command.startMode(), ex.getErrorCode());
         lifecycle.startFailed(command.executionId(), ex.getErrorCode(), ex.getMessage(), Instant.now());
       } else {
         lifecycle.disconnected(command.executionId(), ex.getErrorCode(), ex.getMessage(), Instant.now());

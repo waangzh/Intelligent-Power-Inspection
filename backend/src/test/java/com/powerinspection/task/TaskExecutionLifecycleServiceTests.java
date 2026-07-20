@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.common.ApiException;
+import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.robot.RobotConnectionStatus;
 import com.powerinspection.robot.RobotHeartbeatService;
@@ -54,6 +55,7 @@ class TaskExecutionLifecycleServiceTests {
     revision = revision();
     when(executions.findById("task-1")).thenReturn(Optional.of(execution));
     when(executions.findByTaskIdForStart("task-1")).thenReturn(Optional.of(execution));
+    when(executions.findByExecutionId("exec-1")).thenReturn(Optional.of(execution));
     when(revisions.findById("rev-1")).thenReturn(Optional.of(revision));
     when(dataStore.get(any(), anyString())).thenReturn(task());
     when(heartbeats.detail("robot-1")).thenReturn(online());
@@ -65,11 +67,14 @@ class TaskExecutionLifecycleServiceTests {
     when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
       .thenReturn(List.of(deployment("a".repeat(64))));
 
-    Map<String, Object> result = service.start("task-1", "start-1");
+    Map<String, Object> result = start("start-1");
 
     assertEquals(TaskExecutionStatus.STARTING.name(), execution.getStatus());
     assertEquals("dep-1", execution.getDeploymentId());
     assertEquals("route-1", execution.getExecutorRouteId());
+    assertEquals(TaskStartMode.REMOTE_IMMEDIATE.name(), execution.getStartMode());
+    assertEquals(TaskStartMode.REMOTE_IMMEDIATE.name(),
+      service.claimStartAttempt("exec-1", Instant.now()).bridgePayload().get("startMode"));
     assertEquals("STARTING", result.get("status"));
   }
 
@@ -79,7 +84,7 @@ class TaskExecutionLifecycleServiceTests {
     when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
       .thenReturn(List.of(deployment("c".repeat(64))));
 
-    assertThrows(ApiException.class, () -> service.start("task-1", "start-1"));
+    assertThrows(ApiException.class, () -> start("start-1"));
     assertEquals(TaskExecutionStatus.CREATED.name(), execution.getStatus());
   }
 
@@ -90,7 +95,7 @@ class TaskExecutionLifecycleServiceTests {
     other.setTaskId("task-2"); other.setExecutionId("exec-2");
     when(executions.findByRobotIdAndStatusIn("robot-1", TaskExecutionStatus.ACTIVE)).thenReturn(List.of(other));
 
-    ApiException error = assertThrows(ApiException.class, () -> service.start("task-1", "start-1"));
+    ApiException error = assertThrows(ApiException.class, () -> start("start-1"));
 
     assertTrue(error.getMessage().contains("活动执行"));
     assertEquals(TaskExecutionStatus.CREATED.name(), execution.getStatus());
@@ -105,7 +110,7 @@ class TaskExecutionLifecycleServiceTests {
     when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
       .thenReturn(List.of(deployment("a".repeat(64))));
 
-    Map<String, Object> result = service.start("task-1", "retry-start");
+    Map<String, Object> result = start("retry-start");
 
     assertEquals(TaskExecutionStatus.STARTING.name(), result.get("status"));
     assertEquals("retry-start", execution.getStartRequestId());
@@ -119,7 +124,7 @@ class TaskExecutionLifecycleServiceTests {
     execution.setManualReconciliationRequired(true);
     when(executions.findByStartRequestId("retry-start")).thenReturn(Optional.empty());
 
-    ApiException error = assertThrows(ApiException.class, () -> service.start("task-1", "retry-start"));
+    ApiException error = assertThrows(ApiException.class, () -> start("retry-start"));
 
     assertTrue(error.getMessage().contains("未核对"));
     assertEquals(TaskExecutionStatus.DISCONNECTED.name(), execution.getStatus());
@@ -141,10 +146,10 @@ class TaskExecutionLifecycleServiceTests {
     when(executions.findByStartRequestId("seed")).thenReturn(Optional.empty());
     when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
       .thenReturn(List.of(deployment("a".repeat(64))));
-    service.start("task-1", "seed");
+    start("seed");
     when(executions.findByStartRequestId("seed")).thenReturn(Optional.of(execution));
 
-    Map<String, Object> result = service.start("task-1", "seed");
+    Map<String, Object> result = start("seed");
 
     assertEquals(TaskExecutionStatus.STARTING.name(), result.get("status"));
     assertEquals("seed", execution.getStartRequestId());
@@ -162,6 +167,40 @@ class TaskExecutionLifecycleServiceTests {
     service.completeRecovery("exec-1", Instant.now());
 
     assertEquals(TaskExecutionStatus.RUNNING.name(), execution.getStatus());
+  }
+
+  @Test
+  void localConfirmModeIsPersistedAndTimesOutIndependently() {
+    when(executions.findByStartRequestId("local-start")).thenReturn(Optional.empty());
+    when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
+      .thenReturn(List.of(deployment("a".repeat(64))));
+    when(dataStore.get(DataCategory.ROBOT, "robot-1")).thenReturn(Map.of(
+      "id", "robot-1", "supportsRemoteImmediateStart", true, "supportsLocalConfirmStart", true));
+
+    service.start("task-1", "local-start", TaskStartMode.LOCAL_CONFIRM, "operator-1");
+    execution.setStatus(TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name());
+    execution.setRobotReadyAt("2026-07-14T00:00:00Z");
+    boolean timedOut = service.timeoutIfNeeded("exec-1", Instant.parse("2026-07-14T00:31:00Z"), 120, 300, 1800);
+
+    assertTrue(timedOut);
+    assertEquals(TaskStartMode.LOCAL_CONFIRM.name(), execution.getStartMode());
+    assertEquals(TaskExecutionStatus.FAILED.name(), execution.getStatus());
+    assertEquals("LOCAL_CONFIRM_TIMEOUT", execution.getLastErrorCode());
+  }
+
+  @Test
+  void localConfirmModeRequiresExplicitRobotCapability() {
+    when(executions.findByStartRequestId("local-start")).thenReturn(Optional.empty());
+    when(dataStore.get(DataCategory.ROBOT, "robot-1")).thenReturn(Map.of("id", "robot-1"));
+
+    ApiException error = assertThrows(ApiException.class,
+      () -> service.start("task-1", "local-start", TaskStartMode.LOCAL_CONFIRM, "operator-1"));
+
+    assertTrue(error.getMessage().contains("ROBOT_START_MODE_UNSUPPORTED"));
+  }
+
+  private Map<String, Object> start(String key) {
+    return service.start("task-1", key, TaskStartMode.REMOTE_IMMEDIATE, "operator-1");
   }
 
   private static TaskExecutionEntity execution(String status) {

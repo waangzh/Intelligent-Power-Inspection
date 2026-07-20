@@ -32,6 +32,18 @@ public class TaskExecutionEntity {
   private String startRequestFingerprint;
   @Column(name = "start_command_id")
   private String startCommandId;
+  @Column(name = "start_mode", nullable = false)
+  private String startMode = TaskStartMode.REMOTE_IMMEDIATE.name();
+  @Column(name = "operator_id")
+  private String operatorId;
+  @Column(name = "start_requested_at")
+  private String startRequestedAt;
+  @Column(name = "robot_ready_at")
+  private String robotReadyAt;
+  @Column(name = "local_confirmed_at")
+  private String localConfirmedAt;
+  @Column(name = "started_at")
+  private String startedAt;
   @Column(name = "start_attempt_no", nullable = false)
   private int startAttemptNo;
   @Column(name = "last_start_attempt_at")
@@ -83,6 +95,18 @@ public class TaskExecutionEntity {
   public void setStartRequestFingerprint(String startRequestFingerprint) { this.startRequestFingerprint = startRequestFingerprint; }
   public String getStartCommandId() { return startCommandId; }
   public void setStartCommandId(String startCommandId) { this.startCommandId = startCommandId; }
+  public String getStartMode() { return startMode; }
+  public void setStartMode(String startMode) { this.startMode = startMode; }
+  public String getOperatorId() { return operatorId; }
+  public void setOperatorId(String operatorId) { this.operatorId = operatorId; }
+  public String getStartRequestedAt() { return startRequestedAt; }
+  public void setStartRequestedAt(String startRequestedAt) { this.startRequestedAt = startRequestedAt; }
+  public String getRobotReadyAt() { return robotReadyAt; }
+  public void setRobotReadyAt(String robotReadyAt) { this.robotReadyAt = robotReadyAt; }
+  public String getLocalConfirmedAt() { return localConfirmedAt; }
+  public void setLocalConfirmedAt(String localConfirmedAt) { this.localConfirmedAt = localConfirmedAt; }
+  public String getStartedAt() { return startedAt; }
+  public void setStartedAt(String startedAt) { this.startedAt = startedAt; }
   public int getStartAttemptNo() { return startAttemptNo; }
   public void setStartAttemptNo(int startAttemptNo) { this.startAttemptNo = startAttemptNo; }
   public String getLastStartAttemptAt() { return lastStartAttemptAt; }

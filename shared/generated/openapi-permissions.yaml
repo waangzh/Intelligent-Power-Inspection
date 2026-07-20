@@ -20,6 +20,8 @@ components:
         - task:create
         - task:dispatch
         - task:estop
+        - task:start-local
+        - task:start-remote
         - task:takeover
         - task:view
         - user:manage

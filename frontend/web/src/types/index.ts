@@ -58,6 +58,7 @@ export type TaskStatus =
   | 'CREATED'
   | 'DISPATCHED'
   | 'STARTING'
+  | 'WAITING_LOCAL_CONFIRM'
   | 'RUNNING'
   | 'PAUSING'
   | 'PAUSED'
@@ -78,6 +79,7 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   CREATED: '已创建',
   DISPATCHED: '已下发',
   STARTING: '启动中',
+  WAITING_LOCAL_CONFIRM: '等待机器人本地确认',
   RUNNING: '执行中',
   PAUSING: '暂停请求中',
   PAUSED: '已暂停',
@@ -235,6 +237,14 @@ export interface Robot {
   firmware?: string
   lastOnlineAt?: string
   telemetry?: RobotTelemetry
+  supportsRemoteImmediateStart?: boolean
+  supportsLocalConfirmStart?: boolean
+}
+
+export type TaskStartMode = 'REMOTE_IMMEDIATE' | 'LOCAL_CONFIRM'
+
+export interface StartTaskRequest {
+  startMode: TaskStartMode
 }
 
 export interface TaskEvent {
@@ -330,6 +340,12 @@ export interface TaskExecution {
   routeContentSha256: string
   mapImageSha256: string
   status: TaskStatus
+  startMode: TaskStartMode
+  operatorId?: string | null
+  startRequestedAt?: string | null
+  robotReadyAt?: string | null
+  localConfirmedAt?: string | null
+  startedAt?: string | null
   currentTargetId?: string | null
   progress: number
   lastRobotSequence: number
@@ -360,6 +376,8 @@ export interface TaskExecutionControl {
 export interface TaskStartEligibility extends TaskExecution {
   eligible: boolean
   ineligibleReason?: string | null
+  supportsRemoteImmediateStart: boolean
+  supportsLocalConfirmStart: boolean
 }
 
 export interface Alarm {

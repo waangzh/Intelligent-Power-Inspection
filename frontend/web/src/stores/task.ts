@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { resourcesApi } from '@/api/resources'
-import type { InspectionRecord, InspectionTask, RouteRevision, TaskEvent, TaskExecution, TaskStartEligibility, TaskStatus } from '@/types'
+import type { InspectionRecord, InspectionTask, RouteRevision, TaskEvent, TaskExecution, TaskStartEligibility, TaskStartMode, TaskStatus } from '@/types'
 import type { RouteDeployment } from '@/types/routeDeployment'
 import type { ListQuery } from '@/types/pagination'
 import { uid } from '@/utils/storage'
@@ -81,8 +81,8 @@ export const useTaskStore = defineStore('task', () => {
     executionPollTimer = undefined
   }
 
-  async function startInspection(taskId: string) {
-    const execution = await resourcesApi.startTask(taskId, uid('start'))
+  async function startInspection(taskId: string, startMode: TaskStartMode) {
+    const execution = await resourcesApi.startTask(taskId, startMode, uid('start'))
     executions.value = { ...executions.value, [taskId]: execution }
     await refreshExecution(taskId)
     startExecutionPolling()
@@ -198,7 +198,7 @@ export const useTaskStore = defineStore('task', () => {
 
   function getActiveTask() {
     return tasks.value.find((t) =>
-      ['DISPATCHED', 'STARTING', 'RUNNING', 'PAUSING', 'PAUSED', 'RESUMING', 'CANCELLING', 'TAKEOVER_PENDING', 'MANUAL_TAKEOVER', 'DISCONNECTED', 'RECOVERING'].includes(statusOf(t)),
+      ['DISPATCHED', 'STARTING', 'WAITING_LOCAL_CONFIRM', 'RUNNING', 'PAUSING', 'PAUSED', 'RESUMING', 'CANCELLING', 'TAKEOVER_PENDING', 'MANUAL_TAKEOVER', 'DISCONNECTED', 'RECOVERING'].includes(statusOf(t)),
     )
   }
 

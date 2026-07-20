@@ -83,6 +83,12 @@ app:
     max-attempts: ${ROUTE_DEPLOYMENT_MAX_ATTEMPTS:5}
     initial-backoff-seconds: ${ROUTE_DEPLOYMENT_INITIAL_BACKOFF_SECONDS:5}
     max-backoff-seconds: ${ROUTE_DEPLOYMENT_MAX_BACKOFF_SECONDS:300}
+  task-execution:
+    worker-delay-ms: ${TASK_EXECUTION_WORKER_DELAY_MS:2000}
+    worker-initial-delay-ms: ${TASK_EXECUTION_WORKER_INITIAL_DELAY_MS:3000}
+    start-command-timeout-seconds: ${TASK_EXECUTION_START_COMMAND_TIMEOUT_SECONDS:120}
+    route-start-timeout-seconds: ${TASK_EXECUTION_ROUTE_START_TIMEOUT_SECONDS:300}
+    local-confirm-timeout-seconds: ${TASK_EXECUTION_LOCAL_CONFIRM_TIMEOUT_SECONDS:1800}
   # 注册短信：mock=本地；pnvs=阿里云号码认证短信认证（个人免资质，用控制台赠送签名/模板）；off=关闭
   sms:
     mode: ${APP_SMS_MODE:mock}

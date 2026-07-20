@@ -4,6 +4,8 @@ public enum Permission {
   TASK_VIEW("task:view"),
   TASK_CREATE("task:create"),
   TASK_DISPATCH("task:dispatch"),
+  TASK_START_LOCAL("task:start-local"),
+  TASK_START_REMOTE("task:start-remote"),
   TASK_CONTROL("task:control"),
   TASK_TAKEOVER("task:takeover"),
   TASK_ESTOP("task:estop"),
