@@ -62,7 +62,6 @@ function tryRefreshSession() {
             expiresAt: body.data.expiresAt ?? previous?.expiresAt,
           }
           writeSession(next)
-          // 续期成功后刷新当前页，避免 token 失效期间展示旧数据
           syncAppSession(next, { reloadPages: true })
           resolve(true)
         } else {

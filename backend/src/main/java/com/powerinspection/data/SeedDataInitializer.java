@@ -100,7 +100,6 @@ public class SeedDataInitializer implements ApplicationRunner {
   }
 
   private void seedBusinessData() {
-    removeDemoData();
     if (dataStore.list(DataCategory.SITE).isEmpty()) {
       site(
           "site_001",
@@ -189,67 +188,6 @@ public class SeedDataInitializer implements ApplicationRunner {
               "图像中清晰可见的火焰、火光或明显烟雾区域"),
           "2026-02-15T08:00:00Z");
     }
-  }
-
-  private void removeDemoData() {
-    List.of(
-            DataCategory.AGENT_ACTION,
-            DataCategory.AGENT_EVIDENCE,
-            DataCategory.AGENT_RUN,
-            DataCategory.AGENT_SESSION,
-            DataCategory.NOTIFICATION,
-            DataCategory.WORK_ORDER,
-            DataCategory.RECORD,
-            DataCategory.ALARM,
-            DataCategory.EVENT,
-            DataCategory.TASK,
-            DataCategory.ROUTE,
-            DataCategory.ROBOT,
-            DataCategory.AREA)
-        .forEach(this::removeDemoRecords);
-  }
-
-  private void removeDemoRecords(String category) {
-    dataStore.list(category).stream()
-        .map(item -> String.valueOf(item.get("id")))
-        .filter(this::isDemoRecordId)
-        .forEach(id -> dataStore.delete(category, id));
-  }
-
-  private boolean isDemoRecordId(String id) {
-    if (id == null || id.isBlank()) return false;
-    if (List.of(
-            "area_demo_",
-            "robot_demo_",
-            "route_demo_",
-            "task_demo_",
-            "task_hist_demo_",
-            "evt_demo_",
-            "alarm_demo_",
-            "record_demo_",
-            "wo_demo_",
-            "ntf_demo_",
-            "agent_session_demo_",
-            "agent_run_demo_",
-            "agent_ev_demo_",
-            "agent_act_demo_",
-            "wo_alarm_alarm_demo_")
-        .stream()
-        .anyMatch(id::startsWith)) {
-      return true;
-    }
-    return List.of(
-            "alarm_seed_001",
-            "alarm_seed_002",
-            "alarm_seed_003",
-            "record_seed_001",
-            "record_seed_002",
-            "wo_seed_1",
-            "wo_seed_2",
-            "ntf_seed_admin",
-            "ntf_seed_dispatcher",
-            "ntf_seed_viewer")
-        .contains(id);
   }
 
   /**
