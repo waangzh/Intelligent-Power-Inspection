@@ -271,7 +271,6 @@ const filteredSiteRoutes = computed(() => {
   return siteRoutes.value.filter((route) => route.name.toLowerCase().includes(keyword))
 })
 const currentRoute = computed<Route | null>(() => siteRoutes.value.find((route) => route.id === selectedRouteId.value) ?? null)
-const hasSelectedSiteRoute = computed(() => siteRoutes.value.some((route) => route.id === selectedRouteId.value))
 const availableAssets = computed(() => availableMapAssets(mapAssets.value, selectedSiteId.value))
 const effectiveMapAssetId = computed(() => selectedMapAssetId.value || draftState.value?.mapAssetId || currentRoute.value?.mapId)
 const draftSaveLabel = computed(() => ({ unsaved: '未保存', saving: '保存中', saved: '已保存', failed: '保存失败' })[draftSaveState.value])
