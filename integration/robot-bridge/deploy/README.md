@@ -10,6 +10,7 @@
 /opt/robot-bridge/venv/
 /var/lib/robot-bridge/robot-bridge.db
 /var/lib/robot-bridge/storage/deployments/
+/var/lib/robot-bridge/inspection-image-upload-tmp/
 /etc/robot-bridge/robot-bridge.env
 ```
 
@@ -38,6 +39,11 @@ sudo install -d -o root -g robotbridge -m 0750 /etc/robot-bridge
 | `PLATFORM_BEARER_TOKEN` | 是 | `token-placeholder` | Bridge→Spring 服务凭据 | 是 | 是 |
 | `ROBOT_BRIDGE_STORAGE_PATH` | 是 | `/var/lib/robot-bridge/robot-bridge.db` | SQLite 文件 | 否 | 是 |
 | `BRIDGE_READ_TIMEOUT_SEC` | 否 | `10` | Bridge 读取 Spring 超时 | 否 | 是 |
+| `BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED` | 否 | `true` | 启用巡检图片转发 | 否 | 是 |
+| `BRIDGE_INSPECTION_IMAGE_UPLOAD_CONNECT_TIMEOUT_SEC` | 否 | `10` | 图片转发连接超时 | 否 | 是 |
+| `BRIDGE_INSPECTION_IMAGE_UPLOAD_READ_TIMEOUT_SEC` | 否 | `60` | 图片转发读取超时 | 否 | 是 |
+| `BRIDGE_INSPECTION_IMAGE_UPLOAD_MAX_BYTES` | 否 | `20971520` | 单图上限 20 MiB | 否 | 是 |
+| `BRIDGE_INSPECTION_IMAGE_UPLOAD_TEMP_DIR` | 否 | `/var/lib/robot-bridge/inspection-image-upload-tmp` | 受控临时目录 | 否 | 是 |
 
 禁止把真实 env 复制进仓库或聊天。编辑后检查权限，不打印文件内容：
 

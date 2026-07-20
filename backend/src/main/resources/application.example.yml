@@ -26,6 +26,9 @@ spring:
     enabled: true
 
 app:
+  robot-inspection:
+    max-image-bytes: ${ROBOT_INSPECTION_MAX_IMAGE_BYTES:20971520}
+    max-image-pixels: ${ROBOT_INSPECTION_MAX_IMAGE_PIXELS:40000000}
   map-assets:
     max-yaml-bytes: ${MAP_ASSET_MAX_YAML_BYTES:1048576}
     max-pgm-bytes: ${MAP_ASSET_MAX_PGM_BYTES:104857600}

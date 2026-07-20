@@ -52,6 +52,8 @@ def create_app() -> FastAPI:
     upload_request_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_REQUEST_MAX_BYTES", str(110 * 1024 * 1024)))
     upload_temp_root = Path(os.environ.get("BRIDGE_MAP_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/map-upload-tmp")).expanduser()
     inspection_upload_enabled = os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+    inspection_upload_connect_timeout = float(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_CONNECT_TIMEOUT_SEC", "10"))
+    inspection_upload_read_timeout = float(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_READ_TIMEOUT_SEC", "60"))
     inspection_upload_max = int(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_MAX_BYTES", str(20 * 1024 * 1024)))
     inspection_upload_temp_root = Path(os.environ.get(
         "BRIDGE_INSPECTION_IMAGE_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/inspection-image-upload-tmp"
@@ -59,9 +61,18 @@ def create_app() -> FastAPI:
     store = Store(os.environ.get("ROBOT_BRIDGE_STORAGE_PATH", "~/.local/share/ylhb/robot-bridge.db"))
     app.state.store = store
 
+    def valid_robot_authorization(value):
+        token = value[7:] if value.startswith("Bearer ") else ""
+        return bool(token) and any(
+            hmac.compare_digest(token, str(expected))
+            for expected in robot_tokens.values()
+        )
+
     @app.middleware("http")
     async def admin_auth(request: Request, call_next):
         if request.url.path.startswith("/bridge/v1") and (not bridge_token or not hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {bridge_token}")):
+            return JSONResponse(status_code=401, content={"code": "AUTH_FAILED", "message": "Bearer token required", "requestId": ""})
+        if request.url.path.startswith("/robot-api/") and not valid_robot_authorization(request.headers.get("authorization", "")):
             return JSONResponse(status_code=401, content={"code": "AUTH_FAILED", "message": "Bearer token required", "requestId": ""})
         return await call_next(request)
 
@@ -104,7 +115,7 @@ def create_app() -> FastAPI:
             while chunk := await upload.read(1024 * 1024):
                 size += len(chunk)
                 if size > limit:
-                    raise BridgeError("PAYLOAD_TOO_LARGE", "map file exceeds configured size limit", 413)
+                    raise BridgeError("PAYLOAD_TOO_LARGE", "uploaded file exceeds configured size limit", 413)
                 target.write(chunk)
                 digest.update(chunk)
         return size, digest.hexdigest()
@@ -403,7 +414,11 @@ def create_app() -> FastAPI:
             try:
                 with image_path.open("rb") as image_source:
                     async with httpx.AsyncClient(
-                        timeout=httpx.Timeout(upload_read_timeout, connect=upload_connect_timeout), trust_env=False
+                        timeout=httpx.Timeout(
+                            inspection_upload_read_timeout,
+                            connect=inspection_upload_connect_timeout,
+                        ),
+                        trust_env=False,
                     ) as client:
                         response = await client.post(
                             platform_url + "/api/v1/internal/robot-inspection-images",
