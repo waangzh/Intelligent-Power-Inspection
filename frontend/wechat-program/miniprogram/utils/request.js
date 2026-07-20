@@ -23,6 +23,74 @@ function writeSession(session) {
   else wx.setStorageSync('pi_session', session)
 }
 
+const REFRESH_COOKIE_NAME = 'pi_refresh'
+const REFRESH_COOKIE_STORAGE_KEY = 'pi_refresh_cookie'
+let sessionRefreshCookie = ''
+
+function clearRefreshCookie() {
+  sessionRefreshCookie = ''
+  wx.removeStorageSync(REFRESH_COOKIE_STORAGE_KEY)
+}
+
+function storedRefreshCookie() {
+  if (sessionRefreshCookie) return sessionRefreshCookie
+  const stored = wx.getStorageSync(REFRESH_COOKIE_STORAGE_KEY)
+  if (!stored || typeof stored !== 'object' || !stored.cookie) return ''
+  if (stored.expiresAt && stored.expiresAt <= Date.now()) {
+    wx.removeStorageSync(REFRESH_COOKIE_STORAGE_KEY)
+    return ''
+  }
+  return stored.cookie
+}
+
+function responseCookieValues(res) {
+  const values = Array.isArray(res?.cookies) ? [...res.cookies] : []
+  Object.entries(res?.header || {}).forEach(([name, value]) => {
+    if (name.toLowerCase() !== 'set-cookie') return
+    if (Array.isArray(value)) values.push(...value)
+    else if (value) values.push(value)
+  })
+  return values.map(String)
+}
+
+/**
+ * wx.request 不会像浏览器一样维护 Cookie。手动提取后端返回的 pi_refresh：
+ * - remember=true 带 Max-Age，持久化到 Storage；
+ * - remember=false 不带 Max-Age，仅保存在当前小程序进程内；
+ * - Max-Age=0 表示退出登录/凭证撤销。
+ */
+function captureRefreshCookie(res) {
+  for (const raw of responseCookieValues(res)) {
+    const match = raw.match(new RegExp(`(?:^|[,\\s])${REFRESH_COOKIE_NAME}=([^;,\\s]*)`, 'i'))
+    if (!match) continue
+
+    const value = match[1]
+    const maxAgeMatch = raw.match(/;\s*Max-Age=(\d+)/i)
+    const maxAge = maxAgeMatch ? Number(maxAgeMatch[1]) : null
+    if (!value || maxAge === 0) {
+      clearRefreshCookie()
+      return
+    }
+
+    const cookie = `${REFRESH_COOKIE_NAME}=${value}`
+    if (maxAge !== null && Number.isFinite(maxAge) && maxAge > 0) {
+      sessionRefreshCookie = ''
+      wx.setStorageSync(REFRESH_COOKIE_STORAGE_KEY, {
+        cookie,
+        expiresAt: Date.now() + maxAge * 1000,
+      })
+    } else {
+      sessionRefreshCookie = cookie
+      wx.removeStorageSync(REFRESH_COOKIE_STORAGE_KEY)
+    }
+    return
+  }
+}
+
+function cookieHeader(url) {
+  return String(url || '').startsWith('/auth/') ? storedRefreshCookie() : ''
+}
+
 function syncAppSession(session, options = {}) {
   try {
     const app = getApp()
@@ -43,14 +111,19 @@ let refreshPromise = null
 function tryRefreshSession() {
   if (refreshPromise) return refreshPromise
   const { baseUrl, timeout } = apiConfig
+  const refreshCookie = storedRefreshCookie()
+  if (!refreshCookie) return Promise.resolve(false)
   refreshPromise = new Promise((resolve) => {
     wx.request({
       url: `${baseUrl}/auth/refresh`,
       method: 'POST',
       timeout,
-      enableCookie: true,
-      header: { 'Content-Type': 'application/json' },
+      header: {
+        'Content-Type': 'application/json',
+        Cookie: refreshCookie,
+      },
       success(res) {
+        captureRefreshCookie(res)
         const body = res.data
         const ok = res.statusCode >= 200 && res.statusCode < 300
           && body && typeof body === 'object' && body.code === 0 && body.data?.token
@@ -62,7 +135,8 @@ function tryRefreshSession() {
             expiresAt: body.data.expiresAt ?? previous?.expiresAt,
           }
           writeSession(next)
-          syncAppSession(next, { reloadPages: true })
+          // 与 Web 一致：续期后重试原请求；仅当用户/权限发生变化时由 applySession 重载页面。
+          syncAppSession(next)
           resolve(true)
         } else {
           resolve(false)
@@ -82,9 +156,6 @@ function tryRefreshSession() {
 /**
  * 统一 HTTP 请求 — 与网页端共用后端 /api/v1
  * 响应格式: { code: 0, message: 'ok', data: T }
- *
- * enableCookie: 后端 refresh token 写在 HttpOnly Cookie（pi_refresh）里，
- * 小程序默认不携带 Cookie，必须显式开启才能与 Web 一样自动续期。
  */
 function request({ url, method = 'GET', data, auth = true, headers = {}, retried = false }) {
   const { baseUrl, timeout } = apiConfig
@@ -92,6 +163,7 @@ function request({ url, method = 'GET', data, auth = true, headers = {}, retried
   const token = session && session.token
   const skipAuth = auth === false || isPublicAuthPath(url)
   const allowsAutomaticRefresh = !String(url || '').startsWith('/auth/logout')
+  const refreshCookie = cookieHeader(url)
 
   return new Promise((resolve, reject) => {
     wx.request({
@@ -99,13 +171,14 @@ function request({ url, method = 'GET', data, auth = true, headers = {}, retried
       method,
       data,
       timeout,
-      enableCookie: true,
       header: {
         'Content-Type': 'application/json',
         ...(!skipAuth && token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(refreshCookie ? { Cookie: refreshCookie } : {}),
         ...headers,
       },
       success(res) {
+        captureRefreshCookie(res)
         const body = res.data
         const hasAppEnvelope = body && typeof body === 'object' && 'code' in body
         const isAuthFailure = res.statusCode === 401
@@ -117,6 +190,7 @@ function request({ url, method = 'GET', data, auth = true, headers = {}, retried
               request({ url, method, data, auth, headers, retried: true }).then(resolve).catch(reject)
             } else {
               writeSession(null)
+              clearRefreshCookie()
               syncAppSession(null)
               reject(new Error('登录已过期，请重新登录'))
             }
@@ -124,8 +198,9 @@ function request({ url, method = 'GET', data, auth = true, headers = {}, retried
           return
         }
 
-        if (isAuthFailure) {
+        if (isAuthFailure && !skipAuth) {
           writeSession(null)
+          clearRefreshCookie()
           syncAppSession(null)
           reject(new Error('登录已过期，请重新登录'))
           return

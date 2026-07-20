@@ -325,13 +325,17 @@ async function tryAutoConvertPendingAlarms() {
   const session = getSession()
   if (!session?.user) return empty
 
-  let [alarms, orders] = await Promise.all([
-    getAlarms(),
-    getWorkOrders().catch(() => []),
-  ])
-
   const user = session.user
   const perms = sessionPermissions()
+  if (!perms.includes('workorder:view')) {
+    return { alarms: await getAlarms(), orders: [], converted: [] }
+  }
+
+  let [alarms, orders] = await Promise.all([
+    getAlarms(),
+    getWorkOrders(),
+  ])
+
   if (!workOrderPerm.canCreateWorkOrder(user, perms)) {
     return { alarms, orders, converted: [] }
   }
@@ -370,7 +374,7 @@ async function tryAutoConvertPendingAlarms() {
   if (converted.length > 0) {
     ;[alarms, orders] = await Promise.all([
       getAlarms(),
-      getWorkOrders().catch(() => []),
+      getWorkOrders(),
     ])
   }
 

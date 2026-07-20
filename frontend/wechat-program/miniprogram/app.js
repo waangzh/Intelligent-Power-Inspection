@@ -1,6 +1,7 @@
 const api = require('./services/index')
 const apiConfig = require('./config/api')
 const { countWorkOrderBadge } = require('./utils/work-order-badge')
+const { hasPermission } = require('./utils/permission')
 
 App({
   globalData: {
@@ -78,11 +79,12 @@ App({
       this.clearTabBarBadges()
       return
     }
+    const canViewWorkOrders = hasPermission(this.globalData.permissions, 'workorder:view')
     try {
       const [ntf, alarms, orders] = await Promise.all([
         api.getNotifications(user.id),
         api.getAlarms(),
-        api.getWorkOrders().catch(() => []),
+        canViewWorkOrders ? api.getWorkOrders() : Promise.resolve([]),
       ])
       this.globalData.unreadNotifications = ntf.filter((n) => !n.read).length
       this.globalData.unackAlarms = alarms.filter((a) => !a.acknowledged).length
