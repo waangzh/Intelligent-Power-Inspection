@@ -62,8 +62,8 @@ public class RobotEventIngestionService {
       return;
     }
     if (!validOwnership(execution, input, robotId, executionId, deploymentId, eventType, sequence)) {
-      reject(audit, "EVENT_OWNERSHIP_CONFLICT", "事件的 robot、execution、deployment、request 或 command 归属不匹配");
-      conflict(execution.getExecutionId(), "EVENT_OWNERSHIP_CONFLICT", "Bridge 事件归属校验失败");
+      reject(audit, "EVENT_OWNERSHIP_CONFLICT", "事件缺少协议必填字段，或 robot、execution、deployment、request、command 归属不匹配");
+      conflict(execution.getExecutionId(), "EVENT_OWNERSHIP_CONFLICT", "Bridge 事件归属校验失败，平台无法确认机器人实际状态，等待人工对账");
       return;
     }
     if (sequence <= execution.getLastRobotSequence()) {
@@ -298,14 +298,12 @@ public class RobotEventIngestionService {
     execution.setManualReconciliationRequired(true);
     execution.setLastErrorCode(safeCode(code, "EVENT_CONFLICT"));
     execution.setLastErrorMessage(safeMessage(message, "机器人事件冲突"));
-    if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus())
-        || (TaskExecutionStatus.RECOVERING.name().equals(execution.getStatus()) && TaskExecutionStatus.STARTING.name().equals(execution.getRecoveryStatus()))) {
-      execution.setStatus(TaskExecutionStatus.START_FAILED.name());
-      execution.setRecoveryStatus(null);
-    } else if (TaskExecutionStatus.RUNNING.name().equals(execution.getStatus())
-        || (TaskExecutionStatus.RECOVERING.name().equals(execution.getStatus()) && TaskExecutionStatus.RUNNING.name().equals(execution.getRecoveryStatus()))) {
-      execution.setStatus(TaskExecutionStatus.FAILED.name());
-      execution.setRecoveryStatus(null);
+    if (!TaskExecutionStatus.TERMINAL.contains(execution.getStatus())
+        && !TaskExecutionStatus.CREATED.name().equals(execution.getStatus())) {
+      String previous = TaskExecutionStatus.RECOVERING.name().equals(execution.getStatus())
+        ? execution.getRecoveryStatus() : execution.getStatus();
+      execution.setRecoveryStatus(previous);
+      execution.setStatus(TaskExecutionStatus.DISCONNECTED.name());
     }
     execution.setUpdatedAt(Instant.now().toString());
     executions.save(execution);

@@ -77,16 +77,31 @@ class RobotEventIngestionServiceTests {
   }
 
   @Test
-  void ownershipMismatchEntersAuditableManualFailurePath() {
+  void ownershipMismatchPreservesUnknownRemoteStateForManualReconciliation() {
     RobotBridgeExecutionEvent wrongRobot = event(1, "route_started", Map.of());
     Map<String, Object> fields = new LinkedHashMap<>(wrongRobot.fields());
     fields.put("robot_id", "robot-other");
 
     service.ingest("exec-1", new RobotBridgeExecutionEvent(fields));
 
-    assertEquals(TaskExecutionStatus.START_FAILED.name(), execution.getStatus());
+    assertEquals(TaskExecutionStatus.DISCONNECTED.name(), execution.getStatus());
+    assertEquals(TaskExecutionStatus.STARTING.name(), execution.getRecoveryStatus());
     assertTrue(execution.isManualReconciliationRequired());
     assertEquals("EVENT_OWNERSHIP_CONFLICT", execution.getLastErrorCode());
+  }
+
+  @Test
+  void ownershipMismatchDoesNotTurnAReportedRunningExecutionIntoFailed() {
+    execution.setStatus(TaskExecutionStatus.RUNNING.name());
+    RobotBridgeExecutionEvent wrongRequest = event(1, "target_reached", Map.of());
+    Map<String, Object> fields = new LinkedHashMap<>(wrongRequest.fields());
+    fields.put("request_id", "request-other");
+
+    service.ingest("exec-1", new RobotBridgeExecutionEvent(fields));
+
+    assertEquals(TaskExecutionStatus.DISCONNECTED.name(), execution.getStatus());
+    assertEquals(TaskExecutionStatus.RUNNING.name(), execution.getRecoveryStatus());
+    assertTrue(execution.isManualReconciliationRequired());
   }
 
   @Test

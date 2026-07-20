@@ -2,7 +2,10 @@
   <div v-if="task">
     <PageHeader :title="task.name" description="巡检任务详情" :breadcrumbs="breadcrumbs">
       <template #actions>
-        <TaskStatusTag :status="taskStore.statusOf(task)" />
+        <TaskStatusTag
+          :status="taskStore.statusOf(task)"
+          :manual-reconciliation-required="execution?.manualReconciliationRequired"
+        />
         <el-button
           v-if="can('task:dispatch') && execution && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(task))"
           type="primary"

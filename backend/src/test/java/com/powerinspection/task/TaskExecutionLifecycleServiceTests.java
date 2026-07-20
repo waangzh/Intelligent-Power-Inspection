@@ -113,6 +113,23 @@ class TaskExecutionLifecycleServiceTests {
   }
 
   @Test
+  void manualReconciliationExecutionCannotBeStartedAgain() {
+    execution.setStatus(TaskExecutionStatus.DISCONNECTED.name());
+    execution.setRecoveryStatus(TaskExecutionStatus.STARTING.name());
+    execution.setManualReconciliationRequired(true);
+    when(executions.findByStartRequestId("retry-start")).thenReturn(Optional.empty());
+
+    ApiException error = assertThrows(ApiException.class, () -> service.start("task-1", "retry-start"));
+
+    assertTrue(error.getMessage().contains("未核对"));
+    assertEquals(TaskExecutionStatus.DISCONNECTED.name(), execution.getStatus());
+    assertTrue(execution.isManualReconciliationRequired());
+    Map<String, Object> eligibility = service.eligibility("task-1");
+    assertEquals(false, eligibility.get("eligible"));
+    assertTrue(String.valueOf(eligibility.get("ineligibleReason")).contains("未核对"));
+  }
+
+  @Test
   void identicalIdempotencyKeyReturnsThePersistedStartingIntent() {
     execution.setStatus(TaskExecutionStatus.STARTING.name());
     execution.setStartRequestId("start-1");

@@ -140,7 +140,7 @@
           <template #header>当前任务</template>
           <el-table :data="activeTasks" size="small" empty-text="暂无进行中的任务">
             <el-table-column prop="name" label="任务名称"><template #default="{ row }"><el-link type="primary" @click="router.push(`/tasks/${row.id}`)">{{ row.name }}</el-link></template></el-table-column>
-            <el-table-column label="状态" width="100"><template #default="{ row }"><TaskStatusTag :status="row.status" /></template></el-table-column>
+            <el-table-column label="状态" width="100"><template #default="{ row }"><TaskStatusTag :status="row.status" :manual-reconciliation-required="taskStore.executionFor(row.id)?.manualReconciliationRequired" /></template></el-table-column>
             <el-table-column label="进度" width="180"><template #default="{ row }"><el-progress :percentage="row.progress" :stroke-width="10" /></template></el-table-column>
             <el-table-column label="操作" width="260"><template #default="{ row }"><el-button v-if="can('task:control') && row.status === 'RUNNING'" size="small" @click="taskStore.pause(row.id)">暂停</el-button><el-button v-if="can('task:control') && row.status === 'PAUSED'" size="small" type="primary" @click="taskStore.resume(row.id)">恢复</el-button><el-button v-if="can('task:control') && row.status === 'RUNNING'" size="small" type="warning" @click="taskStore.takeover(row.id)">接管</el-button><el-button size="small" @click="router.push(`/tasks/${row.id}`)">详情</el-button></template></el-table-column>
           </el-table>

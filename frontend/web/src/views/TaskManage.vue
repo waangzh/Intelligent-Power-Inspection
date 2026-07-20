@@ -41,7 +41,10 @@
             <el-icon class="pulse-icon"><VideoPlay /></el-icon>
             <span>执行中 · {{ activeTask.name }}</span>
           </div>
-          <TaskStatusTag :status="taskStore.statusOf(activeTask)" />
+          <TaskStatusTag
+            :status="taskStore.statusOf(activeTask)"
+            :manual-reconciliation-required="taskStore.executionFor(activeTask.id)?.manualReconciliationRequired"
+          />
         </div>
       </template>
       <el-row :gutter="16">
@@ -146,7 +149,10 @@
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <TaskStatusTag :status="taskStore.statusOf(row)" />
+            <TaskStatusTag
+              :status="taskStore.statusOf(row)"
+              :manual-reconciliation-required="taskStore.executionFor(row.id)?.manualReconciliationRequired"
+            />
           </template>
         </el-table-column>
         <el-table-column label="进度" width="160">
