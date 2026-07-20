@@ -2,6 +2,7 @@ package com.powerinspection.mapasset;
 
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
+import com.powerinspection.common.ResourceChangeEvent;
 import com.powerinspection.config.ModelFileWebConfig;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
@@ -10,6 +11,7 @@ import com.powerinspection.route.RouteDraftRepository;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,6 +20,7 @@ import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -29,6 +32,8 @@ import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -52,27 +57,38 @@ public class MapAssetService {
   private final RouteRevisionRepository routeRevisionRepository;
   private final RouteDraftRepository routeDraftRepository;
   private final RobotMapUploadRepository robotMapUploadRepository;
+  private final SimpMessagingTemplate messagingTemplate;
   private final long maxYamlBytes;
   private final long maxPgmBytes;
+  private final Duration processingTimeout;
+  private final int rejectedRetentionDays;
   private final ConcurrentMap<String, Object> uploadLocks = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Object> reviewLocks = new ConcurrentHashMap<>();
 
   public MapAssetService(DataStoreService dataStore, RouteRevisionRepository routeRevisionRepository,
       RouteDraftRepository routeDraftRepository, RobotMapUploadRepository robotMapUploadRepository,
+      SimpMessagingTemplate messagingTemplate,
       @Value("${app.map-assets.max-yaml-bytes:1048576}") long maxYamlBytes,
-      @Value("${app.map-assets.max-pgm-bytes:104857600}") long maxPgmBytes) {
+      @Value("${app.map-assets.max-pgm-bytes:104857600}") long maxPgmBytes,
+      @Value("${app.map-assets.processing-timeout-seconds:300}") long processingTimeoutSeconds,
+      @Value("${app.map-assets.rejected-retention-days:30}") int rejectedRetentionDays) {
     this.dataStore = dataStore;
     this.routeRevisionRepository = routeRevisionRepository;
     this.routeDraftRepository = routeDraftRepository;
     this.robotMapUploadRepository = robotMapUploadRepository;
+    this.messagingTemplate = messagingTemplate;
     this.maxYamlBytes = maxYamlBytes;
     this.maxPgmBytes = maxPgmBytes;
+    this.processingTimeout = Duration.ofSeconds(Math.max(1, processingTimeoutSeconds));
+    this.rejectedRetentionDays = Math.max(1, rejectedRetentionDays);
   }
 
   public Map<String, Object> create(String siteId, MultipartFile yaml, MultipartFile pgm) throws IOException {
     ensureSiteExists(siteId);
     PreparedUpload prepared = prepare(yaml, pgm);
-    return createAsset(siteId, yaml, pgm, prepared, "AVAILABLE", "USER", null, null, null, null);
+    Map<String, Object> asset = createAsset(siteId, yaml, pgm, prepared, "AVAILABLE", "USER", null, null, null, null);
+    publishChange(ResourceChangeEvent.created("mapAsset", asset.get("id")));
+    return asset;
   }
 
   public RobotMapUploadResult createForRobot(String siteId, String robotId, String bridgeRobotId,
@@ -87,6 +103,9 @@ public class MapAssetService {
         && !prepared.contentIdentitySha256().equals(expectedContentIdentity.trim())) {
       throw ApiException.badRequest("地图内容身份与平台计算结果不一致");
     }
+    log.info("Robot map upload received robotId={} bridgeRobotId={} key={} yamlBytes={} pgmBytes={} identity={}",
+      robotId, bridgeRobotId, keyFingerprint(normalizedKey), yaml.getSize(), pgm.getSize(),
+      shortHash(prepared.contentIdentitySha256()));
     String lockKey = robotId + '\n' + normalizedKey;
     Object lock = uploadLocks.computeIfAbsent(lockKey, ignored -> new Object());
     try {
@@ -95,15 +114,21 @@ public class MapAssetService {
         if (upload != null) {
           verifyHashes(upload, prepared);
           if ("SUCCEEDED".equals(upload.getStatus()) && upload.getMapAssetId() != null) {
+            log.info("Robot map upload replayed robotId={} key={} assetId={}", robotId,
+              keyFingerprint(normalizedKey), upload.getMapAssetId());
             return new RobotMapUploadResult(getForManagement(upload.getMapAssetId()), false);
           }
-          if ("PROCESSING".equals(upload.getStatus())) {
-            throw ApiException.conflict("相同 Idempotency-Key 的上传正在处理");
+          String previousStatus = upload.getStatus();
+          Instant claimTime = Instant.now();
+          String processingCutoff = claimTime.minus(processingTimeout).toString();
+          if (!("FAILED".equals(previousStatus) || "PROCESSING".equals(previousStatus))
+              || robotMapUploadRepository.claimRetryable(upload.getId(), processingCutoff, claimTime.toString()) != 1) {
+            log.info("Robot map upload still processing robotId={} key={} uploadId={}", robotId,
+              keyFingerprint(normalizedKey), upload.getId());
+            throw ApiException.serviceUnavailable("相同 Idempotency-Key 的上传正在处理，请稍后使用原 key 重试");
           }
-          if (!"FAILED".equals(upload.getStatus())
-              || robotMapUploadRepository.claimFailed(upload.getId(), Instant.now().toString()) != 1) {
-            throw ApiException.conflict("相同 Idempotency-Key 的上传状态已变化，请稍后重试");
-          }
+          log.warn("Robot map upload reclaimed robotId={} key={} uploadId={} previousStatus={}", robotId,
+            keyFingerprint(normalizedKey), upload.getId(), previousStatus);
           upload = robotMapUploadRepository.findById(upload.getId())
             .orElseThrow(() -> ApiException.conflict("幂等上传记录不存在"));
         } else {
@@ -114,7 +139,7 @@ public class MapAssetService {
             if ("SUCCEEDED".equals(upload.getStatus()) && upload.getMapAssetId() != null) {
               return new RobotMapUploadResult(getForManagement(upload.getMapAssetId()), false);
             }
-            throw ApiException.conflict("相同 Idempotency-Key 的上传正在处理");
+            throw ApiException.serviceUnavailable("相同 Idempotency-Key 的上传正在处理，请稍后使用原 key 重试");
           }
         }
 
@@ -126,6 +151,9 @@ public class MapAssetService {
           upload.setStatus("SUCCEEDED");
           upload.setUpdatedAt(Instant.now().toString());
           robotMapUploadRepository.saveAndFlush(upload);
+          log.info("Robot map upload succeeded robotId={} key={} assetId={} identity={}", robotId,
+            keyFingerprint(normalizedKey), asset.get("id"), shortHash(prepared.contentIdentitySha256()));
+          publishChange(ResourceChangeEvent.created("mapAsset", asset.get("id")));
           return new RobotMapUploadResult(asset, true);
         } catch (IOException | RuntimeException ex) {
           if (asset != null) deleteIfUnreferenced(String.valueOf(asset.get("id")));
@@ -136,6 +164,8 @@ public class MapAssetService {
           } catch (RuntimeException updateFailure) {
             ex.addSuppressed(updateFailure);
           }
+          log.error("Robot map upload failed robotId={} key={} uploadId={} error={}", robotId,
+            keyFingerprint(normalizedKey), upload.getId(), ex.getClass().getSimpleName(), ex);
           throw ex;
         }
       }
@@ -295,7 +325,18 @@ public class MapAssetService {
         patch.put("reviewedAt", now);
         patch.put("reviewComment", normalizedComment);
         patch.put("updatedAt", now);
-        return dataStore.patch(DataCategory.MAP_ASSET, id, patch);
+        Map<String, Object> reviewed = dataStore.patch(DataCategory.MAP_ASSET, id, patch);
+        if ("REJECT".equals(normalizedAction)) {
+          try {
+            deleteAssetFiles(id);
+          } catch (IOException ex) {
+            log.error("Rejected map file cleanup failed assetId={}", id, ex);
+          }
+        }
+        log.info("Map asset reviewed assetId={} action={} reviewerId={} filesRetained={}", id,
+          normalizedAction, reviewerId, "APPROVE".equals(normalizedAction));
+        publishChange(ResourceChangeEvent.updated("mapAsset", id));
+        return managementView(reviewed);
       }
     } finally {
       reviewLocks.remove(id, lock);
@@ -336,6 +377,33 @@ public class MapAssetService {
     }
     deleteAssetFiles(id);
     dataStore.delete(DataCategory.MAP_ASSET, id);
+    robotMapUploadRepository.deleteByMapAssetId(id);
+    log.info("Map asset deleted assetId={}", id);
+    publishChange(ResourceChangeEvent.deleted("mapAsset", id));
+  }
+
+  @Scheduled(cron = "${app.map-assets.rejected-cleanup-cron:0 30 3 * * *}")
+  public void cleanupRejectedAssets() {
+    Instant cutoff = Instant.now().minus(Duration.ofDays(rejectedRetentionDays));
+    for (Map<String, Object> asset : dataStore.list(DataCategory.MAP_ASSET)) {
+      if (!"REJECTED".equals(String.valueOf(asset.get("status")))) continue;
+      Instant reviewedAt = parseInstant(asset.get("reviewedAt"));
+      if (reviewedAt == null || reviewedAt.isAfter(cutoff)) continue;
+      String id = String.valueOf(asset.get("id"));
+      if (isReferenced(id)) {
+        log.error("Rejected map cleanup skipped referenced assetId={}", id);
+        continue;
+      }
+      try {
+        deleteAssetFiles(id);
+        robotMapUploadRepository.deleteByMapAssetId(id);
+        dataStore.delete(DataCategory.MAP_ASSET, id);
+        log.info("Rejected map metadata purged assetId={} reviewedAt={}", id, reviewedAt);
+        publishChange(ResourceChangeEvent.deleted("mapAsset", id));
+      } catch (IOException | RuntimeException ex) {
+        log.error("Rejected map cleanup failed assetId={}", id, ex);
+      }
+    }
   }
 
   public void deleteIfUnreferenced(String id) {
@@ -469,7 +537,9 @@ public class MapAssetService {
   private void publish(Path staging, Path target) throws IOException {
     try {
       Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
-    } catch (AtomicMoveNotSupportedException ex) {
+    } catch (AtomicMoveNotSupportedException | AccessDeniedException ex) {
+      log.warn("Atomic map directory publish unavailable, falling back to regular move assetId={} reason={}",
+        target.getFileName(), ex.getClass().getSimpleName());
       Files.move(staging, target);
     }
   }
@@ -642,7 +712,36 @@ public class MapAssetService {
         && Objects.equals(upload.getPgmSha256(), prepared.pgmSha256())
       : Objects.equals(upload.getContentIdentitySha256(), prepared.contentIdentitySha256());
     if (!same) {
+      log.warn("Robot map upload idempotency conflict robotId={} key={} uploadId={} expectedIdentity={} actualIdentity={}",
+        upload.getRobotId(), keyFingerprint(upload.getIdempotencyKey()), upload.getId(),
+        shortHash(upload.getContentIdentitySha256()), shortHash(prepared.contentIdentitySha256()));
       throw ApiException.conflict("相同 Idempotency-Key 已用于不同的地图内容");
+    }
+  }
+
+  private Instant parseInstant(Object value) {
+    if (value == null) return null;
+    try {
+      return Instant.parse(value.toString());
+    } catch (RuntimeException ex) {
+      return null;
+    }
+  }
+
+  private String keyFingerprint(String key) {
+    return key == null ? "none" : shortHash(sha256(key.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private String shortHash(String hash) {
+    return hash == null || hash.isBlank() ? "none" : hash.substring(0, Math.min(12, hash.length()));
+  }
+
+  private void publishChange(ResourceChangeEvent event) {
+    try {
+      messagingTemplate.convertAndSend("/topic/map-assets", event);
+    } catch (RuntimeException ex) {
+      log.warn("Map asset realtime notification failed assetId={} operation={}",
+        event.resourceId(), event.operation(), ex);
     }
   }
 

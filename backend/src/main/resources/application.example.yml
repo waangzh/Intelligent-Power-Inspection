@@ -32,6 +32,9 @@ app:
   map-assets:
     max-yaml-bytes: ${MAP_ASSET_MAX_YAML_BYTES:1048576}
     max-pgm-bytes: ${MAP_ASSET_MAX_PGM_BYTES:104857600}
+    processing-timeout-seconds: ${MAP_ASSET_PROCESSING_TIMEOUT_SECONDS:300}
+    rejected-retention-days: ${MAP_ASSET_REJECTED_RETENTION_DAYS:30}
+    rejected-cleanup-cron: ${MAP_ASSET_REJECTED_CLEANUP_CRON:0 30 3 * * *}
   jwt:
     secret: ${JWT_SECRET:dev-secret-change-me-for-production}
     access-ttl-seconds: ${JWT_ACCESS_TTL_SECONDS:900}

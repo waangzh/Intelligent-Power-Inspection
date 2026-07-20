@@ -39,6 +39,13 @@ sudo install -d -o root -g robotbridge -m 0750 /etc/robot-bridge
 | `PLATFORM_BEARER_TOKEN` | 是 | `token-placeholder` | Bridge→Spring 服务凭据 | 是 | 是 |
 | `ROBOT_BRIDGE_STORAGE_PATH` | 是 | `/var/lib/robot-bridge/robot-bridge.db` | SQLite 文件 | 否 | 是 |
 | `BRIDGE_READ_TIMEOUT_SEC` | 否 | `10` | Bridge 读取 Spring 超时 | 否 | 是 |
+| `BRIDGE_MAP_UPLOAD_ENABLED` | 是 | `true` | 启用机器人地图转发 | 否 | 是 |
+| `BRIDGE_MAP_UPLOAD_CONNECT_TIMEOUT_SEC` | 否 | `10` | 地图转发连接超时 | 否 | 是 |
+| `BRIDGE_MAP_UPLOAD_READ_TIMEOUT_SEC` | 否 | `60` | 地图转发读取超时 | 否 | 是 |
+| `BRIDGE_MAP_UPLOAD_YAML_MAX_BYTES` | 否 | `1048576` | YAML 上限 1 MiB | 否 | 是 |
+| `BRIDGE_MAP_UPLOAD_PGM_MAX_BYTES` | 否 | `104857600` | PGM 上限 100 MiB | 否 | 是 |
+| `BRIDGE_MAP_UPLOAD_REQUEST_MAX_BYTES` | 否 | `115343360` | 地图请求总上限 110 MiB | 否 | 是 |
+| `BRIDGE_MAP_UPLOAD_TEMP_DIR` | 是 | `/var/lib/robot-bridge/map-upload-tmp` | 地图上传临时目录 | 否 | 是 |
 | `BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED` | 否 | `true` | 启用巡检图片转发 | 否 | 是 |
 | `BRIDGE_INSPECTION_IMAGE_UPLOAD_CONNECT_TIMEOUT_SEC` | 否 | `10` | 图片转发连接超时 | 否 | 是 |
 | `BRIDGE_INSPECTION_IMAGE_UPLOAD_READ_TIMEOUT_SEC` | 否 | `60` | 图片转发读取超时 | 否 | 是 |

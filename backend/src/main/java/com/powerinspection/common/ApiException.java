@@ -32,6 +32,10 @@ public class ApiException extends RuntimeException {
     return new ApiException(HttpStatus.CONFLICT, 409, message);
   }
 
+  public static ApiException serviceUnavailable(String message) {
+    return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, 503, message);
+  }
+
   public HttpStatus status() {
     return status;
   }

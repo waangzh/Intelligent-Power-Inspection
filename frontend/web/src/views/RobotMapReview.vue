@@ -141,10 +141,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import { resourcesApi } from '@/api/resources'
+import { subscribeTopic } from '@/api/realtime'
 import { usePermission } from '@/composables/usePermission'
 import { useRobotStore } from '@/stores/robot'
 import { useSiteStore } from '@/stores/site'
@@ -175,6 +176,7 @@ const previewCanvasRef = ref<HTMLCanvasElement | null>(null)
 const previewLoading = ref(false)
 const previewReady = ref(false)
 const previewError = ref('')
+let unsubscribeMapAssets: (() => void) | undefined
 
 const totalPixels = computed(() => new Intl.NumberFormat('zh-CN', { notation: 'compact' })
   .format(assets.value.reduce((sum, asset) => sum + asset.width * asset.height, 0)))
@@ -286,7 +288,11 @@ function formatTime(value?: string | null) {
 function formatOrigin(origin: [number, number, number]) { return origin.map(value => Number(value).toFixed(2)).join(', ') }
 
 watch([statusFilter, siteFilter], () => void refresh())
-onMounted(() => void refresh())
+onMounted(() => {
+  void refresh()
+  unsubscribeMapAssets = subscribeTopic('/topic/map-assets', () => void refresh())
+})
+onUnmounted(() => unsubscribeMapAssets?.())
 </script>
 
 <style scoped>
