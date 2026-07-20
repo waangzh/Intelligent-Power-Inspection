@@ -31,6 +31,18 @@ class RouteExecutorSupportTests {
   }
 
   @Test
+  void attachRosAliasFillsLegacyRouteDefaults() {
+    Map<String, Object> route = map("id", "route_legacy", "siteId", "site_001");
+
+    Map<String, Object> normalized = RouteExecutorSupport.attachRosAlias(route);
+
+    assertEquals(List.of(), normalized.get("path"));
+    assertEquals(List.of(), normalized.get("routeDetections"));
+    assertEquals(List.of(), normalized.get("checkpoints"));
+    assertEquals("2d", normalized.get("mapMode"));
+  }
+
+  @Test
   void validateRejectsMissingTargetReferences() {
     Map<String, Object> executor = validExecutor();
     Map<String, Object> routeDef = routeDefs(executor).get(0);

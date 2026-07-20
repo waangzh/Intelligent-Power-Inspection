@@ -257,6 +257,10 @@ const reconcilingDeploymentId = ref('')
 const mapAssets = ref<MapAsset[]>([])
 const mapAssetsLoading = ref(false)
 const selectedMapAssetId = ref('')
+const initialLoading = ref(false)
+const initialLoadError = ref('')
+const initializing = ref(false)
+let initializeRequest = 0
 const routeKeyword = ref('')
 const bottomPanels = ref<string[]>(['validation'])
 
@@ -266,7 +270,7 @@ const filteredSiteRoutes = computed(() => {
   if (!keyword) return siteRoutes.value
   return siteRoutes.value.filter((route) => route.name.toLowerCase().includes(keyword))
 })
-const currentRoute = computed<Route | null>(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
+const currentRoute = computed<Route | null>(() => siteRoutes.value.find((route) => route.id === selectedRouteId.value) ?? null)
 const availableAssets = computed(() => availableMapAssets(mapAssets.value, selectedSiteId.value))
 const effectiveMapAssetId = computed(() => selectedMapAssetId.value || draftState.value?.mapAssetId || currentRoute.value?.mapId)
 const draftSaveLabel = computed(() => ({ unsaved: '未保存', saving: '保存中', saved: '已保存', failed: '保存失败' })[draftSaveState.value])
@@ -305,6 +309,7 @@ watch(
 watch(
   siteRoutes,
   (routes) => {
+    if (initializing.value) return
     if (routes.length && !routes.some((route) => route.id === selectedRouteId.value)) {
       if (!switchingSite.value) void selectRoute(routes[0].id)
     } else if (!routes.length) {
@@ -316,14 +321,54 @@ watch(
   { immediate: true },
 )
 
-watch(selectedSiteId, siteId => void loadAvailableMapAssets(siteId), { immediate: true })
+watch(selectedSiteId, (siteId) => {
+  if (!siteId) {
+    mapAssets.value = []
+    return
+  }
+  void loadAvailableMapAssets(siteId)
+}, { immediate: true })
 
 function targetCount(route: Route) {
-  return route.executorJson?.targets?.length ?? route.checkpoints.length
+  if (Array.isArray(route.executorJson?.targets)) return route.executorJson.targets.length
+  return Array.isArray(route.checkpoints) ? route.checkpoints.length : 0
+}
+
+async function initializeRoutePlan() {
+  const requestId = ++initializeRequest
+  initialLoading.value = true
+  initialLoadError.value = ''
+  initializing.value = true
+  routePage.value = 0
+  selectedRouteId.value = ''
+  routeStore.clear()
+  try {
+    await siteStore.loadSites()
+    if (requestId !== initializeRequest) return
+
+    selectedSiteId.value = siteStore.sites[0]?.id ?? ''
+    if (!selectedSiteId.value) return
+
+    const applied = await routeStore.load(selectedSiteId.value, { page: 0, size: 20 })
+    if (!applied || requestId !== initializeRequest) return
+
+    const firstRouteId = siteRoutes.value[0]?.id ?? ''
+    selectedRouteId.value = firstRouteId
+    await loadDraft(firstRouteId)
+  } catch (error) {
+    if (requestId === initializeRequest) {
+      initialLoadError.value = errorMessage(error, '请检查网络连接、登录状态和后端服务')
+    }
+  } finally {
+    if (requestId === initializeRequest) {
+      initializing.value = false
+      initialLoading.value = false
+    }
+  }
 }
 
 async function onSiteChange() {
-  const previousSiteId = currentRoute.value?.siteId ?? selectedSiteId.value
+  const previousSiteId = routeStore.getRouteById(selectedRouteId.value)?.siteId ?? selectedSiteId.value
   switchingSite.value = true
   try {
     if (!(await confirmDiscardChanges())) {
@@ -331,7 +376,8 @@ async function onSiteChange() {
       return
     }
     routePage.value = 0
-    await routeStore.load(selectedSiteId.value, { page: 0, size: 20 })
+    const applied = await routeStore.load(selectedSiteId.value, { page: 0, size: 20 })
+    if (!applied) return
     selectedRouteId.value = siteRoutes.value[0]?.id ?? ''
     await loadDraft(selectedRouteId.value)
   } finally {
@@ -342,7 +388,8 @@ async function onSiteChange() {
 async function loadRoutePage(page: number) {
   if (!(await confirmDiscardChanges())) return
   routePage.value = page
-  await routeStore.load(selectedSiteId.value, { page, size: 20 })
+  const applied = await routeStore.load(selectedSiteId.value, { page, size: 20 })
+  if (!applied) return
 }
 
 async function selectRoute(id: string) {
@@ -423,7 +470,17 @@ async function createRoute() {
   if (!(await confirmDiscardChanges())) return
   creatingRoute.value = true
   try {
-    const route = await routeStore.createRoute(selectedSiteId.value, `巡检路线 ${siteRoutes.value.length + 1}`)
+    const siteId = selectedSiteId.value
+    const route = await routeStore.createRoute(siteId, `巡检路线 ${siteRoutes.value.length + 1}`)
+    routePage.value = 0
+    try {
+      const applied = await routeStore.load(siteId, { page: 0, size: 20 })
+      if (!applied || selectedSiteId.value !== siteId) return
+      routeStore.ensureRoute(route)
+    } catch (error) {
+      if (selectedSiteId.value !== siteId) return
+      ElMessage.warning(errorMessage(error, '路线已创建，但列表刷新失败，请稍后重试'))
+    }
     selectedRouteId.value = route.id
     await loadDraft(route.id)
     ElMessage.success('路线已创建，请加载 YAML/PGM 地图并开始标注')
@@ -701,6 +758,7 @@ function stopDeploymentPolling() {
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
   startDeploymentPolling()
+  void initializeRoutePlan()
 })
 onActivated(startDeploymentPolling)
 onDeactivated(stopDeploymentPolling)

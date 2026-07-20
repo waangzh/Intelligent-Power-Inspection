@@ -31,6 +31,10 @@ public final class RouteExecutorSupport {
   }
 
   public static Map<String, Object> attachRosAlias(Map<String, Object> route) {
+    route.putIfAbsent("path", List.of());
+    route.putIfAbsent("routeDetections", List.of());
+    route.putIfAbsent("checkpoints", List.of());
+    route.putIfAbsent("mapMode", "2d");
     Map<String, Object> executor = executor(route);
     if (executor != null) {
       route.put("executorJson", executor);

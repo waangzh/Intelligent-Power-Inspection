@@ -14,7 +14,8 @@
         <el-divider direction="vertical" />
         <div class="toolbar-group">
           <span class="toolbar-label">视图</span>
-          <el-button size="small" plain @click="fitToScreen">铺满</el-button>
+          <el-button size="small" plain title="保持比例填满画布，边缘可能被裁剪" @click="fitToScreen">铺满</el-button>
+          <el-button size="small" plain @click="fitMapToScreen">适配</el-button>
           <el-button size="small" plain @click="zoomIn">放大</el-button>
           <el-button size="small" plain @click="zoomOut">缩小</el-button>
         </div>
@@ -287,6 +288,7 @@ const {
   showFootprintPadding,
   setMode,
   fitToScreen,
+  fitMapToScreen,
   zoomIn,
   zoomOut,
   applyYamlText,
@@ -507,11 +509,11 @@ defineExpose({ exportDocument, validateForExport })
   display: grid;
   grid-template-columns: minmax(420px, 1fr) 340px;
   gap: 0;
-  min-height: 520px;
+  height: clamp(520px, 72vh, 780px);
 }
 
 .ros-route-editor.embedded {
-  min-height: 480px;
+  min-height: 0;
 }
 
 .ros-route-editor.embedded .workspace {
@@ -598,7 +600,7 @@ defineExpose({ exportDocument, validateForExport })
 
 .map-wrap {
   position: relative;
-  min-height: 560px;
+  min-height: 0;
   overflow: hidden;
   background: #eef2f6;
 }
@@ -668,11 +670,7 @@ canvas {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 520px;
-}
-
-.ros-route-editor.embedded .config-tabs {
-  min-height: 480px;
+  min-height: 0;
 }
 
 .config-tabs :deep(.el-tabs__header) {
@@ -684,6 +682,7 @@ canvas {
 
 .config-tabs :deep(.el-tabs__content) {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 12px;
 }
@@ -849,6 +848,7 @@ label {
 @media (max-width: 1200px) {
   .ros-route-editor {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .ros-route-editor.embedded .sidebar {
@@ -863,6 +863,14 @@ label {
 
   .mode-group button {
     flex: 1;
+  }
+
+  .map-wrap {
+    min-height: 560px;
+  }
+
+  .config-tabs {
+    height: 520px;
   }
 }
 </style>
