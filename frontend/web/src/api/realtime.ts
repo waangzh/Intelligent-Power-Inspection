@@ -12,7 +12,7 @@ interface TopicSubscription {
   handler: MessageHandler<unknown>
 }
 
-const WS_URL = import.meta.env.VITE_WS_URL || defaultWsUrl()
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://112.124.49.152:8080/ws'
 const SESSION_KEY = 'pi_session'
 
 let socket: WebSocket | null = null
@@ -21,11 +21,6 @@ let reconnectTimer: number | null = null
 let subscriptionSeq = 0
 
 const subscriptions = new Map<string, TopicSubscription>()
-
-function defaultWsUrl() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws`
-}
 
 function accessToken() {
   try {
