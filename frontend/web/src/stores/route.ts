@@ -29,18 +29,39 @@ function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
   }))
 }
 
+function normalizeRoute(route: Route): Route {
+  return {
+    ...route,
+    path: Array.isArray(route.path) ? route.path : [],
+    routeDetections: Array.isArray(route.routeDetections) ? route.routeDetections : [],
+    checkpoints: Array.isArray(route.checkpoints) ? route.checkpoints : [],
+    mapMode: route.mapMode ?? '2d',
+  }
+}
+
+
 export const useRouteStore = defineStore('route', () => {
   const routes = shallowRef<Route[]>([])
   const total = shallowRef(0)
+  let latestLoadRequest = 0
 
   async function load(siteId?: string, query: ListQuery = { size: 20 }) {
+    const requestId = ++latestLoadRequest
     const result = await resourcesApi.listRoutes({ ...query, siteId })
-    routes.value = result.items
+    if (requestId !== latestLoadRequest) return false
+    routes.value = result.items.map(normalizeRoute)
     total.value = result.total
+    return true
+  }
+
+  function clear() {
+    latestLoadRequest += 1
+    routes.value = []
+    total.value = 0
   }
 
   async function loadOne(id: string) {
-    const route = await resourcesApi.getRoute(id)
+    const route = normalizeRoute(await resourcesApi.getRoute(id))
     updateLocalRoute(route)
     return route
   }
@@ -57,19 +78,22 @@ export const useRouteStore = defineStore('route', () => {
       mapMode: '2d',
       createdAt: new Date().toISOString(),
     }
-    const saved = await resourcesApi.createRoute(route)
-    routes.value = [...routes.value, saved]
+    const saved = normalizeRoute(await resourcesApi.createRoute(route))
+    latestLoadRequest += 1
+    ensureRoute(saved)
     return saved
   }
 
   async function updateRoute(id: string, patch: Partial<Route>) {
-    const saved = await resourcesApi.updateRoute(id, patch)
+    const saved = normalizeRoute(await resourcesApi.updateRoute(id, patch))
+    latestLoadRequest += 1
     updateLocalRoute(saved)
     return saved
   }
 
   async function removeRoute(id: string) {
     await resourcesApi.removeRoute(id)
+    latestLoadRequest += 1
     routes.value = routes.value.filter((r) => r.id !== id)
   }
 
@@ -163,6 +187,12 @@ export const useRouteStore = defineStore('route', () => {
     else routes.value = [route, ...routes.value]
   }
 
+  function ensureRoute(route: Route) {
+    const exists = routes.value.some((item) => item.id === route.id)
+    updateLocalRoute(route)
+    if (!exists) total.value += 1
+  }
+
   function updateLocalCheckpoint(routeId: string, checkpoint: Checkpoint) {
     const route = routes.value.find((r) => r.id === routeId)
     if (!route || !route.checkpoints.some((item) => item.id === checkpoint.id)) return
@@ -176,6 +206,7 @@ export const useRouteStore = defineStore('route', () => {
     routes,
     total,
     load,
+    clear,
     loadOne,
     createRoute,
     updateRoute,
@@ -184,6 +215,7 @@ export const useRouteStore = defineStore('route', () => {
     updateCheckpoint,
     removeCheckpoint,
     saveExecutorRoute,
+    ensureRoute,
     getRouteById,
     getRoutesBySite,
   }

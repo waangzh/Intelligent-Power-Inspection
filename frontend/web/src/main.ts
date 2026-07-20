@@ -39,7 +39,7 @@ if (authStore.isLoggedIn) {
 
 setupRouterGuards(router)
 router.afterEach((to) => {
-  if (to.matched.some((record) => record.meta.requiresAuth) && authStore.isLoggedIn) {
+  if (to.name !== 'Routes' && to.matched.some((record) => record.meta.requiresAuth) && authStore.isLoggedIn) {
     void loadRouteData(to.name, to.params).catch(() => {})
   }
 })
