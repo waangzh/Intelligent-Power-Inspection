@@ -1,6 +1,10 @@
 <template>
-  <div>
-    <PageHeader title="任务调度" :description="can('task:create') ? '创建、下发与控制巡检任务' : '查看巡检任务进度（管理员仅可应急急停）'" :breadcrumbs="[{ label: '巡检业务' }, { label: '任务调度' }]">
+  <div class="task-page">
+    <PageHeader
+      title="任务调度"
+      :description="can('task:create') ? '创建、下发与控制巡检任务' : '查看巡检任务进度（管理员仅可应急急停）'"
+      :breadcrumbs="[{ label: '巡检业务' }, { label: '任务调度' }]"
+    >
       <template #actions>
         <el-button v-if="can('task:create')" type="primary" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
@@ -9,15 +13,39 @@
       </template>
     </PageHeader>
 
-    <el-card shadow="never" style="margin-bottom: 16px" v-if="activeTask">
+    <div class="stats-grid">
+      <el-card
+        v-for="(stat, index) in overviewStats"
+        :key="stat.key"
+        shadow="never"
+        :class="['stat-card', `stat-card-${index}`, { active: activeStatKey === stat.key }]"
+        @click="selectStatCard(stat.key)"
+      >
+        <div class="overview-stat">
+          <div class="stat-icon" :class="`tone-${index}`">
+            <el-icon><component :is="statIcons[index]" /></el-icon>
+          </div>
+          <div>
+            <div class="label">{{ stat.label }}</div>
+            <div class="value">{{ stat.value }}</div>
+            <div class="trend">{{ stat.footer }}</div>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <el-card v-if="activeTask" shadow="never" class="active-task-card">
       <template #header>
         <div class="card-head">
-          <span>执行中 · {{ activeTask.name }}</span>
+          <div class="active-task-title">
+            <el-icon class="pulse-icon"><VideoPlay /></el-icon>
+            <span>执行中 · {{ activeTask.name }}</span>
+          </div>
           <TaskStatusTag :status="taskStore.statusOf(activeTask)" />
         </div>
       </template>
       <el-row :gutter="16">
-        <el-col :span="12">
+        <el-col :xs="24" :md="12">
           <el-descriptions :column="2" size="small" border>
             <el-descriptions-item label="路线">{{ routeName(activeTask.routeId) }}</el-descriptions-item>
             <el-descriptions-item label="机器人">{{ robotName(activeTask.robotId) }}</el-descriptions-item>
@@ -34,8 +62,8 @@
             机器人语音：行进中持续检测人员 / 安全帽 / 障碍物 / 火源；到达检查点后播报「已到达指定位置，开始检查」
           </div>
         </el-col>
-        <el-col :span="12">
-          <div style="height: 220px">
+        <el-col :xs="24" :md="12">
+          <div class="active-map">
             <Map2D
               :center="mapCenter"
               :fallback-center="fallbackCenter"
@@ -51,7 +79,7 @@
         :type="taskStore.eligibilityFor(activeTask.id)?.eligible ? 'success' : 'warning'"
         :closable="false"
         show-icon
-        style="margin-top: 14px"
+        class="start-alert"
       />
       <div class="action-bar">
         <el-button
@@ -64,20 +92,47 @@
         <el-button v-if="can('task:dispatch') && !activeTask.executionId && activeTask.status === 'CREATED'" type="primary" @click="taskStore.dispatch(activeTask.id)">下发任务</el-button>
         <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'RUNNING'" @click="taskStore.pause(activeTask.id)">暂停</el-button>
         <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'PAUSED'" type="primary" @click="taskStore.resume(activeTask.id)">恢复</el-button>
-        <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'RUNNING'" type="warning" @click="taskStore.takeover(activeTask.id)">人工接管</el-button>
+        <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'RUNNING'" type="warning" plain @click="taskStore.takeover(activeTask.id)">人工接管</el-button>
         <el-button v-if="can('task:control') && activeTask.executionId && taskStore.statusOf(activeTask) === 'RUNNING'" @click="controlTask(activeTask.id, 'PAUSE')">暂停</el-button>
         <el-button v-if="can('task:control') && activeTask.executionId && taskStore.statusOf(activeTask) === 'PAUSED'" type="primary" @click="controlTask(activeTask.id, 'RESUME')">恢复</el-button>
-        <el-button v-if="can('task:takeover') && activeTask.executionId && taskStore.statusOf(activeTask) === 'RUNNING'" type="warning" @click="controlTask(activeTask.id, 'TAKEOVER')">人工接管</el-button>
+        <el-button v-if="can('task:takeover') && activeTask.executionId && taskStore.statusOf(activeTask) === 'RUNNING'" type="warning" plain @click="controlTask(activeTask.id, 'TAKEOVER')">人工接管</el-button>
         <el-button v-if="canCancelTask(activeTask)" type="danger" plain @click="cancelTask(activeTask.id)">取消任务</el-button>
         <el-button v-if="canEstopTask(activeTask)" type="danger" @click="emergencyStopTask(activeTask.id)">远程急停</el-button>
-        <el-button v-if="can('task:dispatch')" type="success" @click="openAgentForTask(activeTask.id)">Agent 分析</el-button>
-        <el-button @click="router.push(`/tasks/${activeTask.id}`)">任务详情</el-button>
+        <el-button v-if="can('task:dispatch')" type="success" plain @click="openAgentForTask(activeTask.id)">Agent 分析</el-button>
+        <el-button plain @click="router.push(`/tasks/${activeTask.id}`)">任务详情</el-button>
       </div>
     </el-card>
 
-    <el-card shadow="never">
-      <template #header>任务列表</template>
-      <el-table :data="taskStore.tasks" size="small">
+    <el-card shadow="never" class="filter-card">
+      <div class="filter-bar">
+        <el-input v-model="keyword" placeholder="搜索任务名称" clearable class="filter-search" @input="taskPage = 0">
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <div class="filter-item">
+          <span class="filter-label">状态</span>
+          <el-select v-model="statusFilter" placeholder="全部" clearable style="width: 130px" @change="onStatusFilterChange">
+            <el-option label="执行中" value="RUNNING" />
+            <el-option label="待启动" value="PENDING" />
+            <el-option label="已完成" value="DONE" />
+          </el-select>
+        </div>
+        <el-button @click="resetFilters">
+          <el-icon><RefreshRight /></el-icon>
+          重置
+        </el-button>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="table-card">
+      <template #header>
+        <div class="table-head">
+          <span class="table-title">任务列表</span>
+          <span class="record-count">共 {{ filteredTasks.length }} 条记录</span>
+        </div>
+      </template>
+      <el-table :data="filteredTasks" size="small">
         <el-table-column prop="name" label="任务名称" min-width="140">
           <template #default="{ row }">
             <el-link type="primary" @click="router.push(`/tasks/${row.id}`)">{{ row.name }}</el-link>
@@ -94,36 +149,40 @@
             <TaskStatusTag :status="taskStore.statusOf(row)" />
           </template>
         </el-table-column>
-        <el-table-column label="进度" width="140">
+        <el-table-column label="进度" width="160">
           <template #default="{ row }">
-            <el-button
-              v-if="can('task:dispatch') && taskStore.executionFor(row.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(row))"
-              text
-              type="primary"
-              size="small"
-              :disabled="!taskStore.eligibilityFor(row.id)?.eligible"
-              :title="startDisabledReason(row.id)"
-              @click="startInspection(row.id)"
-            >启动巡检</el-button>
-            <el-progress :percentage="taskStore.executionFor(row.id)?.progress ?? row.progress" :stroke-width="8" />
+            <div class="progress-cell">
+              <el-button
+                v-if="can('task:dispatch') && taskStore.executionFor(row.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(row))"
+                plain
+                size="small"
+                class="action-btn action-detail"
+                :disabled="!taskStore.eligibilityFor(row.id)?.eligible"
+                :title="startDisabledReason(row.id)"
+                @click="startInspection(row.id)"
+              >启动</el-button>
+              <el-progress :percentage="taskStore.executionFor(row.id)?.progress ?? row.progress" :stroke-width="8" />
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="160">
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right" class-name="actions-col">
           <template #default="{ row }">
-            <el-button v-if="can('task:dispatch') && !row.executionId && row.status === 'CREATED'" text type="primary" size="small" @click="taskStore.dispatch(row.id)">下发</el-button>
-            <el-button v-if="can('task:control') && !row.executionId && row.status === 'RUNNING'" text size="small" @click="taskStore.pause(row.id)">暂停</el-button>
-            <el-button v-if="can('task:control') && !row.executionId && row.status === 'PAUSED'" text type="primary" size="small" @click="taskStore.resume(row.id)">恢复</el-button>
-            <el-button v-if="can('task:control') && !row.executionId && row.status === 'RUNNING'" text type="warning" size="small" @click="taskStore.takeover(row.id)">接管</el-button>
-            <el-button v-if="can('task:control') && row.executionId && taskStore.statusOf(row) === 'RUNNING'" text size="small" @click="controlTask(row.id, 'PAUSE')">暂停</el-button>
-            <el-button v-if="can('task:control') && row.executionId && taskStore.statusOf(row) === 'PAUSED'" text type="primary" size="small" @click="controlTask(row.id, 'RESUME')">恢复</el-button>
-            <el-button v-if="can('task:takeover') && row.executionId && taskStore.statusOf(row) === 'RUNNING'" text type="warning" size="small" @click="controlTask(row.id, 'TAKEOVER')">接管</el-button>
-            <el-button v-if="can('task:dispatch')" text type="success" size="small" @click="openAgentForTask(row.id)">Agent</el-button>
-            <el-button text size="small" @click="router.push(`/tasks/${row.id}`)">详情</el-button>
-            <el-button v-if="canCancelTask(row)" text type="danger" size="small" @click="cancelTask(row.id)">取消</el-button>
-            <el-button v-if="canEstopTask(row)" text type="danger" size="small" @click="emergencyStopTask(row.id)">急停</el-button>
+            <div class="row-actions">
+              <el-button v-if="can('task:dispatch') && !row.executionId && row.status === 'CREATED'" plain size="small" class="action-btn action-claim" @click="taskStore.dispatch(row.id)">下发</el-button>
+              <el-button v-if="can('task:control') && !row.executionId && row.status === 'RUNNING'" plain size="small" class="action-btn action-detail" @click="taskStore.pause(row.id)">暂停</el-button>
+              <el-button v-if="can('task:control') && !row.executionId && row.status === 'PAUSED'" plain size="small" class="action-btn action-detail" @click="taskStore.resume(row.id)">恢复</el-button>
+              <el-button v-if="can('task:control') && !row.executionId && row.status === 'RUNNING'" plain size="small" class="action-btn action-claim" @click="taskStore.takeover(row.id)">接管</el-button>
+              <el-button v-if="can('task:control') && row.executionId && taskStore.statusOf(row) === 'RUNNING'" plain size="small" class="action-btn action-detail" @click="controlTask(row.id, 'PAUSE')">暂停</el-button>
+              <el-button v-if="can('task:control') && row.executionId && taskStore.statusOf(row) === 'PAUSED'" plain size="small" class="action-btn action-detail" @click="controlTask(row.id, 'RESUME')">恢复</el-button>
+              <el-button v-if="can('task:takeover') && row.executionId && taskStore.statusOf(row) === 'RUNNING'" plain size="small" class="action-btn action-claim" @click="controlTask(row.id, 'TAKEOVER')">接管</el-button>
+              <el-button v-if="can('task:dispatch')" plain size="small" class="action-btn action-submit" @click="openAgentForTask(row.id)">Agent</el-button>
+              <el-button plain size="small" class="action-btn action-detail" @click="router.push(`/tasks/${row.id}`)">详情</el-button>
+              <el-button v-if="canCancelTask(row)" plain size="small" class="action-btn action-danger" @click="cancelTask(row.id)">取消</el-button>
+              <el-button v-if="canEstopTask(row)" plain size="small" class="action-btn action-danger" @click="emergencyStopTask(row.id)">急停</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -164,6 +223,16 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import {
+  CircleCheck,
+  Clock,
+  List,
+  Microphone,
+  Plus,
+  RefreshRight,
+  Search,
+  VideoPlay,
+} from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { resourcesApi } from '@/api/resources'
 import Map2D from '@/components/Map2D.vue'
@@ -175,19 +244,23 @@ import { useRobotStore } from '@/stores/robot'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { latestReadyRevision, useTaskStore } from '@/stores/task'
-import type { InspectionTask, RouteRevision } from '@/types'
+import type { InspectionTask, RouteRevision, TaskStatus } from '@/types'
 import { DEPLOYMENT_STATE_LABELS } from '@/utils/routeDeployment'
 
 const readyDeploymentLabel = DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT
 
+const RUNNING_STATUSES: TaskStatus[] = ['STARTING', 'RUNNING', 'PAUSING', 'PAUSED', 'RESUMING', 'MANUAL_TAKEOVER', 'TAKEOVER_PENDING']
+const PENDING_STATUSES: TaskStatus[] = ['CREATED', 'DISPATCHED', 'START_FAILED']
+const DONE_STATUSES: TaskStatus[] = ['COMPLETED', 'CANCELLED', 'ESTOPPED', 'FAILED']
+
 const router = useRouter()
 const { can } = usePermission()
 const taskPage = ref(0)
+const keyword = ref('')
+const statusFilter = ref('')
+const activeStatKey = ref('ALL')
+const statIcons = [List, VideoPlay, Clock, CircleCheck]
 
-function loadTaskPage(page: number) {
-  taskPage.value = page
-  void taskStore.loadDynamic({ page, size: 20 })
-}
 const taskStore = useTaskStore()
 const routeStore = useRouteStore()
 const robotStore = useRobotStore()
@@ -197,6 +270,11 @@ const dialogVisible = ref(false)
 const form = reactive({ name: '', routeId: '', robotId: 'robot_001' })
 const readyRevision = ref<RouteRevision>()
 const revisionLoading = ref(false)
+
+function loadTaskPage(page: number) {
+  taskPage.value = page
+  void taskStore.loadDynamic({ page, size: 20 })
+}
 
 const activeTask = computed(() => taskStore.getActiveTask())
 const activeRoute = computed(() =>
@@ -215,6 +293,73 @@ const robotPos = computed(() => {
   if (!activeTask.value) return null
   return robotStore.getRobotById(activeTask.value.robotId)?.position ?? null
 })
+
+const overviewStats = computed(() => {
+  const tasks = taskStore.tasks
+  const statusOf = (task: InspectionTask) => taskStore.statusOf(task)
+  return [
+    {
+      key: 'ALL',
+      label: '全部任务',
+      value: taskStore.total,
+      footer: '服务端总数',
+    },
+    {
+      key: 'RUNNING',
+      label: '执行中',
+      value: tasks.filter((t) => RUNNING_STATUSES.includes(statusOf(t))).length,
+      footer: '本页统计',
+    },
+    {
+      key: 'PENDING',
+      label: '待启动',
+      value: tasks.filter((t) => PENDING_STATUSES.includes(statusOf(t))).length,
+      footer: '本页统计',
+    },
+    {
+      key: 'DONE',
+      label: '已结束',
+      value: tasks.filter((t) => DONE_STATUSES.includes(statusOf(t))).length,
+      footer: '本页统计',
+    },
+  ]
+})
+
+const filteredTasks = computed(() => {
+  let list = taskStore.tasks
+  if (keyword.value.trim()) {
+    const q = keyword.value.trim()
+    list = list.filter((t) => t.name.includes(q))
+  }
+  if (statusFilter.value === 'RUNNING') {
+    list = list.filter((t) => RUNNING_STATUSES.includes(taskStore.statusOf(t)))
+  } else if (statusFilter.value === 'PENDING') {
+    list = list.filter((t) => PENDING_STATUSES.includes(taskStore.statusOf(t)))
+  } else if (statusFilter.value === 'DONE') {
+    list = list.filter((t) => DONE_STATUSES.includes(taskStore.statusOf(t)))
+  }
+  return list
+})
+
+function selectStatCard(key: string) {
+  if (activeStatKey.value === key) {
+    activeStatKey.value = 'ALL'
+    statusFilter.value = ''
+  } else {
+    activeStatKey.value = key
+    statusFilter.value = key === 'ALL' ? '' : key
+  }
+}
+
+function onStatusFilterChange() {
+  activeStatKey.value = statusFilter.value || 'ALL'
+}
+
+function resetFilters() {
+  keyword.value = ''
+  statusFilter.value = ''
+  activeStatKey.value = 'ALL'
+}
 
 const defaultRobotLabel = computed(() => {
   const robot = robotStore.robots[0]
@@ -358,17 +503,43 @@ function openAgentForTask(taskId: string) {
 </script>
 
 <style scoped>
+.active-task-card {
+  margin-bottom: 16px;
+  border-color: #91caff;
+  box-shadow: 0 0 0 1px rgba(23, 104, 242, 0.08), var(--pi-card-shadow);
+}
+
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
+.active-task-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--pi-text);
+}
+
+.pulse-icon {
+  color: var(--pi-primary);
+  font-size: 18px;
+}
+
+.active-map {
+  height: 220px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--pi-border-soft);
+}
+
 .voice-hint {
   margin-top: 12px;
   padding: 10px 12px;
   background: #ecf5ff;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   color: #409eff;
   display: flex;
@@ -376,9 +547,32 @@ function openAgentForTask(taskId: string) {
   gap: 8px;
 }
 
+.start-alert {
+  margin-top: 14px;
+}
+
 .action-bar {
   margin-top: 16px;
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-cell :deep(.el-progress) {
+  flex: 1;
+  min-width: 60px;
+}
+
+@media (max-width: 768px) {
+  .active-map {
+    margin-top: 12px;
+    height: 200px;
+  }
 }
 </style>

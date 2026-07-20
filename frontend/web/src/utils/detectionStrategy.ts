@@ -32,6 +32,13 @@ export function cloneDetectionItems(items: DetectionItem[]): DetectionItem[] {
   return items.map((item) => ({ ...item, threshold: 0.75 }))
 }
 
+export function ensureDetectionPrompts(items: DetectionItem[]): DetectionItem[] {
+  return items.map((item) => ({
+    ...item,
+    prompt: item.prompt?.trim() || defaultDetectionItem(item.type).prompt,
+  }))
+}
+
 export function defaultCheckpointDetectionItems(): DetectionItem[] {
   return CHECKPOINT_DETECTIONS.map(defaultDetectionItem)
 }

@@ -413,6 +413,9 @@ public class SeedDataInitializer implements ApplicationRunner {
   }
 
   private void seedDemoRoutes() {
+    if (!dataStore.exists(DataCategory.ROUTE, "route_demo_001")) {
+      routeDemo();
+    }
     List<Map<String, Object>> switchyardPath =
         List.of(
             latLng(30.2599, 120.1198),
@@ -1367,8 +1370,6 @@ public class SeedDataInitializer implements ApplicationRunner {
             "PENDING",
             "priority",
             "MEDIUM",
-            "assigneeName",
-            "李运维",
             "createdById",
             "user_dispatcher",
             "createdByName",
