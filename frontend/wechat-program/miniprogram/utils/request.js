@@ -14,15 +14,156 @@ function isPublicAuthPath(url) {
   )
 }
 
+function readSession() {
+  return wx.getStorageSync('pi_session') || null
+}
+
+function writeSession(session) {
+  if (!session) wx.removeStorageSync('pi_session')
+  else wx.setStorageSync('pi_session', session)
+}
+
+const REFRESH_COOKIE_NAME = 'pi_refresh'
+const REFRESH_COOKIE_STORAGE_KEY = 'pi_refresh_cookie'
+let sessionRefreshCookie = ''
+
+function clearRefreshCookie() {
+  sessionRefreshCookie = ''
+  wx.removeStorageSync(REFRESH_COOKIE_STORAGE_KEY)
+}
+
+function storedRefreshCookie() {
+  if (sessionRefreshCookie) return sessionRefreshCookie
+  const stored = wx.getStorageSync(REFRESH_COOKIE_STORAGE_KEY)
+  if (!stored || typeof stored !== 'object' || !stored.cookie) return ''
+  if (stored.expiresAt && stored.expiresAt <= Date.now()) {
+    wx.removeStorageSync(REFRESH_COOKIE_STORAGE_KEY)
+    return ''
+  }
+  return stored.cookie
+}
+
+function responseCookieValues(res) {
+  const values = Array.isArray(res?.cookies) ? [...res.cookies] : []
+  Object.entries(res?.header || {}).forEach(([name, value]) => {
+    if (name.toLowerCase() !== 'set-cookie') return
+    if (Array.isArray(value)) values.push(...value)
+    else if (value) values.push(value)
+  })
+  return values.map(String)
+}
+
+/**
+ * wx.request 不会像浏览器一样维护 Cookie。手动提取后端返回的 pi_refresh：
+ * - remember=true 带 Max-Age，持久化到 Storage；
+ * - remember=false 不带 Max-Age，仅保存在当前小程序进程内；
+ * - Max-Age=0 表示退出登录/凭证撤销。
+ */
+function captureRefreshCookie(res) {
+  for (const raw of responseCookieValues(res)) {
+    const match = raw.match(new RegExp(`(?:^|[,\\s])${REFRESH_COOKIE_NAME}=([^;,\\s]*)`, 'i'))
+    if (!match) continue
+
+    const value = match[1]
+    const maxAgeMatch = raw.match(/;\s*Max-Age=(\d+)/i)
+    const maxAge = maxAgeMatch ? Number(maxAgeMatch[1]) : null
+    if (!value || maxAge === 0) {
+      clearRefreshCookie()
+      return
+    }
+
+    const cookie = `${REFRESH_COOKIE_NAME}=${value}`
+    if (maxAge !== null && Number.isFinite(maxAge) && maxAge > 0) {
+      sessionRefreshCookie = ''
+      wx.setStorageSync(REFRESH_COOKIE_STORAGE_KEY, {
+        cookie,
+        expiresAt: Date.now() + maxAge * 1000,
+      })
+    } else {
+      sessionRefreshCookie = cookie
+      wx.removeStorageSync(REFRESH_COOKIE_STORAGE_KEY)
+    }
+    return
+  }
+}
+
+function cookieHeader(url) {
+  return String(url || '').startsWith('/auth/') ? storedRefreshCookie() : ''
+}
+
+function syncAppSession(session, options = {}) {
+  try {
+    const app = getApp()
+    if (app && typeof app.applySession === 'function' && session) {
+      app.applySession(session, options)
+    } else if (app && typeof app.handleSessionExpired === 'function' && !session) {
+      app.handleSessionExpired()
+    } else if (app && typeof app.clearUser === 'function' && !session) {
+      app.clearUser({ redirect: true })
+    }
+  } catch {
+    // App 尚未初始化时忽略
+  }
+}
+
+let refreshPromise = null
+
+function tryRefreshSession() {
+  if (refreshPromise) return refreshPromise
+  const { baseUrl, timeout } = apiConfig
+  const refreshCookie = storedRefreshCookie()
+  if (!refreshCookie) return Promise.resolve(false)
+  refreshPromise = new Promise((resolve) => {
+    wx.request({
+      url: `${baseUrl}/auth/refresh`,
+      method: 'POST',
+      timeout,
+      header: {
+        'Content-Type': 'application/json',
+        Cookie: refreshCookie,
+      },
+      success(res) {
+        captureRefreshCookie(res)
+        const body = res.data
+        const ok = res.statusCode >= 200 && res.statusCode < 300
+          && body && typeof body === 'object' && body.code === 0 && body.data?.token
+        if (ok) {
+          const previous = readSession()
+          const next = {
+            ...(previous || {}),
+            ...body.data,
+            expiresAt: body.data.expiresAt ?? previous?.expiresAt,
+          }
+          writeSession(next)
+          // 与 Web 一致：续期后重试原请求；仅当用户/权限发生变化时由 applySession 重载页面。
+          syncAppSession(next)
+          resolve(true)
+        } else {
+          resolve(false)
+        }
+      },
+      fail() {
+        resolve(false)
+      },
+      complete() {
+        refreshPromise = null
+      },
+    })
+  })
+  return refreshPromise
+}
+
 /**
  * 统一 HTTP 请求 — 与网页端共用后端 /api/v1
  * 响应格式: { code: 0, message: 'ok', data: T }
  */
-function request({ url, method = 'GET', data, auth = true, headers = {} }) {
+function request({ url, method = 'GET', data, auth = true, headers = {}, retried = false }) {
   const { baseUrl, timeout } = apiConfig
-  const session = wx.getStorageSync('pi_session')
+  const session = readSession()
   const token = session && session.token
   const skipAuth = auth === false || isPublicAuthPath(url)
+  const allowsAutomaticRefresh = !String(url || '').startsWith('/auth/logout')
+  const refreshCookie = cookieHeader(url)
 
   return new Promise((resolve, reject) => {
     wx.request({
@@ -33,17 +174,34 @@ function request({ url, method = 'GET', data, auth = true, headers = {} }) {
       header: {
         'Content-Type': 'application/json',
         ...(!skipAuth && token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(refreshCookie ? { Cookie: refreshCookie } : {}),
         ...headers,
       },
       success(res) {
+        captureRefreshCookie(res)
         const body = res.data
-        // 业务层的权限拒绝（如观察员访问工单）会经 GlobalExceptionHandler 包装成
-        // { code, message, data } 返回；而 token 失效/缺失时 Spring Security 直接
-        // 在认证层拦截，返回的是框架默认错误体（无 code 字段）。用是否带 code 区分
-        // 两种 403，避免把“认证失效”误判为普通业务失败，导致坏 token 被反复携带发出。
         const hasAppEnvelope = body && typeof body === 'object' && 'code' in body
-        if (res.statusCode === 401 || (res.statusCode === 403 && !hasAppEnvelope && !isPublicAuthPath(url))) {
-          wx.removeStorageSync('pi_session')
+        const isAuthFailure = res.statusCode === 401
+          || (res.statusCode === 403 && !hasAppEnvelope && !isPublicAuthPath(url))
+
+        if (isAuthFailure && !skipAuth && allowsAutomaticRefresh && !retried) {
+          tryRefreshSession().then((refreshed) => {
+            if (refreshed) {
+              request({ url, method, data, auth, headers, retried: true }).then(resolve).catch(reject)
+            } else {
+              writeSession(null)
+              clearRefreshCookie()
+              syncAppSession(null)
+              reject(new Error('登录已过期，请重新登录'))
+            }
+          })
+          return
+        }
+
+        if (isAuthFailure && !skipAuth) {
+          writeSession(null)
+          clearRefreshCookie()
+          syncAppSession(null)
           reject(new Error('登录已过期，请重新登录'))
           return
         }

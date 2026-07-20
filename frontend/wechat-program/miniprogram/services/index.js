@@ -47,7 +47,7 @@ async function getWorkOrderById(id) {
  */
 async function fetchAllPages(listFn, extraParams) {
   const pageSize = 200
-  let page = 1
+  let page = 0
   let items = []
   for (let guard = 0; guard < 50; guard += 1) {
     const res = await listFn({ ...extraParams, page, size: pageSize })
@@ -61,10 +61,6 @@ async function fetchAllPages(listFn, extraParams) {
     page += 1
   }
   return items
-}
-
-function delay(ms = 200) {
-  return new Promise((r) => setTimeout(r, ms))
 }
 
 // ==================== Auth ====================
@@ -231,7 +227,7 @@ async function getRoutes() {
 }
 
 async function saveRoute(route) {
-  return route.id ? services.routes.replace(route.id, route) : services.routes.create(route)
+  return route.id ? services.routes.update(route.id, route) : services.routes.create(route)
 }
 
 async function createRoute(siteId, name, description = '') {
@@ -329,13 +325,17 @@ async function tryAutoConvertPendingAlarms() {
   const session = getSession()
   if (!session?.user) return empty
 
-  let [alarms, orders] = await Promise.all([
-    getAlarms(),
-    getWorkOrders().catch(() => []),
-  ])
-
   const user = session.user
   const perms = sessionPermissions()
+  if (!perms.includes('workorder:view')) {
+    return { alarms: await getAlarms(), orders: [], converted: [] }
+  }
+
+  let [alarms, orders] = await Promise.all([
+    getAlarms(),
+    getWorkOrders(),
+  ])
+
   if (!workOrderPerm.canCreateWorkOrder(user, perms)) {
     return { alarms, orders, converted: [] }
   }
@@ -374,7 +374,7 @@ async function tryAutoConvertPendingAlarms() {
   if (converted.length > 0) {
     ;[alarms, orders] = await Promise.all([
       getAlarms(),
-      getWorkOrders().catch(() => []),
+      getWorkOrders(),
     ])
   }
 
@@ -383,9 +383,6 @@ async function tryAutoConvertPendingAlarms() {
 
 // ==================== Work Orders ====================
 async function getWorkOrders() {
-  if (!sessionPermissions().includes('workorder:view')) {
-    return []
-  }
   return fetchAllPages(services.workOrders.list)
 }
 
@@ -484,13 +481,7 @@ async function removeNotification(id) {
 
 // ==================== Aggregates ====================
 async function fetchDashboard() {
-  await delay(100)
-  const [sites, routes, tasks, alarms, robots, records] = await Promise.all([
-    getSites(), getRoutes(), getTasks(), getAlarms(), getRobots(), getRecords(),
-  ])
-  const activeTasks = tasks.filter((t) => ['DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER'].includes(t.status))
-  const unack = alarms.filter((a) => !a.acknowledged).length
-  return { sites, routes, tasks, alarms, robots, records, activeTasks, unack }
+  return openapiClient.dashboard.overview()
 }
 
 module.exports = {

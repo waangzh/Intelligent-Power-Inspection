@@ -1,5 +1,6 @@
 /** AUTO-GENERATED — 请勿手工编辑。运行: npm run api:generate */
 const { get, post, put, patch, del } = require('../utils/request')
+const { uid } = require('../utils/storage')
 const { API_PATHS, apiRel } = require('./api-paths')
 
 function buildPath(apiPath, params = {}) {
@@ -84,8 +85,8 @@ const openapiClient = {
     health(query) { return get(buildPath(API_PATHS.health), query) },
   },
   internal: {
-    upload2(body) { return post(buildPath(API_PATHS.internalRobotInspectionImages), body) },
-    upload1(body) { return post(buildPath(API_PATHS.internalRobotMapAssets), body) },
+    upload2(body) { return post(buildPath(API_PATHS.internalRobotInspectionImages), body, { 'Idempotency-Key': uid('api') }) },
+    upload1(body) { return post(buildPath(API_PATHS.internalRobotMapAssets), body, { 'Idempotency-Key': uid('api') }) },
   },
   mapAssets: {
     getMapAssets(query) { return get(buildPath(API_PATHS.mapAssets), query) },
@@ -129,7 +130,7 @@ const openapiClient = {
   routeRevisions: {
     getRouteRevisions(revisionId, query) { return get(buildPath(API_PATHS.routeRevisionsRevisionId, { revisionId }), query) },
     getDeployments(revisionId, query) { return get(buildPath(API_PATHS.routeRevisionsRevisionIdDeployments, { revisionId }), query) },
-    create2(revisionId, body) { return post(buildPath(API_PATHS.routeRevisionsRevisionIdDeployments, { revisionId }), body) },
+    create2(revisionId, body) { return post(buildPath(API_PATHS.routeRevisionsRevisionIdDeployments, { revisionId }), body, { 'Idempotency-Key': uid('api') }) },
   },
   routes: {
     getRoutes(query) { return get(buildPath(API_PATHS.routes), query) },
@@ -172,16 +173,16 @@ const openapiClient = {
     deleteTask(id) { return del(buildPath(API_PATHS.tasksId, { id })) },
     task(id, query) { return get(buildPath(API_PATHS.tasksId, { id }), query) },
     updateTask(id, body) { return patch(buildPath(API_PATHS.tasksId, { id }), body) },
-    cancel(id, body) { return post(buildPath(API_PATHS.tasksIdCancel, { id }), body) },
+    cancel(id, body) { return post(buildPath(API_PATHS.tasksIdCancel, { id }), body, { 'Idempotency-Key': uid('api') }) },
     dispatch(id, body) { return post(buildPath(API_PATHS.tasksIdDispatch, { id }), body) },
-    emergencyStop(id, body) { return post(buildPath(API_PATHS.tasksIdEmergencyStop, { id }), body) },
+    emergencyStop(id, body) { return post(buildPath(API_PATHS.tasksIdEmergencyStop, { id }), body, { 'Idempotency-Key': uid('api') }) },
     events(id, query) { return get(buildPath(API_PATHS.tasksIdEvents, { id }), query) },
     execution(id, query) { return get(buildPath(API_PATHS.tasksIdExecution, { id }), query) },
-    pause(id, body) { return post(buildPath(API_PATHS.tasksIdPause, { id }), body) },
-    resume(id, body) { return post(buildPath(API_PATHS.tasksIdResume, { id }), body) },
-    start(id, body) { return post(buildPath(API_PATHS.tasksIdStart, { id }), body) },
+    pause(id, body) { return post(buildPath(API_PATHS.tasksIdPause, { id }), body, { 'Idempotency-Key': uid('api') }) },
+    resume(id, body) { return post(buildPath(API_PATHS.tasksIdResume, { id }), body, { 'Idempotency-Key': uid('api') }) },
+    start(id, body) { return post(buildPath(API_PATHS.tasksIdStart, { id }), body, { 'Idempotency-Key': uid('api') }) },
     startEligibility(id, query) { return get(buildPath(API_PATHS.tasksIdStartEligibility, { id }), query) },
-    takeover(id, body) { return post(buildPath(API_PATHS.tasksIdTakeover, { id }), body) },
+    takeover(id, body) { return post(buildPath(API_PATHS.tasksIdTakeover, { id }), body, { 'Idempotency-Key': uid('api') }) },
     active(query) { return get(buildPath(API_PATHS.tasksActive), query) },
     event(eventId, query) { return get(buildPath(API_PATHS.tasksEventsEventId, { eventId }), query) },
   },
@@ -245,6 +246,7 @@ const services = {
   routes: {
     list: (...args) => openapiClient.routes.getRoutes(...args),
     create: (...args) => openapiClient.routes.createRoute(...args),
+    update: (...args) => openapiClient.routes.updateRoute(...args),
     replace: (...args) => openapiClient.routes.replaceRoute(...args),
     remove: (...args) => openapiClient.routes.deleteRoute(...args),
   },
