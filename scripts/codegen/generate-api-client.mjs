@@ -151,17 +151,18 @@ function deriveMethodName(httpMethod, apiPath, operationId, usedInGroup) {
 }
 
 function genMpMethodBody(op) {
-  const { httpMethod, pathConstName, params, methodName } = op
+  const { httpMethod, pathConstName, params, methodName, requiresIdempotencyKey } = op
   const httpFn = httpMethod === 'delete' ? 'del' : httpMethod
   const pathArgs = params.length ? `{ ${params.join(', ')} }` : null
   const build = pathArgs
     ? `buildPath(API_PATHS.${pathConstName}, ${pathArgs})`
     : `buildPath(API_PATHS.${pathConstName})`
+  const idempotencyArg = requiresIdempotencyKey ? ", { 'Idempotency-Key': uid('api') }" : ''
 
   if (params.length === 0) {
     if (httpMethod === 'get') return `${methodName}(query) { return ${httpFn}(${build}, query) }`
     if (httpMethod === 'delete') return `${methodName}() { return ${httpFn}(${build}) }`
-    return `${methodName}(body) { return ${httpFn}(${build}, body) }`
+    return `${methodName}(body) { return ${httpFn}(${build}, body${idempotencyArg}) }`
   }
   const sig = [...params, httpMethod === 'get' ? 'query' : 'body'].join(', ')
   if (httpMethod === 'get') {
@@ -170,7 +171,7 @@ function genMpMethodBody(op) {
   if (httpMethod === 'delete') {
     return `${methodName}(${params.join(', ')}) { return ${httpFn}(${build}) }`
   }
-  return `${methodName}(${sig}) { return ${httpFn}(${build}, body) }`
+  return `${methodName}(${sig}) { return ${httpFn}(${build}, body${idempotencyArg}) }`
 }
 
 /** 小程序 services 层使用的友好别名 → OpenAPI 路径 + HTTP 方法 */
@@ -198,6 +199,7 @@ const MP_SERVICE_ENDPOINTS = [
   ['sites.listSlamMaps', '/api/v1/sites/slam-maps', 'get'],
   ['routes.list', '/api/v1/routes', 'get'],
   ['routes.create', '/api/v1/routes', 'post'],
+  ['routes.update', '/api/v1/routes/{id}', 'patch'],
   ['routes.replace', '/api/v1/routes/{id}', 'put'],
   ['routes.remove', '/api/v1/routes/{id}', 'delete'],
   ['tasks.list', '/api/v1/tasks', 'get'],
@@ -242,6 +244,9 @@ for (const entry of pathEntries) {
       operationId: op.operationId || '',
       params: pathParamNames(entry.apiPath),
       group: toGroupName(entry.apiPath),
+      requiresIdempotencyKey: (op.parameters || []).some(
+        (p) => p.in === 'header' && p.name === 'Idempotency-Key',
+      ),
     })
   }
 }
@@ -318,6 +323,7 @@ export { API_PATHS }
 fs.writeFileSync(webClientPath, webClientTs, 'utf8')
 
 const mpClientJs = `${banner}const { get, post, put, patch, del } = require('../utils/request')
+const { uid } = require('../utils/storage')
 const { API_PATHS, apiRel } = require('./api-paths')
 
 function buildPath(apiPath, params = {}) {

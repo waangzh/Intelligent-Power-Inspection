@@ -19,31 +19,52 @@ App({
     this.restoreSession()
   },
 
+  reloadVisiblePages() {
+    getCurrentPages().forEach((page) => {
+      if (page && typeof page.load === 'function') {
+        Promise.resolve(page.load()).catch(() => {})
+      }
+    })
+    const tabBar = this.globalData.tabBarComponent
+    if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
+  },
+
   restoreSession() {
     const session = api.getSession()
     if (session) {
-      this.applySession(session)
+      this.applySession(session, { reloadPages: false })
       api.refreshMe().then((fresh) => {
-        if (fresh) this.applySession(fresh)
+        if (fresh) this.applySession(fresh, { reloadPages: true })
       }).catch(() => {
         // request.js 已根据响应特征区分“token 失效”与“网络抖动”：
         // 前者会清掉 pi_session，此时才需要退出登录态；网络抖动时 session 仍在，
         // 保留乐观展示，避免偶发超时就把用户强制登出。
         if (!api.getSession()) {
-          this.clearUser()
+          this.clearUser({ redirect: false })
         }
       })
     }
   },
 
-  applySession(session) {
+  applySession(session, options = {}) {
     if (!session?.user || !Array.isArray(session.permissions) || !session.permissions.length) {
       this.clearUser()
       return
     }
+    const prevUserId = this.globalData.user?.id
+    const prevUserSig = JSON.stringify(this.globalData.user || null)
+    const prevPerms = JSON.stringify(this.globalData.permissions || [])
     this.globalData.user = session.user
     this.globalData.permissions = session.permissions
     this.refreshBadges()
+    const sessionChanged = prevUserId !== session.user.id
+      || prevUserSig !== JSON.stringify(session.user)
+      || prevPerms !== JSON.stringify(session.permissions)
+    // 显式要求重载时始终刷新页面（如 refreshMe / 重新登录）；
+    // 默认仅在用户或权限变化时重载，避免无意义重复请求。
+    if (options.reloadPages === true || (options.reloadPages !== false && sessionChanged)) {
+      this.reloadVisiblePages()
+    }
   },
 
   registerTabBar(component) {
@@ -124,12 +145,15 @@ App({
   },
 
   setSession(session) {
-    this.applySession(session)
-    const tabBar = this.globalData.tabBarComponent
-    if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
+    this.applySession(session, { reloadPages: true })
   },
 
-  clearUser() {
+  handleSessionExpired() {
+    this.clearUser({ redirect: true })
+  },
+
+  clearUser(options = {}) {
+    const wasLoggedIn = !!this.globalData.user
     this.globalData.user = null
     this.globalData.permissions = []
     this.globalData.unreadNotifications = 0
@@ -138,6 +162,13 @@ App({
     this.clearTabBarBadges()
     const tabBar = this.globalData.tabBarComponent
     if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
+    if (options.redirect !== false && wasLoggedIn) {
+      const pages = getCurrentPages()
+      const route = pages[pages.length - 1]?.route || ''
+      if (route && !route.startsWith('pages/auth/')) {
+        wx.redirectTo({ url: '/pages/auth/login/index' })
+      }
+    }
   },
 
   requireAuth(redirectUrl) {
