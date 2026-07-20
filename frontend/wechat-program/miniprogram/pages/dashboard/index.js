@@ -1,5 +1,4 @@
 const api = require('../../services/index')
-const { computeAnalytics } = require('../../utils/analytics')
 const { canControlTask, canTakeoverTask } = require('../../utils/permission')
 const { syncTabBar } = require('../../utils/tab-page')
 const { isNativeTabPage } = require('../../config/tab-bar')
@@ -38,14 +37,16 @@ Page({
   },
 
   async load() {
-    const d = await api.fetchDashboard()
-    const analytics = computeAnalytics(d)
-    const alarmChartData = analytics.weeklyAlarmCounts.map((v, i) => ({
+    const overview = await api.fetchDashboard()
+    const { counts, rates, weeklyAlarmCounts, recentAlarms, activeTaskItems, robotItems } = overview
+
+    const alarmChartData = (weeklyAlarmCounts || []).map((v, i) => ({
       label: `${6 - i}天`,
       value: v,
     }))
-    const robotName = (id) => d.robots.find((r) => r.id === id)?.name || '机器人'
-    const active = d.tasks.filter((t) => ['DISPATCHED', 'RUNNING', 'CREATED'].includes(t.status))
+
+    const robotName = (id) => (robotItems || []).find((r) => r.id === id)?.name || '机器人'
+    const active = activeTaskItems || []
     const schedule = active.length
       ? active.slice(0, 4).map((t) => ({
         time: new Date(t.startedAt || t.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
@@ -57,26 +58,27 @@ Page({
         { time: '14:00', text: '电容器组巡检（巡检机器人）' },
         { time: '16:00', text: '夜间预检任务待命' },
       ]
-    const runningCount = d.tasks.filter((t) =>
-      ['RUNNING', 'PAUSED', 'MANUAL_TAKEOVER'].includes(t.status)).length
+
+    const unack = counts.unacknowledgedAlarms || 0
     const stats = [
-      { label: '站点数量', value: d.sites.length, trend: `覆盖 ${d.sites.length} 座变电站`, up: true },
-      { label: '巡检路线', value: d.routes.length, trend: `共 ${d.routes.length} 条路线`, up: true },
-      { label: '进行中任务', value: runningCount, trend: '实时更新', up: true },
-      { label: '未确认告警', value: d.unack, trend: d.unack ? '需及时处理' : '暂无待处理', up: !d.unack },
+      { label: '站点数量', value: counts.sites, trend: `覆盖 ${counts.sites} 座变电站`, up: true },
+      { label: '巡检路线', value: counts.routes, trend: `共 ${counts.routes} 条路线`, up: true },
+      { label: '进行中任务', value: counts.activeTasks, trend: '实时更新', up: true },
+      { label: '未确认告警', value: unack, trend: unack ? '需及时处理' : '暂无待处理', up: !unack },
     ]
+
     this.setData({
       stats,
-      recentAlarms: d.alarms.slice(0, 5).map((a) => ({
+      recentAlarms: (recentAlarms || []).slice(0, 5).map((a) => ({
         ...a,
         severityLabel: ALARM_SEVERITY_LABELS[a.severity],
         sevType: a.severity === 'CRITICAL' ? 'danger' : 'warning',
       })),
-      activeTasks: d.activeTasks,
-      unack: d.unack,
+      activeTasks: active,
+      unack,
       schedule,
       alarmChartData,
-      completionRate: analytics.completionRate,
+      completionRate: rates.taskCompletion || 0,
     })
   },
 

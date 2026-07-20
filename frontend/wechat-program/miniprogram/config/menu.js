@@ -1,6 +1,4 @@
 const profileMenuItems = [
-  { path: '/pages/profile/info/index', label: '我的信息' },
-  { path: '/pages/profile/avatar/index', label: '我的头像' },
   { path: '/pages/profile/security/index', label: '账号安全' },
   { path: '/pages/profile/activity/index', label: '我的记录' },
   { path: '/pages/profile/settings/index', label: '偏好设置' },

@@ -1,1 +1,55 @@
 @import '../login/index.wxss';
+
+/* 避免 flex 垂直居中 + 倒计时 setData 导致卡片上下跳 */
+.auth-page {
+  align-items: flex-start;
+  padding-top: 80rpx;
+  box-sizing: border-box;
+}
+
+.auth-card {
+  overflow: hidden;
+}
+
+.sms-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.sms-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sms-btn {
+  flex-shrink: 0;
+  width: 220rpx;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  background: #fff;
+  color: var(--pi-primary);
+  border: 1rpx solid var(--pi-primary);
+  box-sizing: border-box;
+}
+
+.sms-btn-text {
+  font-size: 24rpx;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sms-btn--disabled {
+  color: var(--pi-muted);
+  border-color: var(--pi-border);
+  background: #f7f8fa;
+  pointer-events: none;
+}
+
+.submit::after {
+  border: none;
+}

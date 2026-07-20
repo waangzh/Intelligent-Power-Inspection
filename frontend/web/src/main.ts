@@ -38,9 +38,9 @@ if (authStore.isLoggedIn) {
 }
 
 setupRouterGuards(router)
-router.beforeResolve(async (to) => {
-  if (to.meta.requiresAuth && authStore.isLoggedIn) {
-    await loadRouteData(to.name, to.params)
+router.afterEach((to) => {
+  if (to.matched.some((record) => record.meta.requiresAuth) && authStore.isLoggedIn) {
+    void loadRouteData(to.name, to.params).catch(() => {})
   }
 })
 

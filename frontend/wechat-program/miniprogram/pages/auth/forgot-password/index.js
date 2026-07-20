@@ -1,5 +1,5 @@
 const api = require('../../../services/index')
-const { validateUsername, validatePassword } = require('../../../utils/storage')
+const { validatePassword } = require('../../../utils/storage')
 
 Page({
   data: {
@@ -8,13 +8,10 @@ Page({
     smsCooldown: 0,
     smsBtnLabel: '发送验证码',
     form: {
-      username: '',
-      displayName: '',
       phone: '',
       smsCode: '',
-      password: '',
+      newPassword: '',
       confirmPassword: '',
-      agreed: false,
     },
   },
 
@@ -30,10 +27,6 @@ Page({
   onInput(e) {
     const k = e.currentTarget.dataset.k
     this.setData({ [`form.${k}`]: e.detail.value })
-  },
-
-  toggleAgreed() {
-    this.setData({ 'form.agreed': !this.data.form.agreed })
   },
 
   goLogin() {
@@ -87,7 +80,7 @@ Page({
 
     this.updateSmsBtn(this.data.smsCooldown, true)
     try {
-      const result = await api.sendRegisterSms(this.data.form.phone.trim())
+      const result = await api.sendResetPasswordSms(this.data.form.phone.trim())
       wx.showToast({ title: result.message || '验证码已发送' })
       if (result.debugCode) {
         this.setData({ 'form.smsCode': result.debugCode })
@@ -106,22 +99,18 @@ Page({
 
   validateForm() {
     const f = this.data.form
-    const uErr = validateUsername(f.username)
-    if (uErr) return uErr
-    if (!(f.displayName || '').trim()) return '请填写姓名'
     const phoneErr = this.validatePhone(f.phone)
     if (phoneErr) return phoneErr
     const code = (f.smsCode || '').trim()
     if (!code) return '请输入短信验证码'
     if (!/^\d{4,8}$/.test(code)) return '验证码格式不正确'
-    const pErr = validatePassword(f.password)
+    const pErr = validatePassword(f.newPassword)
     if (pErr) return pErr
-    if (f.password !== f.confirmPassword) return '两次输入的密码不一致'
-    if (!f.agreed) return '请阅读并同意服务条款'
+    if (f.newPassword !== f.confirmPassword) return '两次输入的密码不一致'
     return null
   },
 
-  async handleRegister() {
+  async handleReset() {
     const err = this.validateForm()
     if (err) {
       wx.showToast({ title: err, icon: 'none' })
@@ -131,19 +120,16 @@ Page({
     const f = this.data.form
     this.setData({ loading: true })
     try {
-      await api.register({
-        username: f.username.trim(),
-        displayName: f.displayName.trim(),
+      await api.resetPassword({
         phone: f.phone.trim(),
         smsCode: f.smsCode.trim(),
-        password: f.password,
+        newPassword: f.newPassword,
         confirmPassword: f.confirmPassword,
-        agreed: f.agreed,
       })
-      wx.showToast({ title: '注册成功，请登录' })
+      wx.showToast({ title: '密码已重置，请登录' })
       setTimeout(() => wx.navigateBack(), 800)
     } catch (e) {
-      wx.showToast({ title: e.message || '注册失败', icon: 'none' })
+      wx.showToast({ title: e.message || '重置失败', icon: 'none' })
     } finally {
       this.setData({ loading: false })
     }

@@ -99,15 +99,18 @@ Page({
     const perms = getApp().globalData.permissions
     const canCreate = workOrderPerm.canCreateWorkOrder(user, perms)
     let pendingAlarms = []
+    let orders = []
+
     if (canCreate) {
-      const [alarms, ordersForAlarm] = await Promise.all([
-        api.getAlarms(),
-        api.getWorkOrders(),
-      ])
+      const snapshot = await api.tryAutoConvertPendingAlarms().catch(() => ({
+        alarms: [],
+        orders: [],
+      }))
+      orders = snapshot.orders || []
       const linkedAlarmIds = new Set(
-        ordersForAlarm.filter((o) => o.alarmId).map((o) => o.alarmId),
+        orders.filter((o) => o.alarmId).map((o) => o.alarmId),
       )
-      pendingAlarms = alarms
+      pendingAlarms = (snapshot.alarms || [])
         .filter((a) => !linkedAlarmIds.has(a.id))
         .slice(0, 8)
         .map((a) => ({
@@ -117,9 +120,9 @@ Page({
           sevType: a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info',
           time: a.createdAt ? a.createdAt.slice(0, 16).replace('T', ' ') : '',
         }))
+    } else {
+      orders = await api.getWorkOrders()
     }
-
-    let orders = await api.getWorkOrders()
     orders = workOrderPerm.filterVisibleWorkOrders(orders, user)
     orders = orders.map((o) => {
       const enriched = enrichWorkOrder({

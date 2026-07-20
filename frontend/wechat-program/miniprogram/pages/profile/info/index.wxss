@@ -2,6 +2,10 @@
 .profile-meta { flex: 1; }
 .profile-name { display: block; font-size: 34rpx; font-weight: 700; color: var(--pi-text); }
 .bio-preview { display: block; font-size: 24rpx; margin-top: 4rpx; }
+.avatar-edit { display: flex; flex-direction: column; align-items: center; gap: 16rpx; margin-bottom: 24rpx; padding-bottom: 24rpx; border-bottom: 1rpx solid var(--pi-border-soft); }
+.avatar-edit-preview { width: 160rpx; height: 160rpx; border-radius: 50%; overflow: hidden; }
+.avatar-edit-image { width: 160rpx; height: 160rpx; border-radius: 50%; }
+.avatar-edit-actions { display: flex; gap: 16rpx; flex-wrap: wrap; justify-content: center; }
 .info-row { display: flex; justify-content: space-between; padding: 12rpx 0; border-bottom: 1rpx solid var(--pi-border-soft); }
 .info-row:last-child { border-bottom: none; }
 .quick-entry { margin-bottom: 16rpx; }
