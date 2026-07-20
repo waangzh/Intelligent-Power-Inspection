@@ -22,6 +22,7 @@ import com.powerinspection.route.RouteDeploymentRepository;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionRepository;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -126,6 +127,64 @@ class RobotMapAssetControllerTests {
   }
 
   @Test
+  void sameUploadIntentRepairsMissingPendingFilesWithoutCreatingAnotherAsset() throws Exception {
+    String key = key();
+    String mapId = uploadMap(key);
+    String originalYamlSha256 = String.valueOf(
+      dataStore.get(DataCategory.MAP_ASSET, mapId).get("yamlSha256"));
+    Files.delete(mapAssetService.yamlPathForManagement(mapId));
+    Files.delete(mapAssetService.pgmPathForManagement(mapId));
+
+    MockMultipartFile equivalentYaml = yaml(
+      "mode: trinary\nfree_thresh: 0.2000\norigin: [0.0, 0.00, -0]\nimage: floor.pgm\n"
+        + "occupied_thresh: 0.6500\nresolution: 0.0500\nnegate: 0\n");
+    String response = mockMvc.perform(upload(key, "robot-001", equivalentYaml, pgmBytes((byte) 0))
+        .header("Authorization", BRIDGE_AUTH))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.id").value(mapId))
+      .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"))
+      .andExpect(jsonPath("$.data.filesReady").value(true))
+      .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+
+    String repairedYamlSha256 = objectMapper.readTree(response).path("data").path("yamlSha256").asText();
+    assertNotEquals(originalYamlSha256, repairedYamlSha256);
+    assertEquals(1, dataStore.list(DataCategory.MAP_ASSET).stream()
+      .filter(asset -> key.equals(asset.get("uploadIdempotencyKey"))).count());
+    assertEquals("SUCCEEDED", robotMapUploadRepository
+      .findByRobotIdAndIdempotencyKey("robot_001", key).orElseThrow().getStatus());
+
+    String token = login("dispatcher", "Disp@123");
+    mockMvc.perform(post("/api/v1/map-assets/{id}/review", mapId).header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON).content(json("action", "APPROVE")))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.status").value("AVAILABLE"));
+  }
+
+  @Test
+  void staleRepairReconcilesFilesPublishedBeforeMetadataUpdate() throws Exception {
+    String key = key();
+    String mapId = uploadMap(key);
+    MockMultipartFile equivalentYaml = yaml(
+      "mode: trinary\nfree_thresh: 0.2000\norigin: [0.0, 0.00, -0]\nimage: floor.pgm\n"
+        + "occupied_thresh: 0.6500\nresolution: 0.0500\nnegate: 0\n");
+    Files.write(mapAssetService.yamlPathForManagement(mapId), equivalentYaml.getBytes());
+    RobotMapUploadEntity upload = robotMapUploadRepository
+      .findByRobotIdAndIdempotencyKey("robot_001", key).orElseThrow();
+    upload.setStatus("PROCESSING");
+    upload.setUpdatedAt(Instant.now().minus(10, ChronoUnit.MINUTES).toString());
+    robotMapUploadRepository.saveAndFlush(upload);
+
+    mockMvc.perform(upload(key, "robot-001", equivalentYaml, pgmBytes((byte) 0))
+        .header("Authorization", BRIDGE_AUTH))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.id").value(mapId))
+      .andExpect(jsonPath("$.data.filesReady").value(true))
+      .andExpect(jsonPath("$.data.yamlSha256").value(sha256(equivalentYaml.getBytes())));
+    assertEquals("SUCCEEDED", robotMapUploadRepository
+      .findByRobotIdAndIdempotencyKey("robot_001", key).orElseThrow().getStatus());
+  }
+
+  @Test
   void missingMapFilesAreVisibleToReviewersAndCannotBeApproved() throws Exception {
     String mapId = "map_missing_files_" + suffix();
     dataStore.upsert(DataCategory.MAP_ASSET, new LinkedHashMap<>(Map.of(
@@ -144,7 +203,7 @@ class RobotMapAssetControllerTests {
     mockMvc.perform(post("/api/v1/map-assets/{id}/review", mapId).header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON).content(json("action", "APPROVE")))
       .andExpect(status().isConflict())
-      .andExpect(jsonPath("$.message").value("地图资产文件不完整，无法通过审核，请让机器人使用新的 Idempotency-Key 重新上传"));
+      .andExpect(jsonPath("$.message").value("地图资产文件不完整，无法通过审核；可使用原 Idempotency-Key 重试修复"));
   }
 
   @Test

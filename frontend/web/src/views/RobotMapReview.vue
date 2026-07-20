@@ -206,7 +206,7 @@ function openDetail(asset: MapAsset) {
 
 async function approve(asset: MapAsset) {
   if (asset.filesReady === false) {
-    ElMessage.error('地图文件不完整，请让机器人使用新的 Idempotency-Key 重新上传后再审核')
+    ElMessage.error('地图文件不完整，请让机器人使用原 Idempotency-Key 重试修复后再审核')
     return
   }
   try {
