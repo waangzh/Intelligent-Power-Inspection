@@ -261,3 +261,231 @@ body,
     justify-content: center;
   }
 }
+
+/* 列表页通用：统计卡片、筛选栏、表格操作列（工单 / 告警 / 任务） */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stats-grid.cols-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.overview-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.stat-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  place-items: center;
+  border-radius: 16px;
+  color: #fff;
+  font-size: 24px;
+}
+
+.tone-0 { background: linear-gradient(135deg, #2878ff, #1455d9); }
+.tone-1 { background: linear-gradient(135deg, #ff7d2d, #f25216); }
+.tone-2 { background: linear-gradient(135deg, #2878ff, #1455d9); }
+.tone-3 { background: linear-gradient(135deg, #8b58ff, #6431e6); }
+.tone-4 { background: linear-gradient(135deg, #ff4d4f, #cf1322); }
+
+.stat-card {
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.stat-card.active {
+  border-color: #1768f2;
+  box-shadow: 0 0 0 1px #1768f2 inset;
+}
+
+.stat-card .label {
+  margin: 0;
+  color: #526986;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-card .value {
+  margin-top: 2px;
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+.stat-card .trend {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #909399;
+}
+
+.stat-card-0 .value { color: #1768f2; }
+.stat-card-1 .value { color: #f25216; }
+.stat-card-2 .value { color: #1768f2; }
+.stat-card-3 .value { color: #6431e6; }
+.stat-card-4 .value,
+.stat-card-4 .trend { color: #cf1322; }
+
+.filter-card {
+  margin-bottom: 16px;
+}
+
+.filter-card :deep(.el-card__body) {
+  padding: 14px 16px;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-search {
+  width: 280px;
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+
+.filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: #526986;
+  white-space: nowrap;
+}
+
+.table-card :deep(.el-card__header) {
+  padding-block: 12px 10px;
+}
+
+.table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.record-count {
+  font-size: 13px;
+  color: #909399;
+}
+
+.table-card :deep(.el-table__body td.el-table__cell) {
+  vertical-align: middle;
+}
+
+.table-card :deep(.actions-col .cell) {
+  overflow: visible;
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-height: 28px;
+  white-space: nowrap;
+}
+
+.row-actions :deep(.action-btn) {
+  margin: 0;
+  padding: 5px 12px;
+  height: 28px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.row-actions :deep(.action-claim) {
+  background: #fff7e6;
+  border-color: #ffbb96;
+  color: #fa8c16;
+}
+
+.row-actions :deep(.action-claim:hover),
+.row-actions :deep(.action-claim:focus) {
+  background: #ffe7ba;
+  border-color: #ffa940;
+  color: #d46b08;
+}
+
+.row-actions :deep(.action-detail),
+.row-actions :deep(.action-review) {
+  background: #e6f4ff;
+  border-color: #91caff;
+  color: #1677ff;
+}
+
+.row-actions :deep(.action-detail:hover),
+.row-actions :deep(.action-detail:focus),
+.row-actions :deep(.action-review:hover),
+.row-actions :deep(.action-review:focus) {
+  background: #bae0ff;
+  border-color: #69b1ff;
+  color: #0958d9;
+}
+
+.row-actions :deep(.action-submit) {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+  color: #52c41a;
+}
+
+.row-actions :deep(.action-submit:hover),
+.row-actions :deep(.action-submit:focus) {
+  background: #d9f7be;
+  border-color: #95de64;
+  color: #389e0d;
+}
+
+.row-actions :deep(.action-danger) {
+  background: #fff1f0;
+  border-color: #ffa39e;
+  color: #f5222d;
+}
+
+.row-actions :deep(.action-danger:hover),
+.row-actions :deep(.action-danger:focus) {
+  background: #ffccc7;
+  border-color: #ff7875;
+  color: #cf1322;
+}
+
+.section-title {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}

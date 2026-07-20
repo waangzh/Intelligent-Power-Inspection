@@ -1,188 +1,209 @@
 <template>
-  <div class="route-plan">
+  <div class="route-page">
     <PageHeader
       title="巡检路线规划"
       description="基于 ROS 建图（YAML/PGM）标注起点、巡检点与导航方向，导出 route.json"
       :breadcrumbs="[{ label: '巡检业务' }, { label: '巡检规划' }]"
     >
       <template #actions>
-        <el-select v-model="selectedSiteId" placeholder="选择站点" style="width: 220px" :disabled="savingRoute" @change="onSiteChange">
+        <el-select v-model="selectedSiteId" placeholder="选择站点" class="site-select" :disabled="savingRoute" @change="onSiteChange">
           <el-option v-for="s in siteStore.sites" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
         <el-button v-if="can('route:edit')" type="primary" :disabled="!selectedSiteId || savingRoute" :loading="creatingRoute" @click="createRoute">
           <el-icon><Plus /></el-icon>
           新建路线
         </el-button>
-        <el-tag v-if="currentRoute" class="draft-status" :type="draftSaveTagType" effect="plain">
-          {{ draftSaveLabel }}
-        </el-tag>
-        <el-button v-if="can('route:edit') && currentRoute" type="success" :loading="savingRoute" @click="saveDraft">
-          保存草稿
-        </el-button>
-        <el-button v-if="can('route:edit') && currentRoute" type="warning" plain :title="publishBlockReason" :disabled="!canCreateRevision" :loading="creatingRevision" @click="createRevision">
-          创建路线修订
-        </el-button>
-        <el-button v-if="can('route:edit') && currentRoute" type="danger" plain :disabled="savingRoute" :loading="deletingRoute" @click="deleteRoute">
-          删除路线
-        </el-button>
       </template>
     </PageHeader>
 
-    <el-row :gutter="16">
-      <el-col :span="5">
-        <div class="route-list-panel">
-          <div class="route-list-head">路线列表</div>
-          <div v-if="siteRoutes.length" class="route-list-body">
+    <el-card shadow="never" class="workspace-card">
+      <div class="route-workspace">
+        <aside class="route-nav">
+          <el-input v-model="routeKeyword" size="small" placeholder="搜索路线" clearable class="nav-search">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          <div class="nav-list">
             <button
-              v-for="r in siteRoutes"
+              v-for="r in filteredSiteRoutes"
               :key="r.id"
               type="button"
-              class="route-item"
+              class="nav-item"
               :class="{ active: selectedRouteId === r.id }"
               :disabled="savingRoute || deletingRoute"
               @click="selectRoute(r.id)"
             >
-              <span class="route-name">{{ r.name }}</span>
-              <span class="route-meta">{{ targetCount(r) }} 点</span>
+              <span class="nav-dot" :class="targetCount(r) > 0 ? 'ok' : 'idle'" />
+              <span class="nav-name">{{ r.name }}</span>
+              <span class="nav-badge">{{ targetCount(r) }}</span>
             </button>
+            <div v-if="!filteredSiteRoutes.length" class="nav-empty">
+              {{ siteRoutes.length ? '无匹配路线' : '暂无路线，请先新建' }}
+            </div>
           </div>
-          <div v-else class="empty-hint">暂无路线，请先新建</div>
           <ListPagination :total="routeStore.total" :page="routePage" @change="loadRoutePage" />
-        </div>
-      </el-col>
+        </aside>
 
-      <el-col :span="19">
-        <div v-if="currentRoute" class="map-asset-selector">
-          <div>
-            <span class="map-selector-kicker">APPROVED MAP ASSET</span>
-            <strong>路线地图</strong>
-            <small>这里只列出当前站点状态为 AVAILABLE 的地图；仍可在下方按原流程上传 YAML/PGM。</small>
-          </div>
-          <el-select v-model="selectedMapAssetId" clearable filterable placeholder="选择已审核可用地图" :loading="mapAssetsLoading" class="map-asset-select" @change="onMapAssetChange">
-            <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.id} · ${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id" />
-          </el-select>
-        </div>
-        <RosMapRouteEditor
-          v-if="currentRoute"
-          ref="editorRef"
-          :key="currentRoute.id"
-          :initial-json="editorInitialJson ?? undefined"
-          :default-route-id="currentRoute.id"
-          :default-route-name="currentRoute.name"
-          :map-id="effectiveMapAssetId"
-          @change="onEditorChange"
-          @map-files-change="onMapFilesChange"
-        />
-        <el-card v-if="draftValidation" class="validation-panel" shadow="never">
-          <template #header>
-            <div class="validation-header">
-              <span>发布前检查</span>
-              <el-tag :type="draftValidation.publishable ? 'success' : draftValidation.valid ? 'warning' : 'danger'" effect="light">
-                {{ draftValidation.publishable ? '允许发布' : draftValidation.valid ? '不可发布' : '存在错误' }}
-              </el-tag>
+        <main class="route-main">
+          <template v-if="currentRoute">
+            <div class="route-toolbar">
+              <div class="toolbar-info">
+                <h3>{{ currentRoute.name }}</h3>
+                <p>{{ currentRouteSiteName }} · {{ targetCount(currentRoute) }} 个巡检点</p>
+              </div>
+              <div class="toolbar-tags">
+                <el-tag size="small" :type="draftSaveTagType" effect="light">{{ draftSaveLabel }}</el-tag>
+                <el-tag v-if="draftValidation" size="small" effect="plain" :type="draftValidation.publishable ? 'success' : draftValidation.valid ? 'warning' : 'danger'">
+                  {{ draftValidation.publishable ? '可发布' : draftValidation.valid ? '待完善' : '有错误' }}
+                </el-tag>
+              </div>
+              <div v-if="can('route:edit')" class="toolbar-actions">
+                <el-button plain size="small" class="action-btn action-submit" :loading="savingRoute" @click="saveDraft">保存草稿</el-button>
+                <el-button plain size="small" class="action-btn action-detail" :title="publishBlockReason" :disabled="!canCreateRevision" :loading="creatingRevision" @click="createRevision">创建修订</el-button>
+                <el-button plain size="small" class="action-btn action-danger" :disabled="savingRoute" :loading="deletingRoute" @click="deleteRoute">删除</el-button>
+              </div>
             </div>
-            <small v-if="draftValidation.checkedAt" class="checked-at">最近校验：{{ formatTime(draftValidation.checkedAt) }}</small>
-          </template>
-          <div
-            v-if="!draftValidation.issues.length"
-            class="validation-summary"
-            :class="{ 'is-publishable': draftValidation.publishable }"
-            role="status"
-          >
-            <el-icon><CircleCheckFilled v-if="draftValidation.publishable" /><WarningFilled v-else /></el-icon>
-            <div>
-              <strong>{{ draftValidation.publishable ? '检查已通过' : '当前不可发布' }}</strong>
-              <span>
-                {{ draftValidation.publishable
-                  ? '草稿结构与地图身份校验通过，可创建路线修订。'
-                  : '未发现字段错误，但草稿或地图身份状态不满足发布条件，请重新保存草稿。' }}
-              </span>
+
+            <div class="map-asset-bar">
+              <div class="map-asset-info">
+                <span class="map-kicker">路线地图</span>
+                <strong>已审核可用地图</strong>
+                <small>也可在编辑器内直接上传 YAML + PGM</small>
+              </div>
+              <el-select v-model="selectedMapAssetId" clearable filterable placeholder="选择地图资产" :loading="mapAssetsLoading" class="map-asset-select" @change="onMapAssetChange">
+                <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.id} · ${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id" />
+              </el-select>
             </div>
-          </div>
-          <ul v-else class="validation-issues">
-            <li v-for="issue in draftValidation.issues" :key="`${issue.severity}:${issue.code}:${issue.jsonPointer}`">
-              <el-tag size="small" :type="issue.severity === 'ERROR' ? 'danger' : 'warning'">{{ issue.severity }}</el-tag>
-              <code>{{ issue.code }}</code>
-              <code>{{ issue.jsonPointer || '/' }}</code>
-              <span>{{ issue.message }}</span>
-            </li>
-          </ul>
-        </el-card>
-        <el-card v-if="currentRoute" class="deployment-panel" shadow="never">
-          <template #header>
-            <div class="deployment-header">
-              <div><strong>当前站点机器人</strong><small>仅显示绑定到“{{ currentRouteSiteName }}”的机器人及其 Robot Bridge 连接、心跳和路线部署资格。</small></div>
-              <el-tag effect="plain" type="info">{{ currentSiteRobots.length }} 台已绑定</el-tag>
+
+            <div class="editor-shell">
+              <RosMapRouteEditor
+                ref="editorRef"
+                :key="currentRoute.id"
+                embedded
+                :initial-json="editorInitialJson ?? undefined"
+                :default-route-id="currentRoute.id"
+                :default-route-name="currentRoute.name"
+                :map-id="effectiveMapAssetId"
+                @change="onEditorChange"
+                @map-files-change="onMapFilesChange"
+              />
             </div>
-          </template>
-          <div v-loading="deploymentLoading">
-            <div v-if="currentSiteRobots.length" class="site-robot-list" aria-label="当前站点机器人状态">
-              <article v-for="robot in currentSiteRobots" :key="robot.id" class="site-robot-item">
-                <div class="site-robot-heading">
-                  <div><strong>{{ robot.name }}</strong><span>{{ robot.model || '型号未登记' }} · {{ robot.serialNo || '序列号未登记' }}</span></div>
-                  <div class="site-robot-tags">
-                    <el-tag size="small" :type="heartbeatVisual(robot.status)">{{ robot.status.online ? '在线' : connectionLabel(robot.status.connectionStatus) }}</el-tag>
-                    <el-tag size="small" effect="plain" :type="robot.eligibility.eligible ? 'success' : 'warning'">{{ robot.eligibility.reason }}</el-tag>
+
+            <el-collapse v-model="bottomPanels" class="bottom-panels">
+              <el-collapse-item v-if="draftValidation" name="validation">
+                <template #title>
+                  <div class="panel-title">
+                    <span class="table-title">发布前检查</span>
+                    <el-tag size="small" :type="draftValidation.publishable ? 'success' : draftValidation.valid ? 'warning' : 'danger'" effect="light">
+                      {{ draftValidation.publishable ? '允许发布' : draftValidation.valid ? '不可发布' : '存在错误' }}
+                    </el-tag>
+                    <small v-if="draftValidation.checkedAt" class="panel-meta">最近校验：{{ formatTime(draftValidation.checkedAt) }}</small>
+                  </div>
+                </template>
+                <div
+                  v-if="!draftValidation.issues.length"
+                  class="validation-summary"
+                  :class="{ 'is-publishable': draftValidation.publishable }"
+                  role="status"
+                >
+                  <el-icon><CircleCheckFilled v-if="draftValidation.publishable" /><WarningFilled v-else /></el-icon>
+                  <div>
+                    <strong>{{ draftValidation.publishable ? '检查已通过' : '当前不可发布' }}</strong>
+                    <span>
+                      {{ draftValidation.publishable
+                        ? '草稿结构与地图身份校验通过，可创建路线修订。'
+                        : '未发现字段错误，但草稿或地图身份状态不满足发布条件，请重新保存草稿。' }}
+                    </span>
                   </div>
                 </div>
-                <dl class="site-robot-details">
-                  <div><dt>平台状态</dt><dd>{{ robot.platformStatus || '-' }}</dd></div>
-                  <div><dt>Bridge 配置</dt><dd>{{ robot.status.source?.bridgeConfigured ? '已配置' : '未配置' }}</dd></div>
-                  <div><dt>最近心跳</dt><dd>{{ formatTime(robot.status.lastHeartbeatAt) }}</dd></div>
-                  <div><dt>状态原因</dt><dd>{{ robot.status.online ? '心跳正常' : offlineReasonLabel(robot.status.offlineReason) }}</dd></div>
-                  <div v-if="robot.status.diagnosticSummary" class="site-robot-diagnostic"><dt>诊断摘要</dt><dd>{{ robot.status.diagnosticSummary }}</dd></div>
-                </dl>
-              </article>
-            </div>
-            <el-empty v-else-if="!deploymentLoading" description="当前站点尚未绑定机器人，请先在机器人管理中完成站点绑定。" :image-size="48" />
-          </div>
-          <div class="deployment-diagnosis-actions">
-            <el-button link type="primary" @click="router.push('/robots/status')">查看在线状态</el-button>
-            <el-button v-if="can('robot:manage')" link type="primary" @click="router.push('/robots')">前往机器人管理</el-button>
-            <el-button link type="primary" :loading="deploymentLoading" @click="loadDeploymentData(selectedRouteId)">刷新状态</el-button>
-          </div>
-          <template v-if="can('task:dispatch')">
-            <el-divider content-position="left">部署路线</el-divider>
-            <div class="deployment-controls">
-              <el-select v-model="selectedRevisionId" placeholder="选择路线修订" :loading="deploymentLoading" class="deployment-select">
-                <el-option v-for="revision in revisions" :key="revision.id" :label="`r${revision.revisionNo} · ${shortHash(revision.contentSha256)}`" :value="revision.id" />
-              </el-select>
-              <el-select v-model="selectedDeploymentRobotId" placeholder="选择符合条件的机器人" :loading="deploymentLoading" class="deployment-select">
-                <el-option v-for="robot in currentSiteRobots" :key="robot.id" :label="`${robot.name} · ${robot.eligibility.reason}`" :value="robot.id" :disabled="!robot.eligibility.eligible" />
-              </el-select>
-              <el-button type="primary" :loading="creatingDeployment" :disabled="!canCreateDeployment" @click="createDeployment">发起部署</el-button>
-            </div>
-            <el-alert v-if="selectedDeploymentRobot && !selectedDeploymentRobot.eligibility.eligible" class="deployment-alert" type="warning" :closable="false" :title="selectedDeploymentRobot.eligibility.reason" />
-            <el-alert v-if="deploymentError" class="deployment-alert" type="error" :closable="false" :title="deploymentError" />
-            <el-empty v-if="!deployments.length && !deploymentLoading" description="尚无路线部署记录" :image-size="48" />
-            <el-table v-else :data="deployments" v-loading="deploymentLoading" size="small" class="deployment-table">
-              <el-table-column label="修订 / 机器人" min-width="180">
-                <template #default="{ row }"><div class="deployment-identity"><strong>{{ revisionLabel(row.routeRevisionId) }}</strong><span>{{ robotName(row.robotId) }}</span></div></template>
-              </el-table-column>
-              <el-table-column label="状态" width="136"><template #default="{ row }"><el-tag size="small" :type="deploymentStateType(row.state)">{{ deploymentStateLabel(row.state) }}</el-tag></template></el-table-column>
-              <el-table-column label="最近尝试" min-width="164"><template #default="{ row }">{{ formatTime(row.lastAttemptAt) }}<small v-if="row.attemptCount">第 {{ row.attemptCount }} 次</small></template></el-table-column>
-              <el-table-column label="路线 / 地图哈希" min-width="205"><template #default="{ row }"><code>{{ shortHash(row.routeContentSha256) }}</code><code>{{ shortHash(row.mapImageSha256) }}</code></template></el-table-column>
-              <el-table-column label="错误摘要" min-width="210"><template #default="{ row }"><span v-if="row.errorCode" class="deployment-error">{{ row.errorCode }} · {{ row.errorMessage }}</span><span v-else>-</span></template></el-table-column>
-              <el-table-column v-if="can('task:dispatch')" label="操作" width="106" fixed="right">
-                <template #default="{ row }">
-                  <el-button v-if="canManualReconcile(row)" link type="warning" size="small" :loading="reconcilingDeploymentId === row.id" @click="reconcileDeployment(row)">重新对账</el-button>
-                  <span v-else>-</span>
+                <ul v-else class="validation-issues">
+                  <li v-for="issue in draftValidation.issues" :key="`${issue.severity}:${issue.code}:${issue.jsonPointer}`">
+                    <el-tag size="small" :type="issue.severity === 'ERROR' ? 'danger' : 'warning'">{{ issue.severity }}</el-tag>
+                    <code>{{ issue.code }}</code>
+                    <code>{{ issue.jsonPointer || '/' }}</code>
+                    <span>{{ issue.message }}</span>
+                  </li>
+                </ul>
+              </el-collapse-item>
+
+              <el-collapse-item name="deployment">
+                <template #title>
+                  <div class="panel-title">
+                    <span class="table-title">机器人与部署</span>
+                    <el-tag size="small" effect="plain" type="info">{{ currentSiteRobots.length }} 台已绑定</el-tag>
+                  </div>
                 </template>
-              </el-table-column>
-            </el-table>
+                <div v-loading="deploymentLoading">
+                  <div v-if="currentSiteRobots.length" class="site-robot-list" aria-label="当前站点机器人状态">
+                    <article v-for="robot in currentSiteRobots" :key="robot.id" class="site-robot-item">
+                      <div class="site-robot-heading">
+                        <div><strong>{{ robot.name }}</strong><span>{{ robot.model || '型号未登记' }} · {{ robot.serialNo || '序列号未登记' }}</span></div>
+                        <div class="site-robot-tags">
+                          <el-tag size="small" :type="heartbeatVisual(robot.status)">{{ robot.status.online ? '在线' : connectionLabel(robot.status.connectionStatus) }}</el-tag>
+                          <el-tag size="small" effect="plain" :type="robot.eligibility.eligible ? 'success' : 'warning'">{{ robot.eligibility.reason }}</el-tag>
+                        </div>
+                      </div>
+                      <dl class="site-robot-details">
+                        <div><dt>平台状态</dt><dd>{{ robot.platformStatus || '-' }}</dd></div>
+                        <div><dt>Bridge 配置</dt><dd>{{ robot.status.source?.bridgeConfigured ? '已配置' : '未配置' }}</dd></div>
+                        <div><dt>最近心跳</dt><dd>{{ formatTime(robot.status.lastHeartbeatAt) }}</dd></div>
+                        <div><dt>状态原因</dt><dd>{{ robot.status.online ? '心跳正常' : offlineReasonLabel(robot.status.offlineReason) }}</dd></div>
+                        <div v-if="robot.status.diagnosticSummary" class="site-robot-diagnostic"><dt>诊断摘要</dt><dd>{{ robot.status.diagnosticSummary }}</dd></div>
+                      </dl>
+                    </article>
+                  </div>
+                  <el-empty v-else-if="!deploymentLoading" description="当前站点尚未绑定机器人，请先在机器人管理中完成站点绑定。" :image-size="48" />
+                </div>
+                <div class="deployment-diagnosis-actions">
+                  <el-button link type="primary" @click="router.push('/robots/status')">查看在线状态</el-button>
+                  <el-button v-if="can('robot:manage')" link type="primary" @click="router.push('/robots')">前往机器人管理</el-button>
+                  <el-button link type="primary" :loading="deploymentLoading" @click="loadDeploymentData(selectedRouteId)">刷新状态</el-button>
+                </div>
+                <template v-if="can('task:dispatch')">
+                  <el-divider content-position="left">部署路线</el-divider>
+                  <div class="deployment-controls">
+                    <el-select v-model="selectedRevisionId" placeholder="选择路线修订" :loading="deploymentLoading" class="deployment-select">
+                      <el-option v-for="revision in revisions" :key="revision.id" :label="`r${revision.revisionNo} · ${shortHash(revision.contentSha256)}`" :value="revision.id" />
+                    </el-select>
+                    <el-select v-model="selectedDeploymentRobotId" placeholder="选择符合条件的机器人" :loading="deploymentLoading" class="deployment-select">
+                      <el-option v-for="robot in currentSiteRobots" :key="robot.id" :label="`${robot.name} · ${robot.eligibility.reason}`" :value="robot.id" :disabled="!robot.eligibility.eligible" />
+                    </el-select>
+                    <el-button type="primary" :loading="creatingDeployment" :disabled="!canCreateDeployment" @click="createDeployment">发起部署</el-button>
+                  </div>
+                  <el-alert v-if="selectedDeploymentRobot && !selectedDeploymentRobot.eligibility.eligible" class="deployment-alert" type="warning" :closable="false" :title="selectedDeploymentRobot.eligibility.reason" />
+                  <el-alert v-if="deploymentError" class="deployment-alert" type="error" :closable="false" :title="deploymentError" />
+                  <el-empty v-if="!deployments.length && !deploymentLoading" description="尚无路线部署记录" :image-size="48" />
+                  <el-table v-else :data="deployments" v-loading="deploymentLoading" size="small" class="deployment-table table-card">
+                    <el-table-column label="修订 / 机器人" min-width="180">
+                      <template #default="{ row }"><div class="deployment-identity"><strong>{{ revisionLabel(row.routeRevisionId) }}</strong><span>{{ robotName(row.robotId) }}</span></div></template>
+                    </el-table-column>
+                    <el-table-column label="状态" width="136"><template #default="{ row }"><el-tag size="small" :type="deploymentStateType(row.state)">{{ deploymentStateLabel(row.state) }}</el-tag></template></el-table-column>
+                    <el-table-column label="最近尝试" min-width="164"><template #default="{ row }">{{ formatTime(row.lastAttemptAt) }}<small v-if="row.attemptCount">第 {{ row.attemptCount }} 次</small></template></el-table-column>
+                    <el-table-column label="路线 / 地图哈希" min-width="205"><template #default="{ row }"><code>{{ shortHash(row.routeContentSha256) }}</code><code>{{ shortHash(row.mapImageSha256) }}</code></template></el-table-column>
+                    <el-table-column label="错误摘要" min-width="210"><template #default="{ row }"><span v-if="row.errorCode" class="deployment-error">{{ row.errorCode }} · {{ row.errorMessage }}</span><span v-else>-</span></template></el-table-column>
+                    <el-table-column v-if="can('task:dispatch')" label="操作" width="106" fixed="right">
+                      <template #default="{ row }">
+                        <el-button v-if="canManualReconcile(row)" link type="warning" size="small" :loading="reconcilingDeploymentId === row.id" @click="reconcileDeployment(row)">重新对账</el-button>
+                        <span v-else>-</span>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </template>
+              </el-collapse-item>
+            </el-collapse>
           </template>
-        </el-card>
-        <div v-if="!currentRoute" class="empty-panel">
-          <div class="empty-hint">请选择或创建巡检路线</div>
-        </div>
-      </el-col>
-    </el-row>
+          <el-empty v-else description="请选择或创建巡检路线" :image-size="80" />
+        </main>
+      </div>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { resourcesApi } from '@/api/resources'
 import PageHeader from '@/components/PageHeader.vue'
@@ -236,8 +257,15 @@ const reconcilingDeploymentId = ref('')
 const mapAssets = ref<MapAsset[]>([])
 const mapAssetsLoading = ref(false)
 const selectedMapAssetId = ref('')
+const routeKeyword = ref('')
+const bottomPanels = ref<string[]>(['validation'])
 
 const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
+const filteredSiteRoutes = computed(() => {
+  const keyword = routeKeyword.value.trim().toLowerCase()
+  if (!keyword) return siteRoutes.value
+  return siteRoutes.value.filter((route) => route.name.toLowerCase().includes(keyword))
+})
 const currentRoute = computed<Route | null>(() => routeStore.getRouteById(selectedRouteId.value) ?? null)
 const availableAssets = computed(() => availableMapAssets(mapAssets.value, selectedSiteId.value))
 const effectiveMapAssetId = computed(() => selectedMapAssetId.value || draftState.value?.mapAssetId || currentRoute.value?.mapId)
@@ -684,119 +712,284 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 </script>
 
 <style scoped>
-.map-asset-selector { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 12px; padding: 14px 16px; border: 1px solid #cfe0e7; background: linear-gradient(100deg, #f6fafb, #edf6f8); }
-.map-asset-selector strong, .map-asset-selector small { display: block; }
-.map-asset-selector strong { color: #1e4356; font-size: 15px; }
-.map-asset-selector small { margin-top: 3px; color: #708995; }
-.map-selector-kicker { display: block; margin-bottom: 3px; color: #0b8b9c; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
-.map-asset-select { width: min(440px, 48%); }
-.route-list-panel {
-  min-height: 640px;
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  overflow: hidden;
+.site-select {
+  width: 220px;
 }
 
-.route-list-head {
-  padding: 14px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-  border-bottom: 1px solid #ebeef5;
-  background: #fff;
+.workspace-card :deep(.el-card__body) {
+  padding: 0;
 }
 
-.route-list-body {
-  padding: 8px;
+.route-workspace {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 560px;
 }
 
-.route-item {
+.route-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+  border-right: 1px solid var(--pi-border-soft);
+  background: #fafbfc;
+}
+
+.nav-search {
+  flex-shrink: 0;
+}
+
+.nav-list {
+  flex: 1;
+  min-height: 120px;
+  max-height: 480px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   width: 100%;
-  padding: 10px 12px;
-  margin-bottom: 4px;
+  padding: 8px 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   cursor: pointer;
   text-align: left;
   transition: background 0.15s;
 }
 
-.route-item:hover {
-  background: #f5f7fa;
+.nav-item:hover:not(:disabled) {
+  background: #eef2f8;
 }
 
-.route-item.active {
-  background: #ecfdf5;
-  box-shadow: inset 3px 0 0 #0f766e;
+.nav-item.active {
+  background: #e6f4ff;
 }
 
-.route-name {
-  font-size: 14px;
-  color: #303133;
+.nav-item.active .nav-name {
+  color: var(--pi-primary);
+  font-weight: 700;
+}
+
+.nav-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.nav-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nav-dot.ok {
+  background: #12b76a;
+}
+
+.nav-dot.idle {
+  background: #c0c4cc;
+}
+
+.nav-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--pi-text);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.route-meta {
+.nav-badge {
   flex-shrink: 0;
-  margin-left: 8px;
-  font-size: 12px;
-  color: #909399;
-}
-
-.empty-panel {
-  min-height: 640px;
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-}
-
-.empty-hint {
-  padding: 48px 16px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #eef2f8;
+  color: var(--pi-muted);
+  font-size: 11px;
+  line-height: 18px;
   text-align: center;
-  color: #909399;
 }
 
-.validation-panel {
-  margin-top: 16px;
+.nav-item.active .nav-badge {
+  background: #d6e4ff;
+  color: var(--pi-primary);
 }
 
-.validation-panel :deep(.el-card__header) {
-  padding-block: 12px;
+.nav-empty {
+  padding: 16px 8px;
+  font-size: 12px;
+  color: var(--pi-muted);
+  text-align: center;
 }
 
-.validation-panel :deep(.el-card__body) {
-  padding-block: 12px;
+.route-nav :deep(.el-pagination) {
+  margin-top: auto;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
-.deployment-panel {
-  margin-top: 16px;
+.route-main {
+  padding: 16px 18px 18px;
+  min-width: 0;
 }
 
-.deployment-header {
+.route-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
+  gap: 12px 20px;
+  margin-bottom: 14px;
+}
+
+.toolbar-info {
+  flex: 1;
+  min-width: 180px;
+}
+
+.toolbar-info h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--pi-text);
+}
+
+.toolbar-info p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--pi-muted);
+}
+
+.toolbar-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.toolbar-actions :deep(.action-btn) {
+  margin: 0;
+  padding: 5px 12px;
+  height: 28px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.toolbar-actions :deep(.action-submit) {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+  color: #52c41a;
+}
+
+.toolbar-actions :deep(.action-detail) {
+  background: #e6f4ff;
+  border-color: #91caff;
+  color: #1677ff;
+}
+
+.toolbar-actions :deep(.action-danger) {
+  background: #fff1f0;
+  border-color: #ffa39e;
+  color: #f5222d;
+}
+
+.map-asset-bar {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--pi-border-soft);
+  border-radius: 10px;
+  background: linear-gradient(100deg, #f8fafc, #f0f5fa);
 }
 
-.deployment-header strong,
-.deployment-header small {
+.map-asset-info strong,
+.map-asset-info small {
   display: block;
 }
 
-.deployment-header small {
-  max-width: 680px;
-  margin-top: 5px;
-  color: #7a8895;
+.map-asset-info strong {
+  color: var(--pi-text);
+  font-size: 14px;
+}
+
+.map-asset-info small {
+  margin-top: 2px;
+  color: var(--pi-muted);
   font-size: 12px;
-  line-height: 1.55;
+}
+
+.map-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: #0b8b9c;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.map-asset-select {
+  width: min(420px, 48%);
+}
+
+.editor-shell {
+  border: 1px solid var(--pi-border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.bottom-panels {
+  margin-top: 14px;
+  border: 1px solid var(--pi-border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.bottom-panels :deep(.el-collapse-item__header) {
+  padding: 0 14px;
+  height: 46px;
+  background: #fafbfc;
+  border-bottom-color: var(--pi-border-soft);
+}
+
+.bottom-panels :deep(.el-collapse-item__wrap) {
+  border-bottom: none;
+}
+
+.bottom-panels :deep(.el-collapse-item__content) {
+  padding: 14px 16px 16px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-meta {
+  margin-left: auto;
+  color: var(--pi-muted);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .deployment-controls {
@@ -824,8 +1017,8 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
   display: grid;
   gap: 10px;
   padding: 12px 14px;
-  border: 1px solid #dfe7ee;
-  border-radius: 6px;
+  border: 1px solid var(--pi-border-soft);
+  border-radius: 8px;
   background: #fbfdff;
 }
 
@@ -844,7 +1037,7 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 .site-robot-heading span,
 .site-robot-details dt {
   margin-top: 3px;
-  color: #7a8895;
+  color: var(--pi-muted);
   font-size: 13px;
 }
 
@@ -873,7 +1066,7 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 
 .site-robot-details dd {
   overflow: hidden;
-  color: #303133;
+  color: var(--pi-text);
   font-size: 13px;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -899,7 +1092,7 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 .deployment-identity span,
 .deployment-table small {
   display: block;
-  color: #7a8895;
+  color: var(--pi-muted);
   font-size: 12px;
 }
 
@@ -908,30 +1101,12 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 }
 
 .deployment-identity strong {
-  color: #263a4a;
+  color: var(--pi-text);
 }
 
 .deployment-error {
   color: #c45656;
   line-height: 1.45;
-}
-
-.validation-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-weight: 600;
-}
-
-.draft-status {
-  margin-right: 4px;
-}
-
-.checked-at {
-  display: block;
-  margin-top: 4px;
-  color: #909399;
-  font-weight: 400;
 }
 
 .validation-summary {
@@ -941,7 +1116,7 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
   min-height: 40px;
   padding: 8px 10px;
   border: 1px solid #f3d19e;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #b88230;
   background: #fdf6ec;
 }
@@ -963,7 +1138,7 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 }
 
 .validation-summary strong {
-  color: #303133;
+  color: var(--pi-text);
   font-size: 14px;
 }
 
@@ -987,16 +1162,43 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
   gap: 8px;
   align-items: baseline;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #f8fafc;
-  color: #303133;
+  color: var(--pi-text);
 }
 
 .validation-issues code {
   color: #606266;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
+  .route-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .route-nav {
+    border-right: none;
+    border-bottom: 1px solid var(--pi-border-soft);
+  }
+
+  .nav-list {
+    max-height: 160px;
+  }
+
+  .toolbar-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .map-asset-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .map-asset-select {
+    width: 100%;
+  }
+
   .site-robot-heading {
     flex-direction: column;
   }
@@ -1016,6 +1218,10 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 
   .deployment-select {
     width: 100%;
+  }
+
+  .panel-meta {
+    display: none;
   }
 }
 </style>

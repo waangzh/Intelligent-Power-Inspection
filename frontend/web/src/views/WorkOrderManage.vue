@@ -1,50 +1,134 @@
 <template>
-  <div>
+  <div class="workorder-page">
     <PageHeader
       title="工单管理"
-      description="管理员转工单与复核，调度员在接单大厅抢单并现场处置"
+      description="管理员：转工单与复核，调度员在接单大厅抢单并现场处理"
       :breadcrumbs="[{ label: '运维中心' }, { label: '工单管理' }]"
-    >
-      <template #actions>
-        <el-button v-if="can('workorder:create')" @click="router.push('/alarms')">从告警创建</el-button>
+    />
+
+    <div class="workorder-toolbar">
+      <div class="scope-tabs">
+        <button
+          v-for="tab in scopeTabs"
+          :key="tab.key"
+          type="button"
+          class="scope-tab"
+          :class="{ active: scopeFilter === tab.key }"
+          @click="scopeFilter = tab.key"
+        >
+          <el-icon><component :is="tab.icon" /></el-icon>
+          {{ tab.label }}
+        </button>
+      </div>
+      <div class="toolbar-actions">
+        <el-button type="primary" :loading="exporting" @click="exportWorkOrders">
+          <el-icon><Download /></el-icon>
+          导出工单
+        </el-button>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <el-card
+        v-for="(stat, index) in overviewStats"
+        :key="stat.key"
+        shadow="never"
+        :class="['stat-card', `stat-card-${index}`, { active: activeStatCard === stat.key }]"
+        @click="selectStatCard(stat.key)"
+      >
+        <div class="overview-stat">
+          <div class="stat-icon" :class="`tone-${index}`">
+            <el-icon><component :is="statIcons[index]" /></el-icon>
+          </div>
+          <div>
+            <div class="label">{{ stat.label }}</div>
+            <div class="value">{{ stat.value }}</div>
+            <div class="trend">{{ stat.footer }}</div>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <el-card shadow="never" class="filter-card">
+      <div class="filter-bar">
+        <el-input
+          v-model="keyword"
+          placeholder="搜索工单号 / 标题 / 地点"
+          clearable
+          class="filter-search"
+          @change="orderPage = 0"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <div class="filter-item">
+          <span class="filter-label">优先级</span>
+          <el-select v-model="priorityFilter" placeholder="全部" style="width: 100px" @change="orderPage = 0">
+            <el-option label="全部" value="ALL" />
+            <el-option label="紧急" value="URGENT" />
+            <el-option label="高" value="HIGH" />
+            <el-option label="中" value="MEDIUM" />
+            <el-option label="低" value="LOW" />
+          </el-select>
+        </div>
+        <div class="filter-item">
+          <span class="filter-label">状态</span>
+          <el-select v-model="statusFilter" placeholder="全部" style="width: 110px" @change="onStatusFilterChange">
+            <el-option label="全部" value="ALL" />
+            <el-option label="待处理" value="PENDING" />
+            <el-option label="处理中" value="PROCESSING" />
+            <el-option label="待复核" value="REVIEW" />
+            <el-option label="已关闭" value="CLOSED" />
+            <el-option label="已取消" value="CANCELLED" />
+          </el-select>
+        </div>
+        <div class="filter-item">
+          <span class="filter-label">处理人</span>
+          <el-select v-model="assigneeFilter" placeholder="全部" style="width: 120px" @change="orderPage = 0">
+            <el-option label="全部" value="ALL" />
+            <el-option label="待接单" value="UNASSIGNED" />
+            <el-option v-for="name in assigneeOptions" :key="name" :label="name" :value="name" />
+          </el-select>
+        </div>
+        <el-button @click="resetFilters">
+          <el-icon><RefreshRight /></el-icon>
+          重置
+        </el-button>
+        <el-button v-if="can('workorder:create')" type="primary" @click="router.push('/alarms')">
+          <el-icon><Plus /></el-icon>
+          新建工单
+        </el-button>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="table-card">
+      <template #header>
+        <div class="table-head">
+          <span class="table-title">工单列表</span>
+          <span class="record-count">共 {{ filteredOrders.length }} 条记录</span>
+        </div>
       </template>
-    </PageHeader>
-
-    <el-row v-if="role === 'DISPATCHER'" :gutter="12" style="margin-bottom: 12px">
-      <el-col :span="8" v-for="s in scopeCards" :key="s.key">
-        <el-card shadow="never" class="stat-card" :class="{ active: scopeFilter === s.key }" @click="scopeFilter = s.key">
-          <div class="stat-val">{{ s.value }}</div>
-          <div class="stat-lbl">{{ s.label }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-row :gutter="12" style="margin-bottom: 16px">
-      <el-col :span="6" v-for="s in statusCards" :key="s.key">
-        <el-card shadow="never" class="stat-card" :class="{ active: statusFilter === s.key }" @click="statusFilter = s.key">
-          <div class="stat-val">{{ s.value }}</div>
-          <div class="stat-lbl">{{ s.label }}</div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-card shadow="never">
-      <el-table :data="visibleOrders" size="small" @row-click="openDetail">
-        <el-table-column prop="id" label="工单号" width="130" show-overflow-tooltip />
-        <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
-        <el-table-column label="地点" min-width="140" show-overflow-tooltip>
+      <el-table :data="paginatedOrders" size="small" @row-click="openDetail">
+        <el-table-column prop="id" label="工单号" width="180" show-overflow-tooltip />
+        <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+        <el-table-column label="地点" min-width="160" show-overflow-tooltip>
           <template #default="{ row }: { row: WorkOrder }">
             {{ locationLabel(row) }}
           </template>
         </el-table-column>
         <el-table-column label="优先级" width="80">
           <template #default="{ row }: { row: WorkOrder }">
-            <el-tag :type="priorityType(row.priority)" size="small">{{ WORK_ORDER_PRIORITY_LABELS[row.priority] }}</el-tag>
+            <el-tag :type="priorityType(row.priority)" size="small" effect="light">
+              {{ WORK_ORDER_PRIORITY_LABELS[row.priority] }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }: { row: WorkOrder }">
-            <el-tag :type="statusType(row.status)" size="small">{{ WORK_ORDER_STATUS_LABELS[row.status] }}</el-tag>
+            <el-tag :type="statusType(row.status)" size="small" effect="light">
+              {{ WORK_ORDER_STATUS_LABELS[row.status] }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="处理人" width="100">
@@ -52,38 +136,40 @@
             {{ workOrderAssigneeLabel(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" width="160">
+        <el-table-column label="创建时间" width="170">
           <template #default="{ row }">{{ fmt(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="can('workorder:process') || can('workorder:review')" label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right" class-name="actions-col">
           <template #default="{ row }">
-            <el-button
-              v-if="canClaimOrder(row)"
-              text
-              type="warning"
-              size="small"
-              :loading="claimingId === row.id"
-              @click.stop="submitClaim(row)"
-            >接单</el-button>
-            <el-button
-              v-if="canProcessOrder(row) && row.status === 'PROCESSING'"
-              text
-              type="success"
-              size="small"
-              @click.stop="openResolve(row)"
-            >提交复核</el-button>
-            <el-button
-              v-if="can('workorder:review') && row.status === 'REVIEW'"
-              text
-              type="primary"
-              size="small"
-              @click.stop="openReview(row)"
-            >确认复核</el-button>
-            <el-button text type="info" size="small" @click.stop="openDetail(row)">详情</el-button>
+            <div class="row-actions" @click.stop>
+              <el-button
+                v-if="canClaimOrder(row)"
+                plain
+                size="small"
+                class="action-btn action-claim"
+                :loading="claimingId === row.id"
+                @click="submitClaim(row)"
+              >接单</el-button>
+              <el-button
+                v-if="canProcessOrder(row) && row.status === 'PROCESSING'"
+                plain
+                size="small"
+                class="action-btn action-submit"
+                @click="openResolve(row)"
+              >提交复核</el-button>
+              <el-button
+                v-if="can('workorder:review') && row.status === 'REVIEW'"
+                plain
+                size="small"
+                class="action-btn action-review"
+                @click="openReview(row)"
+              >确认复核</el-button>
+              <el-button plain size="small" class="action-btn action-detail" @click="openDetail(row)">详情</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
-      <ListPagination :total="workOrderStore.total" :page="orderPage" @change="loadOrderPage" />
+      <ListPagination :total="filteredOrders.length" :page="orderPage" @change="loadOrderPage" />
     </el-card>
 
     <el-dialog v-model="detailVisible" title="工单详情" width="640px">
@@ -205,8 +291,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import {
+  CircleCheck,
+  Clock,
+  Document,
+  Download,
+  EditPen,
+  Plus,
+  Refresh,
+  RefreshRight,
+  Search,
+  Top,
+  User,
+} from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import ListPagination from '@/components/ListPagination.vue'
@@ -225,11 +324,20 @@ import {
 } from '@/types/workOrder'
 import { isWorkOrderUnassigned, workOrderAssigneeLabel } from '@/utils/workOrder'
 
+const PAGE_SIZE = 20
+const LOAD_SIZE = 500
+
 const router = useRouter()
 const workOrderStore = useWorkOrderStore()
 const authStore = useAuthStore()
 const { can, role } = usePermission()
+
+const keyword = ref('')
 const statusFilter = ref<string>('ALL')
+const priorityFilter = ref<string>('ALL')
+const assigneeFilter = ref<string>('ALL')
+const highPriorityOnly = ref(false)
+const activeStatCard = ref<string>('ALL')
 const orderPage = ref(0)
 const scopeFilter = ref<'ALL' | 'POOL' | 'MINE'>('ALL')
 const detailVisible = ref(false)
@@ -240,17 +348,39 @@ const resolvingId = ref('')
 const reviewingId = ref('')
 const claimingId = ref('')
 const submitting = ref(false)
+const exporting = ref(false)
+
+const statIcons = [Document, Clock, Refresh, CircleCheck, Top]
+
+const scopeTabs = [
+  { key: 'ALL' as const, label: '全部可见', icon: Document },
+  { key: 'POOL' as const, label: '接单大厅', icon: User },
+  { key: 'MINE' as const, label: '我的工单', icon: EditPen },
+]
+
+async function loadOrders() {
+  await workOrderStore.load({ page: 0, size: LOAD_SIZE })
+}
 
 function loadOrderPage(page: number) {
   orderPage.value = page
-  void workOrderStore.load({
-    page,
-    size: 20,
-    status: statusFilter.value === 'ALL' ? undefined : statusFilter.value,
-  })
 }
 
-watch(statusFilter, () => loadOrderPage(0))
+onMounted(() => {
+  void loadOrders()
+})
+
+watch(scopeFilter, () => {
+  orderPage.value = 0
+})
+
+watch(priorityFilter, () => {
+  if (priorityFilter.value !== 'ALL') {
+    highPriorityOnly.value = false
+    activeStatCard.value = ''
+  }
+  orderPage.value = 0
+})
 
 const resolveForm = reactive({
   faultType: '',
@@ -276,45 +406,106 @@ function isMyOrder(order: WorkOrder) {
   return order.assigneeId === me.id || order.assigneeName === me.displayName
 }
 
-const dispatcherBaseOrders = computed(() => {
-  if (role.value !== 'DISPATCHER') return workOrderStore.orders
-  return workOrderStore.orders.filter((o) => isWorkOrderUnassigned(o) || isMyOrder(o))
-})
-
-const scopeCards = computed(() => {
-  const list = dispatcherBaseOrders.value
-  const pool = list.filter((o) => isWorkOrderUnassigned(o))
-  const mine = list.filter((o) => isMyOrder(o))
-  return [
-    { key: 'ALL' as const, label: '全部可见', value: list.length },
-    { key: 'POOL' as const, label: '接单大厅', value: pool.length },
-    { key: 'MINE' as const, label: '我的工单', value: mine.length },
-  ]
-})
-
-const statusCards = computed(() => {
-  const orders = visibleOrders.value
-  const count = (status: WorkOrderStatus) => orders.filter((o) => o.status === status).length
-  return [
-    { key: 'ALL', label: '全部', value: orders.length },
-    { key: 'PENDING', label: '待处理', value: count('PENDING') },
-    { key: 'PROCESSING', label: '处理中', value: count('PROCESSING') },
-    { key: 'REVIEW', label: '待复核', value: count('REVIEW') },
-  ]
-})
-
-const visibleOrders = computed(() => {
-  let list = role.value === 'DISPATCHER' ? dispatcherBaseOrders.value : workOrderStore.orders
+const baseOrders = computed(() => {
   if (role.value === 'DISPATCHER') {
-    if (scopeFilter.value === 'POOL') {
-      list = list.filter((o) => isWorkOrderUnassigned(o))
-    } else if (scopeFilter.value === 'MINE') {
-      list = list.filter((o) => isMyOrder(o))
-    }
+    return workOrderStore.orders.filter((o) => isWorkOrderUnassigned(o) || isMyOrder(o))
   }
-  if (statusFilter.value === 'ALL') return list
-  return list.filter((o) => o.status === statusFilter.value)
+  return workOrderStore.orders
 })
+
+const scopedOrders = computed(() => {
+  let list = baseOrders.value
+  if (scopeFilter.value === 'POOL') {
+    list = list.filter((o) => isWorkOrderUnassigned(o))
+  } else if (scopeFilter.value === 'MINE') {
+    list = list.filter((o) => isMyOrder(o))
+  }
+  return list
+})
+
+const overviewStats = computed(() => {
+  const list = scopedOrders.value
+  const count = (status: WorkOrderStatus) => list.filter((o) => o.status === status).length
+  const highPriority = list.filter((o) => o.priority === 'HIGH' || o.priority === 'URGENT').length
+  return [
+    { key: 'ALL', label: '全部工单', value: list.length, footer: '当前统计' },
+    { key: 'PENDING', label: '待处理', value: count('PENDING'), footer: '当前统计' },
+    { key: 'PROCESSING', label: '处理中', value: count('PROCESSING'), footer: '当前统计' },
+    { key: 'REVIEW', label: '待复核', value: count('REVIEW'), footer: '当前统计' },
+    { key: 'HIGH', label: '高优先级', value: highPriority, footer: '需优先关注' },
+  ]
+})
+
+const assigneeOptions = computed(() => {
+  const names = new Set<string>()
+  scopedOrders.value.forEach((o) => {
+    const label = workOrderAssigneeLabel(o)
+    if (label !== '待接单') names.add(label)
+  })
+  return [...names].sort()
+})
+
+const filteredOrders = computed(() => {
+  let list = scopedOrders.value
+  if (statusFilter.value !== 'ALL') {
+    list = list.filter((o) => o.status === statusFilter.value)
+  }
+  if (highPriorityOnly.value) {
+    list = list.filter((o) => o.priority === 'HIGH' || o.priority === 'URGENT')
+  } else if (priorityFilter.value !== 'ALL') {
+    list = list.filter((o) => o.priority === priorityFilter.value)
+  }
+  if (assigneeFilter.value === 'UNASSIGNED') {
+    list = list.filter((o) => isWorkOrderUnassigned(o))
+  } else if (assigneeFilter.value !== 'ALL') {
+    list = list.filter((o) => workOrderAssigneeLabel(o) === assigneeFilter.value)
+  }
+  const q = keyword.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(
+      (o) =>
+        o.id.toLowerCase().includes(q) ||
+        o.title.toLowerCase().includes(q) ||
+        locationLabel(o).toLowerCase().includes(q),
+    )
+  }
+  return list
+})
+
+const paginatedOrders = computed(() => {
+  const start = orderPage.value * PAGE_SIZE
+  return filteredOrders.value.slice(start, start + PAGE_SIZE)
+})
+
+function selectStatCard(key: string) {
+  activeStatCard.value = key
+  orderPage.value = 0
+  if (key === 'HIGH') {
+    highPriorityOnly.value = true
+    statusFilter.value = 'ALL'
+    priorityFilter.value = 'ALL'
+    return
+  }
+  highPriorityOnly.value = false
+  statusFilter.value = key === 'ALL' ? 'ALL' : key
+}
+
+function onStatusFilterChange() {
+  highPriorityOnly.value = false
+  activeStatCard.value = statusFilter.value
+  orderPage.value = 0
+}
+
+function resetFilters() {
+  keyword.value = ''
+  statusFilter.value = 'ALL'
+  priorityFilter.value = 'ALL'
+  assigneeFilter.value = 'ALL'
+  highPriorityOnly.value = false
+  activeStatCard.value = 'ALL'
+  scopeFilter.value = 'ALL'
+  orderPage.value = 0
+}
 
 function canClaimOrder(row: WorkOrder) {
   return can('workorder:process') && row.status === 'PENDING' && isWorkOrderUnassigned(row)
@@ -327,9 +518,13 @@ function canProcessOrder(row: WorkOrder) {
 }
 
 function locationLabel(row: WorkOrder) {
-  return row.location?.checkpointName
-    ? `${row.location.routeName || ''} · ${row.location.checkpointName}`
-    : row.location?.areaName || row.location?.routeName || '-'
+  return (
+    row.location?.siteName ||
+    row.location?.address ||
+    row.location?.areaName ||
+    row.location?.routeName ||
+    '-'
+  )
 }
 
 function openDetail(row: WorkOrder) {
@@ -426,6 +621,41 @@ async function submitReview() {
   }
 }
 
+function exportWorkOrders() {
+  if (!filteredOrders.value.length) {
+    ElMessage.warning('当前没有可导出的工单')
+    return
+  }
+  exporting.value = true
+  try {
+    const headers = ['工单号', '标题', '地点', '优先级', '状态', '处理人', '创建时间']
+    const rows = filteredOrders.value.map((o) => [
+      o.id,
+      o.title,
+      locationLabel(o),
+      WORK_ORDER_PRIORITY_LABELS[o.priority],
+      WORK_ORDER_STATUS_LABELS[o.status],
+      workOrderAssigneeLabel(o),
+      fmt(o.createdAt),
+    ])
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `work-orders-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    ElMessage.success(`已导出 ${filteredOrders.value.length} 条工单`)
+  } finally {
+    exporting.value = false
+  }
+}
+
 function fmt(iso: string) {
   return new Date(iso).toLocaleString('zh-CN')
 }
@@ -437,30 +667,253 @@ function statusType(s: WorkOrderStatus) {
 function priorityType(p: WorkOrderPriority) {
   return { LOW: 'info', MEDIUM: '', HIGH: 'warning', URGENT: 'danger' }[p] as '' | 'warning' | 'danger' | 'info'
 }
-
 </script>
 
 <style scoped>
+.workorder-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.scope-tabs {
+  display: inline-flex;
+  padding: 4px;
+  background: #f4f6f8;
+  border-radius: 10px;
+  gap: 4px;
+}
+
+.scope-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #526986;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.scope-tab.active {
+  background: #1768f2;
+  color: #fff;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.overview-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.stat-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  place-items: center;
+  border-radius: 16px;
+  color: #fff;
+  font-size: 24px;
+}
+
+.tone-0 { background: linear-gradient(135deg, #2878ff, #1455d9); }
+.tone-1 { background: linear-gradient(135deg, #ff7d2d, #f25216); }
+.tone-2 { background: linear-gradient(135deg, #2878ff, #1455d9); }
+.tone-3 { background: linear-gradient(135deg, #8b58ff, #6431e6); }
+.tone-4 { background: linear-gradient(135deg, #ff4d4f, #cf1322); }
+
 .stat-card {
   cursor: pointer;
-  text-align: center;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .stat-card.active {
-  border-color: #1a5fb4;
+  border-color: #1768f2;
+  box-shadow: 0 0 0 1px #1768f2 inset;
 }
 
-.stat-val {
-  font-size: 24px;
+.stat-card .label {
+  margin: 0;
+  color: #526986;
+  font-size: 14px;
   font-weight: 700;
-  color: #1a5fb4;
+  line-height: 1.2;
 }
 
-.stat-lbl {
-  font-size: 12px;
-  color: #909399;
+.stat-card .value {
+  margin-top: 2px;
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+.stat-card .trend {
   margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #909399;
+}
+
+.stat-card-0 .value { color: #1768f2; }
+.stat-card-1 .value { color: #f25216; }
+.stat-card-2 .value { color: #1768f2; }
+.stat-card-3 .value { color: #6431e6; }
+.stat-card-4 .value,
+.stat-card-4 .trend { color: #cf1322; }
+
+.filter-card {
+  margin-bottom: 16px;
+}
+
+.filter-card :deep(.el-card__body) {
+  padding: 14px 16px;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-search {
+  width: 280px;
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+
+.filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: #526986;
+  white-space: nowrap;
+}
+
+.table-card :deep(.el-card__header) {
+  padding-block: 12px 10px;
+}
+
+.table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+
+.record-count {
+  font-size: 13px;
+  color: #909399;
+}
+
+.table-card :deep(.el-table__body td.el-table__cell) {
+  vertical-align: middle;
+}
+
+.table-card :deep(.actions-col .cell) {
+  overflow: visible;
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-height: 28px;
+  white-space: nowrap;
+}
+
+.row-actions :deep(.action-btn) {
+  margin: 0;
+  padding: 5px 12px;
+  height: 28px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.row-actions :deep(.action-claim) {
+  background: #fff7e6;
+  border-color: #ffbb96;
+  color: #fa8c16;
+}
+
+.row-actions :deep(.action-claim:hover),
+.row-actions :deep(.action-claim:focus) {
+  background: #ffe7ba;
+  border-color: #ffa940;
+  color: #d46b08;
+}
+
+.row-actions :deep(.action-detail),
+.row-actions :deep(.action-review) {
+  background: #e6f4ff;
+  border-color: #91caff;
+  color: #1677ff;
+}
+
+.row-actions :deep(.action-detail:hover),
+.row-actions :deep(.action-detail:focus),
+.row-actions :deep(.action-review:hover),
+.row-actions :deep(.action-review:focus) {
+  background: #bae0ff;
+  border-color: #69b1ff;
+  color: #0958d9;
+}
+
+.row-actions :deep(.action-submit) {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+  color: #52c41a;
+}
+
+.row-actions :deep(.action-submit:hover),
+.row-actions :deep(.action-submit:focus) {
+  background: #d9f7be;
+  border-color: #95de64;
+  color: #389e0d;
 }
 
 .section-title {
@@ -468,5 +921,21 @@ function priorityType(p: WorkOrderPriority) {
   font-size: 14px;
   font-weight: 600;
   color: #303133;
+}
+
+@media (max-width: 768px) {
+  .workorder-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-end;
+  }
+
+  .scope-tabs {
+    width: 100%;
+    overflow-x: auto;
+  }
 }
 </style>

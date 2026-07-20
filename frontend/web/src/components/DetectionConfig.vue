@@ -2,12 +2,12 @@
   <div class="detection-config">
     <el-alert
       class="confidence-notice"
-      title="当前模型不返回可校准置信度，策略仅按启用状态和提示词执行。"
+      title="当前模型不返回可校准置信度，策略按启用状态与框上目标名称执行。"
       type="info"
       :closable="false"
       show-icon
     />
-    <el-table :data="items" size="small" border>
+    <el-table :data="items" size="small" border class="config-table">
       <el-table-column label="检测项" width="140">
         <template #default="{ row }: { row: DetectionItem }">
           {{ DETECTION_LABELS[row.type] }}
@@ -24,16 +24,6 @@
             v-model="row.displayLabel"
             size="small"
             placeholder="例如：压力表"
-            @change="emitChange"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column label="LocateAnything 提示词" min-width="180">
-        <template #default="{ row }: { row: DetectionItem }">
-          <el-input
-            v-model="row.prompt"
-            size="small"
-            placeholder="自然语言描述检测目标"
             @change="emitChange"
           />
         </template>
@@ -55,7 +45,19 @@ function emitChange() {
 </script>
 
 <style scoped>
+.detection-config {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .confidence-notice {
   margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.config-table {
+  flex: 1;
 }
 </style>

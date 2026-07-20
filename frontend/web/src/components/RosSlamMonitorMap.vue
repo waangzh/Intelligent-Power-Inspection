@@ -276,6 +276,8 @@ onMounted(() => {
 onUnmounted(() => {
   resizeObserver?.disconnect()
 })
+
+defineExpose({ recenter: fitToScreen })
 </script>
 
 <style scoped>
