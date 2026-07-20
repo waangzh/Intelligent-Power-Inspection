@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "codegen": "npm run permissions:generate && npm run domain:generate && npm run miniprogram:env",
-    "codegen:check": "npm run permissions:check && npm run domain:check && npm run miniprogram:env:check && npm run web:policy:check && npm run api:artifacts:check && npm run api:contract:check",
+    "codegen:check": "npm run permissions:check && npm run domain:check && npm run miniprogram:env:check && npm run miniprogram:request:check && npm run web:policy:check && npm run api:artifacts:check && npm run api:contract:check",
     "permissions:generate": "node scripts/permissions/generate.mjs",
     "permissions:check": "node scripts/permissions/check.mjs",
     "domain:generate": "node scripts/codegen/generate-domain-enums.mjs",
@@ -13,6 +13,7 @@
     "miniprogram:env:mock": "cross-env MOCK_MODE=openapi API_BASE_URL=http://localhost:4010/api/v1 node scripts/codegen/miniprogram-env.mjs",
     "miniprogram:env:openapi": "cross-env MOCK_MODE=openapi API_BASE_URL=http://localhost:4010/api/v1 node scripts/codegen/miniprogram-env.mjs",
     "miniprogram:env:check": "node scripts/codegen/check-miniprogram-env.mjs",
+    "miniprogram:request:check": "node scripts/codegen/check-miniprogram-request.mjs",
     "web:policy:check": "node scripts/codegen/check-web-alarm-policy.mjs",
     "openapi:export": "node scripts/codegen/export-openapi.mjs",
     "api:generate": "node scripts/codegen/generate-api-types.mjs",

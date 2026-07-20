@@ -1,17 +1,23 @@
 <template>
-  <div class="ros-route-editor" @dragenter.prevent @dragover.prevent @drop.prevent="onDrop">
+  <div class="ros-route-editor" :class="{ embedded }" @dragenter.prevent @dragover.prevent @drop.prevent="onDrop">
     <section class="workspace">
       <div class="toolbar">
-        <input ref="yamlInputRef" type="file" accept=".yaml,.yml,.pgm,text/yaml,image/x-portable-graymap" multiple hidden @change="onMapFilesChange" />
-        <input ref="pgmInputRef" type="file" accept=".pgm,image/x-portable-graymap" hidden @change="onPgmChange" />
-        <input ref="jsonInputRef" type="file" accept=".json,application/json" hidden @change="onJsonChange" />
-        <el-button size="small" @click="yamlInputRef?.click()">YAML + PGM</el-button>
-        <el-button size="small" @click="pgmInputRef?.click()">仅 PGM</el-button>
-        <el-button size="small" @click="jsonInputRef?.click()">导入 JSON</el-button>
+        <div class="toolbar-group">
+          <span class="toolbar-label">地图</span>
+          <input ref="yamlInputRef" type="file" accept=".yaml,.yml,.pgm,text/yaml,image/x-portable-graymap" multiple hidden @change="onMapFilesChange" />
+          <input ref="pgmInputRef" type="file" accept=".pgm,image/x-portable-graymap" hidden @change="onPgmChange" />
+          <input ref="jsonInputRef" type="file" accept=".json,application/json" hidden @change="onJsonChange" />
+          <el-button size="small" plain @click="yamlInputRef?.click()">YAML + PGM</el-button>
+          <el-button size="small" plain @click="pgmInputRef?.click()">仅 PGM</el-button>
+          <el-button size="small" plain @click="jsonInputRef?.click()">导入 JSON</el-button>
+        </div>
         <el-divider direction="vertical" />
-        <el-button size="small" @click="fitToScreen">适配</el-button>
-        <el-button size="small" @click="zoomIn">放大</el-button>
-        <el-button size="small" @click="zoomOut">缩小</el-button>
+        <div class="toolbar-group">
+          <span class="toolbar-label">视图</span>
+          <el-button size="small" plain @click="fitToScreen">铺满</el-button>
+          <el-button size="small" plain @click="zoomIn">放大</el-button>
+          <el-button size="small" plain @click="zoomOut">缩小</el-button>
+        </div>
         <div class="mode-group">
           <button type="button" :class="{ active: mode === 'start' }" @click="setMode('start')">起点</button>
           <button type="button" :class="{ active: mode === 'target' }" @click="setMode('target')">巡检点</button>
@@ -29,7 +35,12 @@
           @wheel="onWheel"
           @contextmenu.prevent
         />
-        <div v-if="!mapLoaded" class="map-empty">拖入或点击上方按钮加载 YAML + PGM 地图</div>
+        <div v-if="!mapLoaded" class="map-empty">
+          <div class="map-empty-inner">
+            <strong>加载 ROS 地图</strong>
+            <span>拖入 YAML + PGM，或点击上方按钮导入</span>
+          </div>
+        </div>
       </div>
 
       <div class="hud">
@@ -233,6 +244,7 @@ const props = defineProps<{
   defaultRouteId?: string
   defaultRouteName?: string
   mapId?: string | null
+  embedded?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -493,15 +505,30 @@ defineExpose({ exportDocument, validateForExport })
 <style scoped>
 .ros-route-editor {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) 360px;
-  gap: 12px;
-  min-height: 640px;
+  grid-template-columns: minmax(420px, 1fr) 340px;
+  gap: 0;
+  min-height: 520px;
+}
+
+.ros-route-editor.embedded {
+  min-height: 480px;
+}
+
+.ros-route-editor.embedded .workspace {
+  border: none;
+  border-radius: 0;
+}
+
+.ros-route-editor.embedded .sidebar {
+  border: none;
+  border-left: 1px solid var(--pi-border-soft, #e4e7ed);
+  border-radius: 0;
 }
 
 .workspace,
 .sidebar {
   background: #fff;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--pi-border-soft, #e4e7ed);
   border-radius: 8px;
   min-height: 0;
   overflow: hidden;
@@ -515,41 +542,65 @@ defineExpose({ exportDocument, validateForExport })
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px 10px;
   align-items: center;
   padding: 10px 12px;
-  border-bottom: 1px solid #ebeef5;
-  background: #fff;
+  border-bottom: 1px solid var(--pi-border-soft, #ebeef5);
+  background: #fafbfc;
+}
+
+.toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-label {
+  color: var(--pi-muted, #909399);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-right: 2px;
 }
 
 .mode-group {
   display: inline-flex;
   border: 1px solid #dcdfe6;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   margin-left: auto;
+  background: #fff;
 }
 
 .mode-group button {
   border: 0;
   background: #fff;
-  min-width: 56px;
+  min-width: 58px;
   min-height: 30px;
   font-size: 13px;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mode-group button + button {
+  border-left: 1px solid #ebeef5;
+}
+
+.mode-group button:hover {
+  background: #f5f7fa;
 }
 
 .mode-group button.active {
-  background: #ecfdf5;
-  color: #0f766e;
+  background: #e6f4ff;
+  color: var(--pi-primary, #1677ff);
   font-weight: 600;
 }
 
 .map-wrap {
   position: relative;
-  min-height: 420px;
+  min-height: 560px;
   overflow: hidden;
-  background: #f5f7fa;
+  background: #eef2f6;
 }
 
 canvas {
@@ -565,20 +616,47 @@ canvas {
   display: grid;
   place-items: center;
   padding: 24px;
-  color: #909399;
-  font-size: 14px;
   pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(0, 0, 0, 0.02),
+    rgba(0, 0, 0, 0.02) 8px,
+    rgba(0, 0, 0, 0.04) 8px,
+    rgba(0, 0, 0, 0.04) 16px
+  );
+}
+
+.map-empty-inner {
+  display: grid;
+  gap: 6px;
+  padding: 16px 22px;
+  border: 1px dashed #c0c4cc;
+  border-radius: 10px;
+  text-align: center;
+  color: #606266;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.map-empty-inner strong {
+  font-size: 15px;
+  color: #303133;
+}
+
+.map-empty-inner span {
+  font-size: 13px;
+  color: #909399;
 }
 
 .hud {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 12px;
-  border-top: 1px solid #ebeef5;
-  color: #909399;
-  font-size: 12px;
-  background: #fff;
+  padding: 7px 12px;
+  border-top: 1px solid #e4e7ed;
+  color: #606266;
+  font-size: 11px;
+  font-family: Consolas, 'Courier New', monospace;
+  background: #f5f7fa;
 }
 
 .sidebar {
@@ -590,14 +668,18 @@ canvas {
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 640px;
+  min-height: 520px;
+}
+
+.ros-route-editor.embedded .config-tabs {
+  min-height: 480px;
 }
 
 .config-tabs :deep(.el-tabs__header) {
   margin: 0;
   padding: 0 12px;
-  background: #fff;
-  border-bottom: 1px solid #ebeef5;
+  background: #fafbfc;
+  border-bottom: 1px solid var(--pi-border-soft, #ebeef5);
 }
 
 .config-tabs :deep(.el-tabs__content) {
@@ -633,15 +715,15 @@ canvas {
 }
 
 .target-item.selected {
-  border-color: #0f766e;
-  background: #ecfdf5;
+  border-color: var(--pi-primary, #1677ff);
+  background: #e6f4ff;
 }
 
 .target-badge {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--pi-primary, #1677ff);
   color: #fff;
   display: grid;
   place-items: center;
@@ -767,6 +849,20 @@ label {
 @media (max-width: 1200px) {
   .ros-route-editor {
     grid-template-columns: 1fr;
+  }
+
+  .ros-route-editor.embedded .sidebar {
+    border-left: none;
+    border-top: 1px solid var(--pi-border-soft, #e4e7ed);
+  }
+
+  .mode-group {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .mode-group button {
+    flex: 1;
   }
 }
 </style>

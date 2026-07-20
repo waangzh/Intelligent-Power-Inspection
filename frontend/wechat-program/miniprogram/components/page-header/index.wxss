@@ -1,4 +1,2 @@
-@import '../../config/theme.wxss';
-
 .title { font-size: 36rpx; font-weight: 700; color: var(--pi-text); }
 .desc { font-size: 24rpx; color: var(--pi-muted); margin-top: 8rpx; display: block; }

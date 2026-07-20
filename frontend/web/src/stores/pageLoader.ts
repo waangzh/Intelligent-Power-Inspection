@@ -25,8 +25,8 @@ export async function loadRouteData(routeName: unknown, params: Record<string, u
     loaders.push(useTaskStore().loadDynamic())
     realtime.push('task', 'robot')
   }
-  if (['Alarms', 'Statistics', 'BigScreen'].includes(name)) {
-    loaders.push(useAlarmStore().load())
+  if (['Alarms', 'Monitor', 'Statistics', 'BigScreen'].includes(name)) {
+    loaders.push(useAlarmStore().load({ size: 10 }))
     realtime.push('alarm')
   }
   if (name === 'WorkOrders') loaders.push(useWorkOrderStore().load(), useSiteStore().loadSites())

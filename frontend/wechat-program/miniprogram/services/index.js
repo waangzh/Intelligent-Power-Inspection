@@ -1,14 +1,25 @@
 const { openapiClient, services } = require('../generated/api-client')
-const { uid } = require('../utils/storage')
+const {
+  uid,
+  validateUsername,
+  validatePassword,
+  generateDefaultAvatar,
+} = require('../utils/storage')
 const { ROUTE_DETECTIONS } = require('../utils/constants')
 const { createEmptyRosRoute } = require('../utils/ros-route')
 const { resolutionSummary, buildReviewFromResolveForm } = require('../utils/work-order')
 const workOrderPerm = require('../utils/work-order-permission')
-const {
-  validateUsername,
-  validatePassword,
-  generateDefaultAvatar,
-} = require('../utils/user-profile')
+const { DEFAULT_POLICY } = require('../utils/alarm-policy')
+const { post } = require('../utils/request')
+const { API_PATHS, apiRel } = require('../generated/api-paths')
+
+function taskControlPath(apiPath, id) {
+  return apiRel(apiPath).replace('{id}', encodeURIComponent(String(id)))
+}
+
+async function postTaskControl(apiPath, id, body = {}) {
+  await post(taskControlPath(apiPath, id), body, { 'Idempotency-Key': uid('taskctl') })
+}
 
 function currentUser() {
   const session = getSession()
@@ -36,7 +47,7 @@ async function getWorkOrderById(id) {
  */
 async function fetchAllPages(listFn, extraParams) {
   const pageSize = 200
-  let page = 1
+  let page = 0
   let items = []
   for (let guard = 0; guard < 50; guard += 1) {
     const res = await listFn({ ...extraParams, page, size: pageSize })
@@ -52,10 +63,6 @@ async function fetchAllPages(listFn, extraParams) {
   return items
 }
 
-function delay(ms = 200) {
-  return new Promise((r) => setTimeout(r, ms))
-}
-
 // ==================== Auth ====================
 async function login(username, password, remember = true) {
   const data = await openapiClient.auth.login(username, password, remember)
@@ -65,6 +72,18 @@ async function login(username, password, remember = true) {
 
 async function register(form) {
   return services.auth.register(form)
+}
+
+async function sendRegisterSms(phone) {
+  return openapiClient.auth.sendSms({ phone: String(phone || '').trim(), purpose: 'REGISTER' })
+}
+
+async function sendResetPasswordSms(phone) {
+  return openapiClient.auth.sendSms({ phone: String(phone || '').trim(), purpose: 'RESET_PASSWORD' })
+}
+
+async function resetPassword(payload) {
+  await openapiClient.auth.resetPassword(payload)
 }
 
 function normalizeSession(session) {
@@ -208,7 +227,7 @@ async function getRoutes() {
 }
 
 async function saveRoute(route) {
-  return route.id ? services.routes.replace(route.id, route) : services.routes.create(route)
+  return route.id ? services.routes.update(route.id, route) : services.routes.create(route)
 }
 
 async function createRoute(siteId, name, description = '') {
@@ -254,19 +273,24 @@ async function dispatchTask(id) {
 }
 
 async function pauseTask(id) {
-  await services.tasks.pause(id)
+  await postTaskControl(API_PATHS.tasksIdPause, id)
 }
 
 async function resumeTask(id) {
-  await services.tasks.resume(id)
+  await postTaskControl(API_PATHS.tasksIdResume, id)
 }
 
-async function takeoverTask(id) {
-  await services.tasks.takeover(id)
+async function takeoverTask(id, reason) {
+  const body = reason ? { reason } : {}
+  await postTaskControl(API_PATHS.tasksIdTakeover, id, body)
 }
 
 async function cancelTask(id) {
-  await services.tasks.cancel(id)
+  await postTaskControl(API_PATHS.tasksIdCancel, id)
+}
+
+async function emergencyStopTask(id, reason) {
+  await postTaskControl(API_PATHS.tasksIdEmergencyStop, id, { reason: reason || '' })
 }
 
 // ==================== Alarms ====================
@@ -291,11 +315,74 @@ async function updateAlarmWorkOrderPolicy(rules) {
   return openapiClient.alarms.updateWorkOrderPolicy(rules)
 }
 
+/**
+ * 拉取告警/工单并执行自动转工单（对齐 Web alarm store）。
+ * 单次拉取；若有成功转换则再拉取一次以返回最新列表，避免页面 load 重复请求。
+ * @returns {Promise<{ alarms: object[], orders: object[], converted: string[] }>}
+ */
+async function tryAutoConvertPendingAlarms() {
+  const empty = { alarms: [], orders: [], converted: [] }
+  const session = getSession()
+  if (!session?.user) return empty
+
+  const user = session.user
+  const perms = sessionPermissions()
+  if (!perms.includes('workorder:view')) {
+    return { alarms: await getAlarms(), orders: [], converted: [] }
+  }
+
+  let [alarms, orders] = await Promise.all([
+    getAlarms(),
+    getWorkOrders(),
+  ])
+
+  if (!workOrderPerm.canCreateWorkOrder(user, perms)) {
+    return { alarms, orders, converted: [] }
+  }
+
+  let rules = { ...DEFAULT_POLICY }
+  try {
+    const policy = await getAlarmWorkOrderPolicy()
+    if (policy?.rules) rules = { ...DEFAULT_POLICY, ...policy.rules }
+  } catch {
+    // 策略读取失败时使用默认规则
+  }
+
+  const linkedAlarmIds = new Set(orders.filter((o) => o.alarmId).map((o) => o.alarmId))
+  const creator = { id: user.id, name: user.displayName }
+  const converted = []
+
+  for (const alarm of alarms) {
+    if (linkedAlarmIds.has(alarm.id)) continue
+    if (rules[alarm.severity] !== 'AUTO') continue
+    try {
+      await createWorkOrderFromAlarm(alarm, creator, { autoConverted: true })
+      linkedAlarmIds.add(alarm.id)
+      converted.push(alarm.id)
+      if (!alarm.acknowledged) {
+        try {
+          await acknowledgeAlarm(alarm.id)
+        } catch {
+          // 自动确认失败不影响转工单结果
+        }
+      }
+    } catch {
+      // 已转工单或接口失败时忽略，继续处理其余告警
+    }
+  }
+
+  if (converted.length > 0) {
+    ;[alarms, orders] = await Promise.all([
+      getAlarms(),
+      getWorkOrders(),
+    ])
+  }
+
+  return { alarms, orders, converted }
+}
+
 // ==================== Work Orders ====================
 async function getWorkOrders() {
-  if (!sessionPermissions().includes('workorder:view')) {
-    return []
-  }
   return fetchAllPages(services.workOrders.list)
 }
 
@@ -394,18 +481,15 @@ async function removeNotification(id) {
 
 // ==================== Aggregates ====================
 async function fetchDashboard() {
-  await delay(100)
-  const [sites, routes, tasks, alarms, robots, records] = await Promise.all([
-    getSites(), getRoutes(), getTasks(), getAlarms(), getRobots(), getRecords(),
-  ])
-  const activeTasks = tasks.filter((t) => ['DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER'].includes(t.status))
-  const unack = alarms.filter((a) => !a.acknowledged).length
-  return { sites, routes, tasks, alarms, robots, records, activeTasks, unack }
+  return openapiClient.dashboard.overview()
 }
 
 module.exports = {
   login,
   register,
+  sendRegisterSms,
+  sendResetPasswordSms,
+  resetPassword,
   getSession,
   refreshMe,
   logout,
@@ -443,11 +527,13 @@ module.exports = {
   resumeTask,
   takeoverTask,
   cancelTask,
+  emergencyStopTask,
   getAlarms,
   acknowledgeAlarm,
   acknowledgeAllAlarms,
   getAlarmWorkOrderPolicy,
   updateAlarmWorkOrderPolicy,
+  tryAutoConvertPendingAlarms,
   getWorkOrders,
   createWorkOrderFromAlarm,
   claimWorkOrder,

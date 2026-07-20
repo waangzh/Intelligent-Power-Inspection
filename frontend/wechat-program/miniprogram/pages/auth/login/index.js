@@ -24,6 +24,8 @@ Page({
 
   goRegister() { wx.navigateTo({ url: '/pages/auth/register/index' }) },
 
+  goForgotPassword() { wx.navigateTo({ url: '/pages/auth/forgot-password/index' }) },
+
   async handleLogin() {
     const { username, password, remember } = this.data
     if (!username || !password) {
