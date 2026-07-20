@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -16,6 +17,9 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from .store import Store, StoreConflict, now
+
+
+logger = logging.getLogger("robot_bridge.map_upload")
 
 
 class BridgeError(Exception):
@@ -308,6 +312,8 @@ def create_app() -> FastAPI:
         idempotency_key = request.headers.get("idempotency-key", "").strip()
         if not idempotency_key or len(idempotency_key) > 160:
             raise BridgeError("INVALID_REQUEST", "valid Idempotency-Key is required")
+        key_fingerprint = hashlib.sha256(idempotency_key.encode()).hexdigest()[:12]
+        logger.info("map upload received robot_id=%s key=%s", robot_id, key_fingerprint)
         yaml_name = safe_name(yaml_file.filename, (".yaml", ".yml"))
         pgm_name = safe_name(pgm_file.filename, (".pgm",))
         if not valid_sha256(content_identity) or not valid_sha256(yaml_sha256) or not valid_sha256(pgm_sha256):
@@ -318,6 +324,10 @@ def create_app() -> FastAPI:
         try:
             yaml_size, actual_yaml_sha = await save_upload(yaml_file, yaml_path, upload_yaml_max)
             pgm_size, actual_pgm_sha = await save_upload(pgm_file, pgm_path, upload_pgm_max)
+            logger.info(
+                "map upload buffered robot_id=%s key=%s yaml_bytes=%d pgm_bytes=%d",
+                robot_id, key_fingerprint, yaml_size, pgm_size,
+            )
             if yaml_size + pgm_size > upload_request_max:
                 raise BridgeError("PAYLOAD_TOO_LARGE", "map upload exceeds configured request size", 413)
             if not hmac.compare_digest(yaml_sha256.lower(), actual_yaml_sha):
@@ -348,14 +358,26 @@ def create_app() -> FastAPI:
                             },
                         )
             except httpx.HTTPError as exc:
+                logger.warning(
+                    "map upload platform unavailable robot_id=%s key=%s error=%s",
+                    robot_id, key_fingerprint, type(exc).__name__,
+                )
                 raise BridgeError("PLATFORM_UNREACHABLE", f"platform upload failed: {type(exc).__name__}", 503) from exc
             try:
                 payload = response.json()
             except ValueError as exc:
                 raise BridgeError("PLATFORM_UNREACHABLE", "platform returned invalid JSON", 503) from exc
             if response.status_code >= 400:
+                logger.warning(
+                    "map upload rejected robot_id=%s key=%s platform_status=%d",
+                    robot_id, key_fingerprint, response.status_code,
+                )
                 return platform_error(response.status_code, payload)
             asset = payload.get("data", payload)
+            logger.info(
+                "map upload succeeded robot_id=%s key=%s platform_status=%d asset_id=%s status=%s",
+                robot_id, key_fingerprint, response.status_code, asset.get("id"), asset.get("status"),
+            )
             return JSONResponse(status_code=response.status_code, content={
                 "mapAssetId": asset.get("id"),
                 "status": asset.get("status"),

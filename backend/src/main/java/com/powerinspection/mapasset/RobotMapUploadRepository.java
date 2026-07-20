@@ -13,6 +13,11 @@ public interface RobotMapUploadRepository extends JpaRepository<RobotMapUploadEn
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Transactional
   @Query("update RobotMapUploadEntity upload set upload.status = 'PROCESSING', upload.updatedAt = :updatedAt "
-    + "where upload.id = :id and upload.status = 'FAILED'")
-  int claimFailed(@Param("id") Long id, @Param("updatedAt") String updatedAt);
+    + "where upload.id = :id and (upload.status = 'FAILED' "
+    + "or (upload.status = 'PROCESSING' and upload.updatedAt < :processingCutoff))")
+  int claimRetryable(@Param("id") Long id, @Param("processingCutoff") String processingCutoff,
+      @Param("updatedAt") String updatedAt);
+
+  @Transactional
+  void deleteByMapAssetId(String mapAssetId);
 }

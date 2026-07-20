@@ -2,6 +2,10 @@ package com.powerinspection.mapasset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -10,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.common.ApiException;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.route.RouteDeploymentEntity;
@@ -17,7 +22,10 @@ import com.powerinspection.route.RouteDeploymentRepository;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionRepository;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +58,7 @@ class RobotMapAssetControllerTests {
   @Autowired ObjectMapper objectMapper;
   @Autowired DataStoreService dataStore;
   @Autowired MapAssetService mapAssetService;
+  @Autowired RobotMapUploadRepository robotMapUploadRepository;
   @Autowired RouteRevisionRepository revisionRepository;
   @Autowired RouteDeploymentRepository deploymentRepository;
 
@@ -178,6 +187,55 @@ class RobotMapAssetControllerTests {
   }
 
   @Test
+  void processingUploadReturnsRetryableStatusAndStaleRecordCanBeReclaimed() throws Exception {
+    String activeKey = key();
+    robotMapUploadRepository.saveAndFlush(uploadRecord(activeKey, Instant.now()));
+
+    ApiException active = assertThrows(ApiException.class, () -> mapAssetService.createForRobot(
+      "site_001", "robot_001", "robot-001", activeKey, null,
+      Instant.parse("2026-07-17T00:00:00Z"), yaml(), pgm()));
+    assertEquals(503, active.status().value());
+
+    String staleKey = key();
+    robotMapUploadRepository.saveAndFlush(uploadRecord(staleKey, Instant.now().minus(10, ChronoUnit.MINUTES)));
+    RobotMapUploadResult recovered = mapAssetService.createForRobot(
+      "site_001", "robot_001", "robot-001", staleKey, null,
+      Instant.parse("2026-07-17T00:00:00Z"), yaml(), pgm());
+
+    assertTrue(recovered.created());
+    assertEquals("PENDING_REVIEW", recovered.asset().get("status"));
+    assertEquals("SUCCEEDED", robotMapUploadRepository
+      .findByRobotIdAndIdempotencyKey("robot_001", staleKey).orElseThrow().getStatus());
+  }
+
+  @Test
+  void rejectionPurgesFilesAndNewUploadIntentCreatesNewPendingAsset() throws Exception {
+    String originalKey = key();
+    String rejectedId = uploadMap(originalKey);
+    String token = login("dispatcher", "Disp@123");
+    mockMvc.perform(post("/api/v1/map-assets/{id}/review", rejectedId).header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON).content(json("action", "REJECT", "comment", "地图质量不合格")))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.status").value("REJECTED"))
+      .andExpect(jsonPath("$.data.filesReady").value(false));
+
+    mockMvc.perform(upload(originalKey, "robot-001").header("Authorization", BRIDGE_AUTH))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.id").value(rejectedId))
+      .andExpect(jsonPath("$.data.status").value("REJECTED"));
+
+    String replacementId = uploadMap(key());
+    assertNotEquals(rejectedId, replacementId);
+    assertEquals("PENDING_REVIEW", dataStore.get(DataCategory.MAP_ASSET, replacementId).get("status"));
+
+    dataStore.patch(DataCategory.MAP_ASSET, rejectedId,
+      Map.of("reviewedAt", Instant.now().minus(31, ChronoUnit.DAYS).toString()));
+    mapAssetService.cleanupRejectedAssets();
+    assertNull(dataStore.find(DataCategory.MAP_ASSET, rejectedId));
+    assertTrue(robotMapUploadRepository.findByRobotIdAndIdempotencyKey("robot_001", originalKey).isEmpty());
+  }
+
+  @Test
   void reviewControlsRouteAvailabilityAndDoesNotMutateExistingRouteOrDeployment() throws Exception {
     String token = login("dispatcher", "Disp@123");
     String approvedMapId = uploadMap(key());
@@ -251,6 +309,23 @@ class RobotMapAssetControllerTests {
   private MockMultipartFile yaml() { return yaml("image: floor.pgm\nresolution: 0.05\norigin: [0, 0, 0]\nnegate: 0\noccupied_thresh: 0.65\nfree_thresh: 0.2\n"); }
   private MockMultipartFile yaml(String body) { return new MockMultipartFile("yaml", "floor.yaml", "application/yaml", body.getBytes(StandardCharsets.UTF_8)); }
   private MockMultipartFile pgm() { return new MockMultipartFile("pgm", "floor.pgm", "image/x-portable-graymap", pgmBytes((byte) 0)); }
+
+  private RobotMapUploadEntity uploadRecord(String key, Instant updatedAt) throws Exception {
+    RobotMapUploadEntity upload = new RobotMapUploadEntity();
+    upload.setRobotId("robot_001");
+    upload.setIdempotencyKey(key);
+    upload.setYamlSha256(sha256(yaml().getBytes()));
+    upload.setPgmSha256(sha256(pgm().getBytes()));
+    upload.setStatus("PROCESSING");
+    upload.setCreatedAt(updatedAt.toString());
+    upload.setUpdatedAt(updatedAt.toString());
+    return upload;
+  }
+
+  private String sha256(byte[] bytes) throws Exception {
+    return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+  }
+
   private byte[] pgmBytes(byte firstPixel) {
     byte[] header = "P5\n2 1\n255\n".getBytes(StandardCharsets.US_ASCII);
     byte[] bytes = new byte[header.length + 2];
