@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-20T01:35:14.204Z",
+  "generatedAt": "2026-07-20T13:35:27.308Z",
   "paths": [
     {
       "apiPath": "/api/v1/agent-actions/{actionId}",
@@ -540,6 +540,11 @@
       "apiPath": "/api/v1/work-orders/{id}/claim",
       "relPath": "/work-orders/{id}/claim",
       "name": "workOrdersIdClaim"
+    },
+    {
+      "apiPath": "/api/v1/work-orders/{id}/photos",
+      "relPath": "/work-orders/{id}/photos",
+      "name": "workOrdersIdPhotos"
     },
     {
       "apiPath": "/api/v1/work-orders/{id}/status",

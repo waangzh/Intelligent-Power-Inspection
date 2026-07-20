@@ -202,6 +202,8 @@ const openapiClient = {
     order(id, query) { return get(buildPath(API_PATHS.workOrdersId, { id }), query) },
     patchWorkOrders(id, body) { return patch(buildPath(API_PATHS.workOrdersId, { id }), body) },
     claim(id, body) { return post(buildPath(API_PATHS.workOrdersIdClaim, { id }), body) },
+    discardPhoto(id) { return del(buildPath(API_PATHS.workOrdersIdPhotos, { id })) },
+    uploadPhoto(id, body) { return post(buildPath(API_PATHS.workOrdersIdPhotos, { id }), body) },
     updateStatus(id, body) { return patch(buildPath(API_PATHS.workOrdersIdStatus, { id }), body) },
     createFromAlarm(alarmId, body) { return post(buildPath(API_PATHS.workOrdersFromAlarmAlarmId, { alarmId }), body) },
   },

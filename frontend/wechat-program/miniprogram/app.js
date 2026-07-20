@@ -32,19 +32,27 @@ App({
 
   restoreSession() {
     const session = api.getSession()
-    if (session) {
-      this.applySession(session, { reloadPages: false })
-      api.refreshMe().then((fresh) => {
-        if (fresh) this.applySession(fresh, { reloadPages: true })
-      }).catch(() => {
-        // request.js 已根据响应特征区分“token 失效”与“网络抖动”：
-        // 前者会清掉 pi_session，此时才需要退出登录态；网络抖动时 session 仍在，
-        // 保留乐观展示，避免偶发超时就把用户强制登出。
+    if (!session) return
+    // 先恢复本地展示，等 token 续期 /auth/me 成功后再拉 badge，避免启动时过期 token 刷屏 401。
+    this.globalData.user = session.user
+    this.globalData.permissions = session.permissions
+    const { ensureSessionFresh } = require('./utils/request')
+    ensureSessionFresh()
+      .then(() => api.refreshMe())
+      .then((fresh) => {
+        if (fresh) {
+          this.applySession(fresh, { reloadPages: true })
+          return
+        }
         if (!api.getSession()) {
-          this.clearUser({ redirect: false })
+          this.clearUser({ redirect: true })
         }
       })
-    }
+      .catch(() => {
+        if (!api.getSession()) {
+          this.clearUser({ redirect: true })
+        }
+      })
   },
 
   applySession(session, options = {}) {
@@ -57,7 +65,9 @@ App({
     const prevPerms = JSON.stringify(this.globalData.permissions || [])
     this.globalData.user = session.user
     this.globalData.permissions = session.permissions
-    this.refreshBadges()
+    if (!options.skipBadges) {
+      this.refreshBadges()
+    }
     const sessionChanged = prevUserId !== session.user.id
       || prevUserSig !== JSON.stringify(session.user)
       || prevPerms !== JSON.stringify(session.permissions)

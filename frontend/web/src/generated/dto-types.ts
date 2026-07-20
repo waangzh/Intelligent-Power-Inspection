@@ -19,6 +19,7 @@ export type ApiResponseListUserDto = components['schemas']['ApiResponseListUserD
 export type ApiResponseLoginResponse = components['schemas']['ApiResponseLoginResponse']
 export type ApiResponseManualDetectionResponse = components['schemas']['ApiResponseManualDetectionResponse']
 export type ApiResponseMapStringObject = components['schemas']['ApiResponseMapStringObject']
+export type ApiResponseMapStringString = components['schemas']['ApiResponseMapStringString']
 export type ApiResponseMeResponse = components['schemas']['ApiResponseMeResponse']
 export type ApiResponsePageResultMapStringObject = components['schemas']['ApiResponsePageResultMapStringObject']
 export type ApiResponseRobotHeartbeatStatusPage = components['schemas']['ApiResponseRobotHeartbeatStatusPage']

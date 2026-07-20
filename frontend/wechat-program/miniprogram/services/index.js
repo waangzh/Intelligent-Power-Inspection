@@ -10,7 +10,7 @@ const { createEmptyRosRoute } = require('../utils/ros-route')
 const { resolutionSummary, buildReviewFromResolveForm } = require('../utils/work-order')
 const workOrderPerm = require('../utils/work-order-permission')
 const { DEFAULT_POLICY } = require('../utils/alarm-policy')
-const { post } = require('../utils/request')
+const { del, uploadFile } = require('../utils/request')
 const { API_PATHS, apiRel } = require('../generated/api-paths')
 
 function taskControlPath(apiPath, id) {
@@ -135,8 +135,31 @@ async function listUsers() {
   return services.users.list()
 }
 
-async function uploadWorkOrderPhoto(filePath) {
-  return filePath
+async function uploadWorkOrderPhoto(workOrderId, filePath) {
+  if (!workOrderId) throw new Error('工单 ID 不能为空')
+  if (!filePath) throw new Error('照片路径无效')
+  const data = await uploadFile({
+    url: `/work-orders/${encodeURIComponent(workOrderId)}/photos`,
+    filePath,
+    name: 'photo',
+  })
+  if (!data?.url) throw new Error('照片上传失败')
+  return data.url
+}
+
+async function discardWorkOrderPhoto(workOrderId, url) {
+  if (!workOrderId || !url) return
+  try {
+    await del(`/work-orders/${encodeURIComponent(workOrderId)}/photos`, { url })
+  } catch {
+    // 清理失败不阻断主流程
+  }
+}
+
+async function discardWorkOrderPhotos(workOrderId, urls) {
+  for (const url of urls || []) {
+    await discardWorkOrderPhoto(workOrderId, url)
+  }
 }
 
 async function updateUserRole(userId, role) {
@@ -406,7 +429,12 @@ async function updateWorkOrderStatus(id, status, extra = {}) {
   const user = currentUser()
   const order = await getWorkOrderById(id)
   workOrderPerm.assertStatusTransition(order, status, user, sessionPermissions())
-  return services.workOrders.updateStatus(id, { status, ...extra })
+  const body = { status }
+  if (extra.resolution != null) body.resolution = extra.resolution
+  if (extra.review != null) body.review = extra.review
+  if (extra.resolutionForm != null) body.resolutionForm = extra.resolutionForm
+  if (extra.reviewForm != null) body.reviewForm = extra.reviewForm
+  return services.workOrders.updateStatus(id, body)
 }
 
 async function submitWorkOrderResolution(id, form) {
@@ -433,7 +461,10 @@ async function submitWorkOrderReview(id, form) {
     reviewedBy: reviewer,
   }
   const status = form.result === 'PASS' ? 'CLOSED' : 'PROCESSING'
-  return updateWorkOrderStatus(id, status, { reviewForm: fullForm })
+  return updateWorkOrderStatus(id, status, {
+    resolution: form.comment,
+    reviewForm: fullForm,
+  })
 }
 
 // ==================== Robots ====================
@@ -538,6 +569,8 @@ module.exports = {
   createWorkOrderFromAlarm,
   claimWorkOrder,
   uploadWorkOrderPhoto,
+  discardWorkOrderPhoto,
+  discardWorkOrderPhotos,
   updateWorkOrderStatus,
   submitWorkOrderResolution,
   submitWorkOrderReview,

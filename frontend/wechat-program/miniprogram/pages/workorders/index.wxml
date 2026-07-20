@@ -158,7 +158,7 @@
       </view>
       <view class="form-actions">
         <button size="mini" bindtap="closeResolve">取消</button>
-        <button size="mini" type="primary" bindtap="submitResolve">提交复核</button>
+        <button size="mini" type="primary" loading="{{submittingResolve}}" disabled="{{submittingResolve}}" bindtap="submitResolve">提交复核</button>
       </view>
     </view>
   </view>
