@@ -1,18 +1,51 @@
 <view class="container">
   <page-header title="账号安全" description="账号信息与密码管理" />
 
-  <view class="card">
+  <view class="card account-card">
     <view class="card-title">账号信息</view>
     <view class="info-row"><text class="muted">用户名</text><text>{{username}}</text></view>
     <view class="info-row"><text class="muted">角色</text><text class="tag tag-primary">{{roleLabel}}</text></view>
     <view class="info-row"><text class="muted">最近更新</text><text>{{updatedLabel}}</text></view>
   </view>
 
-  <view class="card">
+  <view class="card password-card">
     <view class="card-title">修改密码</view>
-    <view class="form-row"><text class="form-label">原密码</text><input password data-field="oldPassword" value="{{form.oldPassword}}" bindinput="onInput" placeholder="请输入原密码" /></view>
-    <view class="form-row"><text class="form-label">新密码</text><input password data-field="newPassword" value="{{form.newPassword}}" bindinput="onInput" placeholder="至少8位，含字母和数字" /></view>
-    <view class="form-row"><text class="form-label">确认密码</text><input password data-field="confirmPassword" value="{{form.confirmPassword}}" bindinput="onInput" placeholder="再次输入新密码" /></view>
+    <view class="form-item">
+      <view class="form-label">原密码</view>
+      <input
+        class="form-input"
+        password
+        data-field="oldPassword"
+        value="{{form.oldPassword}}"
+        bindinput="onInput"
+        placeholder="请输入原密码"
+        placeholder-class="form-placeholder"
+      />
+    </view>
+    <view class="form-item">
+      <view class="form-label">新密码</view>
+      <input
+        class="form-input"
+        password
+        data-field="newPassword"
+        value="{{form.newPassword}}"
+        bindinput="onInput"
+        placeholder="至少 8 位，含字母和数字"
+        placeholder-class="form-placeholder"
+      />
+    </view>
+    <view class="form-item">
+      <view class="form-label">确认密码</view>
+      <input
+        class="form-input"
+        password
+        data-field="confirmPassword"
+        value="{{form.confirmPassword}}"
+        bindinput="onInput"
+        placeholder="再次输入新密码"
+        placeholder-class="form-placeholder"
+      />
+    </view>
     <view class="form-actions">
       <button type="primary" bindtap="submit">修改密码</button>
       <button class="btn-plain" bindtap="resetForm">清空</button>

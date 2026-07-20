@@ -62,6 +62,7 @@ export const PERMISSIONS_BY_ROLE: Record<'ADMIN' | 'DISPATCHER' | 'VIEWER', Perm
   ],
   VIEWER: [
     'task:view',
+    'workorder:view',
   ],
 }
 

@@ -41,21 +41,22 @@ public class WorkOrderPhotoRetentionWorker {
         return;
       }
       Files.walk(WorkOrderPhotoService.ROOT)
-        .filter(Files::isRegularFile)
-        .forEach(file -> {
-          String url = toPublicUrl(file);
-          if (url == null || referenced.contains(url)) {
-            return;
-          }
-          try {
-            if (Files.getLastModifiedTime(file).toMillis() > cutoffMs) {
-              return;
-            }
-            Files.deleteIfExists(file);
-          } catch (IOException ignored) {
-            // best effort
-          }
-        });
+          .filter(Files::isRegularFile)
+          .forEach(
+              file -> {
+                String url = toPublicUrl(file);
+                if (url == null || referenced.contains(url)) {
+                  return;
+                }
+                try {
+                  if (Files.getLastModifiedTime(file).toMillis() > cutoffMs) {
+                    return;
+                  }
+                  Files.deleteIfExists(file);
+                } catch (IOException ignored) {
+                  // best effort
+                }
+              });
     } catch (IOException ignored) {
       // best effort
     }

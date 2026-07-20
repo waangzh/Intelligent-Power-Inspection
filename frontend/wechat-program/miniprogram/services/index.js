@@ -92,8 +92,29 @@ function normalizeSession(session) {
   return session
 }
 
+const { permissionsForRole } = require('../generated/permissions')
+
+function enrichSessionPermissions(session) {
+  if (!session?.user?.role) return session
+  const rolePerms = permissionsForRole(session.user.role)
+  if (!rolePerms.length) return session
+  const current = session.permissions || []
+  const merged = [...new Set([...current, ...rolePerms])]
+  if (merged.length === current.length && rolePerms.every((p) => current.includes(p))) {
+    return session
+  }
+  return { ...session, permissions: merged }
+}
+
 function getSession() {
-  return normalizeSession(wx.getStorageSync('pi_session') || null)
+  const raw = wx.getStorageSync('pi_session') || null
+  const session = normalizeSession(raw)
+  if (!session) return null
+  const enriched = enrichSessionPermissions(session)
+  if (JSON.stringify(enriched.permissions) !== JSON.stringify(session.permissions)) {
+    wx.setStorageSync('pi_session', enriched)
+  }
+  return enriched
 }
 
 async function refreshMe() {
@@ -128,6 +149,11 @@ async function updateProfile(form) {
 async function changePassword(form) {
   const session = getSession()
   if (!session) throw new Error('未登录')
+  if (form.newPassword !== form.confirmPassword) {
+    throw new Error('两次输入的新密码不一致')
+  }
+  const pwdErr = validatePassword(form.newPassword)
+  if (pwdErr) throw new Error(pwdErr)
   await services.auth.changePassword(form)
 }
 
@@ -472,6 +498,19 @@ async function getRobots() {
   return fetchAllPages(services.robots.list)
 }
 
+async function getRobotHeartbeatStatus() {
+  return fetchAllPages((params) => openapiClient.robots.getStatus(params))
+}
+
+async function getRobotTelemetry(robotId) {
+  if (!robotId) return null
+  try {
+    return await openapiClient.robots.telemetry(robotId)
+  } catch {
+    return null
+  }
+}
+
 async function addRobot(robot) {
   return services.robots.create(robot)
 }
@@ -575,6 +614,8 @@ module.exports = {
   submitWorkOrderResolution,
   submitWorkOrderReview,
   getRobots,
+  getRobotHeartbeatStatus,
+  getRobotTelemetry,
   addRobot,
   removeRobot,
   getDetectionTemplates,

@@ -16,6 +16,8 @@ App({
   onLaunch() {
     if (apiConfig.mockMode === 'openapi') {
       console.warn('[power-inspection] OpenAPI Mock 模式：请求', apiConfig.baseUrl)
+    } else {
+      console.info('[power-inspection] 真实后端模式：', apiConfig.baseUrl)
     }
     this.restoreSession()
   },
@@ -41,17 +43,20 @@ App({
       .then(() => api.refreshMe())
       .then((fresh) => {
         if (fresh) {
-          this.applySession(fresh, { reloadPages: true })
-          return
+          this.applySession(fresh, { reloadPages: false })
         }
         if (!api.getSession()) {
           this.clearUser({ redirect: true })
+          return
         }
+        this.enterMainApp()
       })
       .catch(() => {
         if (!api.getSession()) {
           this.clearUser({ redirect: true })
+          return
         }
+        this.enterMainApp()
       })
   },
 
@@ -60,22 +65,28 @@ App({
       this.clearUser()
       return
     }
-    const prevUserId = this.globalData.user?.id
-    const prevUserSig = JSON.stringify(this.globalData.user || null)
-    const prevPerms = JSON.stringify(this.globalData.permissions || [])
     this.globalData.user = session.user
     this.globalData.permissions = session.permissions
     if (!options.skipBadges) {
       this.refreshBadges()
     }
-    const sessionChanged = prevUserId !== session.user.id
-      || prevUserSig !== JSON.stringify(session.user)
-      || prevPerms !== JSON.stringify(session.permissions)
-    // 显式要求重载时始终刷新页面（如 refreshMe / 重新登录）；
-    // 默认仅在用户或权限变化时重载，避免无意义重复请求。
-    if (options.reloadPages === true || (options.reloadPages !== false && sessionChanged)) {
+    if (options.reloadPages === true) {
       this.reloadVisiblePages()
     }
+  },
+
+  enterMainApp(url) {
+    if (!this.globalData.user) return
+    const pages = getCurrentPages()
+    const route = pages[pages.length - 1]?.route || ''
+    if (!route.startsWith('pages/auth/login')) return
+    const { enterMainApp } = require('./config/tab-bar')
+    const { getRoleLandingPath } = require('./utils/role-landing')
+    enterMainApp(
+      url || getRoleLandingPath(this.globalData.user.role),
+      this.globalData.permissions,
+      this.globalData.user.role,
+    )
   },
 
   registerTabBar(component) {
@@ -90,6 +101,7 @@ App({
       return
     }
     const canViewWorkOrders = hasPermission(this.globalData.permissions, 'workorder:view')
+      && user.role !== 'VIEWER'
     try {
       const [ntf, alarms, orders] = await Promise.all([
         api.getNotifications(user.id),
@@ -157,7 +169,7 @@ App({
   },
 
   setSession(session) {
-    this.applySession(session, { reloadPages: true })
+    this.applySession(session, { reloadPages: false })
   },
 
   handleSessionExpired() {
@@ -183,7 +195,16 @@ App({
     }
   },
 
+  syncSessionFromStorage() {
+    const session = api.getSession()
+    if (!session) return false
+    this.globalData.user = session.user
+    this.globalData.permissions = session.permissions
+    return true
+  },
+
   requireAuth(redirectUrl) {
+    this.syncSessionFromStorage()
     if (!this.globalData.user) {
       const url = redirectUrl ? `/pages/auth/login/index?redirect=${encodeURIComponent(redirectUrl)}` : '/pages/auth/login/index'
       wx.redirectTo({ url })
@@ -193,6 +214,7 @@ App({
   },
 
   requirePermission(permission, roles) {
+    this.syncSessionFromStorage()
     const { hasPermission, canAccessByRole } = require('./utils/permission.js')
     const user = this.globalData.user
     const role = user && user.role

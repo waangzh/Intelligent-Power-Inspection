@@ -1,0 +1,155 @@
+const api = require('../../../services/index')
+const { hasPermission } = require('../../../utils/permission')
+const { ALARM_SEVERITY_LABELS, DETECTION_LABELS } = require('../../../utils/constants')
+
+const SEVERITY_OPTIONS = [
+  { value: '', label: '全部级别' },
+  { value: 'CRITICAL', label: '紧急' },
+  { value: 'HIGH', label: '高' },
+  { value: 'MEDIUM', label: '中' },
+  { value: 'LOW', label: '低' },
+]
+
+Page({
+  data: {
+    alarms: [],
+    filtered: [],
+    selected: null,
+    keyword: '',
+    ackFilter: 'all',
+    severityFilter: '',
+    severityLabel: '全部级别',
+    severityOptions: SEVERITY_OPTIONS,
+    stats: { total: 0, unack: 0, critical: 0, high: 0, medium: 0 },
+    severityChart: [],
+    canAck: false,
+    canCreateWorkOrder: false,
+    user: null,
+  },
+
+  onShow() {
+    const app = getApp()
+    if (!app.requireAuth('/pages/alarms/center/index')) return
+    if (!app.requirePermission('workorder:view')) return
+    const perms = app.globalData.permissions
+    this.setData({
+      user: app.globalData.user,
+      canAck: hasPermission(perms, 'alarm:ack'),
+      canCreateWorkOrder: hasPermission(perms, 'workorder:create'),
+    })
+    getApp().refreshBadges().then(() => {
+      this.selectComponent('#inlineTabBar')?.refresh?.()
+    })
+    this.load()
+  },
+
+  async load() {
+    try {
+      const { alarms, orders } = await api.tryAutoConvertPendingAlarms().catch(() => ({
+        alarms: [],
+        orders: [],
+      }))
+      const workOrderByAlarm = {}
+      orders.forEach((o) => {
+        if (o.alarmId) workOrderByAlarm[o.alarmId] = o
+      })
+      const enriched = alarms.map((a) => ({
+        ...a,
+        severityLabel: ALARM_SEVERITY_LABELS[a.severity],
+        typeLabel: DETECTION_LABELS[a.type] || a.type,
+        sevType: a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info',
+        time: a.createdAt ? a.createdAt.slice(0, 16).replace('T', ' ') : '',
+        hasWorkOrder: !!workOrderByAlarm[a.id],
+        workOrderLabel: workOrderByAlarm[a.id]?.autoConverted ? '已自动转工单' : '已关联工单',
+      }))
+      const stats = {
+        total: enriched.length,
+        unack: enriched.filter((a) => !a.acknowledged).length,
+        critical: enriched.filter((a) => a.severity === 'CRITICAL').length,
+        high: enriched.filter((a) => a.severity === 'HIGH').length,
+        medium: enriched.filter((a) => a.severity === 'MEDIUM').length,
+      }
+      const severityChart = [
+        { label: '紧急', value: stats.critical, color: '#f04438' },
+        { label: '高', value: stats.high, color: '#ff8a00' },
+        { label: '中', value: stats.medium, color: '#1768f2' },
+      ]
+      this.setData({
+        alarms: enriched,
+        stats,
+        severityChart,
+        selected: this.data.selected || enriched[0] || null,
+      })
+      this.applyFilter()
+    } catch (e) {
+      wx.showToast({ title: e.message || '加载失败', icon: 'none' })
+    }
+  },
+
+  onKeyword(e) {
+    this.setData({ keyword: e.detail.value })
+    this.applyFilter()
+  },
+
+  setAckFilter(e) {
+    this.setData({ ackFilter: e.currentTarget.dataset.v })
+    this.applyFilter()
+  },
+
+  applyFilter() {
+    const { alarms, severityFilter, keyword, ackFilter } = this.data
+    let list = alarms
+    if (ackFilter === 'pending') list = list.filter((a) => !a.acknowledged)
+    if (severityFilter) list = list.filter((a) => a.severity === severityFilter)
+    if (keyword.trim()) list = list.filter((a) => a.message.includes(keyword.trim()))
+    this.setData({ filtered: list })
+  },
+
+  onSeverityChange(e) {
+    const opt = SEVERITY_OPTIONS[e.detail.value]
+    this.setData({ severityFilter: opt.value, severityLabel: opt.label })
+    this.applyFilter()
+  },
+
+  selectAlarm(e) {
+    const alarm = this.data.alarms.find((a) => a.id === e.currentTarget.dataset.id)
+    this.setData({ selected: alarm })
+  },
+
+  async ackOne(e) {
+    const id = e.currentTarget.dataset.id
+    await api.acknowledgeAlarm(id)
+    wx.showToast({ title: '已确认' })
+    this.load()
+    getApp().refreshBadges()
+  },
+
+  async ackAll() {
+    wx.showModal({
+      title: '全部确认',
+      content: '确认将所有告警标记为已确认？',
+      success: async (res) => {
+        if (!res.confirm) return
+        await api.acknowledgeAllAlarms()
+        this.load()
+        getApp().refreshBadges()
+      },
+    })
+  },
+
+  async createFromAlarm(e) {
+    const id = e.currentTarget.dataset.id
+    const alarm = this.data.alarms.find((a) => a.id === id)
+    if (!alarm || alarm.hasWorkOrder) return
+    try {
+      await api.createWorkOrderFromAlarm(alarm, this.data.user)
+      wx.showToast({ title: '工单已创建' })
+      getApp().refreshBadges()
+      this.load()
+    } catch (err) {
+      wx.showToast({ title: err.message || '创建失败', icon: 'none' })
+    }
+  },
+
+  stop() {},
+})

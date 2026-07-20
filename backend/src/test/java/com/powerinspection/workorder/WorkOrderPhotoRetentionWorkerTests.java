@@ -63,9 +63,11 @@ class WorkOrderPhotoRetentionWorkerTests {
     String url = WorkOrderPhotoService.publicUrl(orderId, "keep.jpg");
 
     DataStoreService dataStore = mock(DataStoreService.class);
-    when(dataStore.list(DataCategory.WORK_ORDER)).thenReturn(List.of(
-      Map.of("pendingPhotos", List.of(url)),
-      Map.of("resolutionForm", Map.of("photos", List.of(url)))));
+    when(dataStore.list(DataCategory.WORK_ORDER))
+        .thenReturn(
+            List.of(
+                Map.of("pendingPhotos", List.of(url)),
+                Map.of("resolutionForm", Map.of("photos", List.of(url)))));
 
     new WorkOrderPhotoRetentionWorker(dataStore, 24).runOnce(now);
 

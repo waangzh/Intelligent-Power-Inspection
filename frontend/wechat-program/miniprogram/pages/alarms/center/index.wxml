@@ -1,5 +1,5 @@
 <view class="container">
-  <page-header title="告警中心" description="告警监控、筛选与确认（转工单请至工单页）" />
+  <page-header title="告警中心" description="管理员/调度员告警处置，可确认并转工单" />
 
   <view class="stat-grid">
     <view class="stat-item"><view class="stat-value">{{stats.unack}}</view><view class="stat-label">未确认</view></view>
@@ -35,6 +35,7 @@
       <view class="alarm-actions" catchtap="stop">
         <text wx:if="{{item.acknowledged}}" class="tag tag-success">已确认</text>
         <button wx:if="{{!item.acknowledged && canAck}}" size="mini" catchtap="ackOne" data-id="{{item.id}}">确认</button>
+        <button wx:if="{{!item.hasWorkOrder && canCreateWorkOrder}}" size="mini" type="primary" catchtap="createFromAlarm" data-id="{{item.id}}">转工单</button>
         <text wx:if="{{item.hasWorkOrder}}" class="tag tag-info">{{item.workOrderLabel}}</text>
       </view>
     </view>
@@ -55,3 +56,5 @@
     <simple-chart type="bar" data="{{severityChart}}" />
   </view>
 </view>
+
+<inline-tab-bar id="inlineTabBar" activePath="/pages/dashboard/index" />

@@ -60,6 +60,7 @@ const PERMISSIONS_BY_ROLE = {
   ],
   VIEWER: [
     'task:view',
+    'workorder:view',
   ],
 }
 

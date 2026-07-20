@@ -16,10 +16,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class WorkOrderPhotoService {
-  private static final List<String> ALLOWED_CONTENT_TYPES = List.of(
-    "image/jpeg", "image/png", "image/webp", "image/bmp"
-  );
-  static final Path ROOT = ModelFileWebConfig.MODEL_FILE_ROOT.resolve("work-order-photos").normalize();
+  private static final List<String> ALLOWED_CONTENT_TYPES =
+      List.of("image/jpeg", "image/png", "image/webp", "image/bmp");
+  static final Path ROOT =
+      ModelFileWebConfig.MODEL_FILE_ROOT.resolve("work-order-photos").normalize();
   static final int MAX_PHOTOS_PER_ORDER = 3;
 
   private final long maxBytes;
@@ -68,19 +68,20 @@ public class WorkOrderPhotoService {
       throw ApiException.badRequest("现场照片最多 " + MAX_PHOTOS_PER_ORDER + " 张");
     }
     return list.stream()
-      .map(item -> {
-        String url = item == null ? "" : String.valueOf(item).trim();
-        if (url.isBlank()) {
-          throw ApiException.badRequest("现场照片地址不能为空");
-        }
-        verifyWorkOrderUrl(workOrderId, url);
-        Path file = resolveStoragePath(url);
-        if (!Files.isRegularFile(file)) {
-          throw ApiException.badRequest("现场照片不存在或已失效");
-        }
-        return url;
-      })
-      .toList();
+        .map(
+            item -> {
+              String url = item == null ? "" : String.valueOf(item).trim();
+              if (url.isBlank()) {
+                throw ApiException.badRequest("现场照片地址不能为空");
+              }
+              verifyWorkOrderUrl(workOrderId, url);
+              Path file = resolveStoragePath(url);
+              if (!Files.isRegularFile(file)) {
+                throw ApiException.badRequest("现场照片不存在或已失效");
+              }
+              return url;
+            })
+        .toList();
   }
 
   static String publicUrl(String workOrderId, String filename) {
@@ -95,7 +96,8 @@ public class WorkOrderPhotoService {
   }
 
   static Path resolveStoragePath(String publicUrl) {
-    if (!StringUtils.hasText(publicUrl) || !publicUrl.startsWith("/model-files/work-order-photos/")) {
+    if (!StringUtils.hasText(publicUrl)
+        || !publicUrl.startsWith("/model-files/work-order-photos/")) {
       throw ApiException.badRequest("现场照片地址不合法");
     }
     String relative = publicUrl.substring("/model-files/".length());
@@ -114,7 +116,8 @@ public class WorkOrderPhotoService {
       throw ApiException.badRequest("现场照片不能超过 " + (maxBytes / 1024 / 1024) + "MB");
     }
     String contentType = photo.getContentType();
-    if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase(Locale.ROOT))) {
+    if (contentType == null
+        || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase(Locale.ROOT))) {
       throw ApiException.badRequest("仅支持 JPG/PNG/WebP/BMP 图片");
     }
   }

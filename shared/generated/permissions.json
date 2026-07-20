@@ -1,6 +1,6 @@
 {
   "source": "backend",
-  "generatedAt": "2026-07-19T01:16:37.382Z",
+  "generatedAt": "2026-07-20T16:47:36.405Z",
   "permissions": [
     "agent:admin",
     "agent:approve",
@@ -59,7 +59,8 @@
       "workorder:view"
     ],
     "VIEWER": [
-      "task:view"
+      "task:view",
+      "workorder:view"
     ]
   }
 }

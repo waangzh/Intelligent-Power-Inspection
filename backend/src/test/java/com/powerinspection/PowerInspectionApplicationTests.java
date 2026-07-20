@@ -79,7 +79,10 @@ class PowerInspectionApplicationTests {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.user.username").value("viewer"))
         .andExpect(jsonPath("$.data.user.role").value("VIEWER"))
-        .andExpect(jsonPath("$.data.permissions.length()").value(1));
+        .andExpect(jsonPath("$.data.permissions.length()").value(2))
+        .andExpect(jsonPath("$.data.permissions[?(@ == 'task:view')]").exists())
+        .andExpect(jsonPath("$.data.permissions[?(@ == 'workorder:view')]").exists())
+        .andExpect(jsonPath("$.data.permissions[?(@ == 'workorder:process')]").doesNotExist());
 
     mockMvc
         .perform(get("/api/v1/users").header("Authorization", bearer(adminToken)))
@@ -652,11 +655,14 @@ class PowerInspectionApplicationTests {
         mockMvc
             .perform(
                 multipart("/api/v1/work-orders/" + workOrderId + "/photos")
-                    .file(new MockMultipartFile(
-                        "photo", "onsite.jpg", MediaType.IMAGE_JPEG_VALUE, testImage()))
+                    .file(
+                        new MockMultipartFile(
+                            "photo", "onsite.jpg", MediaType.IMAGE_JPEG_VALUE, testImage()))
                     .header("Authorization", bearer(dispatcherToken)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.url", containsString("/model-files/work-order-photos/" + workOrderId)))
+            .andExpect(
+                jsonPath(
+                    "$.data.url", containsString("/model-files/work-order-photos/" + workOrderId)))
             .andReturn()
             .getResponse()
             .getContentAsString(StandardCharsets.UTF_8);
@@ -669,11 +675,15 @@ class PowerInspectionApplicationTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json("url", photoUrl)))
         .andExpect(status().isOk());
-    assertThat(Files.notExists(
-        ModelFileWebConfig.MODEL_FILE_ROOT.resolve(photoUrl.substring("/model-files/".length()))))
+    assertThat(
+            Files.notExists(
+                ModelFileWebConfig.MODEL_FILE_ROOT.resolve(
+                    photoUrl.substring("/model-files/".length()))))
         .isTrue();
     mockMvc
-        .perform(get("/api/v1/work-orders/" + workOrderId).header("Authorization", bearer(dispatcherToken)))
+        .perform(
+            get("/api/v1/work-orders/" + workOrderId)
+                .header("Authorization", bearer(dispatcherToken)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.pendingPhotos").isEmpty());
 
@@ -681,8 +691,9 @@ class PowerInspectionApplicationTests {
         mockMvc
             .perform(
                 multipart("/api/v1/work-orders/" + workOrderId + "/photos")
-                    .file(new MockMultipartFile(
-                        "photo", "onsite.jpg", MediaType.IMAGE_JPEG_VALUE, testImage()))
+                    .file(
+                        new MockMultipartFile(
+                            "photo", "onsite.jpg", MediaType.IMAGE_JPEG_VALUE, testImage()))
                     .header("Authorization", bearer(dispatcherToken)))
             .andExpect(status().isOk())
             .andReturn()
@@ -889,7 +900,29 @@ class PowerInspectionApplicationTests {
     if (Files.exists(image)) {
       return Files.readAllBytes(image);
     }
-    return new byte[] { (byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00,
-      0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, (byte) 0xff, (byte) 0xd9 };
+    return new byte[] {
+      (byte) 0xff,
+      (byte) 0xd8,
+      (byte) 0xff,
+      (byte) 0xe0,
+      0x00,
+      0x10,
+      'J',
+      'F',
+      'I',
+      'F',
+      0x00,
+      0x01,
+      0x01,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      (byte) 0xff,
+      (byte) 0xd9
+    };
   }
 }

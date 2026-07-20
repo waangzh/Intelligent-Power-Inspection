@@ -36,7 +36,7 @@ export function parseAllPermissionValues(source) {
 export function parseRolePermissions(source, permissionEnum) {
   const byRole = {}
   const blocks = source.matchAll(
-    /ROLE_PERMISSIONS\.put\(UserRole\.(\w+),\s*EnumSet\.of\(([\s\S]*?)\)\);/g,
+    /ROLE_PERMISSIONS\.put\(\s*UserRole\.(\w+),\s*EnumSet\.of\(([\s\S]*?)\)\s*\);/g,
   )
   for (const [, role, body] of blocks) {
     const perms = [...body.matchAll(/Permission\.(\w+)/g)]
