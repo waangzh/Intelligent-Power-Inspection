@@ -2,24 +2,32 @@
   <div class="dashboard">
     <el-card v-if="authStore.user" shadow="never" class="welcome-card">
       <div class="welcome-inner">
-        <UserAvatar
-          :display-name="authStore.user.displayName"
-          :avatar-url="authStore.user.avatarUrl"
-          :seed="authStore.user.id"
-          :size="52"
-        />
         <div class="welcome-text">
           <h3>{{ greeting }}，{{ authStore.user.displayName }}</h3>
-          <p>{{ authStore.user.bio || '欢迎使用电力智能巡检平台，祝您工作顺利！' }}</p>
+          <p>变电站智能巡检全景感知 · 站点、机器人、任务与告警一屏联动</p>
         </div>
-        <div class="welcome-online">
-          <i />
+        <el-button
+          class="welcome-online"
+          aria-label="查看机器人管理"
+          title="查看机器人管理"
+          @click="router.push('/robots')"
+        >
+          <el-icon><Cpu /></el-icon>
           {{ onlineRobotSummary }}
-        </div>
+        </el-button>
         <div class="quick-actions">
-          <el-button type="primary" plain size="small" @click="router.push('/tasks')">任务调度</el-button>
-          <el-button plain size="small" @click="router.push('/statistics')">统计分析</el-button>
-          <el-button plain size="small" @click="router.push('/profile')">个人中心</el-button>
+          <el-button plain size="small" @click="router.push('/tasks')">
+            <el-icon><CircleCheckFilled /></el-icon>
+            任务调度
+          </el-button>
+          <el-button plain size="small" @click="router.push('/statistics')">
+            <el-icon><DataAnalysis /></el-icon>
+            统计分析
+          </el-button>
+          <el-button plain size="small" @click="router.push('/profile')">
+            <el-icon><User /></el-icon>
+            个人中心
+          </el-button>
         </div>
       </div>
     </el-card>
@@ -157,7 +165,6 @@ import { resourcesApi } from '@/api/resources'
 import ChartCard from '@/components/ChartCard.vue'
 import Map2D from '@/components/Map2D.vue'
 import TaskStatusTag from '@/components/TaskStatusTag.vue'
-import UserAvatar from '@/components/UserAvatar.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useAlarmStore } from '@/stores/alarm'
 import { useAuthStore } from '@/stores/auth'
@@ -348,53 +355,34 @@ function robotStatusType(s: Robot['status']) {
 .welcome-card {
   order: -3;
   position: relative;
-  isolation: isolate;
   margin-bottom: 12px;
   overflow: hidden;
-  border: 0;
-  background:
-    radial-gradient(circle at 72% 18%, rgba(92, 181, 255, 0.42), transparent 18%),
-    radial-gradient(circle at 84% 88%, rgba(32, 100, 255, 0.45), transparent 34%),
-    linear-gradient(105deg, #006b78 0%, #005caf 55%, #0045ae 100%);
-  box-shadow: 0 8px 18px rgba(16, 80, 157, 0.16);
+  border: 1px solid rgba(70, 197, 255, 0.28);
+  background-color: #056a94;
+  background-image:
+    linear-gradient(90deg, rgba(0, 83, 105, 0.56) 0%, rgba(0, 67, 107, 0.2) 48%, rgba(0, 47, 146, 0.08) 100%),
+    url('/img/dashboard.png');
+  background-position: center 72%;
+  background-size: 100% auto;
+  background-repeat: no-repeat;
+  box-shadow: 0 8px 22px rgba(0, 73, 148, 0.18);
 }
 
 .welcome-card::before {
   position: absolute;
-  z-index: -1;
-  top: -46px;
-  right: 6%;
-  width: min(46vw, 650px);
-  height: 210px;
+  inset: 0;
   content: '';
-  opacity: 0.48;
   background:
-    linear-gradient(112deg, transparent 48%, rgba(151, 222, 255, 0.54) 48.4%, transparent 48.8%) 0 0 / 110px 100%,
-    linear-gradient(68deg, transparent 48%, rgba(151, 222, 255, 0.38) 48.4%, transparent 48.8%) 0 0 / 150px 100%,
-    radial-gradient(circle at 36% 72%, rgba(111, 219, 255, 0.8) 0 5px, transparent 6px),
-    radial-gradient(circle at 76% 27%, rgba(111, 219, 255, 0.75) 0 6px, transparent 7px);
-  mask-image: linear-gradient(90deg, transparent, #000 20%, #000 92%, transparent);
-}
-
-.welcome-card::after {
-  position: absolute;
-  z-index: -1;
-  right: 13%;
-  bottom: -30px;
-  width: 124px;
-  height: 142px;
-  content: '';
-  opacity: 0.68;
-  border: 2px solid rgba(178, 229, 255, 0.52);
-  border-bottom-width: 8px;
-  clip-path: polygon(44% 0, 56% 0, 100% 100%, 0 100%);
+    linear-gradient(90deg, rgba(0, 74, 82, 0.18), transparent 52%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 42%);
+  pointer-events: none;
 }
 
 .welcome-inner {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px 16px;
+  gap: 10px 24px;
   position: relative;
   z-index: 1;
 }
@@ -407,62 +395,127 @@ function robotStatusType(s: Robot['status']) {
 .welcome-text h3 {
   margin: 0;
   color: #fff;
-  font-size: clamp(22px, 2vw, 28px);
-  line-height: 1.2;
+  font-size: 21px;
+  line-height: 1.25;
+  font-weight: 750;
+  text-shadow: 0 2px 10px rgba(0, 31, 74, 0.28);
 }
 
 .welcome-text p {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.76);
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: rgba(239, 252, 255, 0.82);
+  line-height: 1.45;
 }
 
 .quick-actions {
   display: flex;
-  grid-column: 1 / -1;
-  gap: 8px;
-  margin-top: 2px;
-  padding-left: 68px;
+  grid-column: 1;
+  gap: 10px;
+  margin-top: -1px;
   flex-wrap: wrap;
 }
 
 .welcome-card :deep(.el-card__body) {
-  min-height: 144px;
-  padding: 22px 34px 18px;
+  min-height: 112px;
+  padding: 16px 26px 14px;
 }
 
-.welcome-card :deep(.el-button) {
-  min-width: 132px;
-  height: 34px;
-  background: rgba(255, 255, 255, 0.94);
-  border-color: rgba(255, 255, 255, 0.72);
-  border-radius: 9px;
-  color: #164c86;
+.quick-actions :deep(.el-button) {
+  min-width: 148px;
+  height: 38px;
+  margin-left: 0;
+  padding-inline: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(213, 241, 255, 0.88);
+  border-radius: 7px;
+  color: #164f77;
+  font-size: 14px;
+  font-weight: 650;
+  box-shadow: 0 4px 12px rgba(0, 38, 91, 0.12);
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.quick-actions :deep(.el-button > span) {
+  gap: 10px;
+}
+
+.quick-actions :deep(.el-button:hover) {
+  color: #075f9d;
+  background: #fff;
+  border-color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 38, 91, 0.2);
+}
+
+.quick-actions :deep(.el-button:active) {
+  transform: translateY(0);
+  box-shadow: 0 3px 9px rgba(0, 38, 91, 0.16);
+}
+
+.quick-actions :deep(.el-button:focus-visible) {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.quick-actions :deep(.el-button:nth-child(1) .el-icon) { color: #0bae69; }
+.quick-actions :deep(.el-button:nth-child(2) .el-icon) { color: #1677e8; }
+.quick-actions :deep(.el-button:nth-child(3) .el-icon) { color: #f59b23; }
+
+.quick-actions :deep(.el-icon) {
+  font-size: 18px;
 }
 
 .welcome-online {
   display: inline-flex;
+  grid-column: 2;
+  grid-row: 1 / span 2;
   align-items: center;
   align-self: center;
-  gap: 9px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid rgba(139, 255, 187, 0.18);
-  border-radius: 24px;
+  min-width: 0;
+  height: 40px;
+  margin: 0;
+  padding: 0 17px;
+  border: 1px solid rgba(179, 255, 210, 0.22);
+  border-radius: 20px;
   color: #ecfff2;
-  background: rgba(0, 185, 91, 0.82);
-  box-shadow: 0 9px 20px rgba(0, 57, 65, 0.16);
-  font-size: 13px;
+  background: rgba(0, 183, 96, 0.9);
+  box-shadow: 0 8px 18px rgba(0, 57, 65, 0.2);
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
+  transition: transform 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
 }
 
-.welcome-online i {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #b9ffcf;
-  box-shadow: 0 0 0 4px rgba(185, 255, 207, 0.17);
+.welcome-online:hover,
+.welcome-online:focus {
+  color: #fff;
+  border-color: rgba(214, 255, 231, 0.56);
+  background: #08a861;
+}
+
+.welcome-online:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 57, 65, 0.28);
+}
+
+.welcome-online:active {
+  transform: translateY(0);
+}
+
+.welcome-online:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.welcome-online :deep(span) {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.welcome-online :deep(.el-icon) {
+  font-size: 18px;
 }
 
 .dashboard {
@@ -699,7 +752,7 @@ function robotStatusType(s: Robot['status']) {
 
 @media (max-width: 991px) {
   .welcome-card :deep(.el-card__body) {
-    padding: 18px 20px 16px;
+    padding: 16px 20px 14px;
   }
 
   .overview-live :deep(.el-col),
@@ -740,31 +793,34 @@ function robotStatusType(s: Robot['status']) {
   }
 
   .welcome-inner {
-    grid-template-columns: 42px minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .welcome-card :deep(.el-avatar) {
-    width: 42px !important;
-    height: 42px !important;
+    grid-template-columns: 1fr;
+    align-items: center;
+    gap: 10px;
   }
 
   .welcome-online {
-    grid-column: 2;
+    grid-column: 1;
+    grid-row: auto;
     justify-self: start;
-    min-height: 32px;
+    height: 40px;
     padding-inline: 11px;
-    font-size: 11px;
+    font-size: 14px;
   }
 
   .quick-actions {
+    grid-column: 1;
     width: 100%;
-    padding-left: 0;
   }
 
   .quick-actions :deep(.el-button) {
-    flex: 1;
+    min-width: 112px;
+    flex: 1 1 112px;
     margin-left: 0;
+  }
+
+  .welcome-card {
+    background-position: 68% center;
+    background-size: auto 100%;
   }
 
   .overview-map {
