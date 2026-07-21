@@ -8,7 +8,6 @@ Page({
       notifyAlarm: true,
       notifyTask: true,
       notifySystem: true,
-      sidebarCollapsed: false,
       defaultSiteId: '',
     },
     sites: [],

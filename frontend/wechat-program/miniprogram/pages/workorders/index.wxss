@@ -46,21 +46,21 @@
 .status-chips {
   width: 100%;
   white-space: nowrap;
-  margin-bottom: 20rpx;
+  margin: 8rpx 0 28rpx;
 }
 
 .status-chips-inner {
   display: inline-flex;
-  gap: 16rpx;
-  padding: 4rpx 4rpx 8rpx;
+  gap: 20rpx;
+  padding: 8rpx 4rpx 12rpx;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 8rpx;
+  gap: 10rpx;
   flex-shrink: 0;
-  padding: 12rpx 24rpx;
+  padding: 18rpx 28rpx;
   background: #fff;
   border: 1rpx solid var(--pi-border);
   border-radius: 999rpx;
@@ -72,6 +72,7 @@
   background: var(--pi-primary);
   border-color: var(--pi-primary);
   color: #fff;
+  transform: scale(1.02);
 }
 
 .chip-count {

@@ -50,7 +50,8 @@ public class PermissionService {
             Permission.WORKORDER_PROCESS,
             Permission.AGENT_VIEW,
             Permission.AGENT_RUN));
-    ROLE_PERMISSIONS.put(UserRole.VIEWER, EnumSet.of(Permission.TASK_VIEW));
+    ROLE_PERMISSIONS.put(
+        UserRole.VIEWER, EnumSet.of(Permission.TASK_VIEW, Permission.WORKORDER_VIEW));
   }
 
   public boolean has(UserRole role, Permission permission) {

@@ -1,12 +1,16 @@
 <view class="container">
-  <page-header title="我的记录" description="账号操作活动日志" />
+  <page-header title="我的记录" description="账号操作活动日志（数据来自后端）" />
+
+  <view wx:if="{{loading}}" class="empty-hint">加载中…</view>
+  <view wx:elif="{{loadError}}" class="empty-hint card">{{loadError}}</view>
 
   <view class="card act-item" wx:for="{{activities}}" wx:key="id">
-    <view class="flex-between">
-      <text class="tag tag-primary">{{item.typeLabel}}</text>
-      <text class="muted">{{item.time}}</text>
+    <view class="flex-between act-head">
+      <text class="tag tag-{{item.tagType}}">{{item.typeLabel}}</text>
+      <text class="muted act-time">{{item.time}}</text>
     </view>
     <view class="act-msg">{{item.message}}</view>
   </view>
-  <view wx:if="{{!activities.length}}" class="empty-hint">暂无活动记录</view>
+
+  <view wx:if="{{!loading && !loadError && !activities.length}}" class="empty-hint">暂无活动记录</view>
 </view>

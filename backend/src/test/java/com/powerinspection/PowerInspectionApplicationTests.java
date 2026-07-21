@@ -1,11 +1,13 @@
 package com.powerinspection;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -16,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.config.ModelFileWebConfig;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.task.TaskService;
@@ -30,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -75,7 +79,10 @@ class PowerInspectionApplicationTests {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.user.username").value("viewer"))
         .andExpect(jsonPath("$.data.user.role").value("VIEWER"))
-        .andExpect(jsonPath("$.data.permissions.length()").value(1));
+        .andExpect(jsonPath("$.data.permissions.length()").value(2))
+        .andExpect(jsonPath("$.data.permissions[?(@ == 'task:view')]").exists())
+        .andExpect(jsonPath("$.data.permissions[?(@ == 'workorder:view')]").exists())
+        .andExpect(jsonPath("$.data.permissions[?(@ == 'workorder:process')]").doesNotExist());
 
     mockMvc
         .perform(get("/api/v1/users").header("Authorization", bearer(adminToken)))
@@ -644,6 +651,56 @@ class PowerInspectionApplicationTests {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.priority").value("LOW"));
 
+    String photoUploadResponse =
+        mockMvc
+            .perform(
+                multipart("/api/v1/work-orders/" + workOrderId + "/photos")
+                    .file(
+                        new MockMultipartFile(
+                            "photo", "onsite.jpg", MediaType.IMAGE_JPEG_VALUE, testImage()))
+                    .header("Authorization", bearer(dispatcherToken)))
+            .andExpect(status().isOk())
+            .andExpect(
+                jsonPath(
+                    "$.data.url", containsString("/model-files/work-order-photos/" + workOrderId)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+    String photoUrl = objectMapper.readTree(photoUploadResponse).path("data").path("url").asText();
+
+    mockMvc
+        .perform(
+            delete("/api/v1/work-orders/" + workOrderId + "/photos")
+                .header("Authorization", bearer(dispatcherToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json("url", photoUrl)))
+        .andExpect(status().isOk());
+    assertThat(
+            Files.notExists(
+                ModelFileWebConfig.MODEL_FILE_ROOT.resolve(
+                    photoUrl.substring("/model-files/".length()))))
+        .isTrue();
+    mockMvc
+        .perform(
+            get("/api/v1/work-orders/" + workOrderId)
+                .header("Authorization", bearer(dispatcherToken)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.pendingPhotos").isEmpty());
+
+    photoUploadResponse =
+        mockMvc
+            .perform(
+                multipart("/api/v1/work-orders/" + workOrderId + "/photos")
+                    .file(
+                        new MockMultipartFile(
+                            "photo", "onsite.jpg", MediaType.IMAGE_JPEG_VALUE, testImage()))
+                    .header("Authorization", bearer(dispatcherToken)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString(StandardCharsets.UTF_8);
+    photoUrl = objectMapper.readTree(photoUploadResponse).path("data").path("url").asText();
+
     mockMvc
         .perform(
             patch("/api/v1/work-orders/" + workOrderId + "/status")
@@ -673,10 +730,19 @@ class PowerInspectionApplicationTests {
                         Map.of(
                             "conclusion", "RESOLVED",
                             "onsiteFinding", "现场检查主变底部和密封件，未见新增渗油痕迹。",
-                            "handlingMeasures", "已完成油迹清洁和油位复测，读数保持正常。"))))
+                            "handlingMeasures", "已完成油迹清洁和油位复测，读数保持正常。"),
+                        "resolutionForm",
+                        Map.of(
+                            "faultType", "设备渗漏油",
+                            "handlingMethod", "现场清理",
+                            "testResult", "复测正常，油位恢复",
+                            "conclusion", "RESOLVED",
+                            "submittedBy", "张调度",
+                            "photos", List.of(photoUrl)))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.review.conclusion").value("RESOLVED"))
-        .andExpect(jsonPath("$.data.review.submittedByName").value("张调度"));
+        .andExpect(jsonPath("$.data.review.submittedByName").value("张调度"))
+        .andExpect(jsonPath("$.data.resolutionForm.photos[0]").value(photoUrl));
 
     mockMvc
         .perform(
@@ -827,5 +893,36 @@ class PowerInspectionApplicationTests {
       map.put(String.valueOf(values[i]), values[i + 1]);
     }
     return objectMapper.writeValueAsString(map);
+  }
+
+  private byte[] testImage() throws Exception {
+    Path image = Path.of("src/test/resources/fixtures/inspection.jpg");
+    if (Files.exists(image)) {
+      return Files.readAllBytes(image);
+    }
+    return new byte[] {
+      (byte) 0xff,
+      (byte) 0xd8,
+      (byte) 0xff,
+      (byte) 0xe0,
+      0x00,
+      0x10,
+      'J',
+      'F',
+      'I',
+      'F',
+      0x00,
+      0x01,
+      0x01,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      (byte) 0xff,
+      (byte) 0xd9
+    };
   }
 }

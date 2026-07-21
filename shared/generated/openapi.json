@@ -397,66 +397,6 @@
         }
       }
     },
-    "/api/v1/auth/password/reset": {
-      "post": {
-        "tags": [
-          "auth-controller"
-        ],
-        "operationId": "resetPassword",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetPasswordRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseVoid"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/sms/send": {
-      "post": {
-        "tags": [
-          "auth-controller"
-        ],
-        "operationId": "sendSms",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SendSmsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseSendSmsResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/alarms/work-order-policy": {
       "get": {
         "tags": [
@@ -562,6 +502,95 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/work-orders/{id}/photos": {
+      "post": {
+        "tags": [
+          "work-order-controller"
+        ],
+        "operationId": "uploadPhoto",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "photo"
+                ],
+                "type": "object",
+                "properties": {
+                  "photo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMapStringString"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "work-order-controller"
+        ],
+        "operationId": "discardPhoto",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
                 }
               }
             }
@@ -2056,6 +2085,36 @@
         }
       }
     },
+    "/api/v1/auth/sms/send": {
+      "post": {
+        "tags": [
+          "auth-controller"
+        ],
+        "operationId": "sendSms",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSmsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseSendSmsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/register": {
       "post": {
         "tags": [
@@ -2129,6 +2188,36 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseLoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password/reset": {
+      "post": {
+        "tags": [
+          "auth-controller"
+        ],
+        "operationId": "resetPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
                 }
               }
             }
@@ -5081,80 +5170,6 @@
           }
         }
       },
-      "ResetPasswordRequest": {
-        "required": [
-          "confirmPassword",
-          "newPassword",
-          "phone",
-          "smsCode"
-        ],
-        "type": "object",
-        "properties": {
-          "phone": {
-            "type": "string"
-          },
-          "smsCode": {
-            "type": "string"
-          },
-          "newPassword": {
-            "type": "string"
-          },
-          "confirmPassword": {
-            "type": "string"
-          }
-        }
-      },
-      "SendSmsRequest": {
-        "required": [
-          "phone"
-        ],
-        "type": "object",
-        "properties": {
-          "phone": {
-            "type": "string"
-          },
-          "purpose": {
-            "type": "string"
-          }
-        }
-      },
-      "SendSmsResponse": {
-        "type": "object",
-        "properties": {
-          "phone": {
-            "type": "string"
-          },
-          "resendIntervalSeconds": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "expiresInSeconds": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "debugCode": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        }
-      },
-      "ApiResponseSendSmsResponse": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "message": {
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/SendSmsResponse"
-          }
-        }
-      },
       "ApiResponseVoid": {
         "type": "object",
         "properties": {
@@ -5167,6 +5182,24 @@
           },
           "data": {
             "type": "object"
+          }
+        }
+      },
+      "ApiResponseMapStringString": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -5273,6 +5306,57 @@
             "type": "string"
           },
           "completedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "SendSmsRequest": {
+        "required": [
+          "phone"
+        ],
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiResponseSendSmsResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SendSmsResponse"
+          }
+        }
+      },
+      "SendSmsResponse": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "resendIntervalSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "expiresInSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "debugCode": {
+            "type": "string"
+          },
+          "message": {
             "type": "string"
           }
         }
@@ -5445,6 +5529,29 @@
         "type": "object",
         "properties": {
           "password": {
+            "type": "string"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "required": [
+          "confirmPassword",
+          "newPassword",
+          "phone",
+          "smsCode"
+        ],
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "smsCode": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          },
+          "confirmPassword": {
             "type": "string"
           }
         }

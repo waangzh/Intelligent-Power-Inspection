@@ -107,6 +107,7 @@ const workOrders = '/api/v1/work-orders'
 const workOrdersFromAlarmAlarmId = '/api/v1/work-orders/from-alarm/{alarmId}'
 const workOrdersId = '/api/v1/work-orders/{id}'
 const workOrdersIdClaim = '/api/v1/work-orders/{id}/claim'
+const workOrdersIdPhotos = '/api/v1/work-orders/{id}/photos'
 const workOrdersIdStatus = '/api/v1/work-orders/{id}/status'
 
 function apiRel(path) {
@@ -222,6 +223,7 @@ module.exports = {
   workOrdersFromAlarmAlarmId,
   workOrdersId,
   workOrdersIdClaim,
+  workOrdersIdPhotos,
   workOrdersIdStatus,
   API_PATHS: {
     agentActionsActionId: '/api/v1/agent-actions/{actionId}',
@@ -332,6 +334,7 @@ module.exports = {
     workOrdersFromAlarmAlarmId: '/api/v1/work-orders/from-alarm/{alarmId}',
     workOrdersId: '/api/v1/work-orders/{id}',
     workOrdersIdClaim: '/api/v1/work-orders/{id}/claim',
+    workOrdersIdPhotos: '/api/v1/work-orders/{id}/photos',
     workOrdersIdStatus: '/api/v1/work-orders/{id}/status',
   },
   apiRel,

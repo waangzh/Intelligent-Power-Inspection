@@ -1,4 +1,4 @@
-<cover-view class="tab-bar">
+<cover-view class="tab-bar" wx:if="{{list.length}}">
   <cover-view
     class="tab-bar-item {{selected === index ? 'active' : ''}}"
     wx:for="{{list}}"

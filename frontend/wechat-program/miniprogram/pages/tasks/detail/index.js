@@ -1,4 +1,5 @@
 const api = require('../../../services/index')
+const { openPage } = require('../../../utils/tab-page')
 const {
   hasPermission,
   canControlTask,
@@ -94,7 +95,7 @@ Page({
   },
 
   goBack() {
-    wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/tasks/index' }) })
+    wx.navigateBack({ fail: () => openPage('/pages/tasks/index') })
   },
 
   async dispatch() { await api.dispatchTask(this.data.taskId); this.load() },

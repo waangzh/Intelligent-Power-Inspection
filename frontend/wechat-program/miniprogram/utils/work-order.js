@@ -126,15 +126,39 @@ function resolutionSummary(form) {
  * 这里做一次转换，避免真实后端因缺少 review 而拒绝提交。
  */
 function buildReviewFromResolveForm(form) {
-  const handlingMeasures = form.replacedParts
+  let handlingMeasures = form.replacedParts
     ? `现场处理方式为${form.handlingMethod}，更换部件：${form.replacedParts}`
     : `现场处理方式为${form.handlingMethod}`
+  if (form.photos?.length) {
+    handlingMeasures += `；已上传现场照片 ${form.photos.length} 张`
+  }
   return {
     conclusion: form.conclusion,
     onsiteFinding: `现场故障类型为${form.faultType}，试验/复测结果：${form.testResult}`,
     handlingMeasures,
     followUpPlan: form.remarks || undefined,
   }
+}
+
+/** 与后端 normalizeReview 的 10～500 字限制对齐 */
+function validateResolveFormForBackend(form) {
+  const review = buildReviewFromResolveForm(form)
+  if (review.onsiteFinding.length < 10) {
+    return '试验结果过短，请补充说明（合计至少约 10 字）'
+  }
+  if (review.onsiteFinding.length > 500) {
+    return '试验结果过长，请精简后再提交'
+  }
+  if (review.handlingMeasures.length < 10) {
+    return '处理方式信息过短，请检查表单'
+  }
+  if (review.handlingMeasures.length > 500) {
+    return '处理方式/更换部件描述过长，请精简后再提交'
+  }
+  if (review.followUpPlan && review.followUpPlan.length > 500) {
+    return '补充说明不能超过 500 字'
+  }
+  return null
 }
 
 function enrichWorkOrder(order) {
@@ -180,5 +204,6 @@ module.exports = {
   locationLabel,
   resolutionSummary,
   buildReviewFromResolveForm,
+  validateResolveFormForBackend,
   enrichWorkOrder,
 }

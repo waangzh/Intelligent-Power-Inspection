@@ -1,5 +1,5 @@
 const api = require('../../services/index')
-const { ROBOT_STATUS_LABELS } = require('../../utils/constants')
+const { resolveRobotPresence } = require('../../utils/robot-status')
 
 Page({
   data: {
@@ -12,12 +12,15 @@ Page({
     activeRoute: null,
     mapCenter: { lat: 30.2741, lng: 120.1551 },
     robotPos: null,
-    videoPlaceholder: '',
+    bridgeOnline: false,
+    videoHint: '暂无视频流',
+    loadError: '',
     refreshing: false,
   },
 
   onShow() {
     if (!getApp().requireAuth('/pages/monitor/index')) return
+    if (typeof wx.hideHomeButton === 'function') wx.hideHomeButton()
     getApp().refreshBadges().then(() => {
       this.selectComponent('#inlineTabBar')?.refresh?.()
     })
@@ -25,35 +28,56 @@ Page({
   },
 
   async load() {
-    const [robotsRaw, tasks, routes, sites] = await Promise.all([
-      api.getRobots(), api.getTasks(), api.getRoutes(), api.getSites(),
-    ])
-    const robots = robotsRaw.slice(0, 1)
-    const activeTask = tasks.find((t) => ['RUNNING', 'PAUSED', 'DISPATCHED', 'MANUAL_TAKEOVER'].includes(t.status))
-    const list = robots.map((r) => ({
-      ...r,
-      statusType: r.status === 'ONLINE' ? 'success' : r.status === 'BUSY' ? 'warning' : 'info',
-      statusLabel: ROBOT_STATUS_LABELS[r.status] || r.status,
-      currentTaskName: r.currentTaskId ? (tasks.find((t) => t.id === r.currentTaskId)?.name || '-') : '-',
-    }))
-    let selected = list.find((r) => r.id === this.data.selectedId) || list[0] || null
-    if (selected) {
-      const task = tasks.find((t) => t.robotId === selected.id && ['RUNNING', 'PAUSED'].includes(t.status))
+    this.setData({ loadError: '' })
+    try {
+      const [robotsRaw, heartbeatItems, tasks, routes, sites] = await Promise.all([
+        api.getRobots(),
+        api.getRobotHeartbeatStatus(),
+        api.getTasks(),
+        api.getRoutes(),
+        api.getSites(),
+      ])
+      const heartbeatById = {}
+      ;(heartbeatItems || []).forEach((item) => {
+        if (item?.robotId) heartbeatById[item.robotId] = item
+      })
+      const list = (robotsRaw || []).map((robot) => {
+        const presence = resolveRobotPresence(robot, heartbeatById[robot.id])
+        return {
+          ...robot,
+          ...presence,
+          currentTaskName: robot.currentTaskId
+            ? (tasks.find((t) => t.id === robot.currentTaskId)?.name || '-')
+            : '-',
+        }
+      })
+      let selected = list.find((r) => r.id === this.data.selectedId) || list[0] || null
+      if (!selected) {
+        this.setData({ robots: [], selected: null, selectedId: '', loadError: '暂无机器人数据' })
+        return
+      }
+      const telemetry = await api.getRobotTelemetry(selected.id)
+      const task = tasks.find((t) => t.robotId === selected.id && ['RUNNING', 'PAUSED', 'DISPATCHED', 'MANUAL_TAKEOVER'].includes(t.status))
       const activeRoute = task ? routes.find((r) => r.id === task.routeId) : null
-      const mapCenter = selected.position || (selected.siteId ? sites.find((s) => s.id === selected.siteId)?.center : null) || { lat: 30.2741, lng: 120.1551 }
+      const siteCenter = selected.siteId ? sites.find((s) => s.id === selected.siteId)?.center : null
+      const mapCenter = selected.position || siteCenter || { lat: 30.2741, lng: 120.1551 }
+      const bridgeOnline = telemetry?.bridgeReachable === true && telemetry?.online === true
       this.setData({
         robots: list,
         tasks,
         routes,
         selectedId: selected.id,
-        selected,
+        selected: { ...selected, telemetry: telemetry || selected.telemetry || null },
         activeRoute,
         mapCenter,
         robotPos: selected.position || null,
-        videoPlaceholder: `https://picsum.photos/seed/monitor_${selected.id}/640/360`,
+        bridgeOnline,
+        videoHint: bridgeOnline
+          ? `Bridge 在线 · ${telemetry?.systemMode || '运行中'}`
+          : '机器人离线，暂无视频流',
       })
-    } else {
-      this.setData({ robots: list })
+    } catch (err) {
+      this.setData({ loadError: err.message || '加载失败，请检查后端与登录状态' })
     }
   },
 

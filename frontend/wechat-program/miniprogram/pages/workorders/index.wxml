@@ -1,5 +1,5 @@
 <view class="container">
-  <page-header title="工单管理" description="{{pageDesc}}" />
+  <page-header title="{{pageTitle}}" description="{{pageDesc}}" />
 
   <view class="card pending-alarms" wx:if="{{canCreate && pendingAlarms.length}}">
     <view class="card-title flex-between">
@@ -32,7 +32,13 @@
 
   <scroll-view class="status-chips" scroll-x enhanced show-scrollbar="{{false}}" wx:if="{{showStatusChips}}">
     <view class="status-chips-inner">
-      <view class="chip {{statusFilter===item.key?'active':''}}" wx:for="{{statusChips}}" wx:key="key" bindtap="filterByStatus" data-key="{{item.key}}">
+      <view
+        class="chip {{statusFilter===item.key?'active':''}}"
+        wx:for="{{statusChips}}"
+        wx:key="key"
+        bindtap="filterByStatus"
+        data-status="{{item.key}}"
+      >
         <text>{{item.label}}</text>
         <text class="chip-count">{{item.value}}</text>
       </view>
@@ -48,7 +54,7 @@
     <view class="muted">地点 {{item.locationLabel}}</view>
     <view class="muted">优先级 {{item.priorityLabel}} · {{item.assigneeLabel}} · {{item.createdLabel}}</view>
     <view class="wo-desc">{{item.description}}</view>
-    <view class="wo-actions" catchtap="stop">
+    <view class="wo-actions" wx:if="{{!isViewer}}" catchtap="stop">
       <button wx:if="{{item.canClaim}}" size="mini" type="warn" loading="{{claimingId===item.id}}" catchtap="claim" data-id="{{item.id}}">接单</button>
       <button wx:if="{{item.canSubmitReview}}" size="mini" type="primary" catchtap="openResolve" data-id="{{item.id}}">提交复核</button>
       <button wx:if="{{item.canConfirmReview}}" size="mini" type="primary" catchtap="openReview" data-id="{{item.id}}">确认复核</button>
@@ -158,7 +164,7 @@
       </view>
       <view class="form-actions">
         <button size="mini" bindtap="closeResolve">取消</button>
-        <button size="mini" type="primary" bindtap="submitResolve">提交复核</button>
+        <button size="mini" type="primary" loading="{{submittingResolve}}" disabled="{{submittingResolve}}" bindtap="submitResolve">提交复核</button>
       </view>
     </view>
   </view>

@@ -15,10 +15,12 @@ import com.powerinspection.user.UserEntity;
 import com.powerinspection.user.UserRepository;
 import com.powerinspection.user.UserRole;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -26,7 +28,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/work-orders")
@@ -34,13 +38,13 @@ public class WorkOrderController {
   private static final Set<String> PRIORITIES = Set.of("LOW", "MEDIUM", "HIGH", "URGENT");
 
   /** 允许的状态流转及触发该流转所需的最低权限；PENDING -> PROCESSING 必须通过 /claim 完成，此处不登记。 */
-  private static final Map<String, Permission> STATUS_TRANSITIONS = Map.of(
-    "PROCESSING->REVIEW", Permission.WORKORDER_PROCESS,
-    "REVIEW->CLOSED", Permission.WORKORDER_REVIEW,
-    "REVIEW->PROCESSING", Permission.WORKORDER_REVIEW,
-    "PENDING->CANCELLED", Permission.WORKORDER_REVIEW,
-    "PROCESSING->CANCELLED", Permission.WORKORDER_REVIEW
-  );
+  private static final Map<String, Permission> STATUS_TRANSITIONS =
+      Map.of(
+          "PROCESSING->REVIEW", Permission.WORKORDER_PROCESS,
+          "REVIEW->CLOSED", Permission.WORKORDER_REVIEW,
+          "REVIEW->PROCESSING", Permission.WORKORDER_REVIEW,
+          "PENDING->CANCELLED", Permission.WORKORDER_REVIEW,
+          "PROCESSING->CANCELLED", Permission.WORKORDER_REVIEW);
 
   private final DataStoreService dataStore;
   private final PermissionService permissionService;
@@ -48,21 +52,23 @@ public class WorkOrderController {
   private final NotificationService notificationService;
   private final UserRepository userRepository;
   private final WorkOrderCommandService workOrderCommandService;
+  private final WorkOrderPhotoService workOrderPhotoService;
 
   public WorkOrderController(
-    DataStoreService dataStore,
-    PermissionService permissionService,
-    CurrentUser currentUser,
-    NotificationService notificationService,
-    UserRepository userRepository,
-    WorkOrderCommandService workOrderCommandService
-  ) {
+      DataStoreService dataStore,
+      PermissionService permissionService,
+      CurrentUser currentUser,
+      NotificationService notificationService,
+      UserRepository userRepository,
+      WorkOrderCommandService workOrderCommandService,
+      WorkOrderPhotoService workOrderPhotoService) {
     this.dataStore = dataStore;
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.notificationService = notificationService;
     this.userRepository = userRepository;
     this.workOrderCommandService = workOrderCommandService;
+    this.workOrderPhotoService = workOrderPhotoService;
   }
 
   @GetMapping
@@ -70,18 +76,30 @@ public class WorkOrderController {
     UserEntity user = currentUser.get();
     permissionService.require(user, Permission.WORKORDER_VIEW);
     if (user.getRole() != UserRole.DISPATCHER) {
-      return ApiResponse.ok(dataStore.page(
-        DataCategory.WORK_ORDER, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
-        query.getUpdatedAfter(), query.getQ(), query.filters("status", "siteId", "type")
-      ));
+      return ApiResponse.ok(
+          dataStore.page(
+              DataCategory.WORK_ORDER,
+              query.getPage(),
+              query.getSize(),
+              query.getSort(),
+              query.getDirection(),
+              query.getUpdatedAfter(),
+              query.getQ(),
+              query.filters("status", "siteId", "type")));
     }
     Map<String, String> filters = new LinkedHashMap<>(query.filters("status", "siteId", "type"));
     filters.put("_viewerId", user.getId());
     filters.put("_viewerName", user.getDisplayName());
-    return ApiResponse.ok(dataStore.page(
-      DataCategory.WORK_ORDER, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
-      query.getUpdatedAfter(), query.getQ(), filters
-    ));
+    return ApiResponse.ok(
+        dataStore.page(
+            DataCategory.WORK_ORDER,
+            query.getPage(),
+            query.getSize(),
+            query.getSort(),
+            query.getDirection(),
+            query.getUpdatedAfter(),
+            query.getQ(),
+            filters));
   }
 
   @GetMapping("/{id}")
@@ -105,7 +123,8 @@ public class WorkOrderController {
     order.put("title", requiredText(body.get("title"), "请填写工单标题", 100));
     order.put("description", optionalText(body.get("description"), 1000, "工单描述不能超过 1000 个字符"));
     order.put("priority", normalizePriority(body.get("priority")));
-    String locationDescription = optionalText(body.get("locationDescription"), 200, "具体地点不能超过 200 个字符");
+    String locationDescription =
+        optionalText(body.get("locationDescription"), 200, "具体地点不能超过 200 个字符");
     if (!locationDescription.isBlank()) {
       order.put("locationDescription", locationDescription);
     }
@@ -121,14 +140,15 @@ public class WorkOrderController {
   }
 
   @PostMapping("/from-alarm/{alarmId}")
-  public ApiResponse<Map<String, Object>> createFromAlarm(@PathVariable String alarmId, @RequestBody(required = false) Map<String, Object> body) {
+  public ApiResponse<Map<String, Object>> createFromAlarm(
+      @PathVariable String alarmId, @RequestBody(required = false) Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.WORKORDER_CREATE);
-    return ApiResponse.ok(workOrderCommandService.createFromAlarm(
-      alarmId,
-      ConversionSource.MANUAL,
-      currentUser.get(),
-      CreateWorkOrderFromAlarmRequest.fromMap(body)
-    ));
+    return ApiResponse.ok(
+        workOrderCommandService.createFromAlarm(
+            alarmId,
+            ConversionSource.MANUAL,
+            currentUser.get(),
+            CreateWorkOrderFromAlarmRequest.fromMap(body)));
   }
 
   @PostMapping("/{id}/claim")
@@ -152,7 +172,8 @@ public class WorkOrderController {
   }
 
   @PatchMapping("/{id}")
-  public ApiResponse<Map<String, Object>> update(@PathVariable String id, @RequestBody Map<String, Object> body) {
+  public ApiResponse<Map<String, Object>> update(
+      @PathVariable String id, @RequestBody Map<String, Object> body) {
     UserEntity user = currentUser.get();
     permissionService.require(user, Permission.WORKORDER_PROCESS);
     Map<String, Object> order = dataStore.get(DataCategory.WORK_ORDER, id);
@@ -169,7 +190,8 @@ public class WorkOrderController {
       patch.put("priority", normalizePriority(body.get("priority")));
     }
     if (body.containsKey("locationDescription")) {
-      patch.put("locationDescription", requiredText(body.get("locationDescription"), "具体地点不能为空", 200));
+      patch.put(
+          "locationDescription", requiredText(body.get("locationDescription"), "具体地点不能为空", 200));
     }
     if (patch.isEmpty()) {
       throw ApiException.badRequest("没有可更新的字段");
@@ -185,8 +207,55 @@ public class WorkOrderController {
     return ApiResponse.ok();
   }
 
+  @PostMapping(value = "/{id}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ApiResponse<Map<String, String>> uploadPhoto(
+      @PathVariable String id, @RequestPart("photo") MultipartFile photo)
+      throws java.io.IOException {
+    UserEntity user = currentUser.get();
+    permissionService.require(user, Permission.WORKORDER_PROCESS);
+    Map<String, Object> order = dataStore.get(DataCategory.WORK_ORDER, id);
+    requireAssignee(order, user);
+    if (!"PROCESSING".equals(String.valueOf(order.get("status")))) {
+      throw ApiException.badRequest("仅处理中工单可上传现场照片");
+    }
+    List<String> pending = readStringList(order.get("pendingPhotos"));
+    if (pending.size() >= WorkOrderPhotoService.MAX_PHOTOS_PER_ORDER) {
+      throw ApiException.badRequest("待提交现场照片已达上限");
+    }
+    String url = workOrderPhotoService.save(id, photo);
+    pending = new ArrayList<>(pending);
+    pending.add(url);
+    dataStore.patch(
+        DataCategory.WORK_ORDER,
+        id,
+        Map.of("pendingPhotos", pending, "updatedAt", Instant.now().toString()));
+    return ApiResponse.ok(Map.of("url", url));
+  }
+
+  @DeleteMapping("/{id}/photos")
+  public ApiResponse<Void> discardPhoto(
+      @PathVariable String id, @RequestBody Map<String, Object> body) {
+    UserEntity user = currentUser.get();
+    permissionService.require(user, Permission.WORKORDER_PROCESS);
+    Map<String, Object> order = dataStore.get(DataCategory.WORK_ORDER, id);
+    requireAssignee(order, user);
+    if (!"PROCESSING".equals(String.valueOf(order.get("status")))) {
+      throw ApiException.badRequest("仅处理中工单可删除现场照片");
+    }
+    String url = requiredText(body.get("url"), "请指定要删除的照片", 512);
+    workOrderPhotoService.deleteFile(id, url);
+    List<String> pending = new ArrayList<>(readStringList(order.get("pendingPhotos")));
+    pending.removeIf(url::equals);
+    dataStore.patch(
+        DataCategory.WORK_ORDER,
+        id,
+        Map.of("pendingPhotos", pending, "updatedAt", Instant.now().toString()));
+    return ApiResponse.ok();
+  }
+
   @PatchMapping("/{id}/status")
-  public ApiResponse<Map<String, Object>> updateStatus(@PathVariable String id, @RequestBody Map<String, Object> body) {
+  public ApiResponse<Map<String, Object>> updateStatus(
+      @PathVariable String id, @RequestBody Map<String, Object> body) {
     UserEntity user = currentUser.get();
     Map<String, Object> order = dataStore.get(DataCategory.WORK_ORDER, id);
     String from = text(order.get("status"));
@@ -212,8 +281,20 @@ public class WorkOrderController {
       Map<String, Object> review = normalizeReview(body.get("review"));
       patch.put("review", review);
       patch.put("resolution", review.get("handlingMeasures"));
+      if (body.get("resolutionForm") != null) {
+        Map<String, Object> resolutionForm =
+            normalizeResolutionForm(id, body.get("resolutionForm"));
+        patch.put("resolutionForm", resolutionForm);
+        discardUnusedPendingPhotos(order, resolutionForm);
+      } else {
+        discardAllPendingPhotos(order);
+      }
+      patch.put("pendingPhotos", List.of());
     } else if (body.get("resolution") != null) {
       patch.put("resolution", text(body.get("resolution")));
+    }
+    if (body.get("reviewForm") != null) {
+      patch.put("reviewForm", normalizeReviewForm(body.get("reviewForm")));
     }
     if ("CLOSED".equals(status)) {
       patch.put("closedAt", Instant.now().toString());
@@ -226,14 +307,12 @@ public class WorkOrderController {
 
   private void notifyDispatchersNewWorkOrder(Map<String, Object> order) {
     String title = String.valueOf(order.get("title"));
-    userRepository.findByRoleAndEnabledTrue(UserRole.DISPATCHER)
-      .forEach(dispatcher -> notificationService.push(
-        dispatcher.getId(),
-        "WORKORDER",
-        "新工单待接单",
-        title,
-        "/workorders"
-      ));
+    userRepository
+        .findByRoleAndEnabledTrue(UserRole.DISPATCHER)
+        .forEach(
+            dispatcher ->
+                notificationService.push(
+                    dispatcher.getId(), "WORKORDER", "新工单待接单", title, "/workorders"));
   }
 
   private boolean isUnassigned(Map<String, Object> order) {
@@ -241,7 +320,8 @@ public class WorkOrderController {
     if (assigneeId != null && !String.valueOf(assigneeId).isBlank()) {
       return false;
     }
-    String assigneeName = order.get("assigneeName") != null ? String.valueOf(order.get("assigneeName")).trim() : "";
+    String assigneeName =
+        order.get("assigneeName") != null ? String.valueOf(order.get("assigneeName")).trim() : "";
     if (assigneeName.isEmpty()) {
       return true;
     }
@@ -258,7 +338,7 @@ public class WorkOrderController {
     }
     String assigneeName = text(order.get("assigneeName"));
     return (assigneeId == null || assigneeId.isBlank())
-      && (user.getDisplayName().equals(assigneeName) || isUnassigned(order));
+        && (user.getDisplayName().equals(assigneeName) || isUnassigned(order));
   }
 
   private Map<String, Object> normalizeReview(Object rawReview) {
@@ -266,8 +346,10 @@ public class WorkOrderController {
       throw ApiException.badRequest("提交复核时必须填写复核记录");
     }
     String conclusion = requiredText(review.get("conclusion"), "请选择复核结论", 32);
-    if (!("RESOLVED".equals(conclusion) || "PARTIALLY_RESOLVED".equals(conclusion)
-        || "UNRESOLVED".equals(conclusion) || "FALSE_ALARM".equals(conclusion))) {
+    if (!("RESOLVED".equals(conclusion)
+        || "PARTIALLY_RESOLVED".equals(conclusion)
+        || "UNRESOLVED".equals(conclusion)
+        || "FALSE_ALARM".equals(conclusion))) {
       throw ApiException.badRequest("复核结论不合法");
     }
     String onsiteFinding = requiredText(review.get("onsiteFinding"), "请填写现场检查情况", 500);
@@ -276,7 +358,8 @@ public class WorkOrderController {
       throw ApiException.badRequest("现场检查情况和处理措施至少填写 10 个字符");
     }
     String followUpPlan = optionalText(review.get("followUpPlan"), 500, "遗留风险与后续计划不能超过 500 个字符");
-    if (("PARTIALLY_RESOLVED".equals(conclusion) || "UNRESOLVED".equals(conclusion)) && followUpPlan.isBlank()) {
+    if (("PARTIALLY_RESOLVED".equals(conclusion) || "UNRESOLVED".equals(conclusion))
+        && followUpPlan.isBlank()) {
       throw ApiException.badRequest("部分消缺或未消缺时必须填写遗留风险与后续计划");
     }
 
@@ -293,9 +376,107 @@ public class WorkOrderController {
     return normalized;
   }
 
+  private Map<String, Object> normalizeResolutionForm(String workOrderId, Object rawForm) {
+    if (!(rawForm instanceof Map<?, ?> form)) {
+      throw ApiException.badRequest("现场处理记录格式不正确");
+    }
+    Map<String, Object> normalized = new LinkedHashMap<>();
+    normalized.put("faultType", requiredText(form.get("faultType"), "请填写故障类型", 64));
+    normalized.put("handlingMethod", requiredText(form.get("handlingMethod"), "请填写处理方式", 64));
+    String replacedParts = optionalText(form.get("replacedParts"), 200, "更换部件不能超过 200 个字符");
+    if (!replacedParts.isBlank()) {
+      normalized.put("replacedParts", replacedParts);
+    }
+    normalized.put("testResult", requiredText(form.get("testResult"), "请填写试验结果", 500));
+    normalized.put("conclusion", requiredText(form.get("conclusion"), "请选择处理结论", 32));
+    String remarks = optionalText(form.get("remarks"), 500, "补充说明不能超过 500 个字符");
+    if (!remarks.isBlank()) {
+      normalized.put("remarks", remarks);
+    }
+    List<String> photos = workOrderPhotoService.normalizePhotoUrls(workOrderId, form.get("photos"));
+    if (!photos.isEmpty()) {
+      normalized.put("photos", new ArrayList<>(photos));
+    }
+    String submittedBy = optionalText(form.get("submittedBy"), 64, "提交人姓名不能超过 64 个字符");
+    if (!submittedBy.isBlank()) {
+      normalized.put("submittedBy", submittedBy);
+    }
+    String submittedAt = optionalText(form.get("submittedAt"), 40, "提交时间格式不正确");
+    if (!submittedAt.isBlank()) {
+      normalized.put("submittedAt", submittedAt);
+    }
+    return normalized;
+  }
+
+  private List<String> readStringList(Object raw) {
+    if (!(raw instanceof List<?> list)) {
+      return List.of();
+    }
+    List<String> values = new ArrayList<>();
+    for (Object item : list) {
+      if (item == null) continue;
+      String value = String.valueOf(item).trim();
+      if (!value.isBlank()) {
+        values.add(value);
+      }
+    }
+    return values;
+  }
+
+  private void discardUnusedPendingPhotos(
+      Map<String, Object> order, Map<String, Object> resolutionForm) {
+    List<String> pending = readStringList(order.get("pendingPhotos"));
+    if (pending.isEmpty()) {
+      return;
+    }
+    Set<String> kept = Set.copyOf(readStringList(resolutionForm.get("photos")));
+    String workOrderId = text(order.get("id"));
+    for (String url : pending) {
+      if (!kept.contains(url)) {
+        workOrderPhotoService.deleteFile(workOrderId, url);
+      }
+    }
+  }
+
+  private void discardAllPendingPhotos(Map<String, Object> order) {
+    List<String> pending = readStringList(order.get("pendingPhotos"));
+    if (pending.isEmpty()) {
+      return;
+    }
+    String workOrderId = text(order.get("id"));
+    for (String url : pending) {
+      workOrderPhotoService.deleteFile(workOrderId, url);
+    }
+  }
+
+  private Map<String, Object> normalizeReviewForm(Object rawForm) {
+    if (!(rawForm instanceof Map<?, ?> form)) {
+      throw ApiException.badRequest("复核记录格式不正确");
+    }
+    String result = requiredText(form.get("result"), "请选择复核结果", 16);
+    if (!("PASS".equals(result) || "REJECT".equals(result))) {
+      throw ApiException.badRequest("复核结果不合法");
+    }
+    Map<String, Object> normalized = new LinkedHashMap<>();
+    normalized.put("result", result);
+    normalized.put("comment", requiredText(form.get("comment"), "请填写复核意见", 500));
+    String reviewedBy = optionalText(form.get("reviewedBy"), 64, "复核人姓名不能超过 64 个字符");
+    if (!reviewedBy.isBlank()) {
+      normalized.put("reviewedBy", reviewedBy);
+    }
+    String reviewedAt = optionalText(form.get("reviewedAt"), 40, "复核时间格式不正确");
+    if (!reviewedAt.isBlank()) {
+      normalized.put("reviewedAt", reviewedAt);
+    }
+    return normalized;
+  }
+
   private boolean isSupportedStatus(String status) {
-    return "PENDING".equals(status) || "PROCESSING".equals(status) || "REVIEW".equals(status)
-      || "CLOSED".equals(status) || "CANCELLED".equals(status);
+    return "PENDING".equals(status)
+        || "PROCESSING".equals(status)
+        || "REVIEW".equals(status)
+        || "CLOSED".equals(status)
+        || "CANCELLED".equals(status);
   }
 
   private String normalizePriority(Object value) {

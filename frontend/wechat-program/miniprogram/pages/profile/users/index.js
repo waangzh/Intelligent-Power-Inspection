@@ -1,6 +1,7 @@
 const api = require('../../../services/index')
 const { ROLE_LABELS } = require('../../../utils/constants')
 const { USER_ROLE_VALUES } = require('../../../generated/domain-enums')
+const { syncTabBar } = require('../../../utils/tab-page')
 
 const ROLE_OPTIONS = USER_ROLE_VALUES.map((value) => ({ value, label: ROLE_LABELS[value] || value }))
 
@@ -15,6 +16,8 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/profile/users/index')) return
     if (!app.requirePermission('user:manage', ['ADMIN'])) return
+    syncTabBar(this)
+    app.refreshBadges()
     this.load()
   },
 

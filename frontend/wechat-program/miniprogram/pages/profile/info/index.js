@@ -1,7 +1,6 @@
 const api = require('../../../services/index')
 const { profileMenuItems } = require('../../../config/menu')
-const { syncTabBar } = require('../../../utils/tab-page')
-const { isTabPage } = require('../../../config/tab-bar')
+const { syncTabBar, openPage } = require('../../../utils/tab-page')
 const { ROLE_LABELS } = require('../../../utils/constants')
 const { hasPermission } = require('../../../utils/permission')
 
@@ -116,9 +115,7 @@ Page({
   },
 
   go(e) {
-    const url = e.currentTarget.dataset.url
-    if (isTabPage(url)) wx.switchTab({ url })
-    else wx.navigateTo({ url })
+    openPage(e.currentTarget.dataset.url)
   },
 
   goNotifications() {
