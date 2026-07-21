@@ -3,6 +3,11 @@ function hasPermission(permissions, permission) {
   return permissions.includes(permission)
 }
 
+function canViewWorkOrders(role, permissions) {
+  return hasPermission(permissions, 'workorder:view')
+    || String(role || '').trim().toUpperCase() === 'VIEWER'
+}
+
 function canAccessByRole(role, allowedRoles) {
   if (!allowedRoles || !allowedRoles.length) return true
   return !!role && allowedRoles.includes(role)
@@ -57,6 +62,7 @@ function cancelTaskLabel(permissions) {
 
 module.exports = {
   hasPermission,
+  canViewWorkOrders,
   canAccessByRole,
   canAccess,
   canControlTask,

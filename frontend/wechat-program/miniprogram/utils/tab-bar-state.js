@@ -1,28 +1,5 @@
 const { getTabList } = require('../config/tab-bar')
-
-/** 始终以 storage + globalData 合并读取，避免切换账号后底栏仍用旧角色 */
-function resolveTabSession() {
-  const app = typeof getApp === 'function' ? getApp() : null
-  let user = app?.globalData?.user || null
-  let permissions = Array.isArray(app?.globalData?.permissions) ? app.globalData.permissions : []
-
-  try {
-    const raw = wx.getStorageSync('pi_session')
-    if (raw?.user?.role) {
-      user = raw.user
-    }
-    if (Array.isArray(raw?.permissions) && raw.permissions.length) {
-      permissions = raw.permissions
-    }
-  } catch {
-    // ignore
-  }
-
-  return {
-    role: user?.role || '',
-    permissions,
-  }
-}
+const { resolveSession } = require('./session-user')
 
 function readTabBarBadges() {
   const app = typeof getApp === 'function' ? getApp() : null
@@ -35,7 +12,7 @@ function readTabBarBadges() {
 }
 
 function buildTabBarState(activePath) {
-  const { role, permissions } = resolveTabSession()
+  const { role, permissions } = resolveSession()
   const list = getTabList(permissions, role)
   let selected = 0
   if (activePath) {
@@ -51,7 +28,7 @@ function buildTabBarState(activePath) {
 }
 
 module.exports = {
-  resolveTabSession,
+  resolveTabSession: resolveSession,
   buildTabBarState,
   readTabBarBadges,
 }

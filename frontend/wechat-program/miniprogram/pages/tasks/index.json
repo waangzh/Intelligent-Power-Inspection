@@ -6,6 +6,7 @@
   "usingComponents": {
     "page-header": "/components/page-header/index",
     "task-status-tag": "/components/task-status-tag/index",
-    "map-view": "/components/map-view/index"
+    "map-view": "/components/map-view/index",
+    "inline-tab-bar": "/components/inline-tab-bar/index"
   }
 }

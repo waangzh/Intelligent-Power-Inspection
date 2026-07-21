@@ -36,11 +36,9 @@ Component({
     refresh() {
       const activePath = this.properties.activePath
       const next = buildTabBarState(activePath)
-      const roleChanged = this._role !== next.role
-      const listChanged = roleChanged || JSON.stringify(this.data.list) !== JSON.stringify(next.list)
       this._role = next.role
       this.setData({
-        ...(listChanged ? { list: next.list } : {}),
+        list: next.list,
         selected: next.selected,
         badges: next.badges,
       })

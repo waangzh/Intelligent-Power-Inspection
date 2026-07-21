@@ -75,3 +75,5 @@
     <view wx:if="{{!tasks.length}}" class="list-empty-hint">暂无任务</view>
   </view>
 </view>
+
+<inline-tab-bar id="inlineTabBar" activePath="/pages/tasks/index" />

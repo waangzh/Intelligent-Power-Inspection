@@ -11,9 +11,11 @@ function effectiveCount(actual, dismissedAt) {
   return n > dismissedAt ? n : 0
 }
 
+const { normalizeRole } = require('./session-user')
+
 /** 调度员 Tab 角标：仅工单、我的；其余角色保持原逻辑 */
 function getDisplayBadges(globalData) {
-  const role = globalData.user?.role
+  const role = normalizeRole(globalData.user?.role)
   const dismissed = globalData.badgeDismissedAt || {}
   const badges = {
     alarms: 0,

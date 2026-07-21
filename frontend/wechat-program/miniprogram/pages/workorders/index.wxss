@@ -184,21 +184,64 @@
 
 .detail-actions {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
   margin-top: 32rpx;
   padding-top: 28rpx;
   border-top: 1rpx solid var(--pi-border-soft);
+}
+.read-only-hint {
+  font-size: 24rpx;
 }
 .detail-actions button {
   margin: 0;
   min-width: 200rpx;
 }
-.form-panel .form-item { margin-bottom: 20rpx; }
-.form-label { display: block; font-size: 26rpx; color: var(--pi-muted); margin-bottom: 10rpx; }
+.form-panel .form-item { margin-bottom: 24rpx; }
+.form-label { display: block; font-size: 26rpx; color: var(--pi-muted); margin-bottom: 12rpx; }
 .form-item.required .form-label::before { content: '*'; color: var(--pi-danger); margin-right: 4rpx; }
-.form-picker, .form-input { width: 100%; border: 1rpx solid var(--pi-border); border-radius: 16rpx; padding: 16rpx; box-sizing: border-box; font-size: 26rpx; color: var(--pi-text); }
-.form-picker { color: var(--pi-muted); }
-.form-textarea { width: 100%; border: 1rpx solid var(--pi-border); border-radius: 16rpx; padding: 16rpx; min-height: 120rpx; box-sizing: border-box; font-size: 26rpx; }
+.form-picker {
+  width: 100%;
+  min-height: 88rpx;
+  line-height: 1.5;
+  border: 1rpx solid var(--pi-border);
+  border-radius: 16rpx;
+  padding: 22rpx 24rpx;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  color: var(--pi-muted);
+  background: #fff;
+}
+.form-input {
+  display: block;
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--pi-border);
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  color: var(--pi-text);
+  background: #fff;
+}
+.form-placeholder {
+  color: var(--pi-muted-light);
+  font-size: 28rpx;
+}
+.form-textarea {
+  width: 100%;
+  border: 1rpx solid var(--pi-border);
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  min-height: 160rpx;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  line-height: 1.55;
+  color: var(--pi-text);
+  background: #fff;
+}
 .review-modes { display: flex; gap: 12rpx; }
 .mode-chip { flex: 1; text-align: center; padding: 14rpx 20rpx; background: var(--pi-bg-muted); border-radius: 12rpx; font-size: 24rpx; color: var(--pi-muted); }
 .mode-chip.on { background: var(--pi-primary); color: #fff; }

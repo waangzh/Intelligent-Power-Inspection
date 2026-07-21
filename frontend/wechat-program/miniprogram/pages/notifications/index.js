@@ -114,7 +114,8 @@ Page({
     if (!item.read) await api.markNotificationRead(item.id)
     getApp().refreshBadges()
     if (item.link) {
-      const path = mapNotificationLink(item.link)
+      const role = getApp().globalData.user?.role
+      const path = mapNotificationLink(item.link, role)
       if (isTabPage(path)) wx.switchTab({ url: path.split('?')[0] })
       else wx.navigateTo({ url: path })
     }

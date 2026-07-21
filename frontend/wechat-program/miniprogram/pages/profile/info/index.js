@@ -23,11 +23,12 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/profile/info/index')) return
     syncTabBar(this)
-    const user = app.globalData.user
+    const { resolveSession } = require('../../../utils/session-user')
+    const { user, role } = resolveSession()
     const permissions = app.globalData.permissions
     this.setData({
       user,
-      roleLabel: ROLE_LABELS[user.role],
+      roleLabel: ROLE_LABELS[role] || role,
       form: { displayName: user.displayName || '', phone: user.phone || '', bio: user.bio || '' },
       avatarPreview: user.avatarUrl || '',
       createdLabel: formatDateTimeShort(user.createdAt),

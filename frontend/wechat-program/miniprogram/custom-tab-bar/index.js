@@ -30,11 +30,9 @@ Component({
       const route = getCurrentPages().slice(-1)[0]?.route || ''
       const pagePath = route ? `/${route}` : ''
       const next = buildTabBarState(pagePath)
-      const roleChanged = this._role !== next.role
-      const listChanged = roleChanged || JSON.stringify(this.data.list) !== JSON.stringify(next.list)
       this._role = next.role
       this.setData({
-        ...(listChanged ? { list: next.list } : {}),
+        list: next.list,
         selected: next.selected,
         badges: next.badges,
       })

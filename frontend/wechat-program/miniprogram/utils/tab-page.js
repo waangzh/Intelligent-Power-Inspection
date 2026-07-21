@@ -1,6 +1,6 @@
 const { openPage: openTabPage } = require('../config/tab-bar')
 const { dismissKeyForRoute } = require('./tab-badge')
-const { resolveTabSession } = require('./tab-bar-state')
+const { resolveSession } = require('./session-user')
 
 function syncTabBar(page) {
   if (!page || typeof page.getTabBar !== 'function') return
@@ -39,7 +39,7 @@ function refreshTabBarBadges(page, options = {}) {
 }
 
 function openPage(url) {
-  const { role, permissions } = resolveTabSession()
+  const { role, permissions } = resolveSession()
   openTabPage(url, permissions, role)
 }
 

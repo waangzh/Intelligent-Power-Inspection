@@ -33,7 +33,7 @@ Page({
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/alarms/center/index')) return
-    if (!app.requirePermission('workorder:view')) return
+    if (!app.requirePermission('workorder:create', ['ADMIN'])) return
     const perms = app.globalData.permissions
     this.setData({
       user: app.globalData.user,

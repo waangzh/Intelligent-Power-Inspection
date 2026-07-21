@@ -67,6 +67,21 @@ public class SeedDataInitializer implements ApplicationRunner {
         "日常巡检任务调度与告警处置");
     seedUser(
         "user_viewer", "viewer", "View@123", "李观察", UserRole.VIEWER, "13800000003", "只读查看监控与巡检记录");
+    ensureDemoRole("admin", UserRole.ADMIN);
+    ensureDemoRole("dispatcher", UserRole.DISPATCHER);
+    ensureDemoRole("viewer", UserRole.VIEWER);
+  }
+
+  /** 演示账号角色被误改后，启动时按用户名纠正（避免调度员变成观察员） */
+  private void ensureDemoRole(String username, UserRole expectedRole) {
+    userRepository
+        .findByUsername(username)
+        .filter(user -> user.getRole() != expectedRole)
+        .ifPresent(
+            user -> {
+              user.setRole(expectedRole);
+              userRepository.save(user);
+            });
   }
 
   private void seedUser(

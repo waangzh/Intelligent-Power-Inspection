@@ -24,12 +24,13 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/dashboard/index')) return
     syncTabBar(this)
-    const user = app.globalData.user
+    const { resolveSession } = require('../../utils/session-user')
+    const { user, role } = resolveSession()
     const h = new Date().getHours()
     this.setData({
       user,
-      isDispatcher: user?.role === 'DISPATCHER',
-      isViewer: user?.role === 'VIEWER',
+      isDispatcher: role === 'DISPATCHER',
+      isViewer: role === 'VIEWER',
       greeting: h < 12 ? '早上好' : h < 18 ? '下午好' : '晚上好',
     })
     this.load()
@@ -63,8 +64,12 @@ Page({
       { label: '站点数量', value: counts.sites, trend: `覆盖 ${counts.sites} 座变电站`, up: true },
       { label: '巡检路线', value: counts.routes, trend: `共 ${counts.routes} 条路线`, up: true },
       { label: '进行中任务', value: counts.activeTasks, trend: '实时更新', up: true },
-      { label: '未确认告警', value: unack, trend: unack ? '需及时处理' : '暂无待处理', up: !unack },
     ]
+    if (!this.data.isDispatcher) {
+      stats.push({ label: '未确认告警', value: unack, trend: unack ? '需及时处理' : '暂无待处理', up: !unack })
+    } else {
+      stats.push({ label: '工单处置', value: '—', trend: '请至工单 Tab 接单', up: true })
+    }
 
       this.setData({
         stats,

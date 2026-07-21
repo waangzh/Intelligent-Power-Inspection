@@ -1,7 +1,7 @@
 const api = require('./services/index')
 const apiConfig = require('./config/api')
 const { countWorkOrderBadge } = require('./utils/work-order-badge')
-const { hasPermission } = require('./utils/permission')
+const { hasPermission, canViewWorkOrders } = require('./utils/permission')
 const {
   getDisplayBadges,
   dismissTabBadge,
@@ -45,23 +45,21 @@ App({
   restoreSession() {
     const session = api.getSession()
     if (!session) return
-    // 先恢复本地展示，等 token 续期 /auth/me 成功后再拉 badge，避免启动时过期 token 刷屏 401。
-    this.globalData.user = session.user
-    this.globalData.permissions = session.permissions
+    const { persistSessionUser } = require('./utils/session-user')
+    persistSessionUser(session.user, session.permissions)
     const { ensureSessionFresh } = require('./utils/request')
     ensureSessionFresh()
       .then(() => api.refreshMe())
       .then((fresh) => {
         if (fresh) {
-          this.applySession(fresh, { reloadPages: false })
+          this.applySession(fresh, { reloadPages: false, relaunch: true })
         } else if (api.getSession()) {
           this.refreshBadges()
+          this.scheduleEnterMainApp()
         }
         if (!api.getSession()) {
           this.clearUser({ redirect: true })
-          return
         }
-        this.scheduleEnterMainApp()
       })
       .catch(() => {
         if (!api.getSession()) {
@@ -90,7 +88,10 @@ App({
       this.clearUser()
       return
     }
-    this.globalData.user = session.user
+    const prevRole = this.globalData.user?.role
+    const { normalizeRole, persistSessionUser } = require('./utils/session-user')
+    const user = persistSessionUser(session.user, session.permissions)
+    this.globalData.user = user
     this.globalData.permissions = session.permissions
     if (!options.skipBadges) {
       this.refreshBadges()
@@ -101,6 +102,23 @@ App({
     if (options.reloadPages === true) {
       this.reloadVisiblePages()
     }
+    const roleChanged = prevRole && normalizeRole(prevRole) !== user.role
+    if (options.relaunch || roleChanged) {
+      this.relaunchToRoleHome(options.landingUrl)
+    }
+  },
+
+  relaunchToRoleHome(url) {
+    if (!this.globalData.user) return Promise.resolve()
+    const { enterMainApp } = require('./config/tab-bar')
+    const { getRoleLandingPath } = require('./utils/role-landing')
+    const { resolveSession } = require('./utils/session-user')
+    const { role, permissions } = resolveSession()
+    return enterMainApp(
+      url || getRoleLandingPath(role),
+      permissions,
+      role,
+    )
   },
 
   enterMainApp(url) {
@@ -147,13 +165,13 @@ App({
       this.clearTabBarBadges()
       return
     }
-    const canViewWorkOrders = hasPermission(this.globalData.permissions, 'workorder:view')
-      && user.role !== 'VIEWER'
+    const shouldLoadWorkOrders = canViewWorkOrders(user.role, this.globalData.permissions)
+    const needAlarms = user.role !== 'DISPATCHER'
     try {
       const [ntf, alarms, orders] = await Promise.all([
         api.getNotifications(user.id),
-        api.getAlarms(),
-        canViewWorkOrders ? api.getWorkOrders() : Promise.resolve([]),
+        needAlarms ? api.getAlarms() : Promise.resolve([]),
+        shouldLoadWorkOrders ? api.getWorkOrders() : Promise.resolve([]),
       ])
       this.globalData.unreadNotifications = ntf.filter((n) => !n.read).length
       this.globalData.unackAlarms = alarms.filter((a) => !a.acknowledged).length
@@ -253,8 +271,8 @@ App({
   syncSessionFromStorage() {
     const session = api.getSession()
     if (!session) return false
-    this.globalData.user = session.user
-    this.globalData.permissions = session.permissions
+    const { persistSessionUser } = require('./utils/session-user')
+    persistSessionUser(session.user, session.permissions)
     return true
   },
 

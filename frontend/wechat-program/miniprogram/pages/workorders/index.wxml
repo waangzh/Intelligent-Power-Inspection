@@ -28,7 +28,7 @@
     </view>
   </view>
 
-  <scroll-view class="status-chips" scroll-x enhanced show-scrollbar="{{false}}" wx:if="{{showStatusChips}}">
+  <scroll-view class="status-chips" scroll-x enhanced show-scrollbar="{{false}}" wx:if="{{showStatusChips && !isViewer}}">
     <view class="status-chips-inner">
       <view
         class="chip {{statusFilter===item.key?'active':''}}"
@@ -121,13 +121,14 @@
       </block>
 
       <view class="detail-actions">
+        <text wx:if="{{isViewer}}" class="muted read-only-hint">只读查看，不可操作</text>
         <button size="mini" bindtap="closeDetail">关闭</button>
       </view>
     </view>
   </view>
 
-  <view class="modal-mask" wx:if="{{showResolve}}" bindtap="closeResolve">
-    <view class="modal-panel form-panel" catchtap="">
+  <view class="modal-mask" wx:if="{{showResolve}}">
+    <view class="modal-panel form-panel" catchtap="stop">
       <view class="card-title">提交现场处理结果</view>
       <view class="form-item required">
         <text class="form-label">故障类型</text>
@@ -143,11 +144,11 @@
       </view>
       <view class="form-item">
         <text class="form-label">更换部件</text>
-        <input class="form-input" placeholder="如有更换请填写部件名称/型号" value="{{resolveForm.replacedParts}}" data-field="replacedParts" bindinput="onResolveFieldInput" />
+        <input class="form-input" placeholder="部件名称/型号（选填）" placeholder-class="form-placeholder" value="{{resolveForm.replacedParts}}" data-field="replacedParts" bindinput="onResolveFieldInput" />
       </view>
       <view class="form-item required">
         <text class="form-label">试验结果</text>
-        <textarea class="form-textarea" placeholder="如：复测正常、绝缘合格等" value="{{resolveForm.testResult}}" data-field="testResult" bindinput="onResolveFieldInput" />
+        <textarea class="form-textarea" placeholder="如：复测正常、绝缘合格等" placeholder-class="form-placeholder" value="{{resolveForm.testResult}}" data-field="testResult" bindinput="onResolveFieldInput" />
       </view>
       <view class="form-item required">
         <text class="form-label">处理结论</text>
@@ -157,7 +158,7 @@
       </view>
       <view class="form-item {{needsFollowUpPlan ? 'required' : ''}}">
         <text class="form-label">补充说明</text>
-        <textarea class="form-textarea" placeholder="{{needsFollowUpPlan ? '部分消缺/未消缺时必须填写遗留风险与后续计划' : '其他现场情况'}}" value="{{resolveForm.remarks}}" data-field="remarks" bindinput="onResolveFieldInput" />
+        <textarea class="form-textarea" placeholder="{{needsFollowUpPlan ? '部分消缺/未消缺时必须填写遗留风险与后续计划' : '其他现场情况'}}" placeholder-class="form-placeholder" value="{{resolveForm.remarks}}" data-field="remarks" bindinput="onResolveFieldInput" />
       </view>
       <view class="form-item">
         <text class="form-label">现场照片</text>
@@ -177,8 +178,8 @@
     </view>
   </view>
 
-  <view class="modal-mask" wx:if="{{showReview}}" bindtap="closeReview">
-    <view class="modal-panel form-panel" catchtap="">
+  <view class="modal-mask" wx:if="{{showReview}}">
+    <view class="modal-panel form-panel" catchtap="stop">
       <view class="card-title">管理员复核确认</view>
       <view class="form-item required">
         <text class="form-label">复核结果</text>
@@ -189,7 +190,7 @@
       </view>
       <view class="form-item required">
         <text class="form-label">复核意见</text>
-        <textarea class="form-textarea" placeholder="请填写复核结论与依据" value="{{reviewForm.comment}}" bindinput="onReviewCommentInput" />
+        <textarea class="form-textarea" placeholder="请填写复核结论与依据" placeholder-class="form-placeholder" value="{{reviewForm.comment}}" bindinput="onReviewCommentInput" />
       </view>
       <view class="form-actions">
         <button size="mini" bindtap="closeReview">取消</button>

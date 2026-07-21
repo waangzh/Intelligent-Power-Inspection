@@ -4,6 +4,7 @@ const { refreshTabBarBadges } = require('../../utils/tab-page')
 const { ALARM_SEVERITY_LABELS, DETECTION_LABELS } = require('../../utils/constants')
 const { formatDateTimeShort } = require('../../utils/date-time')
 const { formatBusinessMessage } = require('../../utils/display-text')
+const { resolveSession } = require('../../utils/session-user')
 
 const SEVERITY_OPTIONS = [
   { value: '', label: '全部级别' },
@@ -31,6 +32,12 @@ Page({
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/alarms/index')) return
+    const role = resolveSession().role
+    if (role === 'DISPATCHER') {
+      wx.switchTab({ url: '/pages/workorders/index' })
+      return
+    }
+    if (typeof wx.hideHomeButton === 'function') wx.hideHomeButton()
     const perms = app.globalData.permissions
     this.setData({
       canAck: hasPermission(perms, 'alarm:ack'),

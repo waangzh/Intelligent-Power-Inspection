@@ -1,4 +1,5 @@
 const { hasPermission } = require('../utils/permission')
+const { normalizeRole } = require('../utils/session-user')
 
 const TAB_DASHBOARD = {
   pagePath: '/pages/dashboard/index',
@@ -21,6 +22,7 @@ const TAB_WORKORDERS = {
   text: '工单',
   iconPath: '/assets/tabbar/workorders.png',
   selectedIconPath: '/assets/tabbar/workorders-active.png',
+  badgeKey: 'workorders',
 }
 
 const TAB_ALARMS = {
@@ -28,6 +30,7 @@ const TAB_ALARMS = {
   text: '告警',
   iconPath: '/assets/tabbar/alarms.png',
   selectedIconPath: '/assets/tabbar/alarms-active.png',
+  badgeKey: 'alarms',
 }
 
 const TAB_TASKS = {
@@ -49,10 +52,25 @@ const TAB_PROFILE = {
   text: '我的',
   iconPath: '/assets/tabbar/profile.png',
   selectedIconPath: '/assets/tabbar/profile-active.png',
+  badgeKey: 'profile',
 }
+
+/** 调度员：总览 / 工单 / 监控 / 任务 / 我的（无告警中心） */
+const TAB_LIST_DISPATCHER = [
+  TAB_DASHBOARD,
+  TAB_WORKORDERS,
+  TAB_MONITOR,
+  TAB_TASKS,
+  TAB_PROFILE,
+]
 
 /** 管理员/调度员告警中心（非底部 Tab，带仿底栏） */
 const ADMIN_ALARMS_PAGE = '/pages/alarms/center/index'
+
+const ALARM_PAGE_PATHS = [
+  TAB_ALARMS.pagePath,
+  ADMIN_ALARMS_PAGE,
+]
 
 const TAB_WORKORDERS_VIEWER = {
   pagePath: TAB_WORKORDERS.pagePath,
@@ -71,14 +89,14 @@ const TAB_LIST_VIEWER = [
 ]
 
 /**
- * app.json tabBar.list — 与调度员底栏一致：总览/工单/监控/任务/我的
- * 观察员「告警」、管理员「用户」走 navigateTo + inline-tab-bar
+ * app.json tabBar.list — 原生 Tab 槽位（最多 5 个）：总览/监控/用户/工单/我的
+ * 观察员「告警」、调度员「任务」走 reLaunch + inline-tab-bar
  */
 const NATIVE_TAB_PATHS = [
   TAB_DASHBOARD.pagePath,
-  TAB_WORKORDERS.pagePath,
   TAB_MONITOR.pagePath,
-  TAB_TASKS.pagePath,
+  TAB_USERS.pagePath,
+  TAB_WORKORDERS.pagePath,
   TAB_PROFILE.pagePath,
 ]
 
@@ -86,13 +104,18 @@ const TAB_PAGE_PATHS = [
   ...NATIVE_TAB_PATHS,
   TAB_ALARMS.pagePath,
   ADMIN_ALARMS_PAGE,
-  TAB_USERS.pagePath,
+  TAB_TASKS.pagePath,
 ]
 
 function normalizePath(url) {
   const path = String(url || '').split('?')[0]
   if (!path) return ''
   return path.startsWith('/') ? path : `/${path}`
+}
+
+function isAlarmPage(url) {
+  const path = normalizePath(url)
+  return ALARM_PAGE_PATHS.some((p) => path === p || path.endsWith(p.replace(/^\//, '')))
 }
 
 function isNativeTabPage(url) {
@@ -102,15 +125,16 @@ function isNativeTabPage(url) {
 }
 
 function getTabList(permissions, role) {
-  if (role === 'VIEWER') {
+  const normalizedRole = normalizeRole(role)
+  if (normalizedRole === 'VIEWER') {
     return TAB_LIST_VIEWER
   }
   const tail = [TAB_PROFILE]
-  if (role === 'ADMIN' && hasPermission(permissions, 'user:manage')) {
+  if (normalizedRole === 'ADMIN' && hasPermission(permissions, 'user:manage')) {
     return [TAB_DASHBOARD_ALARM_BADGE, TAB_WORKORDERS, TAB_MONITOR, TAB_USERS, ...tail]
   }
-  if (role === 'DISPATCHER') {
-    return [TAB_DASHBOARD, TAB_WORKORDERS, TAB_MONITOR, TAB_TASKS, ...tail]
+  if (normalizedRole === 'DISPATCHER') {
+    return TAB_LIST_DISPATCHER
   }
   return [TAB_DASHBOARD_ALARM_BADGE, TAB_WORKORDERS, TAB_MONITOR, TAB_TASKS, ...tail]
 }
@@ -135,8 +159,11 @@ function resolveTarget(url, permissions, role) {
   const raw = String(url || '')
   const path = normalizePath(raw)
   const query = raw.includes('?') ? raw.slice(raw.indexOf('?')) : ''
+  const normalizedRole = normalizeRole(role)
   let targetPath = path
-  if (path === TAB_ALARMS.pagePath && role === 'ADMIN' && hasPermission(permissions, 'workorder:create')) {
+  if (normalizedRole === 'DISPATCHER' && isAlarmPage(path)) {
+    targetPath = TAB_WORKORDERS.pagePath
+  } else if (path === TAB_ALARMS.pagePath && normalizedRole === 'ADMIN' && hasPermission(permissions, 'workorder:create')) {
     targetPath = ADMIN_ALARMS_PAGE
   }
   return `${targetPath}${query}`
@@ -198,17 +225,8 @@ function openPage(url, permissions, role) {
   if (canSwitchTab(targetPath, permissions, role)) {
     wx.switchTab({ url: target })
   } else if (isUserTabPage(targetPath, permissions, role)) {
-    const current = currentPagePath()
-    const fromNativeTab = isNativeTabPage(current)
-    const fromVirtualTab = isUserTabPage(current, permissions, role) && !isNativeTabPage(current)
-    const toVirtualTab = !isNativeTabPage(targetPath)
-    if (fromVirtualTab && toVirtualTab) {
-      wx.redirectTo({ url: target })
-    } else if (fromNativeTab && toVirtualTab) {
-      wx.navigateTo({ url: target })
-    } else {
-      wx.redirectTo({ url: target })
-    }
+    // 仿 Tab 页用 reLaunch，避免 navigateTo 产生返回键
+    wx.reLaunch({ url: target })
   } else {
     wx.navigateTo({ url: target })
   }
@@ -231,6 +249,7 @@ module.exports = {
   openPage,
   NATIVE_TAB_PATHS,
   TAB_LIST_VIEWER,
+  TAB_LIST_DISPATCHER,
   ADMIN_ALARMS_PAGE,
   TAB_ALARMS,
   TAB_USERS,
