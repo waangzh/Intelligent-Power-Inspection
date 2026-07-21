@@ -79,6 +79,17 @@ class TaskExecutionLifecycleServiceTests {
   }
 
   @Test
+  void detailExposesStartRequestAndBridgeCommandReceipt() {
+    execution.setStartRequestId("start-request-1");
+    execution.setStartCommandId("bridge-command-1");
+
+    Map<String, Object> result = service.detail(execution);
+
+    assertEquals("start-request-1", result.get("startRequestId"));
+    assertEquals("bridge-command-1", result.get("startCommandId"));
+  }
+
+  @Test
   void hashMismatchRejectsStartBeforeAnyBridgeCommand() {
     when(executions.findByStartRequestId("start-1")).thenReturn(Optional.empty());
     when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
