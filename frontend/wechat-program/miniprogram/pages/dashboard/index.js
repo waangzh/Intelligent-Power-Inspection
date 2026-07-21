@@ -14,6 +14,8 @@ Page({
     unack: 0,
     alarmChartData: [],
     completionRate: 0,
+    loading: false,
+    loadError: '',
   },
 
   onShow() {
@@ -33,8 +35,10 @@ Page({
   },
 
   async load() {
-    const overview = await api.fetchDashboard()
-    const { counts, rates, weeklyAlarmCounts, recentAlarms, activeTaskItems, robotItems } = overview
+    this.setData({ loading: true, loadError: '' })
+    try {
+      const overview = await api.fetchDashboard()
+      const { counts, rates, weeklyAlarmCounts, recentAlarms, activeTaskItems, robotItems } = overview
 
     const alarmChartData = (weeklyAlarmCounts || []).map((v, i) => ({
       label: `${6 - i}天`,
@@ -58,18 +62,24 @@ Page({
       { label: '未确认告警', value: unack, trend: unack ? '需及时处理' : '暂无待处理', up: !unack },
     ]
 
-    this.setData({
-      stats,
-      recentAlarms: (recentAlarms || []).slice(0, 5).map((a) => ({
-        ...a,
-        severityLabel: ALARM_SEVERITY_LABELS[a.severity],
-        sevType: a.severity === 'CRITICAL' ? 'danger' : 'warning',
-      })),
-      unack,
-      schedule,
-      alarmChartData,
-      completionRate: rates.taskCompletion || 0,
-    })
+      this.setData({
+        stats,
+        recentAlarms: (recentAlarms || []).slice(0, 5).map((a) => ({
+          ...a,
+          severityLabel: ALARM_SEVERITY_LABELS[a.severity],
+          sevType: a.severity === 'CRITICAL' ? 'danger' : 'warning',
+        })),
+        unack,
+        schedule,
+        alarmChartData,
+        completionRate: rates.taskCompletion || 0,
+      })
+    } catch (err) {
+      this.setData({ loadError: err.message || '加载失败，请检查后端服务与登录状态' })
+      wx.showToast({ title: this.data.loadError, icon: 'none' })
+    } finally {
+      this.setData({ loading: false })
+    }
   },
 
   go(e) {
