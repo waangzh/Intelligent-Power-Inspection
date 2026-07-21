@@ -62,6 +62,7 @@ export const robots = '/api/v1/robots' as const
 export const robotsLocations = '/api/v1/robots/locations' as const
 export const robotsStatus = '/api/v1/robots/status' as const
 export const robotsId = '/api/v1/robots/{id}' as const
+export const robotsIdLocalConfirmStartPolicy = '/api/v1/robots/{id}/local-confirm-start-policy' as const
 export const robotsIdTelemetry = '/api/v1/robots/{id}/telemetry' as const
 export const robotsRobotIdLocation = '/api/v1/robots/{robotId}/location' as const
 export const robotsRobotIdStatus = '/api/v1/robots/{robotId}/status' as const
@@ -177,6 +178,7 @@ export const API_PATHS = {
   robotsLocations: '/api/v1/robots/locations',
   robotsStatus: '/api/v1/robots/status',
   robotsId: '/api/v1/robots/{id}',
+  robotsIdLocalConfirmStartPolicy: '/api/v1/robots/{id}/local-confirm-start-policy',
   robotsIdTelemetry: '/api/v1/robots/{id}/telemetry',
   robotsRobotIdLocation: '/api/v1/robots/{robotId}/location',
   robotsRobotIdStatus: '/api/v1/robots/{robotId}/status',

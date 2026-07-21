@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T10:06:38.480Z",
+  "generatedAt": "2026-07-21T14:19:51.734Z",
   "paths": [
     {
       "apiPath": "/api/v1/agent-actions/{actionId}",
@@ -315,6 +315,11 @@
       "apiPath": "/api/v1/robots/{id}",
       "relPath": "/robots/{id}",
       "name": "robotsId"
+    },
+    {
+      "apiPath": "/api/v1/robots/{id}/local-confirm-start-policy",
+      "relPath": "/robots/{id}/local-confirm-start-policy",
+      "name": "robotsIdLocalConfirmStartPolicy"
     },
     {
       "apiPath": "/api/v1/robots/{id}/telemetry",

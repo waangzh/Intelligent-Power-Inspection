@@ -119,6 +119,7 @@ const openapiClient = {
     deleteRobot(id) { return del(buildPath(API_PATHS.robotsId, { id })) },
     robot(id, query) { return get(buildPath(API_PATHS.robotsId, { id }), query) },
     updateRobot(id, body) { return patch(buildPath(API_PATHS.robotsId, { id }), body) },
+    updateLocalConfirmStartPolicy(id, body) { return patch(buildPath(API_PATHS.robotsIdLocalConfirmStartPolicy, { id }), body) },
     telemetry(id, query) { return get(buildPath(API_PATHS.robotsIdTelemetry, { id }), query) },
     location(robotId, query) { return get(buildPath(API_PATHS.robotsRobotIdLocation, { robotId }), query) },
     detail(robotId, query) { return get(buildPath(API_PATHS.robotsRobotIdStatus, { robotId }), query) },

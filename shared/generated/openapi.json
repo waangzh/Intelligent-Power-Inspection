@@ -4200,6 +4200,52 @@
         }
       }
     },
+    "/api/v1/robots/{id}/local-confirm-start-policy": {
+      "patch": {
+        "tags": [
+          "robot-controller"
+        ],
+        "operationId": "updateLocalConfirmStartPolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["enabled"],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/robots/{id}/telemetry": {
       "get": {
         "tags": [

@@ -62,6 +62,7 @@ const robots = '/api/v1/robots'
 const robotsLocations = '/api/v1/robots/locations'
 const robotsStatus = '/api/v1/robots/status'
 const robotsId = '/api/v1/robots/{id}'
+const robotsIdLocalConfirmStartPolicy = '/api/v1/robots/{id}/local-confirm-start-policy'
 const robotsIdTelemetry = '/api/v1/robots/{id}/telemetry'
 const robotsRobotIdLocation = '/api/v1/robots/{robotId}/location'
 const robotsRobotIdStatus = '/api/v1/robots/{robotId}/status'
@@ -181,6 +182,7 @@ module.exports = {
   robotsLocations,
   robotsStatus,
   robotsId,
+  robotsIdLocalConfirmStartPolicy,
   robotsIdTelemetry,
   robotsRobotIdLocation,
   robotsRobotIdStatus,
@@ -295,6 +297,7 @@ module.exports = {
     robotsLocations: '/api/v1/robots/locations',
     robotsStatus: '/api/v1/robots/status',
     robotsId: '/api/v1/robots/{id}',
+    robotsIdLocalConfirmStartPolicy: '/api/v1/robots/{id}/local-confirm-start-policy',
     robotsIdTelemetry: '/api/v1/robots/{id}/telemetry',
     robotsRobotIdLocation: '/api/v1/robots/{robotId}/location',
     robotsRobotIdStatus: '/api/v1/robots/{robotId}/status',
