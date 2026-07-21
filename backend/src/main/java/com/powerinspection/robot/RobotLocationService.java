@@ -133,6 +133,9 @@ public class RobotLocationService {
       throw ApiException.badRequest("TRACK_QUERY_RANGE_TOO_LARGE: maximum range is 7 days");
     }
     int resolvedLimit = limit == null ? DEFAULT_TRACK_LIMIT : limit;
+    if (resolvedLimit < 1) {
+      throw ApiException.badRequest("INVALID_TRACK_POINT_LIMIT: limit must be at least 1");
+    }
     if (resolvedLimit > MAX_TRACK_LIMIT) {
       throw ApiException.badRequest("TRACK_POINT_LIMIT_EXCEEDED: maximum limit is 10000");
     }

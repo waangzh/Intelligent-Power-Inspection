@@ -79,9 +79,10 @@ class PowerInspectionApplicationTests {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.user.username").value("viewer"))
         .andExpect(jsonPath("$.data.user.role").value("VIEWER"))
-        .andExpect(jsonPath("$.data.permissions.length()").value(2))
+        .andExpect(jsonPath("$.data.permissions.length()").value(3))
         .andExpect(jsonPath("$.data.permissions[?(@ == 'task:view')]").exists())
         .andExpect(jsonPath("$.data.permissions[?(@ == 'workorder:view')]").exists())
+        .andExpect(jsonPath("$.data.permissions[?(@ == 'robot:location:view')]").exists())
         .andExpect(jsonPath("$.data.permissions[?(@ == 'workorder:process')]").doesNotExist());
 
     mockMvc
