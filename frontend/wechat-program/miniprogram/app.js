@@ -1,7 +1,12 @@
 const api = require('./services/index')
 const apiConfig = require('./config/api')
 const { countWorkOrderBadge } = require('./utils/work-order-badge')
-const { hasPermission } = require('./utils/permission')
+const { hasPermission, canViewWorkOrders } = require('./utils/permission')
+const {
+  getDisplayBadges,
+  dismissTabBadge,
+  clearBadgeDismissState,
+} = require('./utils/tab-badge')
 
 App({
   globalData: {
@@ -10,6 +15,7 @@ App({
     unreadNotifications: 0,
     unackAlarms: 0,
     pendingWorkOrders: 0,
+    badgeDismissedAt: {},
     tabBarComponent: null,
   },
 
@@ -19,7 +25,14 @@ App({
     } else {
       console.info('[power-inspection] 真实后端模式：', apiConfig.baseUrl)
     }
-    this.restoreSession()
+    const { invalidateSessionIfApiBaseChanged } = require('./utils/request')
+    if (invalidateSessionIfApiBaseChanged()) {
+      console.warn('[power-inspection] API 地址已变更，已清除旧登录状态')
+    }
+    // 延迟恢复会话，避免 onLaunch 阶段 reLaunch 导致模拟器白屏/启动失败
+    const restore = () => this.restoreSession()
+    if (typeof wx.nextTick === 'function') wx.nextTick(restore)
+    else setTimeout(restore, 100)
   },
 
   reloadVisiblePages() {
@@ -35,27 +48,32 @@ App({
   restoreSession() {
     const session = api.getSession()
     if (!session) return
-    // 先恢复本地展示，等 token 续期 /auth/me 成功后再拉 badge，避免启动时过期 token 刷屏 401。
-    this.globalData.user = session.user
-    this.globalData.permissions = session.permissions
+    const { persistSessionUser } = require('./utils/session-user')
+    persistSessionUser(session.user, session.permissions)
     const { ensureSessionFresh } = require('./utils/request')
     ensureSessionFresh()
       .then(() => api.refreshMe())
       .then((fresh) => {
         if (fresh) {
-          this.applySession(fresh, { reloadPages: false })
+          this.applySession(fresh, { reloadPages: false, relaunch: true })
+        } else if (api.getSession()) {
+          this.refreshBadges()
+          this.scheduleEnterMainApp()
         }
         if (!api.getSession()) {
           this.clearUser({ redirect: true })
-          return
         }
-        this.scheduleEnterMainApp()
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn('[power-inspection] restoreSession failed', err?.message || err)
         if (!api.getSession()) {
-          this.clearUser({ redirect: true })
+          this.clearUser({ redirect: false })
           return
         }
+        // 启动时在登录页且网络失败，不 reLaunch，避免模拟器白屏
+        const route = getCurrentPages().slice(-1)[0]?.route || ''
+        if (route.includes('auth/login')) return
+        this.refreshBadges()
         this.scheduleEnterMainApp()
       })
   },
@@ -77,14 +95,37 @@ App({
       this.clearUser()
       return
     }
-    this.globalData.user = session.user
+    const prevRole = this.globalData.user?.role
+    const { normalizeRole, persistSessionUser } = require('./utils/session-user')
+    const user = persistSessionUser(session.user, session.permissions)
+    this.globalData.user = user
     this.globalData.permissions = session.permissions
     if (!options.skipBadges) {
       this.refreshBadges()
     }
+    const tabBar = this.globalData.tabBarComponent
+    if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
+    this.refreshCurrentInlineTabBar()
     if (options.reloadPages === true) {
       this.reloadVisiblePages()
     }
+    const roleChanged = prevRole && normalizeRole(prevRole) !== user.role
+    if (options.relaunch || roleChanged) {
+      this.relaunchToRoleHome(options.landingUrl)
+    }
+  },
+
+  relaunchToRoleHome(url) {
+    if (!this.globalData.user) return Promise.resolve()
+    const { enterMainApp } = require('./config/tab-bar')
+    const { getRoleLandingPath } = require('./utils/role-landing')
+    const { resolveSession } = require('./utils/session-user')
+    const { role, permissions } = resolveSession()
+    return enterMainApp(
+      url || getRoleLandingPath(role),
+      permissions,
+      role,
+    )
   },
 
   enterMainApp(url) {
@@ -103,7 +144,26 @@ App({
 
   registerTabBar(component) {
     this.globalData.tabBarComponent = component
-    this.applyTabBarBadges()
+    this.syncAllTabBarBadges()
+  },
+
+  dismissTabBadge(key) {
+    dismissTabBadge(this.globalData, key)
+    this.syncAllTabBarBadges()
+  },
+
+  getTabBarBadgeCounts() {
+    return getDisplayBadges(this.globalData)
+  },
+
+  refreshCurrentInlineTabBar() {
+    try {
+      const pages = getCurrentPages()
+      const page = pages[pages.length - 1]
+      page?.selectComponent?.('#inlineTabBar')?.refresh?.()
+    } catch {
+      // ignore
+    }
   },
 
   async refreshBadges() {
@@ -112,47 +172,45 @@ App({
       this.clearTabBarBadges()
       return
     }
-    const canViewWorkOrders = hasPermission(this.globalData.permissions, 'workorder:view')
-      && user.role !== 'VIEWER'
+    const shouldLoadWorkOrders = canViewWorkOrders(user.role, this.globalData.permissions)
+    const needAlarms = user.role !== 'DISPATCHER'
     try {
       const [ntf, alarms, orders] = await Promise.all([
         api.getNotifications(user.id),
-        api.getAlarms(),
-        canViewWorkOrders ? api.getWorkOrders() : Promise.resolve([]),
+        needAlarms ? api.getAlarms() : Promise.resolve([]),
+        shouldLoadWorkOrders ? api.getWorkOrders() : Promise.resolve([]),
       ])
       this.globalData.unreadNotifications = ntf.filter((n) => !n.read).length
       this.globalData.unackAlarms = alarms.filter((a) => !a.acknowledged).length
       this.globalData.pendingWorkOrders = countWorkOrderBadge(orders, user, this.globalData.permissions)
-      this.applyTabBarBadges()
+      this.syncAllTabBarBadges()
     } catch (e) {
       console.warn('refreshBadges', e)
     }
   },
 
+  syncAllTabBarBadges() {
+    this.applyTabBarBadges()
+    if (typeof wx.nextTick === 'function') {
+      wx.nextTick(() => this.applyTabBarBadges())
+    }
+  },
+
   applyTabBarBadges() {
+    const emptyBadges = { alarms: 0, workorders: 0, profile: 0 }
     const tabBar = this.globalData.tabBarComponent
     if (tabBar && typeof tabBar.updateBadges === 'function') {
-      tabBar.updateBadges({
-        alarms: this.globalData.unackAlarms,
-        workorders: this.globalData.pendingWorkOrders,
-        profile: this.globalData.unreadNotifications,
-      })
-      return
+      tabBar.updateBadges(emptyBadges)
+    } else if (tabBar && typeof tabBar.syncBadges === 'function') {
+      tabBar.syncBadges()
     }
     try {
-      if (this.globalData.unackAlarms > 0) {
-        wx.setTabBarBadge({ index: 2, text: this.globalData.unackAlarms > 99 ? '99+' : String(this.globalData.unackAlarms) })
-      } else {
-        wx.removeTabBarBadge({ index: 2 })
-      }
-      if (this.globalData.unreadNotifications > 0) {
-        wx.setTabBarBadge({ index: 4, text: this.globalData.unreadNotifications > 99 ? '99+' : String(this.globalData.unreadNotifications) })
-      } else {
-        wx.removeTabBarBadge({ index: 4 })
-      }
+      wx.removeTabBarBadge({ index: 2 })
+      wx.removeTabBarBadge({ index: 4 })
     } catch (e) {
-      // tab bar may not be ready
+      // ignore
     }
+    this.refreshCurrentInlineTabBar()
   },
 
   clearTabBarBadges() {
@@ -195,6 +253,7 @@ App({
     this.globalData.unreadNotifications = 0
     this.globalData.unackAlarms = 0
     this.globalData.pendingWorkOrders = 0
+    clearBadgeDismissState(this.globalData)
     this.clearTabBarBadges()
     const tabBar = this.globalData.tabBarComponent
     if (tabBar && typeof tabBar.initTabBar === 'function') tabBar.initTabBar()
@@ -210,8 +269,8 @@ App({
   syncSessionFromStorage() {
     const session = api.getSession()
     if (!session) return false
-    this.globalData.user = session.user
-    this.globalData.permissions = session.permissions
+    const { persistSessionUser } = require('./utils/session-user')
+    persistSessionUser(session.user, session.permissions)
     return true
   },
 

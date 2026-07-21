@@ -1,6 +1,8 @@
 const api = require('../../services/index')
-const { syncTabBar, openPage } = require('../../utils/tab-page')
+const { syncTabBar, openPage, refreshTabBarBadges } = require('../../utils/tab-page')
 const { ALARM_SEVERITY_LABELS } = require('../../utils/constants')
+const { formatDateTimeShort, formatTimeShort } = require('../../utils/date-time')
+const { formatBusinessMessage } = require('../../utils/display-text')
 
 Page({
   data: {
@@ -22,16 +24,17 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/dashboard/index')) return
     syncTabBar(this)
-    const user = app.globalData.user
+    const { resolveSession } = require('../../utils/session-user')
+    const { user, role } = resolveSession()
     const h = new Date().getHours()
     this.setData({
       user,
-      isDispatcher: user?.role === 'DISPATCHER',
-      isViewer: user?.role === 'VIEWER',
+      isDispatcher: role === 'DISPATCHER',
+      isViewer: role === 'VIEWER',
       greeting: h < 12 ? '早上好' : h < 18 ? '下午好' : '晚上好',
     })
     this.load()
-    app.refreshBadges()
+    refreshTabBarBadges(this)
   },
 
   async load() {
@@ -40,16 +43,18 @@ Page({
       const overview = await api.fetchDashboard()
       const { counts, rates, weeklyAlarmCounts, recentAlarms, activeTaskItems, robotItems } = overview
 
-    const alarmChartData = (weeklyAlarmCounts || []).map((v, i) => ({
-      label: `${6 - i}天`,
-      value: v,
-    }))
+    const alarmChartData = (weeklyAlarmCounts || []).map((v, i) => {
+      const d = new Date()
+      d.setDate(d.getDate() - (6 - i))
+      const label = i === 6 ? '今' : `${d.getMonth() + 1}/${d.getDate()}`
+      return { label, value: Number(v) || 0 }
+    })
 
     const robotName = (id) => (robotItems || []).find((r) => r.id === id)?.name || '机器人'
     const active = activeTaskItems || []
     const schedule = active.length
       ? active.slice(0, 4).map((t) => ({
-        time: new Date(t.startedAt || t.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        time: formatTimeShort(t.startedAt || t.createdAt),
         text: `${t.name}（${robotName(t.robotId)}）`,
       }))
       : []
@@ -66,6 +71,7 @@ Page({
         stats,
         recentAlarms: (recentAlarms || []).slice(0, 5).map((a) => ({
           ...a,
+          message: formatBusinessMessage(a.message),
           severityLabel: ALARM_SEVERITY_LABELS[a.severity],
           sevType: a.severity === 'CRITICAL' ? 'danger' : 'warning',
         })),

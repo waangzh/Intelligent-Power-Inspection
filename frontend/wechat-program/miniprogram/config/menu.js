@@ -4,7 +4,7 @@ const profileMenuItems = [
   { path: '/pages/profile/settings/index', label: '偏好设置' },
 ]
 
-/** web 通知 link → 小程序 path */
+/** web 通知 link → 小程序 path（调度员无告警中心，告警通知进工单页） */
 const linkMap = {
   '/dashboard': '/pages/dashboard/index',
   '/alarms': '/pages/alarms/index',
@@ -13,8 +13,12 @@ const linkMap = {
   '/notifications': '/pages/notifications/index',
 }
 
-function mapNotificationLink(link) {
+function mapNotificationLink(link, role) {
   if (!link) return ''
+  const normalizedRole = String(role || '').trim().toUpperCase()
+  if (normalizedRole === 'DISPATCHER' && (link === '/alarms' || link.startsWith('/alarms'))) {
+    return linkMap['/workorders']
+  }
   return linkMap[link] || link.replace(/^\//, '/pages/') + '/index'
 }
 

@@ -124,6 +124,12 @@ class PowerInspectionApplicationTests {
             post("/api/v1/alarms/alarm_seed_003/ack").header("Authorization", bearer(adminToken)))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.message").value("无权限访问"));
+
+    mockMvc
+        .perform(get("/api/v1/work-orders").header("Authorization", bearer(viewerToken)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.code").value(0))
+        .andExpect(jsonPath("$.data.items").isArray());
   }
 
   @Test

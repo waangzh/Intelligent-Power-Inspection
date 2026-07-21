@@ -1,4 +1,6 @@
-const { getTabList, openPage } = require('../../config/tab-bar')
+const { openPage } = require('../../config/tab-bar')
+const { badgeKeyForPath } = require('../../utils/tab-badge')
+const { buildTabBarState, resolveTabSession } = require('../../utils/tab-bar-state')
 
 Component({
   properties: {
@@ -32,18 +34,13 @@ Component({
 
   methods: {
     refresh() {
-      const app = getApp()
-      const list = getTabList(app.globalData.permissions, app.globalData.user?.role)
       const activePath = this.properties.activePath
-      const selected = activePath ? list.findIndex((t) => t.pagePath === activePath) : -1
+      const next = buildTabBarState(activePath)
+      this._role = next.role
       this.setData({
-        list,
-        selected,
-        badges: {
-          alarms: app.globalData.unackAlarms || 0,
-          workorders: app.globalData.pendingWorkOrders || 0,
-          profile: app.globalData.unreadNotifications || 0,
-        },
+        list: next.list,
+        selected: next.selected,
+        badges: next.badges,
       })
     },
 
@@ -51,7 +48,10 @@ Component({
       const { path } = e.currentTarget.dataset
       if (!path || path === this.properties.activePath) return
       const app = getApp()
-      openPage(path, app.globalData.permissions, app.globalData.user?.role)
+      const { role, permissions } = resolveTabSession()
+      const badgeKey = badgeKeyForPath(path)
+      if (badgeKey && app.dismissTabBadge) app.dismissTabBadge(badgeKey)
+      openPage(path, permissions, role)
     },
   },
 })

@@ -7,6 +7,9 @@ const {
   canCancelTask,
   canEstopTask,
 } = require('../../../utils/permission')
+const { formatDateTime } = require('../../../utils/date-time')
+const { formatBusinessMessage } = require('../../../utils/display-text')
+const { DEFAULT_CENTER, isValidGeoPoint, normalizeGeoPoint, cloneCenter } = require('../../../utils/geo-coord')
 
 const EVENT_LABELS = {
   DISPATCH: '下发', ARRIVE: '到点', INSPECT: '采集', DETECT: '检测',
@@ -25,7 +28,7 @@ Page({
     route: null,
     routeName: '-',
     robotName: '-',
-    mapCenter: { lat: 30.2741, lng: 120.1551 },
+    mapCenter: cloneCenter(DEFAULT_CENTER),
     robotPos: null,
     checkpointTotal: 0,
     createdLabel: '-',
@@ -70,26 +73,32 @@ Page({
     const task = tasks.find((t) => t.id === this.data.taskId)
     const route = task ? routes.find((r) => r.id === task.routeId) : null
     const robot = task ? robots.find((r) => r.id === task.robotId) : null
-    const fmt = (iso) => (iso ? iso.slice(0, 19).replace('T', ' ') : '-')
+    const fmt = (iso) => formatDateTime(iso)
     const timeline = events.map((e) => ({
       ...e,
       typeLabel: EVENT_LABELS[e.type] || e.type,
       time: fmt(e.createdAt),
       evType: EVENT_TYPES[e.type] || 'primary',
+      message: formatBusinessMessage(e.message),
     }))
-    const mapCenter = route?.path?.[0] || { lat: 30.2741, lng: 120.1551 }
+    const fallbackCenter = normalizeGeoPoint(null, DEFAULT_CENTER)
+    const routeStart = route?.path?.[0]
+    const mapCenter = isValidGeoPoint(routeStart) ? normalizeGeoPoint(routeStart, fallbackCenter) : fallbackCenter
+    const robotPos = isValidGeoPoint(robot?.position) ? normalizeGeoPoint(robot.position, fallbackCenter) : null
     this.setData({
       task,
       route,
       routeName: route?.name || '-',
       robotName: robot?.name || '-',
-      robotPos: robot?.position || null,
+      robotPos,
       checkpointTotal: route?.checkpoints?.length || 0,
       createdLabel: task ? fmt(task.createdAt) : '-',
       startedLabel: task ? fmt(task.startedAt) : '-',
       mapCenter,
       events: timeline,
-      taskAlarms: alarms.filter((a) => a.taskId === this.data.taskId),
+      taskAlarms: alarms
+        .filter((a) => a.taskId === this.data.taskId)
+        .map((a) => ({ ...a, message: formatBusinessMessage(a.message) })),
     })
     if (task) wx.setNavigationBarTitle({ title: task.name })
   },

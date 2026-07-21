@@ -1,6 +1,8 @@
 <view class="container">
   <page-header title="{{pageTitle}}" description="{{pageDesc}}" />
 
+  <view wx:if="{{loadError}}" class="card load-error">{{loadError}}</view>
+
   <view class="card pending-alarms" wx:if="{{canCreate && pendingAlarms.length}}">
     <view class="card-title flex-between">
       <text>待转工单告警</text>
@@ -21,16 +23,14 @@
 
   <view class="scope-tabs" wx:if="{{isDispatcher}}">
     <view class="scope-tab {{scopeFilter==='POOL'?'active':''}}" bindtap="switchScope" data-key="POOL">
-      <text>接单大厅</text>
-      <text class="tab-badge" wx:if="{{poolCount}}">{{poolCount > 99 ? '99+' : poolCount}}</text>
+      <text>接单大厅<text wx:if="{{poolCount}}" class="scope-count"> · {{poolCount}}</text></text>
     </view>
     <view class="scope-tab {{scopeFilter==='MINE'?'active':''}}" bindtap="switchScope" data-key="MINE">
-      <text>我的工单</text>
-      <text class="tab-badge" wx:if="{{mineCount}}">{{mineCount > 99 ? '99+' : mineCount}}</text>
+      <text>我的工单<text wx:if="{{mineCount}}" class="scope-count"> · {{mineCount}}</text></text>
     </view>
   </view>
 
-  <scroll-view class="status-chips" scroll-x enhanced show-scrollbar="{{false}}" wx:if="{{showStatusChips}}">
+  <scroll-view class="status-chips" scroll-x enhanced show-scrollbar="{{false}}" wx:if="{{showStatusChips && !isViewer}}">
     <view class="status-chips-inner">
       <view
         class="chip {{statusFilter===item.key?'active':''}}"
@@ -45,15 +45,17 @@
     </view>
   </scroll-view>
 
-  <view class="card" wx:for="{{filtered}}" wx:key="id" bindtap="openDetail" data-id="{{item.id}}">
-    <view class="flex-between">
-      <text class="wo-title">{{item.title}}</text>
+  <view class="card wo-card" wx:for="{{filtered}}" wx:key="id" bindtap="openDetail" data-id="{{item.id}}">
+    <view class="wo-head flex-between">
+      <text class="wo-title">{{item.displayTitle}}</text>
       <text class="tag tag-primary">{{item.statusLabel}}</text>
     </view>
-    <view class="muted">工单号 {{item.id}}</view>
-    <view class="muted">地点 {{item.locationLabel}}</view>
-    <view class="muted">优先级 {{item.priorityLabel}} · {{item.assigneeLabel}} · {{item.createdLabel}}</view>
-    <view class="wo-desc">{{item.description}}</view>
+    <view class="wo-meta">
+      <text class="wo-meta-line">工单号 {{item.id}}</text>
+      <text class="wo-meta-line">地点 {{item.locationLabel}}</text>
+      <text class="wo-meta-line">优先级 {{item.priorityLabel}} · {{item.assigneeLabel}} · {{item.createdLabel}}</text>
+    </view>
+    <view class="wo-desc" wx:if="{{item.showDescription}}">{{item.displayDescription}}</view>
     <view class="wo-actions" wx:if="{{!isViewer}}" catchtap="stop">
       <button wx:if="{{item.canClaim}}" size="mini" type="warn" loading="{{claimingId===item.id}}" catchtap="claim" data-id="{{item.id}}">接单</button>
       <button wx:if="{{item.canSubmitReview}}" size="mini" type="primary" catchtap="openResolve" data-id="{{item.id}}">提交复核</button>
@@ -65,33 +67,39 @@
   <view class="modal-mask" wx:if="{{showDetail}}" bindtap="closeDetail">
     <view class="modal-panel detail-panel" catchtap="">
       <view class="card-title">工单详情</view>
-      <view class="detail-row"><text class="muted">工单号</text><text>{{detail.id}}</text></view>
-      <view class="detail-row"><text class="muted">标题</text><text>{{detail.title}}</text></view>
-      <view class="detail-row"><text class="muted">描述</text><text class="detail-desc-inline">{{detail.description}}</text></view>
-      <view class="detail-row"><text class="muted">优先级</text><text>{{detail.priorityLabel}}</text></view>
-      <view class="detail-row"><text class="muted">状态</text><text>{{detail.statusLabel}}</text></view>
-      <view class="detail-row"><text class="muted">创建人</text><text>{{detail.createdByName || '-'}}</text></view>
-      <view class="detail-row"><text class="muted">创建时间</text><text>{{detail.createdLabel}}</text></view>
-      <view class="detail-row"><text class="muted">处理人</text><text>{{detail.assigneeLabel || detail.assigneeName || '待接单'}}</text></view>
-      <view class="detail-row" wx:if="{{detail.autoConverted}}"><text class="muted">来源</text><text>告警自动转工单</text></view>
+      <view class="detail-row"><text class="muted">工单号</text><text class="detail-value detail-value-strong">{{detail.id}}</text></view>
+      <view class="detail-row"><text class="muted">标题</text><text class="detail-value">{{detail.displayTitle || detail.title}}</text></view>
+      <view class="detail-row" wx:if="{{detail.showDescription}}"><text class="muted">描述</text><text class="detail-value">{{detail.displayDescription || detail.description}}</text></view>
+      <view class="detail-row"><text class="muted">优先级</text><text class="detail-value detail-value-strong">{{detail.priorityLabel}}</text></view>
+      <view class="detail-row"><text class="muted">状态</text><text class="detail-value detail-value-strong">{{detail.statusLabel}}</text></view>
+      <view class="detail-row"><text class="muted">创建人</text><text class="detail-value detail-value-strong">{{detail.createdByName || '-'}}</text></view>
+      <view class="detail-row"><text class="muted">创建时间</text><text class="detail-value detail-value-strong">{{detail.createdLabel}}</text></view>
+      <view class="detail-row"><text class="muted">处理人</text><text class="detail-value detail-value-strong">{{detail.assigneeLabel}}</text></view>
+      <view class="detail-row" wx:if="{{detail.autoConverted}}"><text class="muted">来源</text><text class="detail-value detail-value-strong">告警自动转工单</text></view>
 
       <view class="section-title">具体地点</view>
-      <view class="detail-row"><text class="muted">站点</text><text>{{detail.locationSite}}</text></view>
-      <view class="detail-row"><text class="muted">区域/路线</text><text>{{detail.locationArea}}</text></view>
-      <view class="detail-row"><text class="muted">检查点</text><text>{{detail.locationCheckpoint}}</text></view>
-      <view class="detail-row"><text class="muted">地址</text><text>{{detail.locationAddress}}</text></view>
+      <block wx:if="{{detail.showLocationDetail}}">
+        <view class="detail-row"><text class="muted">站点</text><text class="detail-value detail-value-strong">{{detail.locationSite}}</text></view>
+        <view class="detail-row"><text class="muted">区域/路线</text><text class="detail-value detail-value-strong">{{detail.locationArea}}</text></view>
+        <view class="detail-row"><text class="muted">检查点</text><text class="detail-value detail-value-strong">{{detail.locationCheckpoint}}</text></view>
+        <view class="detail-row"><text class="muted">地址</text><text class="detail-value detail-value-strong">{{detail.locationAddress}}</text></view>
+      </block>
+      <view class="detail-row" wx:else>
+        <text class="muted">具体地点</text>
+        <text class="detail-value">{{detail.locationSummary}}</text>
+      </view>
 
       <block wx:if="{{detail.resolutionForm}}">
         <view class="section-title">现场处理记录</view>
-        <view class="detail-row"><text class="muted">故障类型</text><text>{{detail.resolutionForm.faultType}}</text></view>
-        <view class="detail-row"><text class="muted">处理方式</text><text>{{detail.resolutionForm.handlingMethod}}</text></view>
-        <view class="detail-row"><text class="muted">更换部件</text><text>{{detail.resolutionForm.replacedParts || '-'}}</text></view>
-        <view class="detail-row"><text class="muted">试验结果</text><text class="detail-desc-inline">{{detail.resolutionForm.testResult}}</text></view>
-        <view class="detail-row"><text class="muted">处理结论</text><text>{{detail.resolutionConclusionLabel || '-'}}</text></view>
-        <view class="detail-row"><text class="muted">补充说明</text><text class="detail-desc-inline">{{detail.resolutionForm.remarks || '-'}}</text></view>
+        <view class="detail-row"><text class="muted">故障类型</text><text class="detail-value detail-value-strong">{{detail.resolutionForm.faultType}}</text></view>
+        <view class="detail-row"><text class="muted">处理方式</text><text class="detail-value detail-value-strong">{{detail.resolutionForm.handlingMethod}}</text></view>
+        <view class="detail-row"><text class="muted">更换部件</text><text class="detail-value detail-value-strong">{{detail.resolutionForm.replacedParts || '-'}}</text></view>
+        <view class="detail-row"><text class="muted">试验结果</text><text class="detail-value">{{detail.resolutionForm.testResult}}</text></view>
+        <view class="detail-row"><text class="muted">处理结论</text><text class="detail-value detail-value-strong">{{detail.resolutionConclusionLabel || '-'}}</text></view>
+        <view class="detail-row"><text class="muted">补充说明</text><text class="detail-value">{{detail.resolutionForm.remarks || '-'}}</text></view>
         <view class="detail-row" wx:if="{{detail.resolutionForm.photos && detail.resolutionForm.photos.length}}">
           <text class="muted">现场照片</text>
-          <text>{{detail.resolutionForm.photos.length}} 张</text>
+          <text class="detail-value detail-value-strong">{{detail.resolutionForm.photos.length}} 张</text>
         </view>
         <view class="photo-grid" wx:if="{{detail.resolutionForm.photoSrcs && detail.resolutionForm.photoSrcs.length}}">
           <image
@@ -104,73 +112,78 @@
             data-index="{{index}}"
           />
         </view>
-        <view class="detail-row"><text class="muted">提交人</text><text>{{detail.resolutionSubmittedLabel}}</text></view>
+        <view class="detail-row"><text class="muted">提交人</text><text class="detail-value detail-value-strong">{{detail.resolutionSubmittedLabel}}</text></view>
       </block>
 
       <block wx:if="{{detail.reviewForm}}">
         <view class="section-title">管理员复核</view>
         <view class="detail-row"><text class="muted">复核结果</text><text class="tag {{detail.reviewForm.result==='PASS'?'tag-success':'tag-danger'}}">{{detail.reviewResultLabel}}</text></view>
-        <view class="detail-row"><text class="muted">复核意见</text><text class="detail-desc-inline">{{detail.reviewForm.comment}}</text></view>
-        <view class="detail-row"><text class="muted">复核人</text><text>{{detail.reviewSubmittedLabel}}</text></view>
+        <view class="detail-row"><text class="muted">复核意见</text><text class="detail-value">{{detail.reviewForm.comment}}</text></view>
+        <view class="detail-row"><text class="muted">复核人</text><text class="detail-value detail-value-strong">{{detail.reviewSubmittedLabel}}</text></view>
       </block>
 
-      <button size="mini" bindtap="closeDetail">关闭</button>
+      <view class="detail-actions">
+        <text wx:if="{{isViewer}}" class="muted read-only-hint">只读查看，不可操作</text>
+        <button size="mini" bindtap="closeDetail">关闭</button>
+      </view>
     </view>
   </view>
 
-  <view class="modal-mask" wx:if="{{showResolve}}" bindtap="closeResolve">
-    <view class="modal-panel form-panel" catchtap="">
-      <view class="card-title">提交现场处理结果</view>
-      <view class="form-item required">
-        <text class="form-label">故障类型</text>
-        <picker mode="selector" range="{{faultTypeOptions}}" value="{{resolveForm.faultTypeIndex}}" bindchange="onFaultTypeChange">
-          <view class="form-picker">{{resolveForm.faultType || '请选择故障类型'}}</view>
-        </picker>
-      </view>
-      <view class="form-item required">
-        <text class="form-label">处理方式</text>
-        <picker mode="selector" range="{{handlingMethodOptions}}" value="{{resolveForm.handlingMethodIndex}}" bindchange="onHandlingMethodChange">
-          <view class="form-picker">{{resolveForm.handlingMethod || '请选择处理方式'}}</view>
-        </picker>
-      </view>
-      <view class="form-item">
-        <text class="form-label">更换部件</text>
-        <input class="form-input" placeholder="如有更换请填写部件名称/型号" value="{{resolveForm.replacedParts}}" data-field="replacedParts" bindinput="onResolveFieldInput" />
-      </view>
-      <view class="form-item required">
-        <text class="form-label">试验结果</text>
-        <textarea class="form-textarea" placeholder="如：复测正常、绝缘合格等" value="{{resolveForm.testResult}}" data-field="testResult" bindinput="onResolveFieldInput" />
-      </view>
-      <view class="form-item required">
-        <text class="form-label">处理结论</text>
-        <picker mode="selector" range="{{conclusionOptions}}" value="{{resolveForm.conclusionIndex}}" bindchange="onConclusionChange">
-          <view class="form-picker">{{conclusionOptions[resolveForm.conclusionIndex] || '请选择处理结论'}}</view>
-        </picker>
-      </view>
-      <view class="form-item {{needsFollowUpPlan ? 'required' : ''}}">
-        <text class="form-label">补充说明</text>
-        <textarea class="form-textarea" placeholder="{{needsFollowUpPlan ? '部分消缺/未消缺时必须填写遗留风险与后续计划' : '其他现场情况'}}" value="{{resolveForm.remarks}}" data-field="remarks" bindinput="onResolveFieldInput" />
-      </view>
-      <view class="form-item">
-        <text class="form-label">现场照片</text>
-        <text class="photo-hint">建议拍摄故障点、处理前后对比，最多 3 张</text>
-        <view class="photo-grid">
-          <view class="photo-item" wx:for="{{resolveForm.photoItems}}" wx:key="localPath">
-            <image class="photo-thumb" src="{{item.localPath}}" mode="aspectFill" bindtap="previewResolvePhoto" data-index="{{index}}" />
-            <text class="photo-remove" catchtap="removePhoto" data-index="{{index}}">×</text>
-          </view>
-          <view class="photo-add" wx:if="{{resolveForm.photoItems.length < 3}}" bindtap="choosePhotos">+</view>
+  <view class="modal-mask" wx:if="{{showResolve}}">
+    <view class="modal-panel form-panel resolve-panel" catchtap="stop">
+      <view class="card-title resolve-title">提交现场处理结果</view>
+      <scroll-view class="resolve-scroll" scroll-y>
+        <view class="form-item required">
+          <text class="form-label">故障类型</text>
+          <picker mode="selector" range="{{faultTypeOptions}}" value="{{resolveForm.faultTypeIndex}}" bindchange="onFaultTypeChange">
+            <view class="form-picker">{{resolveForm.faultType || '请选择故障类型'}}</view>
+          </picker>
         </view>
-      </view>
-      <view class="form-actions">
+        <view class="form-item required">
+          <text class="form-label">处理方式</text>
+          <picker mode="selector" range="{{handlingMethodOptions}}" value="{{resolveForm.handlingMethodIndex}}" bindchange="onHandlingMethodChange">
+            <view class="form-picker">{{resolveForm.handlingMethod || '请选择处理方式'}}</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">更换部件</text>
+          <input class="form-input" placeholder="部件名称/型号（选填）" placeholder-class="form-placeholder" value="{{resolveForm.replacedParts}}" data-field="replacedParts" bindinput="onResolveFieldInput" />
+        </view>
+        <view class="form-item required">
+          <text class="form-label">试验结果</text>
+          <textarea class="form-textarea" placeholder="如：复测正常、绝缘合格等（至少 4 字）" placeholder-class="form-placeholder" value="{{resolveForm.testResult}}" data-field="testResult" bindinput="onResolveFieldInput" />
+        </view>
+        <view class="form-item required">
+          <text class="form-label">处理结论</text>
+          <picker mode="selector" range="{{conclusionOptions}}" value="{{resolveForm.conclusionIndex}}" bindchange="onConclusionChange">
+            <view class="form-picker">{{conclusionOptions[resolveForm.conclusionIndex] || '请选择处理结论'}}</view>
+          </picker>
+        </view>
+        <view class="form-item {{needsFollowUpPlan ? 'required' : ''}}">
+          <text class="form-label">补充说明</text>
+          <textarea class="form-textarea" placeholder="{{needsFollowUpPlan ? '部分消缺/未消缺时必须填写遗留风险与后续计划' : '其他现场情况'}}" placeholder-class="form-placeholder" value="{{resolveForm.remarks}}" data-field="remarks" bindinput="onResolveFieldInput" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">现场照片</text>
+          <text class="photo-hint">建议拍摄故障点、处理前后对比，最多 3 张</text>
+          <view class="photo-grid">
+            <view class="photo-item" wx:for="{{resolveForm.photoItems}}" wx:key="localPath">
+              <image class="photo-thumb" src="{{item.localPath}}" mode="aspectFill" bindtap="previewResolvePhoto" data-index="{{index}}" />
+              <text class="photo-remove" catchtap="removePhoto" data-index="{{index}}">×</text>
+            </view>
+            <view class="photo-add" wx:if="{{resolveForm.photoItems.length < 3}}" bindtap="choosePhotos">+</view>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="form-actions resolve-actions">
         <button size="mini" bindtap="closeResolve">取消</button>
         <button size="mini" type="primary" loading="{{submittingResolve}}" disabled="{{submittingResolve}}" bindtap="submitResolve">提交复核</button>
       </view>
     </view>
   </view>
 
-  <view class="modal-mask" wx:if="{{showReview}}" bindtap="closeReview">
-    <view class="modal-panel form-panel" catchtap="">
+  <view class="modal-mask" wx:if="{{showReview}}">
+    <view class="modal-panel form-panel" catchtap="stop">
       <view class="card-title">管理员复核确认</view>
       <view class="form-item required">
         <text class="form-label">复核结果</text>
@@ -181,7 +194,7 @@
       </view>
       <view class="form-item required">
         <text class="form-label">复核意见</text>
-        <textarea class="form-textarea" placeholder="请填写复核结论与依据" value="{{reviewForm.comment}}" bindinput="onReviewCommentInput" />
+        <textarea class="form-textarea" placeholder="请填写复核结论与依据" placeholder-class="form-placeholder" value="{{reviewForm.comment}}" bindinput="onReviewCommentInput" />
       </view>
       <view class="form-actions">
         <button size="mini" bindtap="closeReview">取消</button>

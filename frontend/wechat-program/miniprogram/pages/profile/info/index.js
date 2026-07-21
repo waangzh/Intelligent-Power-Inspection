@@ -1,8 +1,9 @@
 const api = require('../../../services/index')
 const { profileMenuItems } = require('../../../config/menu')
-const { syncTabBar, openPage } = require('../../../utils/tab-page')
+const { syncTabBar, openPage, refreshTabBarBadges } = require('../../../utils/tab-page')
 const { ROLE_LABELS } = require('../../../utils/constants')
 const { hasPermission } = require('../../../utils/permission')
+const { formatDateTimeShort } = require('../../../utils/date-time')
 
 const AVATAR_MAX_SIZE = 2 * 1024 * 1024
 
@@ -22,18 +23,23 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/profile/info/index')) return
     syncTabBar(this)
-    const user = app.globalData.user
+    const { resolveSession } = require('../../../utils/session-user')
+    const { user, role } = resolveSession()
     const permissions = app.globalData.permissions
     this.setData({
       user,
-      roleLabel: ROLE_LABELS[user.role],
+      roleLabel: ROLE_LABELS[role] || role,
       form: { displayName: user.displayName || '', phone: user.phone || '', bio: user.bio || '' },
       avatarPreview: user.avatarUrl || '',
-      createdLabel: user.createdAt ? user.createdAt.slice(0, 16).replace('T', ' ') : '',
+      createdLabel: formatDateTimeShort(user.createdAt),
       unreadNotifications: app.globalData.unreadNotifications,
       profileMenu: profileMenuItems.filter((item) => !item.permission || hasPermission(permissions, item.permission)),
     })
-    app.refreshBadges()
+    if (user?.role === 'DISPATCHER' || user?.role === 'ADMIN') {
+      refreshTabBarBadges(this, { dismissOnShow: true })
+    } else {
+      refreshTabBarBadges(this)
+    }
   },
 
   toggleEdit() {

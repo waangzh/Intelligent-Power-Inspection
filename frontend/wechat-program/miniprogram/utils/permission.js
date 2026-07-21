@@ -3,6 +3,11 @@ function hasPermission(permissions, permission) {
   return permissions.includes(permission)
 }
 
+function canViewWorkOrders(role, permissions) {
+  return hasPermission(permissions, 'workorder:view')
+    || String(role || '').trim().toUpperCase() === 'VIEWER'
+}
+
 function canAccessByRole(role, allowedRoles) {
   if (!allowedRoles || !allowedRoles.length) return true
   return !!role && allowedRoles.includes(role)
@@ -27,6 +32,26 @@ function canCancelTask(permissions) {
   return hasPermission(permissions, 'task:control') || hasPermission(permissions, 'task:estop')
 }
 
+function canEstopTask(permissions) {
+  return hasPermission(permissions, 'task:estop')
+}
+
+const TERMINAL_TASK_STATUSES = ['COMPLETED', 'CANCELLED', 'ESTOPPED']
+const ESTOP_TASK_STATUSES = ['RUNNING', 'PAUSED', 'DISPATCHED', 'MANUAL_TAKEOVER', 'STARTING']
+const CANCEL_TASK_STATUSES = ['CREATED', ...ESTOP_TASK_STATUSES]
+
+function canShowTaskEstop(task, permissions) {
+  if (!canEstopTask(permissions)) return false
+  const status = task?.status
+  return !!status && ESTOP_TASK_STATUSES.includes(status)
+}
+
+function canShowTaskCancel(task, permissions) {
+  if (!hasPermission(permissions, 'task:control')) return false
+  const status = task?.status
+  return !!status && CANCEL_TASK_STATUSES.includes(status)
+}
+
 function isEmergencyCancel(permissions) {
   return hasPermission(permissions, 'task:estop') && !hasPermission(permissions, 'task:control')
 }
@@ -37,11 +62,15 @@ function cancelTaskLabel(permissions) {
 
 module.exports = {
   hasPermission,
+  canViewWorkOrders,
   canAccessByRole,
   canAccess,
   canControlTask,
   canTakeoverTask,
   canCancelTask,
+  canEstopTask,
+  canShowTaskEstop,
+  canShowTaskCancel,
   isEmergencyCancel,
   cancelTaskLabel,
 }

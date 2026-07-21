@@ -1,5 +1,6 @@
 const api = require('../../../services/index')
 const { ROLE_LABELS } = require('../../../utils/constants')
+const { formatDateTime } = require('../../../utils/date-time')
 
 Page({
   data: {
@@ -16,7 +17,7 @@ Page({
     this.setData({
       username: user.username,
       roleLabel: ROLE_LABELS[user.role],
-      updatedLabel: updated ? updated.slice(0, 19).replace('T', ' ') : '-',
+      updatedLabel: formatDateTime(updated),
     })
   },
 

@@ -9,12 +9,17 @@ Component({
   observers: {
     data(d) {
       const arr = d || []
-      const max = Math.max(...arr.map((x) => x.value), 1)
+      const values = arr.map((x) => Number(x.value) || 0)
+      const max = Math.max(...values, 0)
       this.setData({
-        normalized: arr.map((x) => ({
-          ...x,
-          pct: Math.max(8, Math.round((x.value / max) * 100)),
-        })),
+        normalized: arr.map((x, i) => {
+          const value = values[i]
+          let pct = 0
+          if (value > 0 && max > 0) {
+            pct = Math.max(8, Math.round((value / max) * 100))
+          }
+          return { ...x, value, pct }
+        }),
       })
     },
   },

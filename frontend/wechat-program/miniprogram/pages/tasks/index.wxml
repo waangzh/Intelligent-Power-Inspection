@@ -46,7 +46,8 @@
       <button wx:if="{{canControl && activeTask.status==='RUNNING'}}" size="mini" catchtap="pause" data-id="{{activeTask.id}}">暂停</button>
       <button wx:if="{{canControl && activeTask.status==='PAUSED'}}" size="mini" type="primary" catchtap="resume" data-id="{{activeTask.id}}">恢复</button>
       <button wx:if="{{canTakeover && activeTask.status==='RUNNING'}}" size="mini" catchtap="takeover" data-id="{{activeTask.id}}">接管</button>
-      <button wx:if="{{canCancel && activeTask.status!=='COMPLETED' && activeTask.status!=='CANCELLED'}}" size="mini" catchtap="cancel" data-id="{{activeTask.id}}">{{cancelLabel}}</button>
+      <button wx:if="{{activeTask.showEstop}}" size="mini" type="warn" catchtap="emergencyStop" data-id="{{activeTask.id}}">急停</button>
+      <button wx:if="{{activeTask.showCancel}}" size="mini" catchtap="cancel" data-id="{{activeTask.id}}">取消</button>
       <button size="mini" catchtap="goDetail" data-id="{{activeTask.id}}">详情</button>
     </view>
   </view>
@@ -67,7 +68,8 @@
         <button wx:if="{{canControl && item.status==='RUNNING'}}" size="mini" catchtap="pause" data-id="{{item.id}}">暂停</button>
         <button wx:if="{{canControl && item.status==='PAUSED'}}" size="mini" type="primary" catchtap="resume" data-id="{{item.id}}">恢复</button>
         <button wx:if="{{canTakeover && item.status==='RUNNING'}}" size="mini" catchtap="takeover" data-id="{{item.id}}">接管</button>
-        <button wx:if="{{canCancel && item.status!=='COMPLETED' && item.status!=='CANCELLED'}}" size="mini" catchtap="cancel" data-id="{{item.id}}">{{cancelLabel}}</button>
+        <button wx:if="{{item.showEstop}}" size="mini" type="warn" catchtap="emergencyStop" data-id="{{item.id}}">急停</button>
+        <button wx:if="{{item.showCancel}}" size="mini" catchtap="cancel" data-id="{{item.id}}">取消</button>
       </view>
     </view>
     <view wx:if="{{!tasks.length}}" class="list-empty-hint">暂无任务</view>

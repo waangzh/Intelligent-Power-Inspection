@@ -1,5 +1,5 @@
 const api = require('../../services/index')
-const { hasPermission } = require('../../utils/permission')
+const { hasPermission, canViewWorkOrders } = require('../../utils/permission')
 const workOrderPerm = require('../../utils/work-order-permission')
 const { WORK_ORDER_STATUS_LABELS, WORK_ORDER_PRIORITY_LABELS, ALARM_SEVERITY_LABELS, DETECTION_LABELS } = require('../../utils/constants')
 const {
@@ -11,8 +11,11 @@ const {
   enrichWorkOrder,
   isWorkOrderUnassigned,
   validateResolveFormForBackend,
+  buildLocationContext,
 } = require('../../utils/work-order')
-const { syncTabBar } = require('../../utils/tab-page')
+const { syncTabBar, refreshTabBarBadges } = require('../../utils/tab-page')
+const { formatBusinessMessage } = require('../../utils/display-text')
+const { formatDateTimeShort } = require('../../utils/date-time')
 const { resolvePhotoSrc } = require('../../utils/work-order-photo')
 
 function withPhotoPreview(order) {
@@ -46,6 +49,7 @@ const STATUS_EMPTY_HINTS = {
   PENDING: '暂无待接单工单',
   PROCESSING: '暂无处理中工单',
   REVIEW: '暂无待复核工单',
+  CLOSED: '暂无已关闭工单',
 }
 
 function normalizeStatusFilter(value) {
@@ -64,6 +68,7 @@ Page({
     poolCount: 0,
     mineCount: 0,
     emptyHint: '暂无工单',
+    loadError: '',
     isDispatcher: false,
     isViewer: false,
     pageTitle: '工单管理',
@@ -92,13 +97,17 @@ Page({
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/workorders/index')) return
-    if (!app.requirePermission('workorder:view')) return
-    syncTabBar(this)
-    const user = app.globalData.user
+    const { resolveSession } = require('../../utils/session-user')
+    const { user, role } = resolveSession()
     const perms = app.globalData.permissions
-    const isAdmin = user.role === 'ADMIN'
-    const isDispatcher = user.role === 'DISPATCHER'
-    const isViewer = user.role === 'VIEWER'
+    if (!canViewWorkOrders(role, perms)) {
+      wx.redirectTo({ url: '/pages/forbidden/index' })
+      return
+    }
+    syncTabBar(this)
+    const isAdmin = role === 'ADMIN'
+    const isDispatcher = role === 'DISPATCHER'
+    const isViewer = role === 'VIEWER'
     const pageTitle = isViewer ? '工单' : '工单管理'
     wx.setNavigationBarTitle({ title: pageTitle })
     this.setData({
@@ -106,72 +115,103 @@ Page({
       isDispatcher,
       isViewer,
       pageTitle,
+      ...(isDispatcher && !this.data.isDispatcher ? { scopeFilter: 'POOL', statusFilter: 'ALL' } : {}),
       canCreate: hasPermission(perms, 'workorder:create'),
       canProcess: hasPermission(perms, 'workorder:process'),
       canReview: hasPermission(perms, 'workorder:review'),
       pageDesc: isViewer
-        ? '查看工单处置记录（只读）'
+        ? '工单记录（只读）'
         : isAdmin
           ? '告警转工单与复核'
           : '接单大厅抢单、现场处置与提交复核',
     })
-    this.load()
-    app.refreshBadges()
+    const modalOpen = this.data.showResolve || this.data.showReview || this.data.showDetail
+    if (!modalOpen) {
+      this.load()
+    }
+    refreshTabBarBadges(this)
   },
 
   async load() {
-    const user = this.data.user || getApp().globalData.user
-    const perms = getApp().globalData.permissions
-    const canCreate = workOrderPerm.canCreateWorkOrder(user, perms)
-    let pendingAlarms = []
-    let orders = []
+    this.setData({ loadError: '' })
+    try {
+      const { user, role } = require('../../utils/session-user').resolveSession()
+      const userRef = { ...(user || this.data.user || getApp().globalData.user || {}), role }
+      const perms = getApp().globalData.permissions
+      const canCreate = workOrderPerm.canCreateWorkOrder(userRef, perms)
+      let pendingAlarms = []
+      let orders = []
 
-    if (canCreate) {
-      const snapshot = await api.tryAutoConvertPendingAlarms().catch(() => ({
-        alarms: [],
-        orders: [],
-      }))
-      orders = snapshot.orders || []
-      const linkedAlarmIds = new Set(
-        orders.filter((o) => o.alarmId).map((o) => o.alarmId),
-      )
-      pendingAlarms = (snapshot.alarms || [])
-        .filter((a) => !linkedAlarmIds.has(a.id))
-        .slice(0, 8)
-        .map((a) => ({
-          ...a,
-          severityLabel: ALARM_SEVERITY_LABELS[a.severity],
-          typeLabel: DETECTION_LABELS[a.type] || a.type,
-          sevType: a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info',
-          time: a.createdAt ? a.createdAt.slice(0, 16).replace('T', ' ') : '',
+      const isDispatcherRole = role === 'DISPATCHER'
+      const isViewerRole = role === 'VIEWER'
+      const [sites, allAlarms] = await Promise.all([
+        api.getSites().catch(() => []),
+        isDispatcherRole ? Promise.resolve([]) : api.getAlarms().catch(() => []),
+      ])
+      const locationContext = buildLocationContext(allAlarms, sites)
+
+      if (canCreate) {
+        const snapshot = await api.tryAutoConvertPendingAlarms().catch(() => ({
+          alarms: [],
+          orders: [],
         }))
-    } else {
-      orders = await api.getWorkOrders()
+        orders = snapshot.orders || []
+        ;(snapshot.alarms || []).forEach((alarm) => {
+          if (alarm?.id) locationContext.alarmsById[alarm.id] = alarm
+        })
+        const linkedAlarmIds = new Set(
+          orders.filter((o) => o.alarmId).map((o) => o.alarmId),
+        )
+        pendingAlarms = (snapshot.alarms || [])
+          .filter((a) => !linkedAlarmIds.has(a.id))
+          .slice(0, 8)
+          .map((a) => ({
+            ...a,
+            message: formatBusinessMessage(a.message),
+            severityLabel: ALARM_SEVERITY_LABELS[a.severity],
+            typeLabel: DETECTION_LABELS[a.type] || a.type,
+            sevType: a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info',
+            time: formatDateTimeShort(a.createdAt),
+          }))
+      } else {
+        orders = await api.getWorkOrders()
+      }
+      orders = workOrderPerm.filterVisibleWorkOrders(orders, userRef)
+      orders = orders.map((o) => {
+        const enriched = enrichWorkOrder({
+          ...o,
+          statusLabel: WORK_ORDER_STATUS_LABELS[o.status],
+          priorityLabel: WORK_ORDER_PRIORITY_LABELS[o.priority],
+        }, locationContext)
+        return withPhotoPreview({
+          ...enriched,
+          showDescription: enriched.showDescription,
+          canClaim: workOrderPerm.canClaimOrder(o, userRef, perms),
+          canSubmitReview: workOrderPerm.canSubmitReview(o, userRef, perms),
+          canConfirmReview: workOrderPerm.canConfirmReview(o, userRef, perms),
+        })
+      })
+      if (role === 'VIEWER') {
+        orders.sort((a, b) => String(b.updatedAt || b.createdAt || '')
+          .localeCompare(String(a.updatedAt || a.createdAt || '')))
+      }
+
+      const isDispatcher = role === 'DISPATCHER'
+      const poolCount = isDispatcher ? orders.filter((o) => isWorkOrderUnassigned(o)).length : 0
+      const mineCount = isDispatcher
+        ? orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, userRef)).length
+        : 0
+
+      this.setData({ orders, poolCount, mineCount, pendingAlarms, isDispatcher, isViewer: isViewerRole, loadError: '' })
+      this.rebuildFilters()
+    } catch (e) {
+      const message = e.message || '加载失败'
+      const loadError = message.includes('无权限')
+        ? '当前后端未开放观察员工单查看权限，请更新并重启后端服务后重新登录'
+        : message
+      this.setData({ loadError, orders: [], filtered: [] })
+      wx.showToast({ title: loadError, icon: 'none', duration: 3000 })
     }
-    orders = workOrderPerm.filterVisibleWorkOrders(orders, user)
-    orders = orders.map((o) => {
-      const enriched = enrichWorkOrder({
-        ...o,
-        statusLabel: WORK_ORDER_STATUS_LABELS[o.status],
-        priorityLabel: WORK_ORDER_PRIORITY_LABELS[o.priority],
-        createdLabel: o.createdAt ? o.createdAt.slice(0, 16).replace('T', ' ') : '',
-      })
-      return withPhotoPreview({
-        ...enriched,
-        canClaim: workOrderPerm.canClaimOrder(o, user, perms),
-        canSubmitReview: workOrderPerm.canSubmitReview(o, user, perms),
-        canConfirmReview: workOrderPerm.canConfirmReview(o, user, perms),
-      })
-    })
-
-    const isDispatcher = user.role === 'DISPATCHER'
-    const poolCount = isDispatcher ? orders.filter((o) => isWorkOrderUnassigned(o)).length : 0
-    const mineCount = isDispatcher
-      ? orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, user)).length
-      : 0
-
-    this.setData({ orders, poolCount, mineCount, pendingAlarms })
-    this.rebuildFilters()
   },
 
   switchScope(e) {
@@ -192,9 +232,20 @@ Page({
   },
 
   rebuildFilters() {
-    const { orders, scopeFilter, user, isDispatcher } = this.data
+    const { orders, scopeFilter, user, isDispatcher, isViewer } = this.data
+    if (isViewer) {
+      this.setData({
+        statusChips: [],
+        showStatusChips: false,
+        emptyHint: '暂无工单记录',
+        statusFilter: 'ALL',
+      })
+      this.applyFilter()
+      return
+    }
+
     const scoped = workOrderPerm.filterByScope(orders, user, isDispatcher ? scopeFilter : 'ALL')
-    const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0 }
+    const counts = { PENDING: 0, PROCESSING: 0, REVIEW: 0, CLOSED: 0 }
     scoped.forEach((o) => {
       if (counts[o.status] !== undefined) counts[o.status]++
     })
@@ -282,6 +333,7 @@ Page({
   },
 
   closeResolve() {
+    if (this._pickerCloseGuardUntil && Date.now() < this._pickerCloseGuardUntil) return
     const { resolvingId, resolveForm } = this.data
     const pending = (resolveForm.photoItems || [])
       .map((item) => item.uploadedUrl)
@@ -293,6 +345,7 @@ Page({
   },
 
   onFaultTypeChange(e) {
+    this._pickerCloseGuardUntil = Date.now() + 400
     const index = Number(e.detail.value)
     this.setData({
       'resolveForm.faultTypeIndex': index,
@@ -301,6 +354,7 @@ Page({
   },
 
   onHandlingMethodChange(e) {
+    this._pickerCloseGuardUntil = Date.now() + 400
     const index = Number(e.detail.value)
     this.setData({
       'resolveForm.handlingMethodIndex': index,
@@ -309,6 +363,7 @@ Page({
   },
 
   onConclusionChange(e) {
+    this._pickerCloseGuardUntil = Date.now() + 400
     const index = Number(e.detail.value)
     const conclusion = REVIEW_CONCLUSION_OPTIONS[index]
     this.setData({
@@ -415,6 +470,10 @@ Page({
     if (submittingResolve) return
     if (!resolveForm.faultType || !resolveForm.handlingMethod || !resolveForm.testResult.trim()) {
       wx.showToast({ title: '请填写故障类型、处理方式、试验结果', icon: 'none' })
+      return
+    }
+    if (resolveForm.testResult.trim().length < 4) {
+      wx.showToast({ title: '试验结果过短，请补充说明', icon: 'none' })
       return
     }
     if (!resolveForm.conclusion) {

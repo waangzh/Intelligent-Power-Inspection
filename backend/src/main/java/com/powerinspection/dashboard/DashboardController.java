@@ -9,7 +9,8 @@ import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,16 +85,19 @@ public class DashboardController {
             "HIGH", count(DataCategory.ALARM, Map.of("severity", "HIGH")),
             "MEDIUM", count(DataCategory.ALARM, Map.of("severity", "MEDIUM")),
             "LOW", count(DataCategory.ALARM, Map.of("severity", "LOW"))));
-    LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    ZoneId zone = ZoneId.of("Asia/Shanghai");
+    LocalDate today = LocalDate.now(zone);
     List<Long> weekly =
         java.util.stream.IntStream.range(0, 7)
             .mapToObj(
                 offset -> {
                   LocalDate day = today.minusDays(6L - offset);
+                  ZonedDateTime start = day.atStartOfDay(zone);
+                  ZonedDateTime end = start.plusDays(1);
                   return dataStore.count(
                       DataCategory.ALARM,
-                      day.atStartOfDay().toInstant(ZoneOffset.UTC).toString(),
-                      day.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).toString(),
+                      start.toInstant().toString(),
+                      end.toInstant().toString(),
                       Map.of());
                 })
             .toList();

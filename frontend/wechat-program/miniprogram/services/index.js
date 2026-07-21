@@ -9,8 +9,9 @@ const { ROUTE_DETECTIONS } = require('../utils/constants')
 const { createEmptyRosRoute } = require('../utils/ros-route')
 const { resolutionSummary, buildReviewFromResolveForm } = require('../utils/work-order')
 const workOrderPerm = require('../utils/work-order-permission')
+const { canViewWorkOrders } = require('../utils/permission')
 const { DEFAULT_POLICY } = require('../utils/alarm-policy')
-const { del, uploadFile } = require('../utils/request')
+const { del, post, uploadFile, markSessionApiBase } = require('../utils/request')
 const { API_PATHS, apiRel } = require('../generated/api-paths')
 
 function taskControlPath(apiPath, id) {
@@ -66,8 +67,10 @@ async function fetchAllPages(listFn, extraParams) {
 // ==================== Auth ====================
 async function login(username, password, remember = true) {
   const data = await openapiClient.auth.login(username, password, remember)
-  wx.setStorageSync('pi_session', data)
-  return data
+  const session = enrichSessionPermissions(data)
+  wx.setStorageSync('pi_session', session)
+  markSessionApiBase()
+  return session
 }
 
 async function register(form) {
@@ -93,17 +96,31 @@ function normalizeSession(session) {
 }
 
 const { permissionsForRole } = require('../generated/permissions')
+const { normalizeRole } = require('../utils/session-user')
 
 function enrichSessionPermissions(session) {
   if (!session?.user?.role) return session
-  const rolePerms = permissionsForRole(session.user.role)
-  if (!rolePerms.length) return session
-  const current = session.permissions || []
-  const merged = [...new Set([...current, ...rolePerms])]
-  if (merged.length === current.length && rolePerms.every((p) => current.includes(p))) {
-    return session
+  const role = normalizeRole(session.user.role)
+  const rolePerms = permissionsForRole(role)
+  const user = { ...session.user, role }
+  const current = Array.isArray(session.permissions) ? session.permissions : []
+
+  // 角色基线 + 服务端权限，且不超出当前角色允许范围（观察员保留 workorder:view 只读）。
+  let permissions
+  if (!rolePerms.length) {
+    permissions = current
+  } else {
+    const allowed = new Set(rolePerms)
+    const fromServer = current.filter((perm) => allowed.has(perm))
+    permissions = [...new Set([...rolePerms, ...fromServer])].filter((perm) => allowed.has(perm))
   }
-  return { ...session, permissions: merged }
+
+  const prevPerms = current.slice().sort().join('|')
+  const nextPerms = permissions.slice().sort().join('|')
+  if (user.role === session.user.role && prevPerms === nextPerms) {
+    return { ...session, user }
+  }
+  return { ...session, user, permissions }
 }
 
 function getSession() {
@@ -111,8 +128,9 @@ function getSession() {
   const session = normalizeSession(raw)
   if (!session) return null
   const enriched = enrichSessionPermissions(session)
-  if (JSON.stringify(enriched.permissions) !== JSON.stringify(session.permissions)) {
+  if (JSON.stringify(enriched) !== JSON.stringify(session)) {
     wx.setStorageSync('pi_session', enriched)
+    markSessionApiBase()
   }
   return enriched
 }
@@ -121,15 +139,16 @@ async function refreshMe() {
   const session = getSession()
   if (!session?.token) return null
   const data = await openapiClient.auth.me()
-  const next = {
+  const next = enrichSessionPermissions({
     ...session,
     user: data.user,
     permissions: data.permissions || [],
     scopes: data.scopes,
     features: data.features,
-  }
-  if (!next.permissions.length) return null
+  })
+  if (!next?.permissions?.length) return null
   wx.setStorageSync('pi_session', next)
+  markSessionApiBase()
   return next
 }
 
@@ -376,16 +395,20 @@ async function tryAutoConvertPendingAlarms() {
 
   const user = session.user
   const perms = sessionPermissions()
-  if (!perms.includes('workorder:view')) {
-    return { alarms: await getAlarms(), orders: [], converted: [] }
+  const canViewOrders = canViewWorkOrders(user.role, perms)
+  const canCreate = workOrderPerm.canCreateWorkOrder(user, perms)
+
+  const alarms = await getAlarms()
+  let orders = []
+  if (canViewOrders) {
+    try {
+      orders = await getWorkOrders()
+    } catch {
+      orders = []
+    }
   }
 
-  let [alarms, orders] = await Promise.all([
-    getAlarms(),
-    getWorkOrders(),
-  ])
-
-  if (!workOrderPerm.canCreateWorkOrder(user, perms)) {
+  if (!canCreate) {
     return { alarms, orders, converted: [] }
   }
 

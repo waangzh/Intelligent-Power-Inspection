@@ -16,7 +16,18 @@ Page({
     if (options.redirect) this.setData({ redirect: decodeURIComponent(options.redirect) })
     if (api.getSession()) {
       this.setData({ entering: true, enterText: '正在进入系统…' })
+      // 自动登录超时则回到登录表单，避免一直卡在「正在进入系统」
+      this._enterTimer = setTimeout(() => {
+        if (this.data.entering && !getApp().globalData.user) {
+          this.setData({ entering: false, loading: false })
+          wx.showToast({ title: '自动登录失败，请手动登录', icon: 'none' })
+        }
+      }, 8000)
     }
+  },
+
+  onUnload() {
+    if (this._enterTimer) clearTimeout(this._enterTimer)
   },
 
   onShow() {
@@ -42,13 +53,17 @@ Page({
     }
     this.setData({ loading: true, entering: true, enterText: '正在登录…' })
     try {
-      const session = await api.login(username, password, remember)
       const app = getApp()
-      app.applySession(session, { reloadPages: false, skipBadges: true })
+      app.clearUser({ redirect: false })
+      const session = await api.login(username, password, remember)
       const url = this.data.redirect || getRoleLandingPath(session.user.role)
-      this.setData({ enterText: '正在进入系统…' })
-      await app.enterMainApp(url)
-      app.refreshBadges()
+      app.applySession(session, {
+        reloadPages: false,
+        skipBadges: true,
+        relaunch: true,
+        landingUrl: url,
+      })
+      await app.refreshBadges()
     } catch (e) {
       this.setData({ entering: false, loading: false })
       wx.showToast({ title: e.message || '登录失败', icon: 'none' })

@@ -2,6 +2,8 @@ const api = require('../../services/index')
 const { mapNotificationLink } = require('../../config/menu')
 const { isTabPage } = require('../../config/tab-bar')
 const { NOTIFICATION_TYPE_LABELS } = require('../../utils/constants')
+const { formatBusinessMessage } = require('../../utils/display-text')
+const { formatDateTimeShort } = require('../../utils/date-time')
 
 const TYPE_OPTIONS = [
   { value: '', label: '全部类型' },
@@ -34,7 +36,8 @@ Page({
       const list = (await api.getNotifications(userId)).map((n) => ({
         ...n,
         typeLabel: NOTIFICATION_TYPE_LABELS[n.type] || n.type,
-        time: n.createdAt ? n.createdAt.slice(0, 16).replace('T', ' ') : '',
+        time: formatDateTimeShort(n.createdAt),
+        content: formatBusinessMessage(n.content),
       }))
       this.setData({ list })
       this.applyFilter()
@@ -111,7 +114,8 @@ Page({
     if (!item.read) await api.markNotificationRead(item.id)
     getApp().refreshBadges()
     if (item.link) {
-      const path = mapNotificationLink(item.link)
+      const role = getApp().globalData.user?.role
+      const path = mapNotificationLink(item.link, role)
       if (isTabPage(path)) wx.switchTab({ url: path.split('?')[0] })
       else wx.navigateTo({ url: path })
     }

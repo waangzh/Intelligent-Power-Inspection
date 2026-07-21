@@ -32,9 +32,10 @@ if (!['none', 'openapi'].includes(mockMode)) {
   throw new Error(`不支持的 MOCK_MODE=${mockMode}，仅允许 none / openapi`)
 }
 
+const remoteBaseUrl = 'http://112.124.49.152:8080/api/v1'
 const defaultBaseUrl = mockMode === 'openapi'
   ? 'http://localhost:4010/api/v1'
-  : 'http://localhost:8080/api/v1'
+  : remoteBaseUrl
 const baseUrl = process.env.API_BASE_URL || defaultBaseUrl
 
 const content = `/** AUTO-GENERATED — 请勿手工编辑。运行: npm run miniprogram:env */

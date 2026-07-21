@@ -5,7 +5,6 @@
   "backgroundColorBottom": "#f5f8fc",
   "usingComponents": {
     "page-header": "/components/page-header/index",
-    "map-view": "/components/map-view/index",
-    "inline-tab-bar": "/components/inline-tab-bar/index"
+    "map-view": "/components/map-view/index"
   }
 }

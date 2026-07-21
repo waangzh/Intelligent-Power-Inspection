@@ -1,5 +1,5 @@
 <view class="container">
-  <page-header title="告警中心" description="管理员/调度员告警处置，可确认并转工单" />
+  <page-header title="告警中心" description="管理员告警处置，可确认并转工单" />
 
   <view class="stat-grid">
     <view class="stat-item"><view class="stat-value">{{stats.unack}}</view><view class="stat-label">未确认</view></view>

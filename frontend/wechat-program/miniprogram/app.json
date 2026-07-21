@@ -3,22 +3,23 @@
     "pages/auth/login/index",
     "pages/dashboard/index",
     "pages/monitor/index",
+    "pages/profile/users/index",
+    "pages/workorders/index",
+    "pages/profile/info/index",
     "pages/alarms/index",
     "pages/alarms/center/index",
     "pages/tasks/index",
-    "pages/profile/info/index",
     "pages/auth/register/index",
     "pages/auth/forgot-password/index",
     "pages/forbidden/index",
-    "pages/workorders/index",
     "pages/notifications/index",
     "pages/tasks/detail/index",
     "pages/profile/avatar/index",
     "pages/profile/security/index",
     "pages/profile/activity/index",
-    "pages/profile/settings/index",
-    "pages/profile/users/index"
+    "pages/profile/settings/index"
   ],
+  "subPackages": [],
   "window": {
     "navigationBarBackgroundColor": "#071e42",
     "navigationBarTitleText": "电力智能巡检",
@@ -42,22 +43,22 @@
         "selectedIconPath": "assets/tabbar/dashboard-active.png"
       },
       {
-        "pagePath": "pages/workorders/index",
-        "text": "工单",
-        "iconPath": "assets/tabbar/workorders.png",
-        "selectedIconPath": "assets/tabbar/workorders-active.png"
-      },
-      {
-        "pagePath": "pages/alarms/index",
-        "text": "告警",
-        "iconPath": "assets/tabbar/alarms.png",
-        "selectedIconPath": "assets/tabbar/alarms-active.png"
+        "pagePath": "pages/monitor/index",
+        "text": "监控",
+        "iconPath": "assets/tabbar/monitor.png",
+        "selectedIconPath": "assets/tabbar/monitor-active.png"
       },
       {
         "pagePath": "pages/profile/users/index",
         "text": "用户",
         "iconPath": "assets/tabbar/users.png",
         "selectedIconPath": "assets/tabbar/users-active.png"
+      },
+      {
+        "pagePath": "pages/workorders/index",
+        "text": "工单",
+        "iconPath": "assets/tabbar/workorders.png",
+        "selectedIconPath": "assets/tabbar/workorders-active.png"
       },
       {
         "pagePath": "pages/profile/info/index",
