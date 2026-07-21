@@ -89,6 +89,27 @@ class DetectionTemplateControllerTests {
   }
 
   @Test
+  void rejectsTypesThatOnlyDifferByWhitespace() throws Exception {
+    String token = login("admin", "Admin@123");
+
+    mockMvc.perform(post("/api/v1/detection-templates")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {
+            "name":"重复检测类型",
+            "scope":"CHECKPOINT",
+            "items":[
+              {"type":"CUSTOM_PERSON","enabled":false,"prompt":""},
+              {"type":" CUSTOM_PERSON ","enabled":false,"prompt":""}
+            ]
+          }
+          """))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("检测类型不能重复：CUSTOM_PERSON"));
+  }
+
+  @Test
   void createsAndEditsTemplateItems() throws Exception {
     String token = login("admin", "Admin@123");
     String created = mockMvc.perform(post("/api/v1/detection-templates")
