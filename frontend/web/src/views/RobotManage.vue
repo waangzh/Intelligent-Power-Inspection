@@ -117,6 +117,52 @@
               </el-descriptions>
             </el-card>
 
+            <el-card shadow="never" class="detail-card capability-card">
+              <template #header>
+                <span class="table-title">本地确认启动策略</span>
+              </template>
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="设备支持">
+                  <el-tag :type="reportedLocalConfirmStart ? 'success' : 'info'" size="small">
+                    {{ reportedLocalConfirmStart ? '已支持本地确认启动' : '未上报支持' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="协议兼容">
+                  <el-tag :type="localConfirmProtocolCompatible ? 'success' : 'danger'" size="small">
+                    {{ localConfirmProtocolCompatible ? '兼容' : '不兼容' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="当前就绪">
+                  <el-tag :type="localConfirmStartReady ? 'success' : 'warning'" size="small">
+                    {{ localConfirmStartReady ? '可接收任务' : '当前不可用' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="管理员审批">
+                  <el-switch
+                    :model-value="localConfirmStartEnabled"
+                    :loading="policySaving"
+                    :disabled="policySwitchDisabled"
+                    inline-prompt
+                    active-text="启用"
+                    inactive-text="停用"
+                    @change="updateLocalConfirmPolicy"
+                  />
+                </el-descriptions-item>
+                <el-descriptions-item label="最终有效能力">
+                  <el-tag :type="effectiveLocalConfirmStart ? 'success' : 'danger'" size="small">
+                    {{ effectiveLocalConfirmStart ? '允许本地确认启动' : '不允许' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="协议版本">{{ heartbeatStatus?.localConfirmProtocolVersion || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="能力上报时间">{{ fmt(heartbeatStatus?.capabilityReportedAt) }}</el-descriptions-item>
+                <el-descriptions-item label="状态说明" :span="2">
+                  <span :class="['capability-reason', { ready: !localConfirmStatusReason }]">
+                    {{ localConfirmStatusReason || '设备、协议、审批和当前 readiness 均满足要求' }}
+                  </span>
+                </el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+
             <el-card shadow="never" class="detail-card location-card">
               <template #header>
                 <div class="location-head">
@@ -240,6 +286,7 @@ const bindingSiteId = ref('')
 const heartbeatStatus = ref<RobotHeartbeatStatus>()
 const heartbeatLoading = ref(false)
 const heartbeatLoadFailed = ref(false)
+const policySaving = ref(false)
 const mapRef = ref<InstanceType<typeof Map2D> | null>(null)
 const followRobot = ref(false)
 const trackLoading = ref(false)
@@ -312,6 +359,30 @@ const heartbeatDotClass = computed(() => {
   if (heartbeatLoadFailed.value) return 'bad'
   return 'idle'
 })
+
+const reportedLocalConfirmStart = computed(() => heartbeatStatus.value?.reportedSupportsLocalConfirmStart ?? false)
+const localConfirmProtocolCompatible = computed(() => heartbeatStatus.value?.localConfirmProtocolCompatible ?? false)
+const localConfirmStartReady = computed(() => heartbeatStatus.value?.localConfirmStartReady ?? false)
+const localConfirmStartEnabled = computed(() => robot.value?.localConfirmStartEnabled ?? false)
+const effectiveLocalConfirmStart = computed(() => robot.value?.supportsLocalConfirmStart ?? false)
+const policyEnableBlockedReason = computed(() => {
+  if (!heartbeatStatus.value?.lastHeartbeatAt) return '机器人尚未完成首次有效 heartbeat，不能启用审批'
+  if (!reportedLocalConfirmStart.value) return '设备未上报支持本地确认启动，不能启用审批'
+  if (!localConfirmProtocolCompatible.value) return `协议版本 ${heartbeatStatus.value.localConfirmProtocolVersion || '-'} 不兼容，平台当前支持版本 1`
+  return ''
+})
+const localConfirmStatusReason = computed(() => {
+  if (policyEnableBlockedReason.value) return policyEnableBlockedReason.value
+  if (!localConfirmStartEnabled.value) return '管理员尚未审批启用本地确认启动'
+  if (!localConfirmStartReady.value) {
+    return heartbeatStatus.value?.localConfirmStartError
+      ? `机器人当前未就绪：${heartbeatStatus.value.localConfirmStartError}`
+      : '机器人当前未就绪'
+  }
+  return ''
+})
+const policySwitchDisabled = computed(() => policySaving.value
+  || (!localConfirmStartEnabled.value && !!policyEnableBlockedReason.value))
 
 const nav2DotClass = computed(() => (robot.value?.telemetry?.nav2Status === 'running' ? 'ok' : 'warn'))
 
@@ -443,6 +514,37 @@ async function saveSiteBinding() {
     ElMessage.error(error instanceof Error && error.message ? error.message : '重新绑定失败，请稍后重试')
   } finally {
     bindingSaving.value = false
+  }
+}
+
+async function updateLocalConfirmPolicy(value: string | number | boolean) {
+  const currentRobot = robot.value
+  if (!currentRobot) return
+  const enabled = Boolean(value)
+  if (enabled && policyEnableBlockedReason.value) {
+    ElMessage.warning(policyEnableBlockedReason.value)
+    return
+  }
+  if (enabled) {
+    try {
+      await ElMessageBox.confirm(
+        `确认允许“${currentRobot.name}”使用机器人本地确认启动吗？`,
+        '启用本地确认启动',
+        { type: 'warning', confirmButtonText: '确认启用', cancelButtonText: '取消' },
+      )
+    } catch {
+      return
+    }
+  }
+  policySaving.value = true
+  try {
+    const updated = await resourcesApi.updateRobotLocalConfirmStartPolicy(currentRobot.id, enabled)
+    robotStore.applyRemoteRobot(updated)
+    ElMessage.success(enabled ? '已启用本地确认启动审批' : '已关闭本地确认启动审批')
+  } catch (error) {
+    ElMessage.error(error instanceof Error && error.message ? error.message : '审批策略更新失败')
+  } finally {
+    policySaving.value = false
   }
 }
 

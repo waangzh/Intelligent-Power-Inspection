@@ -23,6 +23,12 @@ public class RobotHeartbeatStatusEntity {
   @Column(name = "robot_state", length = 64) private String robotState;
   @Column(name = "accepted_event_sequence", nullable = false) private long acceptedEventSequence;
   @Column(name = "diagnostic_summary", length = 1000) private String diagnosticSummary;
+  @Column(name = "reported_remote_immediate_start", nullable = false) private boolean reportedRemoteImmediateStart = true;
+  @Column(name = "reported_local_confirm_start", nullable = false) private boolean reportedLocalConfirmStart;
+  @Column(name = "local_confirm_protocol_version", length = 32) private String localConfirmProtocolVersion;
+  @Column(name = "local_confirm_start_ready", nullable = false) private boolean localConfirmStartReady;
+  @Column(name = "local_confirm_start_error", length = 128) private String localConfirmStartError;
+  @Column(name = "capability_reported_at") private Instant capabilityReportedAt;
 
   public String getRobotId() { return robotId; }
   public void setRobotId(String robotId) { this.robotId = robotId; }
@@ -52,4 +58,16 @@ public class RobotHeartbeatStatusEntity {
   public void setAcceptedEventSequence(long acceptedEventSequence) { this.acceptedEventSequence = acceptedEventSequence; }
   public String getDiagnosticSummary() { return diagnosticSummary; }
   public void setDiagnosticSummary(String diagnosticSummary) { this.diagnosticSummary = diagnosticSummary; }
+  public boolean isReportedRemoteImmediateStart() { return reportedRemoteImmediateStart; }
+  public void setReportedRemoteImmediateStart(boolean value) { reportedRemoteImmediateStart = value; }
+  public boolean isReportedLocalConfirmStart() { return reportedLocalConfirmStart; }
+  public void setReportedLocalConfirmStart(boolean value) { reportedLocalConfirmStart = value; }
+  public String getLocalConfirmProtocolVersion() { return localConfirmProtocolVersion; }
+  public void setLocalConfirmProtocolVersion(String value) { localConfirmProtocolVersion = value; }
+  public boolean isLocalConfirmStartReady() { return localConfirmStartReady; }
+  public void setLocalConfirmStartReady(boolean value) { localConfirmStartReady = value; }
+  public String getLocalConfirmStartError() { return localConfirmStartError; }
+  public void setLocalConfirmStartError(String value) { localConfirmStartError = value; }
+  public Instant getCapabilityReportedAt() { return capabilityReportedAt; }
+  public void setCapabilityReportedAt(Instant value) { capabilityReportedAt = value; }
 }

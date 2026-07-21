@@ -57,6 +57,7 @@ class TaskExecutionLifecycleServiceTests {
     when(executions.findByTaskIdForStart("task-1")).thenReturn(Optional.of(execution));
     when(executions.findByExecutionId("exec-1")).thenReturn(Optional.of(execution));
     when(revisions.findById("rev-1")).thenReturn(Optional.of(revision));
+    when(deployments.findById("dep-1")).thenAnswer(ignored -> Optional.of(deployment("a".repeat(64))));
     when(dataStore.get(any(), anyString())).thenReturn(task());
     when(heartbeats.detail("robot-1")).thenReturn(online());
   }
@@ -186,7 +187,7 @@ class TaskExecutionLifecycleServiceTests {
     when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
       .thenReturn(List.of(deployment("a".repeat(64))));
     when(dataStore.get(DataCategory.ROBOT, "robot-1")).thenReturn(Map.of(
-      "id", "robot-1", "supportsRemoteImmediateStart", true, "supportsLocalConfirmStart", true));
+      "id", "robot-1", "localConfirmStartEnabled", true));
 
     service.start("task-1", "local-start", TaskStartMode.LOCAL_CONFIRM, "operator-1");
     execution.setStatus(TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name());
@@ -203,11 +204,28 @@ class TaskExecutionLifecycleServiceTests {
   void localConfirmModeRequiresExplicitRobotCapability() {
     when(executions.findByStartRequestId("local-start")).thenReturn(Optional.empty());
     when(dataStore.get(DataCategory.ROBOT, "robot-1")).thenReturn(Map.of("id", "robot-1"));
+    when(heartbeats.detail("robot-1")).thenReturn(online(false, true, true, null));
 
     ApiException error = assertThrows(ApiException.class,
       () -> service.start("task-1", "local-start", TaskStartMode.LOCAL_CONFIRM, "operator-1"));
 
     assertTrue(error.getMessage().contains("ROBOT_START_MODE_UNSUPPORTED"));
+  }
+
+  @Test
+  void localConfirmReadinessIsRecheckedImmediatelyBeforeBridgeDelivery() {
+    when(executions.findByStartRequestId("local-recheck")).thenReturn(Optional.empty());
+    when(deployments.findByRobotIdAndRouteRevisionIdAndStateOrderByCreatedAtDesc("robot-1", "rev-1", "READY_FOR_ROBOT"))
+      .thenReturn(List.of(deployment("a".repeat(64))));
+    when(dataStore.get(DataCategory.ROBOT, "robot-1")).thenReturn(Map.of(
+      "id", "robot-1", "localConfirmStartEnabled", true));
+
+    service.start("task-1", "local-recheck", TaskStartMode.LOCAL_CONFIRM, "operator-1");
+    when(heartbeats.detail("robot-1")).thenReturn(online(true, true, false, "UI_CONFIRM_ENDPOINT_UNAVAILABLE"));
+
+    assertNull(service.claimStartAttempt("exec-1", Instant.now()));
+    assertEquals(TaskExecutionStatus.START_FAILED.name(), execution.getStatus());
+    assertEquals("LOCAL_CONFIRM_NOT_READY", execution.getLastErrorCode());
   }
 
   private Map<String, Object> start(String key) {
@@ -241,7 +259,13 @@ class TaskExecutionLifecycleServiceTests {
   }
 
   private static RobotHeartbeatStatusView online() {
+    return online(true, true, true, null);
+  }
+
+  private static RobotHeartbeatStatusView online(
+      boolean reportedLocal, boolean protocolCompatible, boolean ready, String error) {
     return new RobotHeartbeatStatusView("robot-1", null, null, RobotConnectionStatus.CONNECTED.name(), true, Instant.now(), Instant.now(), Instant.now(), null,
-      new RobotHeartbeatStatusView.Source("robot-bridge", true), "1.0", "boot-1", "test", "idle", 0, null);
+      new RobotHeartbeatStatusView.Source("robot-bridge", true), "1.0", "boot-1", "test", "idle", 0, null,
+      true, reportedLocal, protocolCompatible ? "1" : "2", protocolCompatible, ready, error, Instant.now());
   }
 }

@@ -66,6 +66,12 @@ public class RobotHeartbeatService {
     status.setSoftwareVersion(blankToNull(snapshot.softwareVersion()));
     status.setRobotState(blankToNull(snapshot.state()));
     status.setAcceptedEventSequence(snapshot.acceptedEventSequence());
+    status.setReportedRemoteImmediateStart(snapshot.reportedSupportsRemoteImmediateStart());
+    status.setReportedLocalConfirmStart(snapshot.reportedSupportsLocalConfirmStart());
+    status.setLocalConfirmProtocolVersion(blankToNull(snapshot.localConfirmProtocolVersion()));
+    status.setLocalConfirmStartReady(snapshot.localConfirmStartReady());
+    status.setLocalConfirmStartError(blankToNull(snapshot.localConfirmStartError()));
+    status.setCapabilityReportedAt(snapshot.capabilityReportedAt());
     status.setDiagnosticSummary(diagnosticSummary(snapshot));
     status.setStatusUpdatedAt(observedAt);
     repository.save(status);
@@ -226,6 +232,7 @@ public class RobotHeartbeatService {
               item.setConnectionStatus(RobotConnectionStatus.UNKNOWN.name());
               item.setOfflineReason("NO_HEARTBEAT");
               item.setSourceName(SOURCE_NAME);
+              item.setReportedRemoteImmediateStart(true);
               item.setStatusUpdatedAt(now);
               return item;
             });
@@ -256,6 +263,13 @@ public class RobotHeartbeatService {
           null,
           null,
           0,
+          null,
+          true,
+          false,
+          null,
+          false,
+          false,
+          null,
           null);
     }
     boolean online = isOnline(status, now);
@@ -276,7 +290,14 @@ public class RobotHeartbeatService {
         status.getSoftwareVersion(),
         status.getRobotState(),
         status.getAcceptedEventSequence(),
-        status.getDiagnosticSummary());
+        status.getDiagnosticSummary(),
+        status.isReportedRemoteImmediateStart(),
+        status.isReportedLocalConfirmStart(),
+        status.getLocalConfirmProtocolVersion(),
+        RobotLocalConfirmPolicyService.isProtocolSupported(status.getLocalConfirmProtocolVersion()),
+        status.isLocalConfirmStartReady(),
+        status.getLocalConfirmStartError(),
+        status.getCapabilityReportedAt());
   }
 
   private Comparator<RobotHeartbeatStatusView> comparator(String sort, String direction) {

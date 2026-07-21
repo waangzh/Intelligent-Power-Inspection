@@ -23,7 +23,9 @@ class RobotBridgeHeartbeatClientTests {
       byte[] body = ("{\"robotId\":\"robot-001\",\"lastSeen\":\"2026-07-15T06:00:00Z\","
         + "\"protocolVersion\":\"1.0\",\"bootId\":\"boot-1\",\"state\":\"idle\","
         + "\"softwareVersion\":\"build-1\",\"acceptedEventSequence\":0,"
-        + "\"health\":{\"systemMode\":\"ready\",\"lastError\":null}}")
+        + "\"capabilities\":{\"remoteImmediateStart\":true,\"localConfirmStart\":true,\"localConfirmProtocolVersion\":\"1\"},"
+        + "\"capabilityReportedAt\":\"2026-07-15T06:00:00Z\","
+        + "\"health\":{\"systemMode\":\"ready\",\"lastError\":null,\"localConfirmStartReady\":true,\"localConfirmStartError\":null}}")
         .getBytes(StandardCharsets.UTF_8);
       exchange.getResponseHeaders().set("Content-Type", "application/json");
       exchange.sendResponseHeaders(200, body.length);
@@ -49,5 +51,8 @@ class RobotBridgeHeartbeatClientTests {
 
     assertEquals("ready", snapshot.health().get("systemMode"));
     assertFalse(snapshot.health().containsKey("lastError"));
+    assertEquals(true, snapshot.reportedSupportsLocalConfirmStart());
+    assertEquals("1", snapshot.localConfirmProtocolVersion());
+    assertEquals(true, snapshot.localConfirmStartReady());
   }
 }

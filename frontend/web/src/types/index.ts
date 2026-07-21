@@ -243,6 +243,14 @@ export interface Robot {
   telemetry?: RobotTelemetry
   supportsRemoteImmediateStart?: boolean
   supportsLocalConfirmStart?: boolean
+  reportedSupportsRemoteImmediateStart?: boolean
+  reportedSupportsLocalConfirmStart?: boolean
+  localConfirmStartEnabled?: boolean
+  localConfirmProtocolVersion?: string | null
+  localConfirmProtocolCompatible?: boolean
+  localConfirmStartReady?: boolean
+  localConfirmStartError?: string | null
+  capabilityReportedAt?: string | null
 }
 
 export type TaskStartMode = 'REMOTE_IMMEDIATE' | 'LOCAL_CONFIRM'
@@ -384,6 +392,18 @@ export interface TaskStartEligibility extends TaskExecution {
   ineligibleReason?: string | null
   supportsRemoteImmediateStart: boolean
   supportsLocalConfirmStart: boolean
+  reportedSupportsRemoteImmediateStart?: boolean
+  reportedSupportsLocalConfirmStart?: boolean
+  localConfirmStartEnabled?: boolean
+  localConfirmProtocolVersion?: string | null
+  localConfirmProtocolCompatible?: boolean
+  localConfirmStartReady?: boolean
+  localConfirmStartError?: string | null
+  capabilityReportedAt?: string | null
+  remoteImmediateStartEligible?: boolean
+  remoteImmediateStartIneligibleReason?: string | null
+  localConfirmStartEligible?: boolean
+  localConfirmStartIneligibleReason?: string | null
 }
 
 export interface Alarm {

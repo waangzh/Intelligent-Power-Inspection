@@ -24,11 +24,17 @@ describe('任务启动接收状态', () => {
   })
 
   it('收到机器人事件后显示机器人已回传', () => {
-    expect(startReceiptOf(execution({ status: 'STARTING', lastRobotSequence: 1 })).label).toBe('机器人已回传')
+    expect(startReceiptOf(execution({ status: 'STARTING', lastRobotSequence: 1 })).label).toBe('机器人已领取')
   })
 
   it('本地确认等待态显示机器人已准备', () => {
-    expect(startReceiptOf(execution({ status: 'WAITING_LOCAL_CONFIRM' })).label).toBe('机器人已准备')
+    expect(startReceiptOf(execution({ status: 'WAITING_LOCAL_CONFIRM' })).label).toBe('等待机器人本地确认')
+  })
+
+  it('本地确认事件只显示已确认，不提前显示运行中', () => {
+    expect(startReceiptOf(execution({
+      status: 'WAITING_LOCAL_CONFIRM', localConfirmedAt: '2026-07-21T00:01:00Z',
+    })).label).toBe('机器人已确认')
   })
 
   it('route_started 后显示机器人已执行', () => {

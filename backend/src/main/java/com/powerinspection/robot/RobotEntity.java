@@ -16,7 +16,10 @@ import java.util.Set;
 public class RobotEntity {
   private static final Set<String> KNOWN = Set.of(
     "id", "name", "model", "serialNo", "siteId", "status", "position", "telemetry",
-    "version", "createdAt", "updatedAt"
+    "localConfirmStartEnabled", "supportsRemoteImmediateStart", "supportsLocalConfirmStart",
+    "reportedSupportsRemoteImmediateStart", "reportedSupportsLocalConfirmStart",
+    "localConfirmProtocolVersion", "localConfirmProtocolCompatible", "localConfirmStartReady",
+    "localConfirmStartError", "capabilityReportedAt", "version", "createdAt", "updatedAt"
   );
 
   @Id
@@ -30,6 +33,8 @@ public class RobotEntity {
   private String siteId;
   @Column(nullable = false)
   private String status;
+  @Column(name = "local_confirm_start_enabled", nullable = false)
+  private boolean localConfirmStartEnabled;
   @Column(name = "position_lat")
   private Double positionLat;
   @Column(name = "position_lng")
@@ -56,6 +61,7 @@ public class RobotEntity {
     serialNo = text(map.get("serialNo"));
     siteId = text(map.get("siteId"));
     status = first(map.get("status"), "OFFLINE");
+    localConfirmStartEnabled = bool(map.get("localConfirmStartEnabled"));
     Object position = map.get("position");
     if (position instanceof Map<?, ?> p) {
       positionLat = dbl(p.get("lat"));
@@ -74,6 +80,7 @@ public class RobotEntity {
     if (serialNo != null) map.put("serialNo", serialNo);
     if (siteId != null) map.put("siteId", siteId);
     map.put("status", status);
+    map.put("localConfirmStartEnabled", localConfirmStartEnabled);
     if (positionLat != null || positionLng != null) {
       Map<String, Object> position = new LinkedHashMap<>();
       position.put("lat", positionLat == null ? 0 : positionLat);
@@ -100,4 +107,5 @@ public class RobotEntity {
     if (value == null) return null;
     try { return Double.parseDouble(value.toString()); } catch (Exception ex) { return null; }
   }
+  private static boolean bool(Object value) { return Boolean.TRUE.equals(value); }
 }

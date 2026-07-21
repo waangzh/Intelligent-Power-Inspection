@@ -62,7 +62,13 @@ public class RobotBridgeHeartbeatSyncService {
             snapshot.softwareVersion(),
             snapshot.acceptedEventSequence(),
             snapshot.health(),
-            snapshot.gnssFix());
+            snapshot.gnssFix(),
+            snapshot.reportedSupportsRemoteImmediateStart(),
+            snapshot.reportedSupportsLocalConfirmStart(),
+            snapshot.localConfirmProtocolVersion(),
+            snapshot.localConfirmStartReady(),
+            snapshot.localConfirmStartError(),
+            snapshot.capabilityReportedAt());
         heartbeatService.applyBridgeSnapshot(platformSnapshot, now);
         locationService.applySnapshot(platformSnapshot, now);
       } catch (BridgeRobotClientException ex) {
