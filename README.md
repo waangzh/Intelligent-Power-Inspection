@@ -198,6 +198,18 @@ $env:ALIYUN_PNVS_TEMPLATE_CODE="100001"      # 控制台赠送模板 CODE
 
 用微信开发者工具打开 `frontend/wechat-program/`，先执行 `npm run miniprogram:env` 生成运行配置，默认对接真实后端。无后端演示时使用 `npm run miniprogram:env:mock`。
 
+**微信小程序合法域名（真机 / 正式版）**
+
+| 类型 | 用途 | 示例 |
+| --- | --- | --- |
+| request 合法域名 | 普通 API（`request.js`） | `https://your-api.example.com` |
+| uploadFile 合法域名 | 工单现场照片上传（`POST /work-orders/{id}/photos`） | 与 API 同域 |
+| downloadFile 合法域名 | 照片预览（`/model-files/work-order-photos/...`） | 与 API 同域 |
+
+本地调试可在微信开发者工具 → 详情 → 本地设置 勾选 **不校验合法域名、web-view、TLS 版本以及 HTTPS 证书**（仓库 `project.private.config.json` 已设 `urlCheck: false`）。上线前须在 [微信公众平台](https://mp.weixin.qq.com/) → 开发管理 → 开发设置 配置上述域名。
+
+**Token 过期与上传**：`wx.uploadFile` 已接入与 `request.js` 相同的 401 refresh 逻辑；refresh 失败时需重新登录。提交复核失败时保留已上传 URL 以便重试；取消或删除照片时会调用 `DELETE /work-orders/{id}/photos` 清理服务端 pending 文件，超过 24 小时仍未引用的孤儿文件由后端定时任务清理。
+
 ### 方式四：Python AI 服务联调
 
 ```powershell

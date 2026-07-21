@@ -1,5 +1,10 @@
 <view class="auth-page">
-  <view class="auth-card">
+  <view class="session-check" wx:if="{{checkingSession && !loading}}">
+    <view class="session-spinner" />
+    <text class="session-text">正在进入系统…</text>
+  </view>
+
+  <view class="auth-card" wx:if="{{!checkingSession || loading}}">
     <view class="brand">⚡ 电力智能巡检</view>
     <text class="subtitle">欢迎回来，请登录您的账号</text>
 
@@ -15,19 +20,13 @@
 
     <button class="submit btn-primary" loading="{{loading}}" bindtap="handleLogin">登 录</button>
 
-    <view class="footer">
-      <text class="link" bindtap="goForgotPassword">忘记密码？</text>
-    </view>
-
-    <view class="footer">
-      还没有账号？<text class="link" bindtap="goRegister">立即注册</text>
-    </view>
-
-    <view class="divider">演示账号</view>
-    <view class="demo-tags">
-      <text class="demo-tag" bindtap="fillDemo" data-u="admin" data-p="Admin@123">管理员</text>
-      <text class="demo-tag" bindtap="fillDemo" data-u="dispatcher" data-p="Disp@123">调度员</text>
-      <text class="demo-tag" bindtap="fillDemo" data-u="viewer" data-p="View@123">观察员</text>
+    <view class="footer-links">
+      <view class="footer-item">
+        <text class="link" bindtap="goForgotPassword">忘记密码？</text>
+      </view>
+      <view class="footer-item">
+        还没有账号？<text class="link" bindtap="goRegister">立即注册</text>
+      </view>
     </view>
   </view>
 </view>

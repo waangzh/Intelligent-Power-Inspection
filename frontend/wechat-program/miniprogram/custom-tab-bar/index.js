@@ -1,4 +1,4 @@
-const { getTabList, isNativeTabPage } = require('../config/tab-bar')
+const { getTabList, openPage } = require('../config/tab-bar')
 
 Component({
   data: {
@@ -38,12 +38,9 @@ Component({
 
     switchTab(e) {
       const { path, index } = e.currentTarget.dataset
-      if (isNativeTabPage(path)) {
-        wx.switchTab({ url: path })
-      } else {
-        wx.navigateTo({ url: path })
-      }
-      this.setData({ selected: Number(index) })
+      const app = getApp()
+      openPage(path, app.globalData.permissions, app.globalData.user?.role)
+      if (index !== undefined) this.setData({ selected: Number(index) })
     },
   },
 })

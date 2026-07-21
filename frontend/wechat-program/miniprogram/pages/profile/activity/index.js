@@ -2,12 +2,28 @@ const api = require('../../../services/index')
 const { ACTIVITY_TYPE_LABELS } = require('../../../utils/constants')
 
 const TYPE_TAG = {
-  LOGIN: 'info', PROFILE: 'primary', AVATAR: 'success', PASSWORD: 'warning',
-  TASK: 'primary', ALARM: 'danger', SETTINGS: 'info',
+  LOGIN: 'info',
+  PROFILE: 'primary',
+  AVATAR: 'success',
+  PASSWORD: 'warning',
+  TASK: 'primary',
+  ALARM: 'danger',
+  SETTINGS: 'info',
+}
+
+function formatActivityTime(iso) {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return String(iso).slice(0, 19).replace('T', ' ')
+  return date.toLocaleString('zh-CN', { hour12: false })
 }
 
 Page({
-  data: { activities: [] },
+  data: {
+    activities: [],
+    loading: false,
+    loadError: '',
+  },
 
   onShow() {
     if (!getApp().requireAuth('/pages/profile/activity/index')) return
@@ -15,44 +31,23 @@ Page({
   },
 
   async load() {
+    this.setData({ loading: true, loadError: '' })
     try {
-      const userId = getApp().globalData.user.id
-      const [base, tasks, alarms] = await Promise.all([
-        api.getActivities(),
-        api.getTasks(),
-        api.getAlarms(),
-      ])
-      const derived = []
-      tasks.slice(0, 5).forEach((t) => {
-        derived.push({
-          id: `task_${t.id}`,
-          userId,
-          type: 'TASK',
-          message: `创建/参与任务：${t.name}`,
-          createdAt: t.createdAt,
-        })
-      })
-      alarms.filter((a) => a.acknowledged).slice(0, 5).forEach((a) => {
-        derived.push({
-          id: `alarm_${a.id}`,
-          userId,
-          type: 'ALARM',
-          message: `确认告警：${a.message}`,
-          createdAt: a.createdAt,
-        })
-      })
-      const activities = [...base, ...derived]
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, 30)
+      const items = await api.getActivities()
+      const list = (Array.isArray(items) ? items : [])
         .map((a) => ({
           ...a,
-          typeLabel: ACTIVITY_TYPE_LABELS[a.type] || a.type,
+          typeLabel: ACTIVITY_TYPE_LABELS[a.type] || a.type || '记录',
           tagType: TYPE_TAG[a.type] || 'primary',
-          time: a.createdAt ? a.createdAt.slice(0, 19).replace('T', ' ') : '',
+          time: formatActivityTime(a.createdAt),
         }))
-      this.setData({ activities })
+      this.setData({ activities: list, loading: false })
     } catch (e) {
-      wx.showToast({ title: e.message || '加载失败', icon: 'none' })
+      this.setData({
+        activities: [],
+        loading: false,
+        loadError: e.message || '加载失败，请检查登录状态与后端服务',
+      })
     }
   },
 })

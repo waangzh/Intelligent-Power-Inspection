@@ -107,6 +107,7 @@ export const workOrders = '/api/v1/work-orders' as const
 export const workOrdersFromAlarmAlarmId = '/api/v1/work-orders/from-alarm/{alarmId}' as const
 export const workOrdersId = '/api/v1/work-orders/{id}' as const
 export const workOrdersIdClaim = '/api/v1/work-orders/{id}/claim' as const
+export const workOrdersIdPhotos = '/api/v1/work-orders/{id}/photos' as const
 export const workOrdersIdStatus = '/api/v1/work-orders/{id}/status' as const
 
 export const API_PATHS = {
@@ -218,6 +219,7 @@ export const API_PATHS = {
   workOrdersFromAlarmAlarmId: '/api/v1/work-orders/from-alarm/{alarmId}',
   workOrdersId: '/api/v1/work-orders/{id}',
   workOrdersIdClaim: '/api/v1/work-orders/{id}/claim',
+  workOrdersIdPhotos: '/api/v1/work-orders/{id}/photos',
   workOrdersIdStatus: '/api/v1/work-orders/{id}/status',
 } as const
 

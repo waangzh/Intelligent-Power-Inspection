@@ -63,7 +63,8 @@
       "workorder:view"
     ],
     "VIEWER": [
-      "task:view"
+      "task:view",
+      "workorder:view"
     ]
   }
 }

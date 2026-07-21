@@ -30,15 +30,19 @@
     </view>
   </view>
 
-  <view class="card">
-    <view class="card-title">今日巡检日程</view>
+  <view class="card" wx:if="{{!isDispatcher && !isViewer}}">
+    <view class="card-title flex-between">
+      <text>今日巡检日程</text>
+      <text class="link" bindtap="go" data-url="/pages/tasks/index">全部</text>
+    </view>
     <view class="schedule-item" wx:for="{{schedule}}" wx:key="time">
       <text class="schedule-time">{{item.time}}</text>
       <text>{{item.text}}</text>
     </view>
+    <view wx:if="{{!schedule.length}}" class="empty-hint">暂无进行中任务</view>
   </view>
 
-  <view class="card">
+  <view class="card" wx:if="{{!isDispatcher && !isViewer}}">
     <view class="card-title flex-between">
       <text>最新告警</text>
       <text class="link" bindtap="go" data-url="/pages/alarms/index">全部</text>
@@ -50,24 +54,4 @@
     <view wx:if="{{!recentAlarms.length}}" class="empty-hint">暂无告警</view>
   </view>
 
-  <view class="card">
-    <view class="card-title flex-between">
-      <text>当前任务</text>
-      <text class="link" bindtap="go" data-url="/pages/tasks/index">全部</text>
-    </view>
-    <view wx:for="{{activeTasks}}" wx:key="id" class="list-item">
-      <view class="flex-between">
-        <text class="task-name" bindtap="goDetail" data-id="{{item.id}}">{{item.name}}</text>
-        <task-status-tag status="{{item.status}}" />
-      </view>
-      <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1768f2" />
-      <view class="task-actions" wx:if="{{canControl || canTakeover}}">
-        <button wx:if="{{canControl && item.status==='RUNNING'}}" size="mini" bindtap="pauseTask" data-id="{{item.id}}">暂停</button>
-        <button wx:if="{{canControl && item.status==='PAUSED'}}" size="mini" type="primary" bindtap="resumeTask" data-id="{{item.id}}">恢复</button>
-        <button wx:if="{{canTakeover && item.status==='RUNNING'}}" size="mini" type="warn" bindtap="takeoverTask" data-id="{{item.id}}">接管</button>
-        <button size="mini" bindtap="goDetail" data-id="{{item.id}}">详情</button>
-      </view>
-    </view>
-    <view wx:if="{{!activeTasks.length}}" class="empty-hint">暂无进行中任务</view>
-  </view>
 </view>

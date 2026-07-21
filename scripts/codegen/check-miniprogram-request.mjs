@@ -35,6 +35,15 @@ function createHarness(responder, initialStorage = {}) {
       options.complete?.(response)
       return {}
     },
+    uploadFile(options) {
+      const entry = { ...options, _upload: true }
+      requests.push(entry)
+      const response = responder(entry, requests.length)
+      if (response.fail) options.fail?.(response.fail)
+      else options.success?.(response)
+      options.complete?.(response)
+      return {}
+    },
   }
   const app = {
     applySession(session, options) {
@@ -135,7 +144,8 @@ async function checkRefreshAndRetry() {
     'pi_refresh=rotated-token',
   )
   assert.equal(harness.appEvents[0].type, 'apply')
-  assert.equal(harness.appEvents[0].options.reloadPages, undefined)
+  assert.equal(harness.appEvents[0].options.reloadPages, false)
+  assert.equal(harness.appEvents[0].options.skipBadges, true)
 }
 
 async function checkSessionCookieAndLogout() {
@@ -171,5 +181,98 @@ async function checkSessionCookieAndLogout() {
 
 await checkPersistentLoginCookie()
 await checkRefreshAndRetry()
+async function checkUploadRefreshAndRetry() {
+  const harness = createHarness(
+    (options, call) => {
+      if (options._upload) {
+        if (call === 1) {
+          assert.equal(options.url, 'http://backend.test/api/v1/work-orders/wo-1/photos')
+          assert.equal(options.header.Authorization, 'Bearer expired-access')
+          assert.equal(options.name, 'photo')
+          return { statusCode: 401, data: JSON.stringify({ error: 'Unauthorized' }) }
+        }
+        assert.equal(call, 3)
+        assert.equal(options.url, 'http://backend.test/api/v1/work-orders/wo-1/photos')
+        assert.equal(options.header.Authorization, 'Bearer fresh-access')
+        return {
+          statusCode: 200,
+          data: JSON.stringify({ code: 0, data: { url: '/model-files/work-order-photos/wo-1/a.jpg' } }),
+        }
+      }
+      if (call === 2) {
+        assert.equal(options.url, 'http://backend.test/api/v1/auth/refresh')
+        return {
+          statusCode: 200,
+          header: {},
+          cookies: [
+            'pi_refresh=rotated-token; Path=/api/v1/auth; Max-Age=7200; HttpOnly; SameSite=Lax',
+          ],
+          data: {
+            code: 0,
+            data: { token: 'fresh-access', user: { id: 'user-1' }, permissions: [] },
+          },
+        }
+      }
+      throw new Error(`Unexpected call ${call}`)
+    },
+    {
+      pi_session: { token: 'expired-access', user: { id: 'user-1' }, permissions: [] },
+      pi_refresh_cookie: {
+        cookie: 'pi_refresh=remember-token',
+        expiresAt: Date.now() + 60_000,
+      },
+    },
+  )
+
+  const data = await harness.api.uploadFile({
+    url: '/work-orders/wo-1/photos',
+    filePath: '/tmp/photo.jpg',
+    name: 'photo',
+  })
+  assert.equal(data.url, '/model-files/work-order-photos/wo-1/a.jpg')
+  assert.equal(harness.storage.get('pi_session').token, 'fresh-access')
+}
+
+await checkUploadRefreshAndRetry()
+async function checkEnsureSessionFresh() {
+  const harness = createHarness(
+    (options, call) => {
+      assert.equal(call, 1)
+      assert.equal(options.url, 'http://backend.test/api/v1/auth/refresh')
+      return {
+        statusCode: 200,
+        header: {},
+        data: {
+          code: 0,
+          data: {
+            token: 'fresh-access',
+            user: { id: 'user-1' },
+            permissions: ['task:view'],
+            expiresAt: Date.now() + 3600_000,
+          },
+        },
+      }
+    },
+    {
+      pi_session: {
+        token: 'expired-access',
+        user: { id: 'user-1' },
+        permissions: ['task:view'],
+        expiresAt: Date.now() - 1000,
+      },
+      pi_refresh_cookie: {
+        cookie: 'pi_refresh=remember-token',
+        expiresAt: Date.now() + 60_000,
+      },
+    },
+  )
+
+  const ok = await harness.api.ensureSessionFresh()
+  assert.equal(ok, true)
+  assert.equal(harness.storage.get('pi_session').token, 'fresh-access')
+  assert.equal(harness.requests.length, 1)
+}
+
+await checkEnsureSessionFresh()
 await checkSessionCookieAndLogout()
-console.log('小程序请求校验通过：refresh cookie 保存、轮换、401 重试与注销清理正常')
+console.log('小程序请求校验通过：refresh cookie 保存、轮换、401 重试（含 uploadFile）与注销清理正常')

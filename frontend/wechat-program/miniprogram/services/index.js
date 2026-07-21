@@ -10,7 +10,7 @@ const { createEmptyRosRoute } = require('../utils/ros-route')
 const { resolutionSummary, buildReviewFromResolveForm } = require('../utils/work-order')
 const workOrderPerm = require('../utils/work-order-permission')
 const { DEFAULT_POLICY } = require('../utils/alarm-policy')
-const { post } = require('../utils/request')
+const { del, uploadFile } = require('../utils/request')
 const { API_PATHS, apiRel } = require('../generated/api-paths')
 
 function taskControlPath(apiPath, id) {
@@ -92,8 +92,29 @@ function normalizeSession(session) {
   return session
 }
 
+const { permissionsForRole } = require('../generated/permissions')
+
+function enrichSessionPermissions(session) {
+  if (!session?.user?.role) return session
+  const rolePerms = permissionsForRole(session.user.role)
+  if (!rolePerms.length) return session
+  const current = session.permissions || []
+  const merged = [...new Set([...current, ...rolePerms])]
+  if (merged.length === current.length && rolePerms.every((p) => current.includes(p))) {
+    return session
+  }
+  return { ...session, permissions: merged }
+}
+
 function getSession() {
-  return normalizeSession(wx.getStorageSync('pi_session') || null)
+  const raw = wx.getStorageSync('pi_session') || null
+  const session = normalizeSession(raw)
+  if (!session) return null
+  const enriched = enrichSessionPermissions(session)
+  if (JSON.stringify(enriched.permissions) !== JSON.stringify(session.permissions)) {
+    wx.setStorageSync('pi_session', enriched)
+  }
+  return enriched
 }
 
 async function refreshMe() {
@@ -128,6 +149,11 @@ async function updateProfile(form) {
 async function changePassword(form) {
   const session = getSession()
   if (!session) throw new Error('未登录')
+  if (form.newPassword !== form.confirmPassword) {
+    throw new Error('两次输入的新密码不一致')
+  }
+  const pwdErr = validatePassword(form.newPassword)
+  if (pwdErr) throw new Error(pwdErr)
   await services.auth.changePassword(form)
 }
 
@@ -135,8 +161,31 @@ async function listUsers() {
   return services.users.list()
 }
 
-async function uploadWorkOrderPhoto(filePath) {
-  return filePath
+async function uploadWorkOrderPhoto(workOrderId, filePath) {
+  if (!workOrderId) throw new Error('工单 ID 不能为空')
+  if (!filePath) throw new Error('照片路径无效')
+  const data = await uploadFile({
+    url: `/work-orders/${encodeURIComponent(workOrderId)}/photos`,
+    filePath,
+    name: 'photo',
+  })
+  if (!data?.url) throw new Error('照片上传失败')
+  return data.url
+}
+
+async function discardWorkOrderPhoto(workOrderId, url) {
+  if (!workOrderId || !url) return
+  try {
+    await del(`/work-orders/${encodeURIComponent(workOrderId)}/photos`, { url })
+  } catch {
+    // 清理失败不阻断主流程
+  }
+}
+
+async function discardWorkOrderPhotos(workOrderId, urls) {
+  for (const url of urls || []) {
+    await discardWorkOrderPhoto(workOrderId, url)
+  }
 }
 
 async function updateUserRole(userId, role) {
@@ -406,7 +455,12 @@ async function updateWorkOrderStatus(id, status, extra = {}) {
   const user = currentUser()
   const order = await getWorkOrderById(id)
   workOrderPerm.assertStatusTransition(order, status, user, sessionPermissions())
-  return services.workOrders.updateStatus(id, { status, ...extra })
+  const body = { status }
+  if (extra.resolution != null) body.resolution = extra.resolution
+  if (extra.review != null) body.review = extra.review
+  if (extra.resolutionForm != null) body.resolutionForm = extra.resolutionForm
+  if (extra.reviewForm != null) body.reviewForm = extra.reviewForm
+  return services.workOrders.updateStatus(id, body)
 }
 
 async function submitWorkOrderResolution(id, form) {
@@ -433,12 +487,28 @@ async function submitWorkOrderReview(id, form) {
     reviewedBy: reviewer,
   }
   const status = form.result === 'PASS' ? 'CLOSED' : 'PROCESSING'
-  return updateWorkOrderStatus(id, status, { reviewForm: fullForm })
+  return updateWorkOrderStatus(id, status, {
+    resolution: form.comment,
+    reviewForm: fullForm,
+  })
 }
 
 // ==================== Robots ====================
 async function getRobots() {
   return fetchAllPages(services.robots.list)
+}
+
+async function getRobotHeartbeatStatus() {
+  return fetchAllPages((params) => openapiClient.robots.getStatus(params))
+}
+
+async function getRobotTelemetry(robotId) {
+  if (!robotId) return null
+  try {
+    return await openapiClient.robots.telemetry(robotId)
+  } catch {
+    return null
+  }
 }
 
 async function addRobot(robot) {
@@ -538,10 +608,14 @@ module.exports = {
   createWorkOrderFromAlarm,
   claimWorkOrder,
   uploadWorkOrderPhoto,
+  discardWorkOrderPhoto,
+  discardWorkOrderPhotos,
   updateWorkOrderStatus,
   submitWorkOrderResolution,
   submitWorkOrderReview,
   getRobots,
+  getRobotHeartbeatStatus,
+  getRobotTelemetry,
   addRobot,
   removeRobot,
   getDetectionTemplates,

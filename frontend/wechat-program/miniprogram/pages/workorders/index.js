@@ -10,39 +10,54 @@ const {
   CONCLUSIONS_REQUIRING_FOLLOW_UP,
   enrichWorkOrder,
   isWorkOrderUnassigned,
+  validateResolveFormForBackend,
 } = require('../../utils/work-order')
 const { syncTabBar } = require('../../utils/tab-page')
 const { resolvePhotoSrc } = require('../../utils/work-order-photo')
 
 function withPhotoPreview(order) {
   if (!order?.resolutionForm?.photos?.length) return order
-  const photoSrcs = order.resolutionForm.photos.map(resolvePhotoSrc)
+  const photoSrcs = order.resolutionForm.photos.map(resolvePhotoSrc).filter(Boolean)
   return {
     ...order,
     resolutionForm: { ...order.resolutionForm, photoSrcs },
   }
 }
 
-const EMPTY_RESOLVE_FORM = {
-  faultType: '',
-  faultTypeIndex: -1,
-  handlingMethod: '',
-  handlingMethodIndex: -1,
-  replacedParts: '',
-  testResult: '',
-  conclusion: '',
-  conclusionIndex: -1,
-  remarks: '',
-  photoItems: [],
+function emptyResolveForm() {
+  return {
+    faultType: '',
+    faultTypeIndex: -1,
+    handlingMethod: '',
+    handlingMethodIndex: -1,
+    replacedParts: '',
+    testResult: '',
+    conclusion: '',
+    conclusionIndex: -1,
+    remarks: '',
+    photoItems: [],
+  }
 }
 
 const REVIEW_CONCLUSION_LABEL_LIST = REVIEW_CONCLUSION_OPTIONS.map((v) => REVIEW_CONCLUSION_LABELS[v])
+
+const STATUS_EMPTY_HINTS = {
+  ALL: '暂无工单',
+  PENDING: '暂无待接单工单',
+  PROCESSING: '暂无处理中工单',
+  REVIEW: '暂无待复核工单',
+}
+
+function normalizeStatusFilter(value) {
+  if (value === undefined || value === null || value === '' || value === 'ALL') return 'ALL'
+  return String(value)
+}
 
 Page({
   data: {
     orders: [],
     filtered: [],
-    statusFilter: '',
+    statusFilter: 'ALL',
     statusChips: [],
     showStatusChips: false,
     scopeFilter: 'POOL',
@@ -50,6 +65,8 @@ Page({
     mineCount: 0,
     emptyHint: '暂无工单',
     isDispatcher: false,
+    isViewer: false,
+    pageTitle: '工单管理',
     detail: null,
     showDetail: false,
     showResolve: false,
@@ -57,12 +74,13 @@ Page({
     resolvingId: '',
     reviewingId: '',
     claimingId: '',
-    resolveForm: { ...EMPTY_RESOLVE_FORM },
+    resolveForm: emptyResolveForm(),
     reviewForm: { result: 'PASS', comment: '' },
     faultTypeOptions: FAULT_TYPE_OPTIONS,
     handlingMethodOptions: HANDLING_METHOD_OPTIONS,
     conclusionOptions: REVIEW_CONCLUSION_LABEL_LIST,
     needsFollowUpPlan: false,
+    submittingResolve: false,
     canCreate: false,
     canProcess: false,
     canReview: false,
@@ -80,15 +98,22 @@ Page({
     const perms = app.globalData.permissions
     const isAdmin = user.role === 'ADMIN'
     const isDispatcher = user.role === 'DISPATCHER'
+    const isViewer = user.role === 'VIEWER'
+    const pageTitle = isViewer ? '工单' : '工单管理'
+    wx.setNavigationBarTitle({ title: pageTitle })
     this.setData({
       user,
       isDispatcher,
+      isViewer,
+      pageTitle,
       canCreate: hasPermission(perms, 'workorder:create'),
       canProcess: hasPermission(perms, 'workorder:process'),
       canReview: hasPermission(perms, 'workorder:review'),
-      pageDesc: isAdmin
-        ? '告警转工单与复核'
-        : '接单大厅抢单、现场处置与提交复核',
+      pageDesc: isViewer
+        ? '查看工单处置记录（只读）'
+        : isAdmin
+          ? '告警转工单与复核'
+          : '接单大厅抢单、现场处置与提交复核',
     })
     this.load()
     app.refreshBadges()
@@ -131,12 +156,12 @@ Page({
         priorityLabel: WORK_ORDER_PRIORITY_LABELS[o.priority],
         createdLabel: o.createdAt ? o.createdAt.slice(0, 16).replace('T', ' ') : '',
       })
-      return {
+      return withPhotoPreview({
         ...enriched,
         canClaim: workOrderPerm.canClaimOrder(o, user, perms),
         canSubmitReview: workOrderPerm.canSubmitReview(o, user, perms),
         canConfirmReview: workOrderPerm.canConfirmReview(o, user, perms),
-      }
+      })
     })
 
     const isDispatcher = user.role === 'DISPATCHER'
@@ -152,12 +177,17 @@ Page({
   switchScope(e) {
     const key = e.currentTarget.dataset.key
     if (key === this.data.scopeFilter) return
-    this.setData({ scopeFilter: key, statusFilter: '' })
+    this.setData({ scopeFilter: key, statusFilter: 'ALL' })
     this.rebuildFilters()
   },
 
   filterByStatus(e) {
-    this.setData({ statusFilter: e.currentTarget.dataset.key })
+    const statusFilter = normalizeStatusFilter(e.currentTarget.dataset.status)
+    if (statusFilter === this.data.statusFilter) return
+    this.setData({
+      statusFilter,
+      emptyHint: STATUS_EMPTY_HINTS[statusFilter] || STATUS_EMPTY_HINTS.ALL,
+    })
     this.applyFilter()
   },
 
@@ -175,31 +205,34 @@ Page({
       showStatusChips = false
     } else if (isDispatcher && scopeFilter === 'MINE') {
       statusChips = [
-        { key: '', label: '全部', value: scoped.length },
+        { key: 'ALL', label: '全部', value: scoped.length },
         { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
         { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
       ]
     } else {
       statusChips = [
-        { key: '', label: '全部', value: scoped.length },
+        { key: 'ALL', label: '全部', value: scoped.length },
         { key: 'PENDING', label: '待接单', value: counts.PENDING },
         { key: 'PROCESSING', label: '处理中', value: counts.PROCESSING },
         { key: 'REVIEW', label: '待复核', value: counts.REVIEW },
       ]
     }
 
-    let emptyHint = '暂无工单'
+    let emptyHint = STATUS_EMPTY_HINTS[this.data.statusFilter] || STATUS_EMPTY_HINTS.ALL
     if (isDispatcher && scopeFilter === 'POOL') emptyHint = '暂无待接工单'
-    else if (isDispatcher && scopeFilter === 'MINE') emptyHint = '暂无我的工单'
+    else if (isDispatcher && scopeFilter === 'MINE' && this.data.statusFilter === 'ALL') emptyHint = '暂无我的工单'
 
     this.setData({ statusChips, showStatusChips, emptyHint })
     this.applyFilter()
   },
 
   applyFilter() {
-    const { orders, statusFilter, scopeFilter, user } = this.data
-    let list = workOrderPerm.filterByScope(orders, user, scopeFilter)
-    if (statusFilter) list = list.filter((o) => o.status === statusFilter)
+    const { orders, statusFilter, scopeFilter, user, isDispatcher } = this.data
+    const scope = isDispatcher ? scopeFilter : 'ALL'
+    let list = workOrderPerm.filterByScope(orders, user, scope)
+    if (statusFilter && statusFilter !== 'ALL') {
+      list = list.filter((o) => o.status === statusFilter)
+    }
     this.setData({ filtered: list })
   },
 
@@ -222,7 +255,7 @@ Page({
     try {
       await api.claimWorkOrder(id)
       wx.showToast({ title: '接单成功，开始处置' })
-      this.setData({ scopeFilter: 'MINE', statusFilter: '' })
+      this.setData({ scopeFilter: 'MINE', statusFilter: 'ALL' })
       getApp().refreshBadges()
       this.load()
     } catch (err) {
@@ -242,13 +275,22 @@ Page({
     }
     this.setData({
       resolvingId: id,
-      resolveForm: { ...EMPTY_RESOLVE_FORM },
+      resolveForm: emptyResolveForm(),
       needsFollowUpPlan: false,
       showResolve: true,
     })
   },
 
-  closeResolve() { this.setData({ showResolve: false }) },
+  closeResolve() {
+    const { resolvingId, resolveForm } = this.data
+    const pending = (resolveForm.photoItems || [])
+      .map((item) => item.uploadedUrl)
+      .filter(Boolean)
+    if (pending.length) {
+      api.discardWorkOrderPhotos(resolvingId, pending)
+    }
+    this.setData({ showResolve: false })
+  },
 
   onFaultTypeChange(e) {
     const index = Number(e.detail.value)
@@ -303,8 +345,12 @@ Page({
   removePhoto(e) {
     const index = Number(e.currentTarget.dataset.index)
     const photoItems = [...this.data.resolveForm.photoItems]
+    const removed = photoItems[index]
     photoItems.splice(index, 1)
     this.setData({ 'resolveForm.photoItems': photoItems })
+    if (removed?.uploadedUrl) {
+      api.discardWorkOrderPhoto(this.data.resolvingId, removed.uploadedUrl)
+    }
   },
 
   previewResolvePhoto(e) {
@@ -315,7 +361,11 @@ Page({
 
   previewDetailPhoto(e) {
     const index = Number(e.currentTarget.dataset.index)
-    const urls = this.data.detail.resolutionForm.photoSrcs
+    const urls = this.data.detail?.resolutionForm?.photoSrcs || []
+    if (!urls.length) {
+      wx.showToast({ title: '暂无照片', icon: 'none' })
+      return
+    }
     wx.previewImage({ current: urls[index], urls })
   },
 
@@ -361,7 +411,8 @@ Page({
   stop() {},
 
   async submitResolve() {
-    const { resolveForm, resolvingId } = this.data
+    const { resolveForm, resolvingId, submittingResolve } = this.data
+    if (submittingResolve) return
     if (!resolveForm.faultType || !resolveForm.handlingMethod || !resolveForm.testResult.trim()) {
       wx.showToast({ title: '请填写故障类型、处理方式、试验结果', icon: 'none' })
       return
@@ -374,11 +425,36 @@ Page({
       wx.showToast({ title: '部分消缺/未消缺时请填写补充说明', icon: 'none' })
       return
     }
+    const limitError = validateResolveFormForBackend({
+      faultType: resolveForm.faultType,
+      handlingMethod: resolveForm.handlingMethod,
+      replacedParts: resolveForm.replacedParts.trim() || undefined,
+      testResult: resolveForm.testResult.trim(),
+      conclusion: resolveForm.conclusion,
+      remarks: resolveForm.remarks.trim() || undefined,
+      photos: resolveForm.photoItems.length ? resolveForm.photoItems.map(() => 'x') : undefined,
+    })
+    if (limitError) {
+      wx.showToast({ title: limitError, icon: 'none' })
+      return
+    }
+    this.setData({ submittingResolve: true })
     try {
       wx.showLoading({ title: '提交中' })
+      const photoItems = [...resolveForm.photoItems]
       const photos = []
-      for (const item of resolveForm.photoItems) {
-        photos.push(await api.uploadWorkOrderPhoto(item.localPath))
+      for (let i = 0; i < photoItems.length; i += 1) {
+        const item = photoItems[i]
+        if (item.uploadedUrl) {
+          photos.push(item.uploadedUrl)
+          continue
+        }
+        const url = await api.uploadWorkOrderPhoto(resolvingId, item.localPath)
+        photoItems[i] = { ...item, uploadedUrl: url }
+        photos.push(url)
+      }
+      if (photoItems.some((item, i) => item.uploadedUrl !== resolveForm.photoItems[i]?.uploadedUrl)) {
+        this.setData({ 'resolveForm.photoItems': photoItems })
       }
       await api.submitWorkOrderResolution(resolvingId, {
         faultType: resolveForm.faultType,
@@ -397,6 +473,7 @@ Page({
       wx.showToast({ title: err.message || '提交失败', icon: 'none' })
     } finally {
       wx.hideLoading()
+      this.setData({ submittingResolve: false })
     }
   },
 
