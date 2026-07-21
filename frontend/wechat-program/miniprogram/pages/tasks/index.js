@@ -3,10 +3,10 @@ const {
   hasPermission,
   canControlTask,
   canTakeoverTask,
-  canCancelTask,
-  cancelTaskLabel,
+  canShowTaskEstop,
+  canShowTaskCancel,
 } = require('../../utils/permission')
-const { syncTabBar } = require('../../utils/tab-page')
+const { syncTabBar, refreshTabBarBadges } = require('../../utils/tab-page')
 
 Page({
   data: {
@@ -26,8 +26,6 @@ Page({
     canDispatch: false,
     canControl: false,
     canTakeover: false,
-    canCancel: false,
-    cancelLabel: '取消',
   },
 
   onShow() {
@@ -36,9 +34,7 @@ Page({
     if (!app.requirePermission('task:view')) return
     if (typeof wx.hideHomeButton === 'function') wx.hideHomeButton()
     syncTabBar(this)
-    app.refreshBadges().then(() => {
-      this.selectComponent('#inlineTabBar')?.refresh?.()
-    })
+    refreshTabBarBadges(this)
     const user = app.globalData.user
     const perms = app.globalData.permissions
     this.setData({
@@ -46,17 +42,22 @@ Page({
       canDispatch: hasPermission(perms, 'task:dispatch'),
       canControl: canControlTask(perms),
       canTakeover: canTakeoverTask(perms),
-      canCancel: canCancelTask(perms),
-      cancelLabel: cancelTaskLabel(perms),
     })
     this.load()
   },
 
   async load() {
     try {
+      const perms = getApp().globalData.permissions
       const [tasks, routes, robots, sites] = await Promise.all([
         api.getTasks(), api.getRoutes(), api.getRobots(), api.getSites(),
       ])
+      const decorateTask = (t) => ({
+        ...t,
+        showEstop: canShowTaskEstop(t, perms),
+        showCancel: canShowTaskCancel(t, perms),
+      })
+      const decoratedTasks = tasks.map(decorateTask)
       const routeLabels = routes.map((r) => {
         const site = sites.find((s) => s.id === r.siteId)
         return { ...r, label: `${site ? site.name : ''} / ${r.name}` }
@@ -64,7 +65,7 @@ Page({
       const availableRobots = robots
         .filter((r) => r.status !== 'OFFLINE')
         .map((r) => ({ ...r, label: `${r.name} (${r.status})` }))
-      const activeTask = tasks.find((t) =>
+      const activeTask = decoratedTasks.find((t) =>
         ['DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER'].includes(t.status))
       let activeRoute = null
       let activeRouteName = ''
@@ -80,7 +81,7 @@ Page({
         robotPos = robot?.position || null
       }
       this.setData({
-        tasks,
+        tasks: decoratedTasks,
         routes: routeLabels,
         robots,
         availableRobots,
@@ -175,17 +176,42 @@ Page({
   },
 
   async cancel(e) {
-    const isEstop = this.data.cancelLabel === '急停'
+    const id = e.currentTarget.dataset.id
     wx.showModal({
-      title: isEstop ? '远程急停' : '取消任务',
-      content: isEstop ? '确认对该任务执行远程急停？' : '确认取消该巡检任务？',
+      title: '取消任务',
+      content: '确认取消该巡检任务？（业务取消，不是设备急停）',
       success: async (res) => {
         if (!res.confirm) return
         try {
-          await api.cancelTask(e.currentTarget.dataset.id)
+          await api.cancelTask(id)
+          wx.showToast({ title: '已取消', icon: 'none' })
           this.load()
         } catch (err) {
-          wx.showToast({ title: err.message || '操作失败', icon: 'none' })
+          wx.showToast({ title: err.message || '取消失败', icon: 'none' })
+        }
+      },
+    })
+  },
+
+  async emergencyStop(e) {
+    const id = e.currentTarget.dataset.id
+    wx.showModal({
+      title: '远程急停',
+      editable: true,
+      placeholderText: '请输入急停原因（必填）',
+      success: async (res) => {
+        if (!res.confirm) return
+        const reason = (res.content || '').trim()
+        if (!reason) {
+          wx.showToast({ title: '必须填写急停原因', icon: 'none' })
+          return
+        }
+        try {
+          await api.emergencyStopTask(id, reason)
+          wx.showToast({ title: '急停已受理', icon: 'none' })
+          this.load()
+        } catch (err) {
+          wx.showToast({ title: err.message || '急停失败', icon: 'none' })
         }
       },
     })

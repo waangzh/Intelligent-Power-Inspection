@@ -19,13 +19,43 @@ function readSession() {
 }
 
 function writeSession(session) {
-  if (!session) wx.removeStorageSync('pi_session')
-  else wx.setStorageSync('pi_session', session)
+  if (!session) {
+    wx.removeStorageSync('pi_session')
+    clearSessionApiBase()
+  } else {
+    wx.setStorageSync('pi_session', session)
+    markSessionApiBase()
+  }
 }
 
 const REFRESH_COOKIE_NAME = 'pi_refresh'
 const REFRESH_COOKIE_STORAGE_KEY = 'pi_refresh_cookie'
+const API_BASE_STORAGE_KEY = 'pi_api_base_url'
 let sessionRefreshCookie = ''
+
+function currentApiBaseUrl() {
+  return apiConfig.baseUrl
+}
+
+function markSessionApiBase() {
+  wx.setStorageSync(API_BASE_STORAGE_KEY, currentApiBaseUrl())
+}
+
+function clearSessionApiBase() {
+  wx.removeStorageSync(API_BASE_STORAGE_KEY)
+}
+
+/** baseUrl 变更后丢弃旧 token，避免 localhost/远程混用导致 401 刷屏 */
+function invalidateSessionIfApiBaseChanged() {
+  const session = readSession()
+  if (!session) return false
+  const storedBase = wx.getStorageSync(API_BASE_STORAGE_KEY)
+  if (!storedBase || storedBase === currentApiBaseUrl()) return false
+  writeSession(null)
+  clearRefreshCookie()
+  clearSessionApiBase()
+  return true
+}
 
 function clearRefreshCookie() {
   sessionRefreshCookie = ''
@@ -331,4 +361,15 @@ function uploadFile({ url, filePath, name = 'file', formData = {}, auth = true, 
   })
 }
 
-module.exports = { request, get, post, put, patch, del, uploadFile, ensureSessionFresh }
+module.exports = {
+  request,
+  get,
+  post,
+  put,
+  patch,
+  del,
+  uploadFile,
+  ensureSessionFresh,
+  invalidateSessionIfApiBaseChanged,
+  markSessionApiBase,
+}

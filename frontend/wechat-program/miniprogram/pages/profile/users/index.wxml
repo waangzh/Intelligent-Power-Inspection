@@ -45,3 +45,5 @@
 
   <view wx:if="{{!loading && !users.length}}" class="empty-hint">暂无用户</view>
 </view>
+
+<inline-tab-bar id="inlineTabBar" activePath="/pages/profile/users/index" />

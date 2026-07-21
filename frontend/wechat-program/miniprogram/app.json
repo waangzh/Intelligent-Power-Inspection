@@ -48,16 +48,16 @@
         "selectedIconPath": "assets/tabbar/workorders-active.png"
       },
       {
-        "pagePath": "pages/alarms/index",
-        "text": "告警",
-        "iconPath": "assets/tabbar/alarms.png",
-        "selectedIconPath": "assets/tabbar/alarms-active.png"
+        "pagePath": "pages/monitor/index",
+        "text": "监控",
+        "iconPath": "assets/tabbar/monitor.png",
+        "selectedIconPath": "assets/tabbar/monitor-active.png"
       },
       {
-        "pagePath": "pages/profile/users/index",
-        "text": "用户",
-        "iconPath": "assets/tabbar/users.png",
-        "selectedIconPath": "assets/tabbar/users-active.png"
+        "pagePath": "pages/tasks/index",
+        "text": "任务",
+        "iconPath": "assets/tabbar/schedule.png",
+        "selectedIconPath": "assets/tabbar/schedule-active.png"
       },
       {
         "pagePath": "pages/profile/info/index",

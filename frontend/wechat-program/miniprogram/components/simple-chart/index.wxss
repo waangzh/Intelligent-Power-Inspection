@@ -58,6 +58,21 @@
   padding: 0 12rpx;
 }
 
+.line-values {
+  display: flex;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-top: 8rpx;
+  padding: 0 12rpx;
+}
+
+.line-val {
+  flex: 1;
+  text-align: center;
+  font-size: 22rpx;
+  color: var(--pi-text);
+}
+
 .line-label {
   flex: 1;
   text-align: center;

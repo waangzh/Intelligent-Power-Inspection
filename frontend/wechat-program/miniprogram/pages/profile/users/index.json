@@ -2,6 +2,7 @@
   "navigationBarTitleText": "用户管理",
   "usingComponents": {
     "page-header": "/components/page-header/index",
-    "user-avatar": "/components/user-avatar/index"
+    "user-avatar": "/components/user-avatar/index",
+    "inline-tab-bar": "/components/inline-tab-bar/index"
   }
 }

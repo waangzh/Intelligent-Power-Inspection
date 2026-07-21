@@ -10,7 +10,7 @@ const { createEmptyRosRoute } = require('../utils/ros-route')
 const { resolutionSummary, buildReviewFromResolveForm } = require('../utils/work-order')
 const workOrderPerm = require('../utils/work-order-permission')
 const { DEFAULT_POLICY } = require('../utils/alarm-policy')
-const { del, uploadFile } = require('../utils/request')
+const { del, post, uploadFile, markSessionApiBase } = require('../utils/request')
 const { API_PATHS, apiRel } = require('../generated/api-paths')
 
 function taskControlPath(apiPath, id) {
@@ -67,6 +67,7 @@ async function fetchAllPages(listFn, extraParams) {
 async function login(username, password, remember = true) {
   const data = await openapiClient.auth.login(username, password, remember)
   wx.setStorageSync('pi_session', data)
+  markSessionApiBase()
   return data
 }
 
@@ -113,6 +114,7 @@ function getSession() {
   const enriched = enrichSessionPermissions(session)
   if (JSON.stringify(enriched.permissions) !== JSON.stringify(session.permissions)) {
     wx.setStorageSync('pi_session', enriched)
+    markSessionApiBase()
   }
   return enriched
 }
@@ -130,6 +132,7 @@ async function refreshMe() {
   }
   if (!next.permissions.length) return null
   wx.setStorageSync('pi_session', next)
+  markSessionApiBase()
   return next
 }
 

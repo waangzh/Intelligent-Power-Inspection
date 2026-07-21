@@ -10,6 +10,9 @@
     <view class="line-bars">
       <view class="line-bar" wx:for="{{normalized}}" wx:key="label" style="height: {{item.pct}}%"></view>
     </view>
+    <view class="line-values">
+      <text wx:for="{{normalized}}" wx:key="label" class="line-val">{{item.value}}</text>
+    </view>
     <view class="line-labels">
       <text wx:for="{{normalized}}" wx:key="label" class="line-label">{{item.label}}</text>
     </view>

@@ -7,10 +7,7 @@ const TAB_DASHBOARD = {
   selectedIconPath: '/assets/tabbar/dashboard-active.png',
 }
 
-const TAB_DASHBOARD_ALARM_BADGE = {
-  ...TAB_DASHBOARD,
-  badgeKey: 'alarms',
-}
+const TAB_DASHBOARD_ALARM_BADGE = TAB_DASHBOARD
 
 const TAB_MONITOR = {
   pagePath: '/pages/monitor/index',
@@ -24,7 +21,6 @@ const TAB_WORKORDERS = {
   text: '工单',
   iconPath: '/assets/tabbar/workorders.png',
   selectedIconPath: '/assets/tabbar/workorders-active.png',
-  badgeKey: 'workorders',
 }
 
 const TAB_ALARMS = {
@@ -32,7 +28,6 @@ const TAB_ALARMS = {
   text: '告警',
   iconPath: '/assets/tabbar/alarms.png',
   selectedIconPath: '/assets/tabbar/alarms-active.png',
-  badgeKey: 'alarms',
 }
 
 const TAB_TASKS = {
@@ -54,7 +49,6 @@ const TAB_PROFILE = {
   text: '我的',
   iconPath: '/assets/tabbar/profile.png',
   selectedIconPath: '/assets/tabbar/profile-active.png',
-  badgeKey: 'profile',
 }
 
 /** 管理员/调度员告警中心（非底部 Tab，带仿底栏） */
@@ -76,20 +70,23 @@ const TAB_LIST_VIEWER = [
   TAB_PROFILE,
 ]
 
-/** app.json tabBar.list — 仅这 5 个页面可 switchTab */
+/**
+ * app.json tabBar.list — 与调度员底栏一致：总览/工单/监控/任务/我的
+ * 观察员「告警」、管理员「用户」走 navigateTo + inline-tab-bar
+ */
 const NATIVE_TAB_PATHS = [
   TAB_DASHBOARD.pagePath,
   TAB_WORKORDERS.pagePath,
-  TAB_ALARMS.pagePath,
-  TAB_USERS.pagePath,
+  TAB_MONITOR.pagePath,
+  TAB_TASKS.pagePath,
   TAB_PROFILE.pagePath,
 ]
 
 const TAB_PAGE_PATHS = [
   ...NATIVE_TAB_PATHS,
-  TAB_MONITOR.pagePath,
-  TAB_TASKS.pagePath,
+  TAB_ALARMS.pagePath,
   ADMIN_ALARMS_PAGE,
+  TAB_USERS.pagePath,
 ]
 
 function normalizePath(url) {
@@ -111,6 +108,9 @@ function getTabList(permissions, role) {
   const tail = [TAB_PROFILE]
   if (role === 'ADMIN' && hasPermission(permissions, 'user:manage')) {
     return [TAB_DASHBOARD_ALARM_BADGE, TAB_WORKORDERS, TAB_MONITOR, TAB_USERS, ...tail]
+  }
+  if (role === 'DISPATCHER') {
+    return [TAB_DASHBOARD, TAB_WORKORDERS, TAB_MONITOR, TAB_TASKS, ...tail]
   }
   return [TAB_DASHBOARD_ALARM_BADGE, TAB_WORKORDERS, TAB_MONITOR, TAB_TASKS, ...tail]
 }
@@ -173,11 +173,18 @@ function enterMainApp(url, permissions, role) {
   if (shouldSkipNav(target)) return Promise.resolve()
   return preloadTabBarIcons(permissions, role).then(() => new Promise((resolve) => {
     const navigate = () => {
-      if (canSwitchTab(targetPath, permissions, role)) {
-        wx.switchTab({ url: target, complete: resolve })
-      } else {
-        wx.reLaunch({ url: target, complete: resolve })
+      const done = () => {
+        try {
+          const app = getApp()
+          if (app?.applyTabBarBadges) app.applyTabBarBadges()
+          if (app?.refreshBadges) app.refreshBadges()
+        } catch {
+          // ignore
+        }
+        resolve()
       }
+      // 登录后 reLaunch 清栈，避免上一账号的仿底栏/页面栈残留导致底栏角色错乱
+      wx.reLaunch({ url: target, complete: done })
     }
     if (typeof wx.nextTick === 'function') wx.nextTick(navigate)
     else setTimeout(navigate, 50)

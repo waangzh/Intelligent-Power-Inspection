@@ -55,3 +55,5 @@
     <simple-chart type="bar" data="{{severityChart}}" />
   </view>
 </view>
+
+<inline-tab-bar id="inlineTabBar" activePath="/pages/alarms/index" />

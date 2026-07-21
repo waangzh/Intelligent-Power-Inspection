@@ -972,6 +972,34 @@ public class SeedDataInitializer implements ApplicationRunner {
         "https://picsum.photos/seed/policy-history/400/240",
         true,
         daysAgo(7));
+    refreshDemoAlarmTimelines();
+  }
+
+  /** 演示告警时间轴随启动刷新，保证 7 日趋势图在远程演示环境可见 */
+  private void refreshDemoAlarmTimelines() {
+    refreshDemoAlarmCreatedAt("alarm_demo_001", minutesAgo(22));
+    refreshDemoAlarmCreatedAt("alarm_demo_002", minutesAgo(16));
+    refreshDemoAlarmCreatedAt("alarm_demo_003", hoursAgo(5));
+    refreshDemoAlarmCreatedAt("alarm_demo_004", daysAgo(1));
+    refreshDemoAlarmCreatedAt("alarm_demo_policy_critical", minutesAgo(1));
+    refreshDemoAlarmCreatedAt("alarm_demo_policy_high", minutesAgo(2));
+    refreshDemoAlarmCreatedAt("alarm_demo_policy_low", minutesAgo(3));
+    refreshDemoAlarmCreatedAt("alarm_demo_005", daysAgo(2));
+    refreshDemoAlarmCreatedAt("alarm_demo_006", daysAgo(3));
+    refreshDemoAlarmCreatedAt("alarm_demo_007", daysAgo(4));
+    refreshDemoAlarmCreatedAt("alarm_demo_008", daysAgo(5));
+    refreshDemoAlarmCreatedAt("alarm_demo_009", daysAgo(6));
+    refreshDemoAlarmCreatedAt("alarm_demo_policy_history_pending", daysAgo(7));
+    refreshDemoAlarmCreatedAt("alarm_demo_policy_history", daysAgo(7));
+  }
+
+  private void refreshDemoAlarmCreatedAt(String id, String createdAt) {
+    if (!dataStore.exists(DataCategory.ALARM, id)) {
+      return;
+    }
+    Map<String, Object> alarm = new LinkedHashMap<>(dataStore.get(DataCategory.ALARM, id));
+    alarm.put("createdAt", createdAt);
+    dataStore.upsert(DataCategory.ALARM, alarm);
   }
 
   private void currentDemoAlarm(

@@ -48,7 +48,7 @@ Page({
       const url = this.data.redirect || getRoleLandingPath(session.user.role)
       this.setData({ enterText: '正在进入系统…' })
       await app.enterMainApp(url)
-      app.refreshBadges()
+      await app.refreshBadges()
     } catch (e) {
       this.setData({ entering: false, loading: false })
       wx.showToast({ title: e.message || '登录失败', icon: 'none' })

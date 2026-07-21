@@ -1,5 +1,6 @@
 const api = require('../../services/index')
 const { resolveRobotPresence } = require('../../utils/robot-status')
+const { syncTabBar, refreshTabBarBadges } = require('../../utils/tab-page')
 
 Page({
   data: {
@@ -21,9 +22,8 @@ Page({
   onShow() {
     if (!getApp().requireAuth('/pages/monitor/index')) return
     if (typeof wx.hideHomeButton === 'function') wx.hideHomeButton()
-    getApp().refreshBadges().then(() => {
-      this.selectComponent('#inlineTabBar')?.refresh?.()
-    })
+    syncTabBar(this)
+    refreshTabBarBadges(this)
     this.load()
   },
 

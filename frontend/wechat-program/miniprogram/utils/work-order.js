@@ -21,6 +21,8 @@ const {
   WORK_ORDER_REVIEW_CONCLUSION_VALUES: REVIEW_CONCLUSION_OPTIONS,
   WORK_ORDER_REVIEW_CONCLUSION_LABELS: REVIEW_CONCLUSION_LABELS,
 } = require('../generated/domain-enums')
+const { formatBusinessMessage, formatWorkOrderTitle } = require('./display-text')
+const { formatDateTime, formatDateTimeShort } = require('./date-time')
 
 /** 部分消缺 / 未消缺时，后端要求必须填写遗留风险与后续计划 */
 const CONCLUSIONS_REQUIRING_FOLLOW_UP = ['PARTIALLY_RESOLVED', 'UNRESOLVED']
@@ -48,7 +50,14 @@ function resolveAssigneeName(order) {
 }
 
 function workOrderAssigneeLabel(order) {
-  return resolveAssigneeName(order) || '待接单'
+  const name = resolveAssigneeName(order)
+  if (name) return name
+  if (order.status === 'CLOSED' || order.status === 'CANCELLED') {
+    return order.resolutionForm?.submittedBy?.trim()
+      || order.reviewForm?.reviewedBy?.trim()
+      || '-'
+  }
+  return '待接单'
 }
 
 /** 处理中/待复核却没有真实处理人，属于历史脏数据 */
@@ -100,11 +109,14 @@ function buildLocationFromAlarm(alarm, site) {
 
 function locationLabel(order) {
   const loc = order?.location
-  if (!loc) return '-'
-  if (loc.checkpointName) {
-    return `${loc.routeName || ''} · ${loc.checkpointName}`.replace(/^ · | · $/g, '') || '-'
+  if (loc) {
+    if (loc.checkpointName) {
+      return `${loc.routeName || ''} · ${loc.checkpointName}`.replace(/^ · | · $/g, '') || '-'
+    }
+    return loc.areaName || loc.routeName || '-'
   }
-  return loc.areaName || loc.routeName || '-'
+  const desc = formatBusinessMessage(order?.locationDescription || '')
+  return desc || '-'
 }
 
 function resolutionSummary(form) {
@@ -161,27 +173,170 @@ function validateResolveFormForBackend(form) {
   return null
 }
 
-function enrichWorkOrder(order) {
+function composeLocationParts(siteName, routeName, checkpointName, address) {
+  return [siteName, routeName, checkpointName, address]
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+    .join(' / ')
+}
+
+/** 前端展示：优先用后端 locationDescription，否则按 alarmId/siteId 关联补全 */
+function resolveLocationDescription(order, context = {}) {
+  const stored = formatBusinessMessage(order?.locationDescription || '')
+  if (stored) return stored
+
+  const { alarmsById = {}, sitesById = {} } = context
+  const alarm = order?.alarmId ? alarmsById[order.alarmId] : null
+  if (alarm) {
+    const siteId = alarm.siteId || order.siteId
+    const site = siteId ? sitesById[siteId] : null
+    const routeName = String(alarm.routeName || '').trim()
+    const checkpointName = String(alarm.checkpointName || '').trim()
+    if (site?.name) {
+      return composeLocationParts(
+        site.name,
+        routeName || null,
+        checkpointName || (routeName ? '路线行进中' : null),
+        site.address,
+      )
+    }
+    if (!routeName) return checkpointName
+    return checkpointName ? `${routeName} / ${checkpointName}` : routeName
+  }
+
+  const siteId = order?.siteId
+  if (siteId && sitesById[siteId]) {
+    const site = sitesById[siteId]
+    return composeLocationParts(site.name, null, null, site.address)
+  }
+  return ''
+}
+
+function buildLocationContext(alarms = [], sites = []) {
+  const alarmsById = {}
+  alarms.forEach((alarm) => {
+    if (alarm?.id) alarmsById[alarm.id] = alarm
+  })
+  const sitesById = {}
+  sites.forEach((site) => {
+    if (site?.id) sitesById[site.id] = site
+  })
+  return { alarmsById, sitesById }
+}
+
+function parseLocationDescription(desc) {
+  const text = String(desc || '').trim()
+  if (!text || text === '-') {
+    return {
+      locationSite: '-',
+      locationArea: '-',
+      locationCheckpoint: '-',
+      locationAddress: '-',
+    }
+  }
+  const parts = text.split(/\s*\/\s*/).filter(Boolean)
+  if (parts.length >= 4) {
+    return {
+      locationSite: parts[0],
+      locationArea: parts[1],
+      locationCheckpoint: parts[2],
+      locationAddress: parts.slice(3).join(' / '),
+    }
+  }
+  if (parts.length === 3) {
+    return {
+      locationSite: parts[0],
+      locationArea: parts[1],
+      locationCheckpoint: parts[2],
+      locationAddress: '-',
+    }
+  }
+  if (parts.length === 2) {
+    return {
+      locationSite: '-',
+      locationArea: parts[0],
+      locationCheckpoint: parts[1],
+      locationAddress: '-',
+    }
+  }
+  if (parts.length === 1) {
+    return {
+      locationSite: parts[0],
+      locationArea: '-',
+      locationCheckpoint: '-',
+      locationAddress: '-',
+    }
+  }
+  return {
+    locationSite: '-',
+    locationArea: '-',
+    locationCheckpoint: text,
+    locationAddress: '-',
+  }
+}
+
+function resolveLocationFields(order) {
   const loc = order.location || {}
+  if (loc.siteName || loc.routeName || loc.checkpointName || loc.areaName || loc.address) {
+    return {
+      locationSite: loc.siteName || '-',
+      locationArea: loc.areaName || loc.routeName || '-',
+      locationCheckpoint: loc.checkpointName || '路线行进中',
+      locationAddress: loc.address || '-',
+    }
+  }
+  const desc = formatBusinessMessage(order.locationDescription || '')
+  return parseLocationDescription(desc)
+}
+
+function countFilledLocationParts(fields) {
+  return [fields.locationSite, fields.locationArea, fields.locationCheckpoint, fields.locationAddress]
+    .filter((v) => v && v !== '-').length
+}
+
+function locationSummaryFrom(order, locFields) {
+  const summary = formatBusinessMessage(order.locationDescription || '')
+  if (summary) return summary
+  const parts = [locFields.locationSite, locFields.locationArea, locFields.locationCheckpoint, locFields.locationAddress]
+    .filter((v) => v && v !== '-')
+  return parts.length ? parts.join(' / ') : '-'
+}
+
+function enrichWorkOrder(order, context = {}) {
+  const resolvedLocationDescription = resolveLocationDescription(order, context)
+  const displayOrder = resolvedLocationDescription
+    ? { ...order, locationDescription: resolvedLocationDescription }
+    : order
+  const locFields = resolveLocationFields(displayOrder)
   const resolutionForm = order.resolutionForm
   const reviewForm = order.reviewForm
+  const displayTitle = formatWorkOrderTitle(order.title)
+  const displayDescription = formatBusinessMessage(order.description)
+  const showDescription = !!(
+    displayDescription
+    && displayDescription !== displayTitle
+    && !displayTitle.includes(displayDescription)
+  )
   return {
     ...order,
+    displayTitle,
+    displayDescription,
+    showDescription,
     assigneeLabel: workOrderAssigneeLabel(order),
-    locationLabel: locationLabel(order),
-    locationSite: loc.siteName || '-',
-    locationArea: loc.areaName || loc.routeName || '-',
-    locationCheckpoint: loc.checkpointName || '路线行进中',
-    locationAddress: loc.address || '-',
+    locationLabel: locationLabel(displayOrder),
+    locationSummary: locationSummaryFrom(displayOrder, locFields),
+    showLocationDetail: countFilledLocationParts(locFields) >= 2,
+    ...locFields,
+    createdLabel: formatDateTimeShort(order.createdAt),
     resolutionSubmittedLabel: resolutionForm
-      ? `${resolutionForm.submittedBy} · ${(resolutionForm.submittedAt || '').slice(0, 16).replace('T', ' ')}`
+      ? `${resolutionForm.submittedBy} · ${formatDateTimeShort(resolutionForm.submittedAt)}`
       : '',
     resolutionConclusionLabel: resolutionForm?.conclusion ? REVIEW_CONCLUSION_LABELS[resolutionForm.conclusion] : '',
     reviewResultLabel: reviewForm
       ? (reviewForm.result === 'PASS' ? '通过' : '退回')
       : '',
     reviewSubmittedLabel: reviewForm
-      ? `${reviewForm.reviewedBy} · ${(reviewForm.reviewedAt || '').slice(0, 16).replace('T', ' ')}`
+      ? `${reviewForm.reviewedBy} · ${formatDateTimeShort(reviewForm.reviewedAt)}`
       : '',
   }
 }
@@ -201,6 +356,10 @@ module.exports = {
   canAssignOrder,
   assignActionLabel,
   buildLocationFromAlarm,
+  buildLocationContext,
+  resolveLocationDescription,
+  formatWorkOrderTitle,
+  formatBusinessMessage,
   locationLabel,
   resolutionSummary,
   buildReviewFromResolveForm,

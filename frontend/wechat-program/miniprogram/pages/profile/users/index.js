@@ -1,7 +1,8 @@
 const api = require('../../../services/index')
 const { ROLE_LABELS } = require('../../../utils/constants')
 const { USER_ROLE_VALUES } = require('../../../generated/domain-enums')
-const { syncTabBar } = require('../../../utils/tab-page')
+const { refreshTabBarBadges } = require('../../../utils/tab-page')
+const { formatDateTimeShort } = require('../../../utils/date-time')
 
 const ROLE_OPTIONS = USER_ROLE_VALUES.map((value) => ({ value, label: ROLE_LABELS[value] || value }))
 
@@ -16,8 +17,7 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/profile/users/index')) return
     if (!app.requirePermission('user:manage', ['ADMIN'])) return
-    syncTabBar(this)
-    app.refreshBadges()
+    refreshTabBarBadges(this)
     this.load()
   },
 
@@ -30,7 +30,7 @@ Page({
       roleIndex: roleIndex < 0 ? 0 : roleIndex,
       enabled,
       statusLabel: enabled ? '已启用' : '已禁用',
-      createdLabel: user.createdAt ? user.createdAt.slice(0, 16).replace('T', ' ') : '',
+      createdLabel: formatDateTimeShort(user.createdAt),
       isSelf: user.id === currentUserId,
     }
   },

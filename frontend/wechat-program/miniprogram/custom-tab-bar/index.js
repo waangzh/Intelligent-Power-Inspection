@@ -1,4 +1,6 @@
-const { getTabList, openPage } = require('../config/tab-bar')
+const { openPage } = require('../config/tab-bar')
+const { badgeKeyForPath } = require('../utils/tab-badge')
+const { buildTabBarState, resolveTabSession } = require('../utils/tab-bar-state')
 
 Component({
   data: {
@@ -17,33 +19,59 @@ Component({
     },
   },
 
+  pageLifetimes: {
+    show() {
+      this.initTabBar()
+    },
+  },
+
   methods: {
     initTabBar() {
-      const app = getApp()
-      const user = app.globalData.user
-      const list = getTabList(app.globalData.permissions, user?.role)
       const route = getCurrentPages().slice(-1)[0]?.route || ''
       const pagePath = route ? `/${route}` : ''
-      const selected = pagePath ? list.findIndex((t) => t.pagePath === pagePath) : 0
-      this.setData({ list, selected: selected >= 0 ? selected : 0 })
+      const next = buildTabBarState(pagePath)
+      const roleChanged = this._role !== next.role
+      const listChanged = roleChanged || JSON.stringify(this.data.list) !== JSON.stringify(next.list)
+      this._role = next.role
+      this.setData({
+        ...(listChanged ? { list: next.list } : {}),
+        selected: next.selected,
+        badges: next.badges,
+      })
+      const app = getApp()
       if (app.registerTabBar) app.registerTabBar(this)
-      if (app.applyTabBarBadges) app.applyTabBarBadges()
+    },
+
+    syncBadges() {
+      const route = getCurrentPages().slice(-1)[0]?.route || ''
+      const pagePath = route ? `/${route}` : ''
+      const next = buildTabBarState(pagePath)
+      this.setData({
+        badges: next.badges,
+        selected: next.selected,
+      })
     },
 
     setSelected(pagePath) {
       const idx = this.data.list.findIndex((t) => t.pagePath === pagePath)
-      if (idx >= 0) this.setData({ selected: idx })
+      if (idx >= 0) {
+        this.setData({ selected: idx, badges: buildTabBarState(pagePath).badges })
+      } else {
+        this.initTabBar()
+      }
     },
 
     updateBadges(badges) {
-      this.setData({ badges: { ...this.data.badges, ...badges } })
+      this.setData({ badges: { ...badges } })
     },
 
     switchTab(e) {
-      const { path, index } = e.currentTarget.dataset
+      const { path } = e.currentTarget.dataset
       const app = getApp()
-      openPage(path, app.globalData.permissions, app.globalData.user?.role)
-      if (index !== undefined) this.setData({ selected: Number(index) })
+      const { role, permissions } = resolveTabSession()
+      const badgeKey = badgeKeyForPath(path)
+      if (badgeKey && app.dismissTabBadge) app.dismissTabBadge(badgeKey)
+      openPage(path, permissions, role)
     },
   },
 })

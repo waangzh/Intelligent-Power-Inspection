@@ -11,8 +11,11 @@ const {
   enrichWorkOrder,
   isWorkOrderUnassigned,
   validateResolveFormForBackend,
+  buildLocationContext,
 } = require('../../utils/work-order')
-const { syncTabBar } = require('../../utils/tab-page')
+const { syncTabBar, refreshTabBarBadges } = require('../../utils/tab-page')
+const { formatBusinessMessage } = require('../../utils/display-text')
+const { formatDateTimeShort } = require('../../utils/date-time')
 const { resolvePhotoSrc } = require('../../utils/work-order-photo')
 
 function withPhotoPreview(order) {
@@ -116,7 +119,7 @@ Page({
           : '接单大厅抢单、现场处置与提交复核',
     })
     this.load()
-    app.refreshBadges()
+    refreshTabBarBadges(this)
   },
 
   async load() {
@@ -126,12 +129,21 @@ Page({
     let pendingAlarms = []
     let orders = []
 
+    const [sites, allAlarms] = await Promise.all([
+      api.getSites().catch(() => []),
+      api.getAlarms().catch(() => []),
+    ])
+    const locationContext = buildLocationContext(allAlarms, sites)
+
     if (canCreate) {
       const snapshot = await api.tryAutoConvertPendingAlarms().catch(() => ({
         alarms: [],
         orders: [],
       }))
       orders = snapshot.orders || []
+      ;(snapshot.alarms || []).forEach((alarm) => {
+        if (alarm?.id) locationContext.alarmsById[alarm.id] = alarm
+      })
       const linkedAlarmIds = new Set(
         orders.filter((o) => o.alarmId).map((o) => o.alarmId),
       )
@@ -140,10 +152,11 @@ Page({
         .slice(0, 8)
         .map((a) => ({
           ...a,
+          message: formatBusinessMessage(a.message),
           severityLabel: ALARM_SEVERITY_LABELS[a.severity],
           typeLabel: DETECTION_LABELS[a.type] || a.type,
           sevType: a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info',
-          time: a.createdAt ? a.createdAt.slice(0, 16).replace('T', ' ') : '',
+          time: formatDateTimeShort(a.createdAt),
         }))
     } else {
       orders = await api.getWorkOrders()
@@ -154,10 +167,10 @@ Page({
         ...o,
         statusLabel: WORK_ORDER_STATUS_LABELS[o.status],
         priorityLabel: WORK_ORDER_PRIORITY_LABELS[o.priority],
-        createdLabel: o.createdAt ? o.createdAt.slice(0, 16).replace('T', ' ') : '',
-      })
+      }, locationContext)
       return withPhotoPreview({
         ...enriched,
+        showDescription: enriched.showDescription,
         canClaim: workOrderPerm.canClaimOrder(o, user, perms),
         canSubmitReview: workOrderPerm.canSubmitReview(o, user, perms),
         canConfirmReview: workOrderPerm.canConfirmReview(o, user, perms),

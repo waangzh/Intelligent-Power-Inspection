@@ -1,7 +1,9 @@
 const api = require('../../services/index')
 const { hasPermission } = require('../../utils/permission')
-const { syncTabBar } = require('../../utils/tab-page')
+const { refreshTabBarBadges } = require('../../utils/tab-page')
 const { ALARM_SEVERITY_LABELS, DETECTION_LABELS } = require('../../utils/constants')
+const { formatDateTimeShort } = require('../../utils/date-time')
+const { formatBusinessMessage } = require('../../utils/display-text')
 
 const SEVERITY_OPTIONS = [
   { value: '', label: '全部级别' },
@@ -29,13 +31,12 @@ Page({
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/alarms/index')) return
-    syncTabBar(this)
     const perms = app.globalData.permissions
     this.setData({
       canAck: hasPermission(perms, 'alarm:ack'),
     })
     this.load()
-    app.refreshBadges()
+    refreshTabBarBadges(this, { dismissOnShow: true })
   },
 
   async load() {
@@ -50,10 +51,11 @@ Page({
       })
       const enriched = alarms.map((a) => ({
         ...a,
+        message: formatBusinessMessage(a.message),
         severityLabel: ALARM_SEVERITY_LABELS[a.severity],
         typeLabel: DETECTION_LABELS[a.type] || a.type,
         sevType: a.severity === 'CRITICAL' ? 'danger' : a.severity === 'HIGH' ? 'warning' : 'info',
-        time: a.createdAt ? a.createdAt.slice(0, 16).replace('T', ' ') : '',
+        time: formatDateTimeShort(a.createdAt),
         hasWorkOrder: !!workOrderByAlarm[a.id],
         workOrderLabel: workOrderByAlarm[a.id]?.autoConverted ? '已自动转工单' : '已关联工单',
       }))

@@ -2,5 +2,14 @@
 .toolbar-right { display: flex; gap: 24rpx; }
 .filter-btn, .link { color: var(--pi-primary); font-size: 26rpx; }
 .ntf-item.unread { border-left: 6rpx solid var(--pi-primary); }
-.ntf-title { font-weight: 500; margin: 8rpx 0; }
-.ntf-actions { margin-top: 8rpx; }
+.ntf-title { font-weight: 500; margin: 12rpx 0 8rpx; line-height: 1.45; }
+.ntf-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 32rpx;
+  margin-top: 16rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx solid var(--pi-border-soft);
+}
+.ntf-actions .link { padding: 8rpx 0; }

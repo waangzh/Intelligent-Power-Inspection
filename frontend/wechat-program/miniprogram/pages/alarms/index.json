@@ -2,6 +2,7 @@
   "navigationBarTitleText": "告警中心",
   "usingComponents": {
     "page-header": "/components/page-header/index",
-    "simple-chart": "/components/simple-chart/index"
+    "simple-chart": "/components/simple-chart/index",
+    "inline-tab-bar": "/components/inline-tab-bar/index"
   }
 }
