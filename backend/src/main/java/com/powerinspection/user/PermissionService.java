@@ -22,6 +22,8 @@ public class PermissionService {
             Permission.SITE_EDIT,
             Permission.ROUTE_EDIT,
             Permission.ROBOT_MANAGE,
+            Permission.ROBOT_LOCATION_VIEW,
+            Permission.ROBOT_TRACK_VIEW,
             Permission.DETECTION_MANAGE,
             Permission.USER_MANAGE,
             Permission.RECORD_EXPORT,
@@ -49,9 +51,12 @@ public class PermissionService {
             Permission.WORKORDER_VIEW,
             Permission.WORKORDER_PROCESS,
             Permission.AGENT_VIEW,
-            Permission.AGENT_RUN));
+            Permission.AGENT_RUN,
+            Permission.ROBOT_LOCATION_VIEW,
+            Permission.ROBOT_TRACK_VIEW));
     ROLE_PERMISSIONS.put(
-        UserRole.VIEWER, EnumSet.of(Permission.TASK_VIEW, Permission.WORKORDER_VIEW));
+        UserRole.VIEWER,
+        EnumSet.of(Permission.TASK_VIEW, Permission.WORKORDER_VIEW, Permission.ROBOT_LOCATION_VIEW));
   }
 
   public boolean has(UserRole role, Permission permission) {

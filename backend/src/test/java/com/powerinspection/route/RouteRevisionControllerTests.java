@@ -201,7 +201,7 @@ class RouteRevisionControllerTests {
     Instant heartbeatAt = Instant.now();
     heartbeatService.applyBridgeSnapshot(
         new BridgeRobotSnapshot(
-            robotId, heartbeatAt, "1.0", "test-boot", "idle", "test", 0, Map.of()),
+            robotId, heartbeatAt, "1.0", "test-boot", "idle", "test", 0, Map.of(), null),
         heartbeatAt);
 
     mockMvc

@@ -16,13 +16,19 @@ import org.springframework.stereotype.Service;
 public class RobotBridgeHeartbeatSyncService {
   private final RobotBridgeHeartbeatClient client;
   private final RobotHeartbeatService heartbeatService;
+  private final RobotLocationService locationService;
   private final DataStoreService dataStore;
   private final RobotBridgeIdMapper idMapper;
 
-  public RobotBridgeHeartbeatSyncService(RobotBridgeHeartbeatClient client, RobotHeartbeatService heartbeatService, DataStoreService dataStore,
+  public RobotBridgeHeartbeatSyncService(
+      RobotBridgeHeartbeatClient client,
+      RobotHeartbeatService heartbeatService,
+      RobotLocationService locationService,
+      DataStoreService dataStore,
       RobotBridgeIdMapper idMapper) {
     this.client = client;
     this.heartbeatService = heartbeatService;
+    this.locationService = locationService;
     this.dataStore = dataStore;
     this.idMapper = idMapper;
   }
@@ -47,8 +53,18 @@ public class RobotBridgeHeartbeatSyncService {
       }
       try {
         BridgeRobotSnapshot snapshot = client.robot(bridgeRobotId);
-        heartbeatService.applyBridgeSnapshot(new BridgeRobotSnapshot(robotId, snapshot.lastHeartbeatAt(), snapshot.protocolVersion(),
-          snapshot.bootId(), snapshot.state(), snapshot.softwareVersion(), snapshot.acceptedEventSequence(), snapshot.health()), now);
+        BridgeRobotSnapshot platformSnapshot = new BridgeRobotSnapshot(
+            robotId,
+            snapshot.lastHeartbeatAt(),
+            snapshot.protocolVersion(),
+            snapshot.bootId(),
+            snapshot.state(),
+            snapshot.softwareVersion(),
+            snapshot.acceptedEventSequence(),
+            snapshot.health(),
+            snapshot.gnssFix());
+        heartbeatService.applyBridgeSnapshot(platformSnapshot, now);
+        locationService.applySnapshot(platformSnapshot, now);
       } catch (BridgeRobotClientException ex) {
         heartbeatService.markBridgeUnreachable(robotId, now);
       }

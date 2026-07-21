@@ -308,6 +308,7 @@ def create_app() -> FastAPI:
             "activeExecutionId": status.get("activeExecutionId"),
             "activeDeploymentId": status.get("activeDeploymentId"),
             "softwareVersion": status.get("softwareVersion"), "health": status.get("health", {}),
+            "gnssFix": status.get("gnssFix"),
         }
 
     @app.post("/robot-api/v1/heartbeat")

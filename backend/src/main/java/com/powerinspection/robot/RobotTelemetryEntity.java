@@ -38,6 +38,32 @@ public class RobotTelemetryEntity {
   private Double lastOdomAgeSec;
   @Column(name = "last_scan_age_sec")
   private Double lastScanAgeSec;
+  @Column(name = "gps_valid")
+  private Boolean gpsValid;
+  @Column(name = "gps_stale")
+  private Boolean gpsStale;
+  @Column(name = "gps_latitude")
+  private Double gpsLatitude;
+  @Column(name = "gps_longitude")
+  private Double gpsLongitude;
+  @Column(name = "gps_altitude")
+  private Double gpsAltitude;
+  @Column(name = "gps_quality")
+  private Integer gpsQuality;
+  @Column(name = "gps_fix_type")
+  private String gpsFixType;
+  @Column(name = "gps_satellites")
+  private Integer gpsSatellites;
+  @Column(name = "gps_hdop")
+  private Double gpsHdop;
+  @Column(name = "gps_differential_age")
+  private Double gpsDifferentialAge;
+  @Column(name = "gps_base_station_id")
+  private String gpsBaseStationId;
+  @Column(name = "gps_observed_at")
+  private Instant gpsObservedAt;
+  @Column(name = "gps_received_at")
+  private Instant gpsReceivedAt;
   @Column(name = "payload_json", columnDefinition = "LONGTEXT")
   private String payloadJson;
   @Column(name = "updated_at", nullable = false)
@@ -95,8 +121,70 @@ public class RobotTelemetryEntity {
     return map;
   }
 
+  public String getRobotId() { return robotId; }
+  public void setRobotId(String robotId) { this.robotId = robotId; }
+  public String getUpdatedAt() { return updatedAt; }
+  public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
   public Long getVersion() { return version; }
   public void setVersion(Long version) { this.version = version; }
+
+  public Boolean getGpsValid() { return gpsValid; }
+  public Boolean getGpsStale() { return gpsStale; }
+  public Double getGpsLatitude() { return gpsLatitude; }
+  public Double getGpsLongitude() { return gpsLongitude; }
+  public Double getGpsAltitude() { return gpsAltitude; }
+  public Integer getGpsQuality() { return gpsQuality; }
+  public String getGpsFixType() { return gpsFixType; }
+  public Integer getGpsSatellites() { return gpsSatellites; }
+  public Double getGpsHdop() { return gpsHdop; }
+  public Double getGpsDifferentialAge() { return gpsDifferentialAge; }
+  public String getGpsBaseStationId() { return gpsBaseStationId; }
+  public Instant getGpsObservedAt() { return gpsObservedAt; }
+  public Instant getGpsReceivedAt() { return gpsReceivedAt; }
+
+  public void applyGnssFix(BridgeGnssFix fix, Instant receivedAt) {
+    if (fix == null) return;
+    gpsValid = fix.valid();
+    gpsStale = fix.stale();
+    gpsLatitude = fix.latitude();
+    gpsLongitude = fix.longitude();
+    gpsAltitude = fix.altitude();
+    gpsQuality = fix.quality();
+    gpsFixType = fix.fixType();
+    gpsSatellites = fix.satellites();
+    gpsHdop = fix.hdop();
+    gpsDifferentialAge = fix.differentialAge();
+    gpsBaseStationId = fix.baseStationId();
+    gpsObservedAt = fix.observedAt() != null ? fix.observedAt() : receivedAt;
+    gpsReceivedAt = receivedAt;
+    if (!Boolean.TRUE.equals(gpsValid) && !GnssFixParser.coordinateValid(gpsLatitude, gpsLongitude)) {
+      gpsLatitude = null;
+      gpsLongitude = null;
+    }
+  }
+
+  public BridgeGnssFix toGnssFix() {
+    if (gpsLatitude == null || gpsLongitude == null) return null;
+    return new BridgeGnssFix(
+        Boolean.TRUE.equals(gpsValid),
+        Boolean.TRUE.equals(gpsStale),
+        "gps_link",
+        gpsLatitude,
+        gpsLongitude,
+        gpsAltitude,
+        gpsQuality,
+        gpsFixType == null ? "UNKNOWN" : gpsFixType,
+        gpsSatellites,
+        gpsHdop,
+        gpsDifferentialAge,
+        gpsBaseStationId,
+        null,
+        gpsObservedAt);
+  }
+
+  public boolean hasStoredCoordinates() {
+    return GnssFixParser.coordinateValid(gpsLatitude, gpsLongitude);
+  }
 
   private static String text(Object value) { return value == null ? null : value.toString(); }
   private static Double dbl(Object value) {
