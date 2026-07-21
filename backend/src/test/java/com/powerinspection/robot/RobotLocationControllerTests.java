@@ -100,6 +100,17 @@ class RobotLocationControllerTests {
         .andExpect(status().isForbidden());
   }
 
+  @Test
+  void trackRejectsNonPositiveLimit() throws Exception {
+    String token = login("dispatcher", "Disp@123");
+
+    mockMvc.perform(get("/api/v1/robots/{id}/track", ROBOT_ID)
+            .header("Authorization", bearer(token))
+            .param("limit", "0"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.message").value("INVALID_TRACK_POINT_LIMIT: limit must be at least 1"));
+  }
+
   private Map<String, Object> robotIdentity() {
     Map<String, Object> identity = new LinkedHashMap<>();
     identity.put("id", ROBOT_ID);
