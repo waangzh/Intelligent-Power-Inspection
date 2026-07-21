@@ -180,10 +180,11 @@ public class DetectionTemplateController extends CrudSupport {
       if (!(value instanceof Map<?, ?> raw)) {
         throw ApiException.badRequest("检测项格式错误");
       }
-      String type = text(raw.get("type"));
-      if (type == null || type.isBlank()) {
+      String rawType = text(raw.get("type"));
+      if (rawType == null || rawType.isBlank()) {
         throw ApiException.badRequest("检测项类型不能为空");
       }
+      String type = rawType.trim();
       if (!types.add(type)) {
         throw ApiException.badRequest("检测类型不能重复：" + type);
       }
@@ -209,7 +210,7 @@ public class DetectionTemplateController extends CrudSupport {
       items.add(
           item(
               normalizedItemId,
-              type.trim(),
+              type,
               normalizedName,
               enabled,
               normalizedPrompt,
