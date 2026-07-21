@@ -75,6 +75,18 @@ const defaultIcon = L.icon({
 
 type MapPoint = LatLng & { x?: number; y?: number }
 
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => HTML_ESCAPES[character] ?? character)
+}
+
 function hasValidGeoCoordinate(latlng: LatLng): boolean {
   return (
     Number.isFinite(latlng.lat)
@@ -132,7 +144,7 @@ function robotMarkerHtml(): string {
 }
 
 function robotPopupHtml(): string {
-  const label = props.robotLabel?.trim() || '机器人'
+  const label = escapeHtml(props.robotLabel?.trim() || '机器人')
   const location = props.robotLocation
   const fix = location?.gnssFix
   const latlng = resolveRobotLatLng()
@@ -181,7 +193,7 @@ function renderRoute() {
 
   route.checkpoints.filter((cp) => canDrawOnGeoMap(cp.position)).forEach((cp) => {
     const marker = L.marker(toLeaflet(cp.position), { icon: defaultIcon })
-    marker.bindPopup(`<b>${cp.seq}. ${cp.name}</b>`)
+    marker.bindPopup(`<b>${cp.seq}. ${escapeHtml(cp.name)}</b>`)
     marker.on('click', () => emit('checkpointSelect', cp.id))
     markersLayer!.addLayer(marker)
 
@@ -209,7 +221,7 @@ function renderAreas() {
         fillOpacity: 0.12,
         weight: 2,
       })
-        .bindPopup(area.name)
+        .bindPopup(escapeHtml(area.name))
         .addTo(areasLayer!)
     }
   })
