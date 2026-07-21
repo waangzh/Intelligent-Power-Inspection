@@ -98,6 +98,11 @@ flowchart LR
 | `mapPose` | object/null | 否 | map 坐标位姿 |
 | `odomPose` | object/null | 否 | odom 坐标位姿 |
 | `health` | object | 是 | 传感器 age、Nav2、系统模式和最后错误 |
+| `capabilities` | object | 否 | 静态软件能力；缺失时本地确认按不支持处理，远程启动保持兼容 |
+
+`capabilities.localConfirmStart` 是随设备软件发布的静态声明，不能作为管理员审批开关；
+`capabilities.localConfirmProtocolVersion` 当前平台精确支持 `"1"`。`health.localConfirmStartReady`
+和 `health.localConfirmStartError` 表示当前运行时是否可接收本地确认任务，不改变静态能力。
 
 请求示例：
 
@@ -112,9 +117,14 @@ flowchart LR
   "activeDeploymentId": null,
   "lastReceivedCommandId": null,
   "latestLocalEventSequence": 0,
+  "capabilities": {
+    "remoteImmediateStart": true,
+    "localConfirmStart": true,
+    "localConfirmProtocolVersion": "1"
+  },
   "mapPose": null,
   "odomPose": {"frame": "odom", "x": 0.0, "y": 0.0, "yaw": 0.0},
-  "health": {"odomAgeSec": 0.1, "scanAgeSec": 0.1, "imuAgeSec": 0.1, "nav2": "not_running", "systemMode": "ready", "lastError": ""}
+  "health": {"odomAgeSec": 0.1, "scanAgeSec": 0.1, "imuAgeSec": 0.1, "nav2": "not_running", "systemMode": "ready", "lastError": "", "localConfirmStartReady": true, "localConfirmStartError": null}
 }
 ```
 
@@ -376,6 +386,12 @@ HTTP：`200`、`401`。可重试；仅证明进程和配置加载，不证明 ro
   "activeDeploymentId": "deployment-demo",
   "protocolVersion": "1.0",
   "softwareVersion": "79df249",
+  "capabilities": {
+    "remoteImmediateStart": true,
+    "localConfirmStart": true,
+    "localConfirmProtocolVersion": "1"
+  },
+  "capabilityReportedAt": "2026-07-13T00:00:00+00:00",
   "health": {}
 }
 ```
@@ -576,6 +592,9 @@ Spring 平台状态包括 `CREATED/STARTING/WAITING_LOCAL_CONFIRM/RUNNING/PAUSIN
 | `ROBOT_BUSY` | 409 | 机器人已有活动执行 |
 | `ROBOT_OFFLINE` | 409/503 | 超过离线阈值；等待 heartbeat |
 | `ROBOT_START_MODE_UNSUPPORTED` | 409 | 机器人未声明支持所选启动模式 |
+| `LOCAL_CONFIRM_POLICY_DISABLED` | 409 | 设备支持但管理员尚未审批启用本地确认 |
+| `LOCAL_CONFIRM_PROTOCOL_INCOMPATIBLE` | 409 | 设备上报的本地确认协议版本不在平台支持集合 |
+| `LOCAL_CONFIRM_NOT_READY` | 409 | 静态能力有效，但机器人当前 readiness 不满足 |
 | `START_COMMAND_TIMEOUT` | 业务错误 | 启动命令在配置期限内未被通信链路接受 |
 | `LOCAL_CONFIRM_TIMEOUT` | 业务错误 | 等待机器人本地确认超过配置期限 |
 | `ROUTE_START_TIMEOUT` | 业务错误 | 启动命令已入队但未在配置期限内收到 `route_started` |
@@ -624,6 +643,7 @@ Spring 平台状态包括 `CREATED/STARTING/WAITING_LOCAL_CONFIRM/RUNNING/PAUSIN
 | --- | --- | --- |
 | `POST /api/v1/tasks` | `name`、`robotId`、`routeRevisionId` 必填；可选 `routeId` 必须与 revision 所属路线一致 | 同事务创建 Task 与不可变 `TaskExecution`，初始 `CREATED`，响应含 `executionId` |
 | `GET /api/v1/tasks/{taskId}/start-eligibility` | 校验 robot CONNECTED、部署 READY、身份/哈希/active route 一致、无冲突活动 execution | `eligible=true` 才可请求启动 |
+| `PATCH /api/v1/robots/{robotId}/local-confirm-start-policy` | 仅 `robot:manage`；启用前需首次有效 heartbeat、设备声明与协议兼容；禁用始终允许 | 保存管理员审批并记录操作人、时间与前后值 |
 | `POST /api/v1/tasks/{taskId}/start` | 必须带 `Idempotency-Key`；请求体可带 `startMode`，省略默认 `REMOTE_IMMEDIATE` | HTTP `202`，Spring 已接受启动意图并等待 worker 向 Bridge 入队 |
 | `POST /api/v1/tasks/{taskId}/pause` | execution 为 `RUNNING` | HTTP `202`，进入 `PAUSING` |
 | `POST /api/v1/tasks/{taskId}/resume` | execution 为 `PAUSED` | HTTP `202`，进入 `RESUMING` |

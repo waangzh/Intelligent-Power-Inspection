@@ -27,6 +27,13 @@ export interface RobotHeartbeatStatus {
   robotState?: string | null
   acceptedEventSequence: number
   diagnosticSummary?: string | null
+  reportedSupportsRemoteImmediateStart?: boolean
+  reportedSupportsLocalConfirmStart?: boolean
+  localConfirmProtocolVersion?: string | null
+  localConfirmProtocolCompatible?: boolean
+  localConfirmStartReady?: boolean
+  localConfirmStartError?: string | null
+  capabilityReportedAt?: string | null
 }
 
 export interface RobotHeartbeatStatusPage {

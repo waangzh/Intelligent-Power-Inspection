@@ -230,12 +230,20 @@ def run_smoke(base_url, store, platform) -> None:
     assert request(base_url, "POST", "/robot-api/v1/inspection-images", {})[0] == 401
     heartbeat = {
         "protocolVersion": "1.0", "robotId": "robot-001", "bootId": "boot-1",
-        "softwareVersion": "smoke", "state": "idle", "latestLocalEventSequence": 0, "health": {},
+        "softwareVersion": "smoke", "state": "idle", "latestLocalEventSequence": 0,
+        "capabilities": {
+            "remoteImmediateStart": True, "localConfirmStart": True,
+            "localConfirmProtocolVersion": "1",
+        },
+        "health": {"localConfirmStartReady": True, "localConfirmStartError": None},
     }
     status, reply = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")
     assert status == 200 and reply["command"] is None
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "robotId": "robot-unknown"}, "token-placeholder")[0] == 401
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "health": []}, "token-placeholder")[0] == 400
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "capabilities": {"localConfirmStart": "true"}}, "token-placeholder")[0] == 400
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "capabilities": {"localConfirmStart": True, "localConfirmProtocolVersion": "latest"}}, "token-placeholder")[0] == 400
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "localConfirmStartEnabled": True}, "token-placeholder")[0] == 400
     invalid_mode = {
         "robotId": "robot-001", "deploymentId": "deploy-1", "executorRouteId": "route-1",
         "requestId": "request-invalid-mode", "startMode": "AUTOMATIC",
@@ -352,6 +360,8 @@ def run_smoke(base_url, store, platform) -> None:
     assert inspection_uploaded["status"] == "AVAILABLE" and platform.inspection_upload_requests == 1
     robot = request(base_url, "GET", "/bridge/v1/robots/robot-001", token="admin-placeholder")[1]
     assert robot["configured"] is True and robot["online"] is True and robot["acceptedEventSequence"] == 4
+    assert robot["capabilities"] == heartbeat["capabilities"]
+    assert robot["health"]["localConfirmStartReady"] is True and robot["capabilityReportedAt"]
     second = {**body, "requestId": "request-2", "startMode": "LOCAL_CONFIRM"}
     status, second_queued = request(base_url, "POST", "/bridge/v1/executions/execution-2/start", second, "admin-placeholder")
     assert status == 202

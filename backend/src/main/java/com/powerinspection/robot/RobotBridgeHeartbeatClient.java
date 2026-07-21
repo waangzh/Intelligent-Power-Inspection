@@ -55,9 +55,20 @@ public class RobotBridgeHeartbeatClient {
     healthMap.forEach((key, value) -> {
       if (key != null && value != null) normalizedHealth.put(String.valueOf(key), value);
     });
+    Object capabilities = body.get("capabilities");
+    Map<?, ?> capabilityMap;
+    if (capabilities == null) capabilityMap = Map.of();
+    else if (capabilities instanceof Map<?, ?> value) capabilityMap = value;
+    else throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD);
+    boolean reportedRemote = bool(capabilityMap.get("remoteImmediateStart"), true);
+    boolean reportedLocal = bool(capabilityMap.get("localConfirmStart"), false);
+    String localProtocolVersion = nullableText(capabilityMap.get("localConfirmProtocolVersion"));
+    boolean localReady = bool(healthMap.get("localConfirmStartReady"), false);
+    String localError = nullableText(healthMap.get("localConfirmStartError"));
     return new BridgeRobotSnapshot(robotId, lastHeartbeatAt, text(body.get("protocolVersion")), text(body.get("bootId")), text(body.get("state")),
       text(body.get("softwareVersion")), number(body.get("acceptedEventSequence")), Map.copyOf(normalizedHealth),
-      GnssFixParser.parse(body.get("gnssFix")));
+      GnssFixParser.parse(body.get("gnssFix")), reportedRemote, reportedLocal, localProtocolVersion,
+      localReady, localError, instant(body.get("capabilityReportedAt")));
   }
 
   @SuppressWarnings("unchecked")
@@ -77,6 +88,23 @@ public class RobotBridgeHeartbeatClient {
 
   private static String trimTrailingSlash(String value) { return value.endsWith("/") ? value.substring(0, value.length() - 1) : value; }
   private static String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }
+  private static String nullableText(Object value) {
+    if (value == null) return null;
+    if (!(value instanceof String)) throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD);
+    String result = ((String) value).trim();
+    return result.isEmpty() ? null : result;
+  }
+  private static boolean bool(Object value, boolean defaultValue) {
+    if (value == null) return defaultValue;
+    if (value instanceof Boolean result) return result;
+    throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD);
+  }
+  private static Instant instant(Object value) {
+    String text = text(value);
+    if (text.isBlank()) return null;
+    try { return Instant.parse(text); }
+    catch (RuntimeException ex) { throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD); }
+  }
   private static long number(Object value) {
     if (value instanceof Number number) return Math.max(0, number.longValue());
     try { return Math.max(0, Long.parseLong(text(value))); }

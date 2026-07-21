@@ -79,8 +79,8 @@
                 <div class="start-mode-title">
                   <el-icon><VideoPlay /></el-icon>
                   <strong>远程立即启动</strong>
-                  <el-tag size="small" :type="supportsRemoteStart ? 'success' : 'info'">
-                    {{ supportsRemoteStart ? '机器人支持' : '机器人不支持' }}
+                  <el-tag size="small" :type="remoteModeEligible ? 'success' : 'info'">
+                    {{ remoteModeEligible ? '当前可用' : '当前不可用' }}
                   </el-tag>
                 </div>
                 <p>校验通过后立即向机器人下发 START，机器人可能随即开始移动。</p>
@@ -102,8 +102,8 @@
                 <div class="start-mode-title">
                   <el-icon><Pointer /></el-icon>
                   <strong>机器人本地确认</strong>
-                  <el-tag size="small" :type="supportsLocalStart ? 'success' : 'info'">
-                    {{ supportsLocalStart ? '机器人支持' : '机器人不支持' }}
+                  <el-tag size="small" :type="localModeEligible ? 'success' : 'info'">
+                    {{ localModeEligible ? '当前可用' : '当前不可用' }}
                   </el-tag>
                 </div>
                 <p>先下发并校验路线、地图，现场人员在机器人触摸屏确认后才开始移动。</p>
@@ -294,6 +294,8 @@ const supportsLocalStart = computed(() =>
   eligibility.value?.supportsLocalConfirmStart ?? robot.value?.supportsLocalConfirmStart ?? false)
 const supportsRemoteStart = computed(() =>
   eligibility.value?.supportsRemoteImmediateStart ?? robot.value?.supportsRemoteImmediateStart ?? true)
+const remoteModeEligible = computed(() => eligibility.value?.remoteImmediateStartEligible ?? false)
+const localModeEligible = computed(() => eligibility.value?.localConfirmStartEligible ?? false)
 const canPause = computed(() => !!execution.value && can('task:control') && executionStatus.value === 'RUNNING')
 const canResume = computed(() => !!execution.value && can('task:control') && executionStatus.value === 'PAUSED')
 const canTakeover = computed(() => !!execution.value && can('task:takeover') && executionStatus.value === 'RUNNING')
@@ -368,11 +370,15 @@ function startDisabledReason(mode: 'REMOTE_IMMEDIATE' | 'LOCAL_CONFIRM') {
   if (mode === 'REMOTE_IMMEDIATE' && !can('task:start-remote')) {
     return '当前账号没有远程立即启动权限；如权限刚更新，请重新登录'
   }
-  if (eligibilityReason.value) return eligibilityReason.value
-  if (robot.value?.status === 'OFFLINE') return '机器人离线'
-  if (robot.value?.status === 'BUSY') return '机器人正忙'
-  if (mode === 'LOCAL_CONFIRM' && !supportsLocalStart.value) return '机器人不支持本地确认启动'
-  if (mode === 'REMOTE_IMMEDIATE' && !supportsRemoteStart.value) return '机器人不支持远程立即启动'
+  if (!eligibility.value) return '正在核验启动条件'
+  if (mode === 'LOCAL_CONFIRM' && !eligibility.value.localConfirmStartEligible) {
+    return eligibility.value.localConfirmStartIneligibleReason || '本地确认启动条件未满足'
+  }
+  if (mode === 'REMOTE_IMMEDIATE' && !eligibility.value.remoteImmediateStartEligible) {
+    return eligibility.value.remoteImmediateStartIneligibleReason || '远程立即启动条件未满足'
+  }
+  if (mode === 'LOCAL_CONFIRM' && !supportsLocalStart.value) return '本地确认有效能力未启用'
+  if (mode === 'REMOTE_IMMEDIATE' && !supportsRemoteStart.value) return '设备未上报支持远程立即启动'
   return ''
 }
 

@@ -69,6 +69,9 @@ class RobotHeartbeatControllerTests {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.serialNo").value("SN-HEARTBEAT-001"))
       .andExpect(jsonPath("$.data.protocolVersion").value("1.0"))
+      .andExpect(jsonPath("$.data.reportedSupportsLocalConfirmStart").value(true))
+      .andExpect(jsonPath("$.data.localConfirmProtocolCompatible").value(true))
+      .andExpect(jsonPath("$.data.localConfirmStartReady").value(true))
       .andExpect(jsonPath("$.data.diagnosticSummary").value(org.hamcrest.Matchers.containsString("nav2=not_running")));
   }
 
@@ -107,7 +110,8 @@ class RobotHeartbeatControllerTests {
 
   private BridgeRobotSnapshot snapshot(String robotId, Instant at, String state, String bootId) {
     return new BridgeRobotSnapshot(robotId, at, "1.0", bootId, state, "test-build", 7,
-      Map.of("systemMode", "ready", "nav2", "not_running", "lastError", "must-not-be-exposed"), null);
+      Map.of("systemMode", "ready", "nav2", "not_running", "lastError", "must-not-be-exposed"), null,
+      true, true, "1", true, null, at);
   }
 
   private Map<String, Object> robotIdentity() {

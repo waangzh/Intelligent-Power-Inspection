@@ -13,5 +13,19 @@ public record BridgeRobotSnapshot(
   String softwareVersion,
   long acceptedEventSequence,
   Map<String, Object> health,
-  BridgeGnssFix gnssFix
-) {}
+  BridgeGnssFix gnssFix,
+  boolean reportedSupportsRemoteImmediateStart,
+  boolean reportedSupportsLocalConfirmStart,
+  String localConfirmProtocolVersion,
+  boolean localConfirmStartReady,
+  String localConfirmStartError,
+  Instant capabilityReportedAt
+) {
+  public BridgeRobotSnapshot(
+      String robotId, Instant lastHeartbeatAt, String protocolVersion, String bootId,
+      String state, String softwareVersion, long acceptedEventSequence,
+      Map<String, Object> health, BridgeGnssFix gnssFix) {
+    this(robotId, lastHeartbeatAt, protocolVersion, bootId, state, softwareVersion,
+      acceptedEventSequence, health, gnssFix, true, false, null, false, null, null);
+  }
+}

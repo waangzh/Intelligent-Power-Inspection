@@ -11,9 +11,12 @@ import com.powerinspection.data.DataStoreService;
 import com.powerinspection.security.CurrentUser;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,28 +30,41 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/robots")
 public class RobotController extends CrudSupport {
+  private static final Set<String> PROTECTED_CAPABILITY_FIELDS = Set.of(
+    "localConfirmStartEnabled", "supportsLocalConfirmStart", "supportsRemoteImmediateStart",
+    "reportedSupportsLocalConfirmStart", "reportedSupportsRemoteImmediateStart",
+    "localConfirmProtocolVersion", "localConfirmProtocolCompatible",
+    "localConfirmStartReady", "localConfirmStartError", "capabilityReportedAt");
+
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
   private final SimpMessagingTemplate messagingTemplate;
   private final RobotProperties robotProperties;
+  private final RobotLocalConfirmPolicyService localConfirmPolicyService;
 
-  public RobotController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, SimpMessagingTemplate messagingTemplate, RobotProperties robotProperties) {
+  public RobotController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser,
+      SimpMessagingTemplate messagingTemplate, RobotProperties robotProperties,
+      RobotLocalConfirmPolicyService localConfirmPolicyService) {
     super(dataStore);
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.messagingTemplate = messagingTemplate;
     this.robotProperties = robotProperties;
+    this.localConfirmPolicyService = localConfirmPolicyService;
   }
 
   @GetMapping
   public ApiResponse<PageResult<Map<String, Object>>> listRobots(ListQuery query) {
     permissionService.require(currentUser.get(), Permission.TASK_VIEW);
-    return ApiResponse.ok(page(DataCategory.ROBOT, query, "siteId", "status"));
+    PageResult<Map<String, Object>> result = page(DataCategory.ROBOT, query, "siteId", "status");
+    return ApiResponse.ok(new PageResult<>(
+      result.items().stream().map(localConfirmPolicyService::decorate).toList(),
+      result.total(), result.page(), result.size(), result.hasMore(), result.nextCursor()));
   }
 
   @GetMapping("/{id}")
   public ApiResponse<Map<String, Object>> robot(@PathVariable String id) {
-    return ApiResponse.ok(dataStore.get(DataCategory.ROBOT, id));
+    return ApiResponse.ok(localConfirmPolicyService.decorate(dataStore.get(DataCategory.ROBOT, id)));
   }
 
   @PostMapping
@@ -57,18 +73,19 @@ public class RobotController extends CrudSupport {
     if (!robotProperties.isAllowRegistration()) {
       throw ApiException.badRequest("当前为单机器人管理模式，不支持注册新机器人");
     }
+    rejectProtectedCapabilityFields(body);
     validateSite(body.get("siteId"));
     body.putIfAbsent("status", "OFFLINE");
-    body.putIfAbsent("supportsRemoteImmediateStart", true);
-    body.putIfAbsent("supportsLocalConfirmStart", false);
+    body.put("localConfirmStartEnabled", false);
     Map<String, Object> robot = create(DataCategory.ROBOT, "robot", body);
     publishRobot(robot);
-    return ApiResponse.ok(robot);
+    return ApiResponse.ok(localConfirmPolicyService.decorate(robot));
   }
 
   @PatchMapping("/{id}")
   public ApiResponse<Map<String, Object>> updateRobot(@PathVariable String id, @RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
+    rejectProtectedCapabilityFields(body);
     if (body.containsKey("siteId")) {
       String requestedSiteId = text(body.get("siteId"));
       if (requestedSiteId == null) {
@@ -81,6 +98,15 @@ public class RobotController extends CrudSupport {
       }
     }
     Map<String, Object> robot = update(DataCategory.ROBOT, id, body);
+    publishRobot(robot);
+    return ApiResponse.ok(localConfirmPolicyService.decorate(robot));
+  }
+
+  @PatchMapping("/{id}/local-confirm-start-policy")
+  public ApiResponse<Map<String, Object>> updateLocalConfirmStartPolicy(
+      @PathVariable String id, @Valid @RequestBody LocalConfirmStartPolicyRequest request) {
+    permissionService.require(currentUser.get(), Permission.ROBOT_MANAGE);
+    Map<String, Object> robot = localConfirmPolicyService.update(id, request.enabled(), currentUser.get());
     publishRobot(robot);
     return ApiResponse.ok(robot);
   }
@@ -110,6 +136,12 @@ public class RobotController extends CrudSupport {
     }
   }
 
+  private void rejectProtectedCapabilityFields(Map<String, Object> body) {
+    if (body.keySet().stream().anyMatch(PROTECTED_CAPABILITY_FIELDS::contains)) {
+      throw ApiException.badRequest("启动能力和管理员审批只能通过设备 heartbeat 与专用审批接口修改");
+    }
+  }
+
   private String text(Object value) {
     if (value == null || value.toString().isBlank() || "null".equals(value.toString())) return null;
     return value.toString();
@@ -132,4 +164,6 @@ public class RobotController extends CrudSupport {
     messagingTemplate.convertAndSend("/topic/robots/" + robot.get("id"), event);
     messagingTemplate.convertAndSend("/topic/robots", event);
   }
+
+  public record LocalConfirmStartPolicyRequest(@NotNull(message = "enabled 不能为空") Boolean enabled) {}
 }

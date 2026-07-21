@@ -146,6 +146,8 @@ export const resourcesApi = {
   getRobot: (id: string) => http.get<Robot>(`/robots/${encodeURIComponent(id)}`),
   createRobot: (robot: Robot) => http.post<Robot>('/robots', robot),
   updateRobot: (id: string, patch: Partial<Robot>) => http.patch<Robot>(`/robots/${id}`, patch),
+  updateRobotLocalConfirmStartPolicy: (id: string, enabled: boolean) =>
+    http.patch<Robot>(`/robots/${encodeURIComponent(id)}/local-confirm-start-policy`, { enabled }),
   removeRobot: (id: string) => http.delete<void>(`/robots/${id}`),
   listRobotHeartbeatStatus: (query: RobotHeartbeatStatusQuery = {}) => {
     const params = new URLSearchParams()

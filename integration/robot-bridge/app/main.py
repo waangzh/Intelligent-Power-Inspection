@@ -3,6 +3,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import tempfile
@@ -19,7 +20,7 @@ from fastapi.responses import JSONResponse, Response
 from .store import Store, StoreConflict, now
 
 
-logger = logging.getLogger("robot_bridge.map_upload")
+logger = logging.getLogger("robot_bridge")
 
 EVENT_REQUIRED_TEXT_FIELDS = (
     "schema_version", "robot_id", "boot_id", "event", "execution_id",
@@ -30,6 +31,11 @@ EVENT_CAMEL_CASE_IDENTITY_FIELDS = {
     "requestId", "commandId", "occurredAt",
 }
 START_MODES = {"REMOTE_IMMEDIATE", "LOCAL_CONFIRM"}
+LOCAL_CONFIRM_VERSION_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
+HEARTBEAT_FORBIDDEN_POLICY_FIELDS = {
+    "localConfirmStartEnabled", "supportsLocalConfirmStart",
+    "reportedSupportsLocalConfirmStart", "reportedLocalConfirmStart",
+}
 
 
 class BridgeError(Exception):
@@ -79,6 +85,54 @@ def validate_robot_event(event, robot_id):
         )
 
 
+def normalize_capabilities(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise BridgeError("INVALID_REQUEST", "capabilities must be an object")
+    if HEARTBEAT_FORBIDDEN_POLICY_FIELDS.intersection(value):
+        raise BridgeError("INVALID_REQUEST", "heartbeat cannot set administrator policy fields")
+    for field in ("remoteImmediateStart", "localConfirmStart"):
+        if field in value and not isinstance(value[field], bool):
+            raise BridgeError("INVALID_REQUEST", f"capabilities.{field} must be a boolean")
+    version = value.get("localConfirmProtocolVersion")
+    if version is not None and (
+        not isinstance(version, str)
+        or len(version) > 32
+        or not LOCAL_CONFIRM_VERSION_PATTERN.fullmatch(version)
+    ):
+        raise BridgeError(
+            "INVALID_REQUEST",
+            "capabilities.localConfirmProtocolVersion must be a version string",
+        )
+    local_confirm = value.get("localConfirmStart", False)
+    if local_confirm and not version:
+        raise BridgeError(
+            "INVALID_REQUEST",
+            "capabilities.localConfirmProtocolVersion is required when localConfirmStart is true",
+        )
+    return {
+        "remoteImmediateStart": value.get("remoteImmediateStart", False),
+        "localConfirmStart": local_confirm,
+        "localConfirmProtocolVersion": version,
+    }
+
+
+def normalize_health(value):
+    if not isinstance(value, dict):
+        raise BridgeError("INVALID_REQUEST", "health must be an object")
+    normalized = dict(value)
+    ready = normalized.get("localConfirmStartReady", False)
+    if not isinstance(ready, bool):
+        raise BridgeError("INVALID_REQUEST", "health.localConfirmStartReady must be a boolean")
+    error = normalized.get("localConfirmStartError")
+    if error is not None and (not isinstance(error, str) or len(error) > 128):
+        raise BridgeError("INVALID_REQUEST", "health.localConfirmStartError must be a string or null")
+    normalized["localConfirmStartReady"] = ready
+    normalized["localConfirmStartError"] = error
+    return normalized
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Robot Platform Bridge", version="1.0")
     try:
@@ -122,11 +176,19 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     @app.exception_handler(BridgeError)
-    async def bridge_error(_request, exc):
+    async def bridge_error(request, exc):
+        logger.warning(
+            "event=bridge_request_rejected path=%s error_code=%s status=%s",
+            request.url.path, exc.code, exc.status,
+        )
         return JSONResponse(status_code=exc.status, content={"code": exc.code, "message": exc.message, "requestId": ""})
 
     @app.exception_handler(StoreConflict)
-    async def store_conflict(_request, exc):
+    async def store_conflict(request, exc):
+        logger.warning(
+            "event=bridge_store_conflict path=%s error_code=%s",
+            request.url.path, exc.code,
+        )
         return JSONResponse(status_code=409, content={"code": exc.code, "message": str(exc), "requestId": ""})
 
     def token_robot(request, body=None):
@@ -272,6 +334,11 @@ def create_app() -> FastAPI:
             }
             message = messages.get(conflict, "command conflicts with existing state")
             raise BridgeError(conflict, message, 409)
+        logger.info(
+            "event=bridge_command_enqueued robot_id=%s request_id=%s execution_id=%s command_id=%s command_type=%s start_mode=%s",
+            robot_id, request_id, execution_id, item["command_id"], command_type,
+            payload.get("startMode", ""),
+        )
         return {"accepted": True, "commandId": item["command_id"], "state": item["state"], "executionId": execution_id}
 
     @app.get("/bridge/v1/executions/{execution_id}")
@@ -299,6 +366,9 @@ def create_app() -> FastAPI:
         except ValueError:
             online = False
         status = json.loads(robot.get("status_json") or "{}")
+        reported_capabilities = status.get("capabilities")
+        capabilities = reported_capabilities if isinstance(reported_capabilities, dict) else {}
+        health = status.get("health") if isinstance(status.get("health"), dict) else {}
         return {
             "robotId": robot_id, "configured": robot_id in robot_tokens, "online": online,
             "bootId": robot.get("boot_id", ""), "state": robot.get("state", "offline"),
@@ -307,7 +377,18 @@ def create_app() -> FastAPI:
             "protocolVersion": status.get("protocolVersion", ""),
             "activeExecutionId": status.get("activeExecutionId"),
             "activeDeploymentId": status.get("activeDeploymentId"),
-            "softwareVersion": status.get("softwareVersion"), "health": status.get("health", {}),
+            "softwareVersion": status.get("softwareVersion"),
+            "capabilities": {
+                "remoteImmediateStart": capabilities.get("remoteImmediateStart", True),
+                "localConfirmStart": capabilities.get("localConfirmStart", False),
+                "localConfirmProtocolVersion": capabilities.get("localConfirmProtocolVersion"),
+            },
+            "capabilityReportedAt": robot.get("last_seen") if isinstance(reported_capabilities, dict) else None,
+            "health": {
+                **health,
+                "localConfirmStartReady": health.get("localConfirmStartReady", False),
+                "localConfirmStartError": health.get("localConfirmStartError"),
+            },
             "gnssFix": status.get("gnssFix"),
         }
 
@@ -320,6 +401,8 @@ def create_app() -> FastAPI:
         if not isinstance(body, dict):
             raise BridgeError("INVALID_REQUEST", "invalid heartbeat payload")
         robot_id = token_robot(request, body)
+        if HEARTBEAT_FORBIDDEN_POLICY_FIELDS.intersection(body):
+            raise BridgeError("INVALID_REQUEST", "heartbeat cannot set administrator policy fields")
         required_text = ("robotId", "bootId", "softwareVersion", "state")
         valid_states = {"idle", "starting", "running", "paused", "manual_takeover", "returning_home", "waiting_loop", "succeeded", "failed", "canceled"}
         sequence = body.get("latestLocalEventSequence")
@@ -331,11 +414,25 @@ def create_app() -> FastAPI:
             or isinstance(sequence, bool)
             or not isinstance(sequence, int)
             or sequence < 0
-            or not isinstance(body.get("health"), dict)
         ):
             raise BridgeError("INVALID_REQUEST", "invalid heartbeat payload")
+        body["health"] = normalize_health(body.get("health"))
+        capabilities = normalize_capabilities(body.get("capabilities"))
+        if capabilities is not None:
+            body["capabilities"] = capabilities
+            if capabilities["localConfirmStart"] and capabilities["localConfirmProtocolVersion"] != "1":
+                logger.warning(
+                    "event=local_confirm_protocol_reported robot_id=%s protocol_version=%s compatible=false",
+                    robot_id, capabilities["localConfirmProtocolVersion"],
+                )
         store.upsert_robot(robot_id, body)
         command = store.lease_command(robot_id, secrets.token_urlsafe(18), str(body.get("state") or "idle"))
+        if command:
+            logger.info(
+                "event=bridge_command_leased robot_id=%s request_id=%s execution_id=%s command_id=%s command_type=%s",
+                robot_id, command["request_id"], command["execution_id"],
+                command["command_id"], command["command_type"],
+            )
         output = None if not command else {
             **command["payload"],
             "commandId": command["command_id"], "requestId": command["request_id"],
