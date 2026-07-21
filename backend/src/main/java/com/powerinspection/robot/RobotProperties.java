@@ -21,6 +21,8 @@ public class RobotProperties {
   private int bridgeReadTimeoutSeconds = 10;
   private int heartbeatSyncIntervalMs = 3000;
   private int heartbeatTimeoutSeconds = 12;
+  /** 轨迹跳点过滤：相邻两点推算速度超过该值（m/s）则丢弃。 */
+  private double maxGpsSpeedMps = 5.0;
   /** 平台 robotId 到 Bridge/Jetson robotId 的显式映射。 */
   private Map<String, String> bridgeRobotIdMappings = new LinkedHashMap<>();
   /** 与 Bridge 的 PLATFORM_BEARER_TOKEN 相同，仅用于识别 Bridge 回读部署的请求。 */
@@ -102,6 +104,8 @@ public class RobotProperties {
   public void setHeartbeatSyncIntervalMs(int heartbeatSyncIntervalMs) { this.heartbeatSyncIntervalMs = heartbeatSyncIntervalMs; }
   public int getHeartbeatTimeoutSeconds() { return heartbeatTimeoutSeconds; }
   public void setHeartbeatTimeoutSeconds(int heartbeatTimeoutSeconds) { this.heartbeatTimeoutSeconds = heartbeatTimeoutSeconds; }
+  public double getMaxGpsSpeedMps() { return maxGpsSpeedMps; }
+  public void setMaxGpsSpeedMps(double maxGpsSpeedMps) { this.maxGpsSpeedMps = maxGpsSpeedMps; }
   public Map<String, String> getBridgeRobotIdMappings() { return bridgeRobotIdMappings; }
   public void setBridgeRobotIdMappings(Map<String, String> bridgeRobotIdMappings) {
     this.bridgeRobotIdMappings = bridgeRobotIdMappings == null ? new LinkedHashMap<>() : new LinkedHashMap<>(bridgeRobotIdMappings);

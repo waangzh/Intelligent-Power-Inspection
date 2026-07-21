@@ -13,7 +13,9 @@ components:
         - alarm:policy
         - detection:manage
         - record:export
+        - robot:location:view
         - robot:manage
+        - robot:track:view
         - route:edit
         - site:edit
         - task:control

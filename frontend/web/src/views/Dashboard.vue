@@ -65,7 +65,8 @@
               :fallback-center="activeSite.center"
               :areas="siteStore.getAreasBySite(selectedSiteId)"
               :route="displayRoute"
-              :robot-position="robotPosition"
+              :robot-location="activeRobotLocation"
+              :robot-label="activeRobotName"
             />
           </div>
         </el-card>
@@ -159,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { resourcesApi } from '@/api/resources'
 import ChartCard from '@/components/ChartCard.vue'
@@ -170,6 +171,7 @@ import { useAlarmStore } from '@/stores/alarm'
 import { useAuthStore } from '@/stores/auth'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotHeartbeatStore } from '@/stores/robotHeartbeat'
+import { useRobotLocationStore } from '@/stores/robotLocation'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
@@ -186,6 +188,7 @@ const routeStore = useRouteStore()
 const taskStore = useTaskStore()
 const robotStore = useRobotStore()
 const heartbeatStore = useRobotHeartbeatStore()
+const locationStore = useRobotLocationStore()
 const alarmStore = useAlarmStore()
 const overview = ref<DashboardOverview | null>(null)
 const onlineRobotSummary = computed(() => {
@@ -214,6 +217,7 @@ watch(
 )
 watch(selectedSiteId, (siteId) => {
   if (!siteId) return
+  locationStore.updatePollingQuery({ siteId })
   void resourcesApi.listAreas({ siteId, size: 100 }).then((page) => {
     siteStore.areas = page.items
   })
@@ -224,9 +228,15 @@ const displayRoute = computed(() => {
   if (active) return routeStore.getRouteById(active.routeId) ?? null
   return routeStore.getRoutesBySite(selectedSiteId.value)[0] ?? null
 })
-const robotPosition = computed(() => {
-  const active = taskStore.getActiveTask()
-  return active ? robotStore.getRobotById(active.robotId)?.position ?? null : null
+const activeRobotId = computed(() => taskStore.getActiveTask()?.robotId ?? '')
+const activeRobotLocation = computed(() => {
+  const robotId = activeRobotId.value
+  if (!robotId) return null
+  return locationStore.getLocation(robotId) ?? null
+})
+const activeRobotName = computed(() => {
+  const robotId = activeRobotId.value
+  return robotId ? robotStore.getRobotById(robotId)?.name ?? robotId : ''
 })
 
 const greeting = computed(() => {
@@ -335,7 +345,14 @@ function scheduleOverviewRefresh() {
 
 onMounted(async () => {
   await loadOverview()
+  if (selectedSiteId.value) {
+    locationStore.startPolling({ siteId: selectedSiteId.value })
+  }
   setPageRealtimeResources(['task', 'robot', 'alarm'], scheduleOverviewRefresh)
+})
+
+onUnmounted(() => {
+  locationStore.stopPolling()
 })
 
 function formatTime(iso: string) {

@@ -45,7 +45,7 @@ public class RobotBridgeHeartbeatClient {
     Map<String, Object> body = get("/bridge/v1/robots/" + robotId);
     if (!robotId.equals(text(body.get("robotId")))) throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD);
     String lastSeen = text(body.get("lastSeen"));
-    if (lastSeen.isBlank()) return new BridgeRobotSnapshot(robotId, null, "", "", "", "", 0, Map.of());
+    if (lastSeen.isBlank()) return new BridgeRobotSnapshot(robotId, null, "", "", "", "", 0, Map.of(), null);
     Instant lastHeartbeatAt;
     try { lastHeartbeatAt = Instant.parse(lastSeen); }
     catch (RuntimeException ex) { throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD); }
@@ -56,7 +56,8 @@ public class RobotBridgeHeartbeatClient {
       if (key != null && value != null) normalizedHealth.put(String.valueOf(key), value);
     });
     return new BridgeRobotSnapshot(robotId, lastHeartbeatAt, text(body.get("protocolVersion")), text(body.get("bootId")), text(body.get("state")),
-      text(body.get("softwareVersion")), number(body.get("acceptedEventSequence")), Map.copyOf(normalizedHealth));
+      text(body.get("softwareVersion")), number(body.get("acceptedEventSequence")), Map.copyOf(normalizedHealth),
+      GnssFixParser.parse(body.get("gnssFix")));
   }
 
   @SuppressWarnings("unchecked")

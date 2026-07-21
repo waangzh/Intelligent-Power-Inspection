@@ -22,10 +22,11 @@ class RobotBridgeHeartbeatSyncServiceTests {
     DataStoreService dataStore = Mockito.mock(DataStoreService.class);
     RobotProperties properties = new RobotProperties();
     properties.setBridgeRobotIdMappings(Map.of("robot_001", "robot-001"));
-    RobotBridgeHeartbeatSyncService service = new RobotBridgeHeartbeatSyncService(client, heartbeats, dataStore,
+    RobotLocationService locations = Mockito.mock(RobotLocationService.class);
+    RobotBridgeHeartbeatSyncService service = new RobotBridgeHeartbeatSyncService(client, heartbeats, locations, dataStore,
       new RobotBridgeIdMapper(properties));
     BridgeRobotSnapshot bridgeSnapshot = new BridgeRobotSnapshot("robot-001", Instant.parse("2026-07-15T00:00:00Z"),
-      "1.0", "boot-1", "idle", "build-1", 3, Map.of());
+      "1.0", "boot-1", "idle", "build-1", 3, Map.of(), null);
 
     when(client.configuredRobotIds()).thenReturn(List.of("robot-001"));
     when(dataStore.list(DataCategory.ROBOT)).thenReturn(List.of(Map.of("id", "robot_001")));
@@ -35,6 +36,7 @@ class RobotBridgeHeartbeatSyncServiceTests {
 
     ArgumentCaptor<BridgeRobotSnapshot> captured = ArgumentCaptor.forClass(BridgeRobotSnapshot.class);
     verify(heartbeats).applyBridgeSnapshot(captured.capture(), any(Instant.class));
+    verify(locations).applySnapshot(captured.capture(), any(Instant.class));
     verify(heartbeats).refreshTimeouts(any(Instant.class));
     assertEquals("robot_001", captured.getValue().robotId());
     assertEquals(bridgeSnapshot.lastHeartbeatAt(), captured.getValue().lastHeartbeatAt());

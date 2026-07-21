@@ -71,7 +71,8 @@
               :center="mapCenter"
               :fallback-center="fallbackCenter"
               :route="activeRoute"
-              :robot-position="robotPos"
+              :robot-location="activeRobotLocation"
+              :robot-label="activeRobotName"
             />
           </div>
         </el-col>
@@ -227,7 +228,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   CircleCheck,
@@ -247,6 +248,7 @@ import ListPagination from '@/components/ListPagination.vue'
 import TaskStatusTag from '@/components/TaskStatusTag.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useRobotStore } from '@/stores/robot'
+import { useRobotLocationStore } from '@/stores/robotLocation'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { latestReadyRevision, useTaskStore } from '@/stores/task'
@@ -270,6 +272,7 @@ const statIcons = [List, VideoPlay, Clock, CircleCheck]
 const taskStore = useTaskStore()
 const routeStore = useRouteStore()
 const robotStore = useRobotStore()
+const locationStore = useRobotLocationStore()
 const siteStore = useSiteStore()
 
 const dialogVisible = ref(false)
@@ -295,9 +298,26 @@ const fallbackCenter = computed(() => {
   const route = activeRoute.value
   return route ? siteStore.getSiteById(route.siteId)?.center ?? siteStore.sites[0]?.center : siteStore.sites[0]?.center
 })
-const robotPos = computed(() => {
-  if (!activeTask.value) return null
-  return robotStore.getRobotById(activeTask.value.robotId)?.position ?? null
+const activeRobotLocation = computed(() => {
+  const robotId = activeTask.value?.robotId
+  return robotId ? locationStore.getLocation(robotId) ?? null : null
+})
+const activeRobotName = computed(() => {
+  const robotId = activeTask.value?.robotId
+  return robotId ? robotStore.getRobotById(robotId)?.name ?? robotId : ''
+})
+
+watch(
+  () => activeTask.value?.robotId,
+  (robotId) => {
+    locationStore.stopPolling()
+    if (robotId) locationStore.startRobotPolling(robotId)
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  locationStore.stopPolling()
 })
 
 const overviewStats = computed(() => {

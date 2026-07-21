@@ -107,7 +107,7 @@ class RobotHeartbeatControllerTests {
 
   private BridgeRobotSnapshot snapshot(String robotId, Instant at, String state, String bootId) {
     return new BridgeRobotSnapshot(robotId, at, "1.0", bootId, state, "test-build", 7,
-      Map.of("systemMode", "ready", "nav2", "not_running", "lastError", "must-not-be-exposed"));
+      Map.of("systemMode", "ready", "nav2", "not_running", "lastError", "must-not-be-exposed"), null);
   }
 
   private Map<String, Object> robotIdentity() {

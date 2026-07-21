@@ -12,5 +12,6 @@ public record BridgeRobotSnapshot(
   String state,
   String softwareVersion,
   long acceptedEventSequence,
-  Map<String, Object> health
+  Map<String, Object> health,
+  BridgeGnssFix gnssFix
 ) {}

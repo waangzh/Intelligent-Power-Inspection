@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-20T13:35:27.308Z",
+  "generatedAt": "2026-07-21T10:06:38.480Z",
   "paths": [
     {
       "apiPath": "/api/v1/agent-actions/{actionId}",
@@ -302,6 +302,11 @@
       "name": "robots"
     },
     {
+      "apiPath": "/api/v1/robots/locations",
+      "relPath": "/robots/locations",
+      "name": "robotsLocations"
+    },
+    {
       "apiPath": "/api/v1/robots/status",
       "relPath": "/robots/status",
       "name": "robotsStatus"
@@ -317,9 +322,19 @@
       "name": "robotsIdTelemetry"
     },
     {
+      "apiPath": "/api/v1/robots/{robotId}/location",
+      "relPath": "/robots/{robotId}/location",
+      "name": "robotsRobotIdLocation"
+    },
+    {
       "apiPath": "/api/v1/robots/{robotId}/status",
       "relPath": "/robots/{robotId}/status",
       "name": "robotsRobotIdStatus"
+    },
+    {
+      "apiPath": "/api/v1/robots/{robotId}/track",
+      "relPath": "/robots/{robotId}/track",
+      "name": "robotsRobotIdTrack"
     },
     {
       "apiPath": "/api/v1/route-deployments/{deploymentId}",

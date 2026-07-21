@@ -1,6 +1,6 @@
 {
   "source": "backend",
-  "generatedAt": "2026-07-20T15:41:37.401Z",
+  "generatedAt": "2026-07-21T10:05:47.859Z",
   "permissions": [
     "agent:admin",
     "agent:approve",
@@ -10,7 +10,9 @@
     "alarm:policy",
     "detection:manage",
     "record:export",
+    "robot:location:view",
     "robot:manage",
+    "robot:track:view",
     "route:edit",
     "site:edit",
     "task:control",
@@ -35,7 +37,9 @@
       "alarm:policy",
       "detection:manage",
       "record:export",
+      "robot:location:view",
       "robot:manage",
+      "robot:track:view",
       "route:edit",
       "site:edit",
       "task:estop",
@@ -50,6 +54,8 @@
       "agent:view",
       "alarm:ack",
       "record:export",
+      "robot:location:view",
+      "robot:track:view",
       "route:edit",
       "site:edit",
       "task:control",
@@ -63,6 +69,7 @@
       "workorder:view"
     ],
     "VIEWER": [
+      "robot:location:view",
       "task:view",
       "workorder:view"
     ]
