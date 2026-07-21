@@ -236,13 +236,25 @@ def run_smoke(base_url, store, platform) -> None:
     assert status == 200 and reply["command"] is None
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "robotId": "robot-unknown"}, "token-placeholder")[0] == 401
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "health": []}, "token-placeholder")[0] == 400
-    body = {"robotId": "robot-001", "deploymentId": "deploy-1", "executorRouteId": "route-1", "requestId": "request-1"}
+    invalid_mode = {
+        "robotId": "robot-001", "deploymentId": "deploy-1", "executorRouteId": "route-1",
+        "requestId": "request-invalid-mode", "startMode": "AUTOMATIC",
+    }
+    status, error = request(base_url, "POST", "/bridge/v1/executions/execution-invalid/start", invalid_mode, "admin-placeholder")
+    assert status == 400 and error["code"] == "INVALID_START_MODE"
+    body = {
+        "robotId": "robot-001", "deploymentId": "deploy-1", "executorRouteId": "route-1",
+        "requestId": "request-1", "commandId": "must-not-be-forwarded",
+    }
     status, queued = request(base_url, "POST", "/bridge/v1/executions/execution-1/start", body, "admin-placeholder")
     assert status == 202
     status, duplicate = request(base_url, "POST", "/bridge/v1/executions/execution-1/start", body, "admin-placeholder")
     assert status == 202 and duplicate["commandId"] == queued["commandId"]
     command = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"]
-    assert command["commandId"] == queued["commandId"]
+    assert command["commandId"] == queued["commandId"] != "must-not-be-forwarded"
+    assert command["startMode"] == "REMOTE_IMMEDIATE"
+    assert command["requestId"] == "request-1" and command["executionId"] == "execution-1"
+    assert command["deploymentId"] == "deploy-1" and command["type"] == "START"
     store.expire_leases_for_smoke()
     command = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"]
     ack = {"robotId": "robot-001", "leaseToken": command["leaseToken"], "status": "RECEIVED", "executionId": "execution-1"}
@@ -251,10 +263,50 @@ def run_smoke(base_url, store, platform) -> None:
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"] is None
     assert request(base_url, "GET", "/robot-api/v1/deployments/deploy-1/manifest", token="token-placeholder")[1]["yamlName"] == "site.yaml"
     events = [{"schema_version": "1.0", "robot_id": "robot-001", "boot_id": "boot-1", "sequence": 2, "event": "route_started", "execution_id": "execution-1", "deployment_id": "deploy-1", "request_id": "request-1", "command_id": command["commandId"], "occurred_at": "2026-01-01T00:00:00Z"}]
+    required_event_fields = {
+        "schema_version", "robot_id", "boot_id", "sequence", "event", "execution_id",
+        "deployment_id", "request_id", "command_id", "occurred_at",
+    }
+    for field in required_event_fields:
+        invalid_event = {key: value for key, value in events[0].items() if key != field}
+        status, error = request(
+            base_url, "POST", "/robot-api/v1/events/batch",
+            {"robotId": "robot-001", "events": [invalid_event]}, "token-placeholder",
+        )
+        assert status == 400 and error["code"] == "INVALID_REQUEST", (field, status, error)
+    camel_event = {**events[0], "robotId": "robot-001"}
+    camel_event.pop("robot_id")
+    status, error = request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": [camel_event]}, "token-placeholder")
+    assert status == 400 and error["code"] == "INVALID_REQUEST"
+    for invalid_event in (
+        {**events[0], "schema_version": "2.0"},
+        {**events[0], "sequence": True},
+        {**events[0], "occurred_at": "2026-01-01T00:00:00"},
+        {**events[0], "payload": []},
+    ):
+        status, error = request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": [invalid_event]}, "token-placeholder")
+        assert status == 400 and error["code"] == "INVALID_REQUEST"
+    status, error = request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": [{**events[0], "robot_id": "robot-002"}]}, "token-placeholder")
+    assert status == 409 and error["code"] == "EVENT_OWNERSHIP_CONFLICT"
+    status, error = request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": [{**events[0], "request_id": "request-other"}]}, "token-placeholder")
+    assert status == 409 and error["code"] == "EVENT_OWNERSHIP_CONFLICT"
+    status, error = request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": [{**events[0], "execution_id": "execution-other"}]}, "token-placeholder")
+    assert status == 409 and error["code"] == "EVENT_OWNERSHIP_CONFLICT"
+    local_event = {**events[0], "event": "start_waiting_local_confirmation"}
+    status, error = request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": [local_event]}, "token-placeholder")
+    assert status == 409 and error["code"] == "EVENT_COMMAND_MISMATCH"
+    atomic_conflict = [events[0], {**events[0], "sequence": 3, "request_id": "request-other"}]
+    status, error = request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": atomic_conflict}, "token-placeholder")
+    assert status == 409 and error["code"] == "EVENT_OWNERSHIP_CONFLICT"
+    assert store.events("execution-1", 0, 100) == []
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": events}, "token-placeholder")[1]["acceptedThroughSequence"] == 0
+    assert store.execution("execution-1")["state"] == "DISPATCHING"
+    assert store.command(command["commandId"])["state"] == "ACKED"
     events.insert(0, {**events[0], "sequence": 1, "event": "initial_pose_published"})
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": events}, "token-placeholder")[1]["acceptedThroughSequence"] == 2
     assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": events}, "token-placeholder")[1]["acceptedThroughSequence"] == 2
+    status, error = request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": [{**events[-1], "payload": {"changed": True}}]}, "token-placeholder")
+    assert status == 409 and error["code"] == "EVENT_SEQUENCE_CONFLICT"
     assert request(base_url, "GET", "/bridge/v1/executions/execution-1", token="admin-placeholder")[1]["state"] == "RUNNING"
     pulled = request(base_url, "GET", "/bridge/v1/executions/execution-1/events?afterSequence=0", token="admin-placeholder")[1]["events"]
     assert [event["sequence"] for event in pulled] == [1, 2]
@@ -300,8 +352,26 @@ def run_smoke(base_url, store, platform) -> None:
     assert inspection_uploaded["status"] == "AVAILABLE" and platform.inspection_upload_requests == 1
     robot = request(base_url, "GET", "/bridge/v1/robots/robot-001", token="admin-placeholder")[1]
     assert robot["configured"] is True and robot["online"] is True and robot["acceptedEventSequence"] == 4
-    second = {**body, "requestId": "request-2"}
-    assert request(base_url, "POST", "/bridge/v1/executions/execution-2/start", second, "admin-placeholder")[0] == 202
+    second = {**body, "requestId": "request-2", "startMode": "LOCAL_CONFIRM"}
+    status, second_queued = request(base_url, "POST", "/bridge/v1/executions/execution-2/start", second, "admin-placeholder")
+    assert status == 202
+    status, second_duplicate = request(base_url, "POST", "/bridge/v1/executions/execution-2/start", second, "admin-placeholder")
+    assert status == 202 and second_duplicate["commandId"] == second_queued["commandId"]
+    second_command = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"]
+    assert second_command["startMode"] == "LOCAL_CONFIRM"
+    assert second_command["commandId"] == second_queued["commandId"]
+    second_ack = {"robotId": "robot-001", "leaseToken": second_command["leaseToken"], "status": "RECEIVED"}
+    assert request(base_url, "POST", f"/robot-api/v1/commands/{second_command['commandId']}/ack", second_ack, "token-placeholder")[0] == 200
+    busy = {**body, "requestId": "request-busy", "startMode": "REMOTE_IMMEDIATE"}
+    status, error = request(base_url, "POST", "/bridge/v1/executions/execution-busy/start", busy, "admin-placeholder")
+    assert status == 409 and error["code"] == "ROBOT_BUSY"
+    local_events = [
+        {**events[-1], "sequence": 5, "event": "start_waiting_local_confirmation", "execution_id": "execution-2", "request_id": "request-2", "command_id": second_command["commandId"]},
+        {**events[-1], "sequence": 6, "event": "local_start_confirmed", "execution_id": "execution-2", "request_id": "request-2", "command_id": second_command["commandId"]},
+    ]
+    assert request(base_url, "POST", "/robot-api/v1/events/batch", {"robotId": "robot-001", "events": local_events}, "token-placeholder")[1]["acceptedThroughSequence"] == 6
+    assert store.execution("execution-2")["state"] == "DISPATCHING"
+    assert [event["event"] for event in store.events("execution-2", 0, 100)] == ["start_waiting_local_confirmation", "local_start_confirmed"]
     cancel = {"robotId": "robot-001", "requestId": "request-3"}
     assert request(base_url, "POST", "/bridge/v1/executions/execution-2/cancel", cancel, "admin-placeholder")[0] == 202
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")[1]["command"]["type"] == "CANCEL"
