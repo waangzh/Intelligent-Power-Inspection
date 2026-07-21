@@ -116,6 +116,55 @@
                 <el-descriptions-item label="Bridge 诊断" :span="2">{{ heartbeatStatus?.diagnosticSummary || '-' }}</el-descriptions-item>
               </el-descriptions>
             </el-card>
+
+            <el-card shadow="never" class="detail-card location-card">
+              <template #header>
+                <div class="location-head">
+                  <span class="table-title">GPS 位置与轨迹</span>
+                  <div class="location-actions">
+                    <el-switch v-model="followRobot" inline-prompt active-text="跟随" inactive-text="跟随" />
+                    <el-button size="small" plain @click="fitMapToRobot">定位机器人</el-button>
+                    <el-button size="small" plain :disabled="!trackPoints.length" @click="fitMapToTrack">定位轨迹</el-button>
+                  </div>
+                </div>
+              </template>
+              <div class="location-meta" v-if="selectedRobotLocation">
+                <el-tag size="small" :type="selectedRobotLocation.realtime ? 'success' : 'warning'" effect="plain">
+                  {{ locationModeLabel(selectedRobotLocation) }}
+                </el-tag>
+                <span v-if="selectedRobotLocation.gnssFix">
+                  {{ GNSS_FIX_TYPE_LABELS[selectedRobotLocation.gnssFix.fixType] }}
+                  · 卫星 {{ selectedRobotLocation.gnssFix.satellites ?? '-' }}
+                  · HDOP {{ selectedRobotLocation.gnssFix.hdop ?? '-' }}
+                </span>
+              </div>
+              <div class="track-toolbar">
+                <el-date-picker
+                  v-model="trackRange"
+                  type="datetimerange"
+                  range-separator="至"
+                  start-placeholder="开始时间"
+                  end-placeholder="结束时间"
+                  value-format="YYYY-MM-DDTHH:mm:ss.SSS[Z]"
+                  size="small"
+                />
+                <el-button size="small" type="primary" :loading="trackLoading" @click="queryTrack">查询轨迹</el-button>
+                <el-button size="small" plain @click="clearTrack">清除</el-button>
+              </div>
+              <div class="location-map">
+                <Map2D
+                  v-if="mapCenter"
+                  ref="mapRef"
+                  :center="mapCenter"
+                  :fallback-center="mapCenter"
+                  :robot-location="selectedRobotLocation"
+                  :robot-label="robot.name"
+                  :track-points="trackPoints"
+                  :show-track="trackPoints.length > 0"
+                  :follow-robot="followRobot"
+                />
+              </div>
+            </el-card>
           </template>
           <el-empty v-else description="请选择或添加机器人设备" :image-size="80" />
         </main>
@@ -159,10 +208,14 @@ import { Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import ListPagination from '@/components/ListPagination.vue'
+import Map2D from '@/components/Map2D.vue'
 import { resourcesApi } from '@/api/resources'
 import { useRobotStore } from '@/stores/robot'
+import { useRobotLocationStore } from '@/stores/robotLocation'
 import { useSiteStore } from '@/stores/site'
 import type { Robot } from '@/types'
+import type { RobotLocation, RobotTrackPoint } from '@/types/robotLocation'
+import { GNSS_FIX_TYPE_LABELS, locationModeLabel } from '@/utils/robotLocation'
 import type { RobotHeartbeatStatus } from '@/types/robotHeartbeat'
 import {
   mappingStatusLabel,
@@ -174,6 +227,7 @@ import {
 import { connectionLabel, heartbeatVisual } from '@/utils/robotHeartbeatStatus'
 
 const robotStore = useRobotStore()
+const locationStore = useRobotLocationStore()
 const siteStore = useSiteStore()
 const router = useRouter()
 
@@ -186,6 +240,17 @@ const bindingSiteId = ref('')
 const heartbeatStatus = ref<RobotHeartbeatStatus>()
 const heartbeatLoading = ref(false)
 const heartbeatLoadFailed = ref(false)
+const mapRef = ref<InstanceType<typeof Map2D> | null>(null)
+const followRobot = ref(false)
+const trackLoading = ref(false)
+const trackRange = ref<[string, string] | null>(null)
+const trackPoints = ref<RobotTrackPoint[]>([])
+
+function defaultTrackRange(): [string, string] {
+  const end = new Date()
+  const start = new Date(end.getTime() - 60 * 60 * 1000)
+  return [start.toISOString(), end.toISOString()]
+}
 
 function loadRobotPage(page: number) {
   robotPage.value = page
@@ -193,6 +258,14 @@ function loadRobotPage(page: number) {
 }
 
 const robot = computed(() => robotStore.getRobotById(selectedRobotId.value))
+const selectedRobotLocation = computed<RobotLocation | null>(() => {
+  const robotId = selectedRobotId.value
+  return robotId ? locationStore.getLocation(robotId) ?? null : null
+})
+const mapCenter = computed(() => {
+  const siteCenter = robot.value?.siteId ? siteStore.getSiteById(robot.value.siteId)?.center : undefined
+  return siteCenter ?? siteStore.sites[0]?.center ?? { lat: 30.27, lng: 120.15 }
+})
 
 const filteredRobots = computed(() => {
   const q = robotKeyword.value.trim().toLowerCase()
@@ -215,6 +288,11 @@ let heartbeatRequestId = 0
 
 watch(selectedRobotId, (robotId) => {
   void loadHeartbeatStatus(robotId)
+  trackPoints.value = []
+  followRobot.value = false
+  trackRange.value = defaultTrackRange()
+  locationStore.stopPolling()
+  if (robotId) locationStore.startRobotPolling(robotId)
 }, { immediate: true })
 
 const heartbeatTagType = computed(() => {
@@ -293,7 +371,39 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (heartbeatPollTimer) window.clearInterval(heartbeatPollTimer)
+  locationStore.stopPolling()
 })
+
+async function queryTrack() {
+  if (!selectedRobotId.value) return
+  trackLoading.value = true
+  try {
+    const range = trackRange.value ?? defaultTrackRange()
+    trackPoints.value = await locationStore.fetchTrack(selectedRobotId.value, {
+      start: range[0],
+      end: range[1],
+      limit: 2000,
+    })
+    if (!trackPoints.value.length) ElMessage.info('该时间范围内暂无轨迹点')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '轨迹查询失败')
+  } finally {
+    trackLoading.value = false
+  }
+}
+
+function clearTrack() {
+  trackPoints.value = []
+  if (selectedRobotId.value) locationStore.clearTrack(selectedRobotId.value)
+}
+
+function fitMapToRobot() {
+  mapRef.value?.fitToRobot()
+}
+
+function fitMapToTrack() {
+  mapRef.value?.fitToTrack()
+}
 
 function openBindingDialog() {
   if (!robot.value) return
@@ -574,6 +684,48 @@ function fmt(iso?: string | null) {
   color: var(--pi-muted);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.location-card {
+  margin-top: 14px;
+}
+
+.location-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.location-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.location-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--pi-muted);
+}
+
+.track-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.location-map {
+  height: 360px;
+  border: 1px solid var(--pi-border-soft);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 @media (max-width: 960px) {
