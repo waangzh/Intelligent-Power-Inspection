@@ -21,6 +21,16 @@ from .store import Store, StoreConflict, now
 
 logger = logging.getLogger("robot_bridge.map_upload")
 
+EVENT_REQUIRED_TEXT_FIELDS = (
+    "schema_version", "robot_id", "boot_id", "event", "execution_id",
+    "deployment_id", "request_id", "command_id", "occurred_at",
+)
+EVENT_CAMEL_CASE_IDENTITY_FIELDS = {
+    "schemaVersion", "robotId", "bootId", "executionId", "deploymentId",
+    "requestId", "commandId", "occurredAt",
+}
+START_MODES = {"REMOTE_IMMEDIATE", "LOCAL_CONFIRM"}
+
 
 class BridgeError(Exception):
     def __init__(self, code, message, status=400):
@@ -36,6 +46,37 @@ def safe_name(value, suffix):
     if not value or path.name != value or path.is_absolute() or ".." in path.parts or not str(value).lower().endswith(suffix):
         raise BridgeError("INVALID_REQUEST", f"invalid {suffix} file name")
     return str(value)
+
+
+def validate_robot_event(event, robot_id):
+    if any(field in event for field in EVENT_CAMEL_CASE_IDENTITY_FIELDS):
+        raise BridgeError("INVALID_REQUEST", "event identity fields must use snake_case")
+    for field in EVENT_REQUIRED_TEXT_FIELDS:
+        value = event.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise BridgeError("INVALID_REQUEST", f"events[].{field} must be a non-empty string")
+    sequence = event.get("sequence")
+    if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence <= 0:
+        raise BridgeError("INVALID_REQUEST", "events[].sequence must be a positive integer")
+    if event["schema_version"] != "1.0":
+        raise BridgeError("INVALID_REQUEST", "events[].schema_version must be 1.0")
+    try:
+        occurred_at = datetime.fromisoformat(event["occurred_at"].replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise BridgeError("INVALID_REQUEST", "events[].occurred_at must be ISO-8601") from exc
+    if occurred_at.utcoffset() is None:
+        raise BridgeError("INVALID_REQUEST", "events[].occurred_at must include a timezone")
+    if "payload" in event and not isinstance(event["payload"], dict):
+        raise BridgeError("INVALID_REQUEST", "events[].payload must be an object")
+    for field in ("error_code", "error_message"):
+        if field in event and not isinstance(event[field], str):
+            raise BridgeError("INVALID_REQUEST", f"events[].{field} must be a string")
+    if event["robot_id"] != robot_id:
+        raise BridgeError(
+            "EVENT_OWNERSHIP_CONFLICT",
+            "events[].robot_id does not match the authenticated robot",
+            409,
+        )
 
 
 def create_app() -> FastAPI:
@@ -182,29 +223,54 @@ def create_app() -> FastAPI:
         command_type = action.upper()
         if command_type not in {"START", "PAUSE", "RESUME", "TAKEOVER", "CANCEL"}:
             raise HTTPException(status_code=404, detail="control not found")
-        body = await request.json()
-        robot_id, request_id = str(body.get("robotId") or ""), str(body.get("requestId") or "")
-        if not robot_id or not request_id:
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise BridgeError("INVALID_REQUEST", "invalid command payload") from exc
+        if not isinstance(body, dict):
+            raise BridgeError("INVALID_REQUEST", "invalid command payload")
+        robot_id, request_id = body.get("robotId"), body.get("requestId")
+        if not isinstance(robot_id, str) or not robot_id.strip() or not isinstance(request_id, str) or not request_id.strip():
             raise BridgeError("INVALID_REQUEST", "robotId and requestId are required")
-        deployment_id = str(body.get("deploymentId") or "")
+        deployment_id = body.get("deploymentId")
         if command_type == "START":
+            if not isinstance(deployment_id, str) or not deployment_id.strip():
+                raise BridgeError("INVALID_REQUEST", "deploymentId is required")
+            start_mode = body.get("startMode", "REMOTE_IMMEDIATE")
+            if not isinstance(start_mode, str) or start_mode not in START_MODES:
+                logger.warning(
+                    "bridge_invalid_start_mode robot_id=%s request_id=%s execution_id=%s",
+                    robot_id, request_id, execution_id,
+                )
+                raise BridgeError("INVALID_START_MODE", "startMode must be REMOTE_IMMEDIATE or LOCAL_CONFIRM")
             deployment = store.deployment(deployment_id)
             if not deployment or deployment["robot_id"] != robot_id or deployment["state"] != "READY_FOR_ROBOT":
                 raise BridgeError("DEPLOYMENT_NOT_FOUND", "deployment is not ready for this robot", 404)
-            if not str(body.get("executorRouteId") or ""):
+            if not isinstance(body.get("executorRouteId"), str) or not body["executorRouteId"].strip():
                 raise BridgeError("INVALID_REQUEST", "executorRouteId is required")
         else:
             execution = store.execution(execution_id)
             if not execution:
                 raise BridgeError("EXECUTION_NOT_FOUND", "execution not found", 404)
+            if robot_id != execution["robot_id"]:
+                raise BridgeError("EXECUTION_CONFLICT", "executionId belongs to another robot", 409)
             robot_id, deployment_id = execution["robot_id"], execution["deployment_id"]
-        payload = {key: value for key, value in body.items() if key not in {"robotId", "requestId"}}
+        payload = {
+            key: value for key, value in body.items()
+            if key not in {"robotId", "requestId", "commandId", "executionId", "type"}
+        }
         if command_type == "START":
             payload["routeRevisionId"] = deployment["manifest"]["routeRevisionId"]
+            payload["startMode"] = start_mode
         payload.update({"executionId": execution_id, "deploymentId": deployment_id, "requestId": request_id, "type": command_type})
         item, conflict = store.queue_command(secrets.token_urlsafe(18), request_id, robot_id, str(body.get("taskId") or ""), execution_id, deployment_id, command_type, payload)
         if conflict:
-            message = "executionId belongs to another robot or deployment" if conflict == "EXECUTION_CONFLICT" else "requestId has different payload"
+            messages = {
+                "EXECUTION_CONFLICT": "executionId belongs to another robot or deployment",
+                "IDEMPOTENCY_CONFLICT": "requestId has different payload",
+                "ROBOT_BUSY": "robot already has an active execution",
+            }
+            message = messages.get(conflict, "command conflicts with existing state")
             raise BridgeError(conflict, message, 409)
         return {"accepted": True, "commandId": item["command_id"], "state": item["state"], "executionId": execution_id}
 
@@ -242,6 +308,7 @@ def create_app() -> FastAPI:
             "activeExecutionId": status.get("activeExecutionId"),
             "activeDeploymentId": status.get("activeDeploymentId"),
             "softwareVersion": status.get("softwareVersion"), "health": status.get("health", {}),
+            "gnssFix": status.get("gnssFix"),
         }
 
     @app.post("/robot-api/v1/heartbeat")
@@ -269,7 +336,12 @@ def create_app() -> FastAPI:
             raise BridgeError("INVALID_REQUEST", "invalid heartbeat payload")
         store.upsert_robot(robot_id, body)
         command = store.lease_command(robot_id, secrets.token_urlsafe(18), str(body.get("state") or "idle"))
-        output = None if not command else {"commandId": command["command_id"], "requestId": command["request_id"], "type": command["command_type"], "executionId": command["execution_id"], "deploymentId": command["deployment_id"], "leaseToken": command["lease_token"], **command["payload"]}
+        output = None if not command else {
+            **command["payload"],
+            "commandId": command["command_id"], "requestId": command["request_id"],
+            "type": command["command_type"], "executionId": command["execution_id"],
+            "deploymentId": command["deployment_id"], "leaseToken": command["lease_token"],
+        }
         robot = store.robot(robot_id) or {}
         return {"serverTime": now(), "nextHeartbeatSec": 1 if output else 3, "acceptedEventSequence": robot.get("last_event_sequence", 0), "command": output}
 
@@ -287,13 +359,22 @@ def create_app() -> FastAPI:
 
     @app.post("/robot-api/v1/events/batch")
     async def event_batch(request: Request):
-        body = await request.json()
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise BridgeError("INVALID_REQUEST", "invalid event batch payload") from exc
+        if not isinstance(body, dict):
+            raise BridgeError("INVALID_REQUEST", "invalid event batch payload")
+        if not isinstance(body.get("robotId"), str) or not body["robotId"].strip():
+            raise BridgeError("INVALID_REQUEST", "robotId is required")
         robot_id = token_robot(request, body)
         events = body.get("events")
-        if not isinstance(events, list) or len(events) > 100 or any(str(event.get("robot_id") or event.get("robotId") or robot_id) != robot_id for event in events if isinstance(event, dict)):
-            raise BridgeError("INVALID_REQUEST", "events must be a robot-owned list of at most 100")
+        if not isinstance(events, list) or len(events) > 100:
+            raise BridgeError("INVALID_REQUEST", "events must be a list of at most 100")
         if any(not isinstance(event, dict) for event in events):
             raise BridgeError("INVALID_REQUEST", "event must be an object")
+        for event in events:
+            validate_robot_event(event, robot_id)
         return {"acceptedThroughSequence": store.accept_events(robot_id, events)}
 
     @app.post("/robot-api/v1/map-assets")

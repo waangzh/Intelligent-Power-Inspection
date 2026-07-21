@@ -42,7 +42,8 @@
               :fallback-center="activeSite.center"
               :areas="siteStore.getAreasBySite(selectedSiteId)"
               :route="displayRoute"
-              :robot-position="robotPosition"
+              :robot-location="displayRobotLocation"
+              :robot-label="displayRobotName"
             />
           </div>
         </div>
@@ -97,6 +98,7 @@ import { useAnalytics } from '@/composables/useAnalytics'
 import { useAlarmStore } from '@/stores/alarm'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotHeartbeatStore } from '@/stores/robotHeartbeat'
+import { useRobotLocationStore } from '@/stores/robotLocation'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { useTaskStore } from '@/stores/task'
@@ -110,6 +112,7 @@ const routeStore = useRouteStore()
 const taskStore = useTaskStore()
 const robotStore = useRobotStore()
 const heartbeatStore = useRobotHeartbeatStore()
+const locationStore = useRobotLocationStore()
 const alarmStore = useAlarmStore()
 const workOrderStore = useWorkOrderStore()
 const { weeklyAlarmCounts, completionRate, robotOnlineRate } = useAnalytics()
@@ -129,7 +132,20 @@ let timer: ReturnType<typeof setInterval> | null = null
 
 const activeSite = computed(() => siteStore.getSiteById(selectedSiteId.value))
 const displayRoute = computed(() => routeStore.getRoutesBySite(selectedSiteId.value)[0] ?? null)
-const robotPosition = computed(() => robotStore.robots.find((r) => r.siteId === selectedSiteId.value)?.position ?? null)
+const siteRobots = computed(() => robotStore.robots.filter((robot) => robot.siteId === selectedSiteId.value))
+const displayRobot = computed(() => {
+  const withLocation = siteRobots.value.find((robot) => locationStore.getLocation(robot.id)?.locationAvailable)
+  return withLocation ?? siteRobots.value[0] ?? null
+})
+const displayRobotLocation = computed(() => {
+  const robot = displayRobot.value
+  return robot ? locationStore.getLocation(robot.id) ?? null : null
+})
+const displayRobotName = computed(() => displayRobot.value?.name ?? '')
+
+watch(selectedSiteId, (siteId) => {
+  if (siteId) locationStore.updatePollingQuery({ siteId })
+}, { immediate: true })
 
 const kpis = computed(() => [
   { label: '站点', value: siteStore.sites.length, color: '#64b5ff' },
@@ -233,10 +249,14 @@ onMounted(() => {
   timer = setInterval(tickClock, 1000)
   document.body.style.overflow = 'hidden'
   void heartbeatStore.refresh()
+  if (selectedSiteId.value) {
+    locationStore.startPolling({ siteId: selectedSiteId.value })
+  }
 })
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  locationStore.stopPolling()
   document.body.style.overflow = ''
 })
 </script>

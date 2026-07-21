@@ -13,6 +13,8 @@ public enum Permission {
   ROUTE_EDIT("route:edit"),
   ALARM_ACK("alarm:ack"),
   ROBOT_MANAGE("robot:manage"),
+  ROBOT_LOCATION_VIEW("robot:location:view"),
+  ROBOT_TRACK_VIEW("robot:track:view"),
   DETECTION_MANAGE("detection:manage"),
   USER_MANAGE("user:manage"),
   RECORD_EXPORT("record:export"),

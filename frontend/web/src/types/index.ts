@@ -342,6 +342,8 @@ export interface TaskExecution {
   status: TaskStatus
   startMode: TaskStartMode
   operatorId?: string | null
+  startRequestId?: string | null
+  startCommandId?: string | null
   startRequestedAt?: string | null
   robotReadyAt?: string | null
   localConfirmedAt?: string | null

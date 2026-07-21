@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8080",
+      "url": "http://localhost:8081",
       "description": "Generated server url"
     }
   ],
@@ -781,6 +781,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTaskRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -4066,6 +4075,71 @@
         }
       }
     },
+    "/api/v1/robots/{robotId}/track": {
+      "get": {
+        "tags": [
+          "robot-location-controller"
+        ],
+        "operationId": "track",
+        "parameters": [
+          {
+            "name": "robotId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "executionId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseRobotTrackView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/robots/{robotId}/status": {
       "get": {
         "tags": [
@@ -4089,6 +4163,36 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseRobotHeartbeatStatusView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/robots/{robotId}/location": {
+      "get": {
+        "tags": [
+          "robot-location-controller"
+        ],
+        "operationId": "location",
+        "parameters": [
+          {
+            "name": "robotId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseRobotLocationView"
                 }
               }
             }
@@ -4195,6 +4299,44 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponseRobotHeartbeatStatusPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/robots/locations": {
+      "get": {
+        "tags": [
+          "robot-location-controller"
+        ],
+        "operationId": "listLocations",
+        "parameters": [
+          {
+            "name": "siteId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "online",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseListRobotLocationView"
                 }
               }
             }
@@ -5203,6 +5345,18 @@
           }
         }
       },
+      "StartTaskRequest": {
+        "type": "object",
+        "properties": {
+          "startMode": {
+            "type": "string",
+            "enum": [
+              "REMOTE_IMMEDIATE",
+              "LOCAL_CONFIRM"
+            ]
+          }
+        }
+      },
       "RobotImageDetectionRequest": {
         "type": "object",
         "properties": {
@@ -5487,13 +5641,17 @@
                 "alarm:policy",
                 "detection:manage",
                 "record:export",
+                "robot:location:view",
                 "robot:manage",
+                "robot:track:view",
                 "route:edit",
                 "site:edit",
                 "task:control",
                 "task:create",
                 "task:dispatch",
                 "task:estop",
+                "task:start-local",
+                "task:start-remote",
                 "task:takeover",
                 "task:view",
                 "user:manage",
@@ -6227,6 +6385,75 @@
           }
         }
       },
+      "ApiResponseRobotTrackView": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RobotTrackView"
+          }
+        }
+      },
+      "RobotTrackPointView": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "altitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "fixType": {
+            "type": "string"
+          },
+          "satellites": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hdop": {
+            "type": "number",
+            "format": "double"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RobotTrackView": {
+        "type": "object",
+        "properties": {
+          "robotId": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RobotTrackPointView"
+            }
+          }
+        }
+      },
       "ApiResponseRobotHeartbeatStatusView": {
         "type": "object",
         "properties": {
@@ -6310,6 +6537,97 @@
           }
         }
       },
+      "ApiResponseRobotLocationView": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RobotLocationView"
+          }
+        }
+      },
+      "BridgeGnssFix": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "frame": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "altitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "quality": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fixType": {
+            "type": "string"
+          },
+          "satellites": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hdop": {
+            "type": "number",
+            "format": "double"
+          },
+          "differentialAge": {
+            "type": "number",
+            "format": "double"
+          },
+          "baseStationId": {
+            "type": "string"
+          },
+          "ageSec": {
+            "type": "number",
+            "format": "double"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RobotLocationView": {
+        "type": "object",
+        "properties": {
+          "robotId": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "locationAvailable": {
+            "type": "boolean"
+          },
+          "realtime": {
+            "type": "boolean"
+          },
+          "gnssFix": {
+            "$ref": "#/components/schemas/BridgeGnssFix"
+          }
+        }
+      },
       "ApiResponseRobotHeartbeatStatusPage": {
         "type": "object",
         "properties": {
@@ -6345,6 +6663,24 @@
           "total": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "ApiResponseListRobotLocationView": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RobotLocationView"
+            }
           }
         }
       },
@@ -6384,13 +6720,17 @@
                 "alarm:policy",
                 "detection:manage",
                 "record:export",
+                "robot:location:view",
                 "robot:manage",
+                "robot:track:view",
                 "route:edit",
                 "site:edit",
                 "task:control",
                 "task:create",
                 "task:dispatch",
                 "task:estop",
+                "task:start-local",
+                "task:start-remote",
                 "task:takeover",
                 "task:view",
                 "user:manage",
@@ -6816,13 +7156,17 @@
           "alarm:policy",
           "detection:manage",
           "record:export",
+          "robot:location:view",
           "robot:manage",
+          "robot:track:view",
           "route:edit",
           "site:edit",
           "task:control",
           "task:create",
           "task:dispatch",
           "task:estop",
+          "task:start-local",
+          "task:start-remote",
           "task:takeover",
           "task:view",
           "user:manage",
@@ -6847,13 +7191,17 @@
             "alarm:policy",
             "detection:manage",
             "record:export",
+            "robot:location:view",
             "robot:manage",
+            "robot:track:view",
             "route:edit",
             "site:edit",
             "task:control",
             "task:create",
             "task:dispatch",
             "task:estop",
+            "task:start-local",
+            "task:start-remote",
             "task:takeover",
             "task:view",
             "user:manage",

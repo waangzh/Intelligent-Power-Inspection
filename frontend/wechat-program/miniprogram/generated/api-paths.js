@@ -59,10 +59,13 @@ const robotInspectionImages = '/api/v1/robot-inspection-images'
 const robotInspectionImagesImport = '/api/v1/robot-inspection-images/import'
 const robotInspectionImagesId = '/api/v1/robot-inspection-images/{id}'
 const robots = '/api/v1/robots'
+const robotsLocations = '/api/v1/robots/locations'
 const robotsStatus = '/api/v1/robots/status'
 const robotsId = '/api/v1/robots/{id}'
 const robotsIdTelemetry = '/api/v1/robots/{id}/telemetry'
+const robotsRobotIdLocation = '/api/v1/robots/{robotId}/location'
 const robotsRobotIdStatus = '/api/v1/robots/{robotId}/status'
+const robotsRobotIdTrack = '/api/v1/robots/{robotId}/track'
 const routeDeploymentsDeploymentId = '/api/v1/route-deployments/{deploymentId}'
 const routeDeploymentsDeploymentIdReconcile = '/api/v1/route-deployments/{deploymentId}/reconcile'
 const routeRevisionsRevisionId = '/api/v1/route-revisions/{revisionId}'
@@ -175,10 +178,13 @@ module.exports = {
   robotInspectionImagesImport,
   robotInspectionImagesId,
   robots,
+  robotsLocations,
   robotsStatus,
   robotsId,
   robotsIdTelemetry,
+  robotsRobotIdLocation,
   robotsRobotIdStatus,
+  robotsRobotIdTrack,
   routeDeploymentsDeploymentId,
   routeDeploymentsDeploymentIdReconcile,
   routeRevisionsRevisionId,
@@ -286,10 +292,13 @@ module.exports = {
     robotInspectionImagesImport: '/api/v1/robot-inspection-images/import',
     robotInspectionImagesId: '/api/v1/robot-inspection-images/{id}',
     robots: '/api/v1/robots',
+    robotsLocations: '/api/v1/robots/locations',
     robotsStatus: '/api/v1/robots/status',
     robotsId: '/api/v1/robots/{id}',
     robotsIdTelemetry: '/api/v1/robots/{id}/telemetry',
+    robotsRobotIdLocation: '/api/v1/robots/{robotId}/location',
     robotsRobotIdStatus: '/api/v1/robots/{robotId}/status',
+    robotsRobotIdTrack: '/api/v1/robots/{robotId}/track',
     routeDeploymentsDeploymentId: '/api/v1/route-deployments/{deploymentId}',
     routeDeploymentsDeploymentIdReconcile: '/api/v1/route-deployments/{deploymentId}/reconcile',
     routeRevisionsRevisionId: '/api/v1/route-revisions/{revisionId}',

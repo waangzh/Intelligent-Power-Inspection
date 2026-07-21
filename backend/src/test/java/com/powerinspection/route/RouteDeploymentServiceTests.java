@@ -262,7 +262,7 @@ class RouteDeploymentServiceTests {
   }
 
   private BridgeRobotSnapshot snapshot(String robotId, Instant at) {
-    return new BridgeRobotSnapshot(robotId, at, "1.0", "boot-test", "idle", "test", 0, Map.of());
+    return new BridgeRobotSnapshot(robotId, at, "1.0", "boot-test", "idle", "test", 0, Map.of(), null);
   }
 
   private RobotBridgeDeploymentResult ready(Fixture fixture, String deploymentId) {
