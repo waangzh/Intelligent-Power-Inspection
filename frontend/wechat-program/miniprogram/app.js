@@ -49,15 +49,27 @@ App({
           this.clearUser({ redirect: true })
           return
         }
-        this.enterMainApp()
+        this.scheduleEnterMainApp()
       })
       .catch(() => {
         if (!api.getSession()) {
           this.clearUser({ redirect: true })
           return
         }
-        this.enterMainApp()
+        this.scheduleEnterMainApp()
       })
+  },
+
+  scheduleEnterMainApp(url) {
+    const run = () => this.enterMainApp(url)
+    if (this._enterMainScheduled) return
+    this._enterMainScheduled = true
+    const done = () => { this._enterMainScheduled = false }
+    if (typeof wx.nextTick === 'function') {
+      wx.nextTick(() => run().finally(done))
+    } else {
+      setTimeout(() => run().finally(done), 100)
+    }
   },
 
   applySession(session, options = {}) {
@@ -76,13 +88,13 @@ App({
   },
 
   enterMainApp(url) {
-    if (!this.globalData.user) return
+    if (!this.globalData.user) return Promise.resolve()
     const pages = getCurrentPages()
     const route = pages[pages.length - 1]?.route || ''
-    if (!route.startsWith('pages/auth/login')) return
+    if (!route.startsWith('pages/auth/login')) return Promise.resolve()
     const { enterMainApp } = require('./config/tab-bar')
     const { getRoleLandingPath } = require('./utils/role-landing')
-    enterMainApp(
+    return enterMainApp(
       url || getRoleLandingPath(this.globalData.user.role),
       this.globalData.permissions,
       this.globalData.user.role,

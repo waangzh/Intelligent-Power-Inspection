@@ -155,11 +155,33 @@ function shouldSkipNav(target) {
   return false
 }
 
-/** 登录/自动登录进入主界面：reLaunch 清栈，避免 switchTab 闪白 */
+function preloadTabBarIcons(permissions, role) {
+  const list = getTabList(permissions, role)
+  const urls = [...new Set(
+    list.flatMap((t) => [t.iconPath, t.selectedIconPath].filter(Boolean)),
+  )]
+  if (!urls.length) return Promise.resolve()
+  return Promise.all(urls.map((src) => new Promise((resolve) => {
+    wx.getImageInfo({ src, success: resolve, fail: resolve })
+  })))
+}
+
+/** 登录/自动登录进入主界面：优先 switchTab，虚拟 Tab 用 reLaunch；延迟到首屏就绪避免 appLaunch 栈错误 */
 function enterMainApp(url, permissions, role) {
   const target = resolveTarget(url, permissions, role)
-  if (shouldSkipNav(target)) return
-  wx.reLaunch({ url: target })
+  const targetPath = normalizePath(target)
+  if (shouldSkipNav(target)) return Promise.resolve()
+  return preloadTabBarIcons(permissions, role).then(() => new Promise((resolve) => {
+    const navigate = () => {
+      if (canSwitchTab(targetPath, permissions, role)) {
+        wx.switchTab({ url: target, complete: resolve })
+      } else {
+        wx.reLaunch({ url: target, complete: resolve })
+      }
+    }
+    if (typeof wx.nextTick === 'function') wx.nextTick(navigate)
+    else setTimeout(navigate, 50)
+  }))
 }
 
 function openPage(url, permissions, role) {
@@ -198,6 +220,7 @@ module.exports = {
   isUserTabPage,
   canSwitchTab,
   enterMainApp,
+  preloadTabBarIcons,
   openPage,
   NATIVE_TAB_PATHS,
   TAB_LIST_VIEWER,

@@ -1,10 +1,10 @@
 <view class="auth-page">
-  <view class="session-check" wx:if="{{checkingSession && !loading}}">
+  <view class="enter-overlay" wx:if="{{entering}}">
     <view class="session-spinner" />
-    <text class="session-text">正在进入系统…</text>
+    <text class="session-text">{{enterText}}</text>
   </view>
 
-  <view class="auth-card" wx:if="{{!checkingSession || loading}}">
+  <view class="auth-card" wx:else>
     <view class="brand">⚡ 电力智能巡检</view>
     <text class="subtitle">欢迎回来，请登录您的账号</text>
 

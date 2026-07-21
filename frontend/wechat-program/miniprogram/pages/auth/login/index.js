@@ -7,19 +7,22 @@ Page({
     password: '',
     remember: true,
     loading: false,
-    checkingSession: false,
+    entering: false,
+    enterText: '正在进入系统…',
     redirect: '',
   },
 
   onLoad(options) {
     if (options.redirect) this.setData({ redirect: decodeURIComponent(options.redirect) })
-    if (api.getSession()) this.setData({ checkingSession: true })
+    if (api.getSession()) {
+      this.setData({ entering: true, enterText: '正在进入系统…' })
+    }
   },
 
   onShow() {
     const app = getApp()
     if (!app.globalData.user && !api.getSession()) {
-      this.setData({ checkingSession: false, loading: false })
+      this.setData({ entering: false, loading: false })
     }
   },
 
@@ -37,19 +40,18 @@ Page({
       wx.showToast({ title: '请输入用户名和密码', icon: 'none' })
       return
     }
-    this.setData({ loading: true, checkingSession: true })
+    this.setData({ loading: true, entering: true, enterText: '正在登录…' })
     try {
       const session = await api.login(username, password, remember)
       const app = getApp()
       app.applySession(session, { reloadPages: false, skipBadges: true })
       const url = this.data.redirect || getRoleLandingPath(session.user.role)
-      app.enterMainApp(url)
+      this.setData({ enterText: '正在进入系统…' })
+      await app.enterMainApp(url)
       app.refreshBadges()
     } catch (e) {
-      this.setData({ checkingSession: false })
+      this.setData({ entering: false, loading: false })
       wx.showToast({ title: e.message || '登录失败', icon: 'none' })
-    } finally {
-      this.setData({ loading: false })
     }
   },
 })

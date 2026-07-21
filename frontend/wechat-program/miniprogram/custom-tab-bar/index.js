@@ -22,7 +22,10 @@ Component({
       const app = getApp()
       const user = app.globalData.user
       const list = getTabList(app.globalData.permissions, user?.role)
-      this.setData({ list })
+      const route = getCurrentPages().slice(-1)[0]?.route || ''
+      const pagePath = route ? `/${route}` : ''
+      const selected = pagePath ? list.findIndex((t) => t.pagePath === pagePath) : 0
+      this.setData({ list, selected: selected >= 0 ? selected : 0 })
       if (app.registerTabBar) app.registerTabBar(this)
       if (app.applyTabBarBadges) app.applyTabBarBadges()
     },
