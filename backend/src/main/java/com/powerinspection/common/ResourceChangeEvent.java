@@ -15,4 +15,8 @@ public record ResourceChangeEvent(
   public static ResourceChangeEvent created(String resource, Object resourceId) {
     return new ResourceChangeEvent(resource, String.valueOf(resourceId), "CREATED", Instant.now());
   }
+
+  public static ResourceChangeEvent deleted(String resource, Object resourceId) {
+    return new ResourceChangeEvent(resource, String.valueOf(resourceId), "DELETED", Instant.now());
+  }
 }

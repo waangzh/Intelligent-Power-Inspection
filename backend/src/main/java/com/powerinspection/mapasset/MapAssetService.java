@@ -2,6 +2,7 @@ package com.powerinspection.mapasset;
 
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
+import com.powerinspection.common.ResourceChangeEvent;
 import com.powerinspection.config.ModelFileWebConfig;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
@@ -10,6 +11,7 @@ import com.powerinspection.route.RouteDraftRepository;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,6 +20,7 @@ import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -29,6 +32,8 @@ import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -52,27 +57,38 @@ public class MapAssetService {
   private final RouteRevisionRepository routeRevisionRepository;
   private final RouteDraftRepository routeDraftRepository;
   private final RobotMapUploadRepository robotMapUploadRepository;
+  private final SimpMessagingTemplate messagingTemplate;
   private final long maxYamlBytes;
   private final long maxPgmBytes;
+  private final Duration processingTimeout;
+  private final int rejectedRetentionDays;
   private final ConcurrentMap<String, Object> uploadLocks = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Object> reviewLocks = new ConcurrentHashMap<>();
 
   public MapAssetService(DataStoreService dataStore, RouteRevisionRepository routeRevisionRepository,
       RouteDraftRepository routeDraftRepository, RobotMapUploadRepository robotMapUploadRepository,
+      SimpMessagingTemplate messagingTemplate,
       @Value("${app.map-assets.max-yaml-bytes:1048576}") long maxYamlBytes,
-      @Value("${app.map-assets.max-pgm-bytes:104857600}") long maxPgmBytes) {
+      @Value("${app.map-assets.max-pgm-bytes:104857600}") long maxPgmBytes,
+      @Value("${app.map-assets.processing-timeout-seconds:300}") long processingTimeoutSeconds,
+      @Value("${app.map-assets.rejected-retention-days:30}") int rejectedRetentionDays) {
     this.dataStore = dataStore;
     this.routeRevisionRepository = routeRevisionRepository;
     this.routeDraftRepository = routeDraftRepository;
     this.robotMapUploadRepository = robotMapUploadRepository;
+    this.messagingTemplate = messagingTemplate;
     this.maxYamlBytes = maxYamlBytes;
     this.maxPgmBytes = maxPgmBytes;
+    this.processingTimeout = Duration.ofSeconds(Math.max(1, processingTimeoutSeconds));
+    this.rejectedRetentionDays = Math.max(1, rejectedRetentionDays);
   }
 
   public Map<String, Object> create(String siteId, MultipartFile yaml, MultipartFile pgm) throws IOException {
     ensureSiteExists(siteId);
     PreparedUpload prepared = prepare(yaml, pgm);
-    return createAsset(siteId, yaml, pgm, prepared, "AVAILABLE", "USER", null, null, null, null);
+    Map<String, Object> asset = createAsset(siteId, yaml, pgm, prepared, "AVAILABLE", "USER", null, null, null, null);
+    publishChange(ResourceChangeEvent.created("mapAsset", asset.get("id")));
+    return asset;
   }
 
   public RobotMapUploadResult createForRobot(String siteId, String robotId, String bridgeRobotId,
@@ -87,48 +103,54 @@ public class MapAssetService {
         && !prepared.contentIdentitySha256().equals(expectedContentIdentity.trim())) {
       throw ApiException.badRequest("地图内容身份与平台计算结果不一致");
     }
+    log.info("Robot map upload received robotId={} bridgeRobotId={} key={} yamlBytes={} pgmBytes={} identity={}",
+      robotId, bridgeRobotId, keyFingerprint(normalizedKey), yaml.getSize(), pgm.getSize(),
+      shortHash(prepared.contentIdentitySha256()));
     String lockKey = robotId + '\n' + normalizedKey;
     Object lock = uploadLocks.computeIfAbsent(lockKey, ignored -> new Object());
     try {
       synchronized (lock) {
         RobotMapUploadEntity upload = robotMapUploadRepository.findByRobotIdAndIdempotencyKey(robotId, normalizedKey).orElse(null);
+        String repairAssetId = null;
         if (upload != null) {
-          verifyHashes(upload, prepared);
-          if ("SUCCEEDED".equals(upload.getStatus()) && upload.getMapAssetId() != null) {
-            return new RobotMapUploadResult(getForManagement(upload.getMapAssetId()), false);
-          }
-          if ("PROCESSING".equals(upload.getStatus())) {
-            throw ApiException.conflict("相同 Idempotency-Key 的上传正在处理");
-          }
-          if (!"FAILED".equals(upload.getStatus())
-              || robotMapUploadRepository.claimFailed(upload.getId(), Instant.now().toString()) != 1) {
-            throw ApiException.conflict("相同 Idempotency-Key 的上传状态已变化，请稍后重试");
-          }
-          upload = robotMapUploadRepository.findById(upload.getId())
-            .orElseThrow(() -> ApiException.conflict("幂等上传记录不存在"));
+          UploadDecision decision = claimExistingUpload(upload, prepared, robotId, normalizedKey);
+          if (decision.replayAsset() != null) return new RobotMapUploadResult(decision.replayAsset(), false);
+          upload = decision.upload();
+          repairAssetId = decision.repairAssetId();
         } else {
           ClaimResult claim = claimRobotUpload(robotId, normalizedKey, prepared);
           upload = claim.upload();
           if (!claim.claimed()) {
-            verifyHashes(upload, prepared);
-            if ("SUCCEEDED".equals(upload.getStatus()) && upload.getMapAssetId() != null) {
-              return new RobotMapUploadResult(getForManagement(upload.getMapAssetId()), false);
-            }
-            throw ApiException.conflict("相同 Idempotency-Key 的上传正在处理");
+            UploadDecision decision = claimExistingUpload(upload, prepared, robotId, normalizedKey);
+            if (decision.replayAsset() != null) return new RobotMapUploadResult(decision.replayAsset(), false);
+            upload = decision.upload();
+            repairAssetId = decision.repairAssetId();
           }
         }
 
         Map<String, Object> asset = null;
+        boolean repairing = repairAssetId != null;
         try {
-          asset = createAsset(siteId, yaml, pgm, prepared, "PENDING_REVIEW", "ROBOT",
-            robotId, bridgeRobotId, normalizedKey, capturedAt);
+          asset = repairing
+            ? repairAsset(repairAssetId, siteId, robotId, yaml, pgm, prepared)
+            : createAsset(siteId, yaml, pgm, prepared, "PENDING_REVIEW", "ROBOT",
+              robotId, bridgeRobotId, normalizedKey, capturedAt);
           upload.setMapAssetId(String.valueOf(asset.get("id")));
           upload.setStatus("SUCCEEDED");
           upload.setUpdatedAt(Instant.now().toString());
           robotMapUploadRepository.saveAndFlush(upload);
-          return new RobotMapUploadResult(asset, true);
+          log.info("Robot map upload {} robotId={} key={} assetId={} identity={}",
+            repairing ? "repaired" : "succeeded", robotId, keyFingerprint(normalizedKey), asset.get("id"),
+            shortHash(prepared.contentIdentitySha256()));
+          publishChange(repairing
+            ? ResourceChangeEvent.updated("mapAsset", asset.get("id"))
+            : ResourceChangeEvent.created("mapAsset", asset.get("id")));
+          return new RobotMapUploadResult(asset, !repairing);
         } catch (IOException | RuntimeException ex) {
-          if (asset != null) deleteIfUnreferenced(String.valueOf(asset.get("id")));
+          if (!repairing && asset != null) {
+            deleteIfUnreferenced(String.valueOf(asset.get("id")));
+            upload.setMapAssetId(null);
+          }
           upload.setStatus("FAILED");
           upload.setUpdatedAt(Instant.now().toString());
           try {
@@ -136,6 +158,8 @@ public class MapAssetService {
           } catch (RuntimeException updateFailure) {
             ex.addSuppressed(updateFailure);
           }
+          log.error("Robot map upload failed robotId={} key={} uploadId={} repair={} error={}", robotId,
+            keyFingerprint(normalizedKey), upload.getId(), repairing, ex.getClass().getSimpleName(), ex);
           throw ex;
         }
       }
@@ -189,18 +213,7 @@ public class MapAssetService {
     Files.createDirectory(staging);
     boolean published = false;
     try {
-      Files.write(staging.resolve(YAML_FILE), prepared.yamlBytes());
-      String pgmSha256;
-      try (InputStream input = pgm.getInputStream()) {
-        MessageDigest digest = sha256Digest();
-        try (var digestInput = new java.security.DigestInputStream(input, digest)) {
-          Files.copy(digestInput, staging.resolve(PGM_FILE));
-        }
-        pgmSha256 = HexFormat.of().formatHex(digest.digest());
-      }
-      if (!prepared.pgmSha256().equals(pgmSha256)) {
-        throw ApiException.conflict("PGM 文件内容在上传处理期间发生变化");
-      }
+      String pgmSha256 = writeAssetFiles(staging, pgm, prepared);
       publish(staging, target);
       published = true;
 
@@ -217,22 +230,7 @@ public class MapAssetService {
       metadata.put("reviewedBy", null);
       metadata.put("reviewedAt", null);
       metadata.put("reviewComment", null);
-      metadata.put("yamlName", prepared.yamlName());
-      metadata.put("pgmName", prepared.pgmName());
-      metadata.put("image", prepared.image());
-      metadata.put("resolution", prepared.resolution());
-      metadata.put("origin", prepared.origin());
-      metadata.put("negate", prepared.negate());
-      metadata.put("occupiedThresh", prepared.occupiedThresh());
-      metadata.put("freeThresh", prepared.freeThresh());
-      metadata.put("mode", prepared.mode());
-      metadata.put("width", prepared.width());
-      metadata.put("height", prepared.height());
-      metadata.put("yamlSize", yaml.getSize());
-      metadata.put("pgmSize", pgm.getSize());
-      metadata.put("yamlSha256", prepared.yamlSha256());
-      metadata.put("pgmSha256", pgmSha256);
-      metadata.put("contentIdentitySha256", prepared.contentIdentitySha256());
+      metadata.putAll(fileMetadata(yaml, pgm, prepared, pgmSha256));
       metadata.put("createdAt", now);
       metadata.put("updatedAt", now);
       try {
@@ -295,7 +293,18 @@ public class MapAssetService {
         patch.put("reviewedAt", now);
         patch.put("reviewComment", normalizedComment);
         patch.put("updatedAt", now);
-        return dataStore.patch(DataCategory.MAP_ASSET, id, patch);
+        Map<String, Object> reviewed = dataStore.patch(DataCategory.MAP_ASSET, id, patch);
+        if ("REJECT".equals(normalizedAction)) {
+          try {
+            deleteAssetFiles(id);
+          } catch (IOException ex) {
+            log.error("Rejected map file cleanup failed assetId={}", id, ex);
+          }
+        }
+        log.info("Map asset reviewed assetId={} action={} reviewerId={} filesRetained={}", id,
+          normalizedAction, reviewerId, "APPROVE".equals(normalizedAction));
+        publishChange(ResourceChangeEvent.updated("mapAsset", id));
+        return managementView(reviewed);
       }
     } finally {
       reviewLocks.remove(id, lock);
@@ -336,6 +345,130 @@ public class MapAssetService {
     }
     deleteAssetFiles(id);
     dataStore.delete(DataCategory.MAP_ASSET, id);
+    robotMapUploadRepository.deleteByMapAssetId(id);
+    log.info("Map asset deleted assetId={}", id);
+    publishChange(ResourceChangeEvent.deleted("mapAsset", id));
+  }
+
+  @Scheduled(cron = "${app.map-assets.rejected-cleanup-cron:0 30 3 * * *}")
+  public void cleanupRejectedAssets() {
+    Instant cutoff = Instant.now().minus(Duration.ofDays(rejectedRetentionDays));
+    for (Map<String, Object> asset : dataStore.list(DataCategory.MAP_ASSET)) {
+      if (!"REJECTED".equals(String.valueOf(asset.get("status")))) continue;
+      Instant reviewedAt = parseInstant(asset.get("reviewedAt"));
+      if (reviewedAt == null || reviewedAt.isAfter(cutoff)) continue;
+      String id = String.valueOf(asset.get("id"));
+      if (isReferenced(id)) {
+        log.error("Rejected map cleanup skipped referenced assetId={}", id);
+        continue;
+      }
+      try {
+        deleteAssetFiles(id);
+        robotMapUploadRepository.deleteByMapAssetId(id);
+        dataStore.delete(DataCategory.MAP_ASSET, id);
+        log.info("Rejected map metadata purged assetId={} reviewedAt={}", id, reviewedAt);
+        publishChange(ResourceChangeEvent.deleted("mapAsset", id));
+      } catch (IOException | RuntimeException ex) {
+        log.error("Rejected map cleanup failed assetId={}", id, ex);
+      }
+    }
+  }
+
+  private Map<String, Object> repairAsset(String id, String siteId, String robotId,
+      MultipartFile yaml, MultipartFile pgm, PreparedUpload prepared) throws IOException {
+    Map<String, Object> current = getForManagement(id);
+    if (!"PENDING_REVIEW".equals(String.valueOf(current.get("status")))) return current;
+    if (!"ROBOT".equals(String.valueOf(current.get("source")))
+        || !siteId.equals(String.valueOf(current.get("siteId")))
+        || !robotId.equals(String.valueOf(current.get("sourceRobotId")))) {
+      throw ApiException.conflict("待修复地图与当前机器人或站点不匹配");
+    }
+    Object identity = current.get("contentIdentitySha256");
+    if (identity != null && !identity.toString().isBlank()
+        && !prepared.contentIdentitySha256().equals(identity.toString())) {
+      throw ApiException.conflict("待修复地图的内容身份与原资产不一致");
+    }
+    if (storedFilesReady(id)) {
+      try (InputStream yamlInput = Files.newInputStream(regularAssetFile(id, YAML_FILE));
+           InputStream pgmInput = Files.newInputStream(regularAssetFile(id, PGM_FILE))) {
+        String storedYamlSha256 = digest(yamlInput);
+        String storedPgmSha256 = digest(pgmInput);
+        if (storedYamlSha256.equals(String.valueOf(current.get("yamlSha256")))
+            && storedPgmSha256.equals(String.valueOf(current.get("pgmSha256")))) {
+          return current;
+        }
+        if (storedYamlSha256.equals(prepared.yamlSha256())
+            && storedPgmSha256.equals(prepared.pgmSha256())) {
+          return patchAssetFileMetadata(id, yaml, pgm, prepared, storedPgmSha256);
+        }
+      }
+    }
+
+    Path staging = resolveAssetDirectory("." + id + ".repair");
+    Path target = resolveAssetDirectory(id);
+    Files.createDirectories(ROOT);
+    deleteDirectoryQuietly(staging);
+    Files.createDirectory(staging);
+    boolean published = false;
+    try {
+      String pgmSha256 = writeAssetFiles(staging, pgm, prepared);
+      deleteAssetFiles(id);
+      publish(staging, target);
+      published = true;
+      try {
+        return patchAssetFileMetadata(id, yaml, pgm, prepared, pgmSha256);
+      } catch (RuntimeException ex) {
+        deleteDirectoryQuietly(target);
+        throw ex;
+      }
+    } finally {
+      if (!published) deleteDirectoryQuietly(staging);
+    }
+  }
+
+  private Map<String, Object> patchAssetFileMetadata(String id, MultipartFile yaml, MultipartFile pgm,
+      PreparedUpload prepared, String pgmSha256) {
+    Map<String, Object> patch = fileMetadata(yaml, pgm, prepared, pgmSha256);
+    patch.put("updatedAt", Instant.now().toString());
+    return managementView(dataStore.patch(DataCategory.MAP_ASSET, id, patch));
+  }
+
+  private String writeAssetFiles(Path directory, MultipartFile pgm, PreparedUpload prepared) throws IOException {
+    Files.write(directory.resolve(YAML_FILE), prepared.yamlBytes());
+    String pgmSha256;
+    try (InputStream input = pgm.getInputStream()) {
+      MessageDigest digest = sha256Digest();
+      try (var digestInput = new java.security.DigestInputStream(input, digest)) {
+        Files.copy(digestInput, directory.resolve(PGM_FILE));
+      }
+      pgmSha256 = HexFormat.of().formatHex(digest.digest());
+    }
+    if (!prepared.pgmSha256().equals(pgmSha256)) {
+      throw ApiException.conflict("PGM 文件内容在上传处理期间发生变化");
+    }
+    return pgmSha256;
+  }
+
+  private Map<String, Object> fileMetadata(MultipartFile yaml, MultipartFile pgm,
+      PreparedUpload prepared, String pgmSha256) {
+    Map<String, Object> metadata = new LinkedHashMap<>();
+    metadata.put("yamlName", prepared.yamlName());
+    metadata.put("pgmName", prepared.pgmName());
+    metadata.put("image", prepared.image());
+    metadata.put("resolution", prepared.resolution());
+    metadata.put("origin", prepared.origin());
+    metadata.put("negate", prepared.negate());
+    metadata.put("occupiedThresh", prepared.occupiedThresh());
+    metadata.put("freeThresh", prepared.freeThresh());
+    metadata.put("mode", prepared.mode());
+    metadata.put("width", prepared.width());
+    metadata.put("height", prepared.height());
+    metadata.put("yamlSize", yaml.getSize());
+    metadata.put("pgmSize", pgm.getSize());
+    metadata.put("yamlSha256", prepared.yamlSha256());
+    metadata.put("pgmSha256", pgmSha256);
+    metadata.put("contentIdentitySha256", prepared.contentIdentitySha256());
+    return metadata;
   }
 
   public void deleteIfUnreferenced(String id) {
@@ -445,7 +578,7 @@ public class MapAssetService {
 
   private void verifyStoredFiles(String id, Map<String, Object> asset) {
     if (!storedFilesReady(id)) {
-      throw ApiException.conflict("地图资产文件不完整，无法通过审核，请让机器人使用新的 Idempotency-Key 重新上传");
+      throw ApiException.conflict("地图资产文件不完整，无法通过审核；可使用原 Idempotency-Key 重试修复");
     }
     try (InputStream yamlInput = Files.newInputStream(regularAssetFile(id, YAML_FILE));
          InputStream pgmInput = Files.newInputStream(regularAssetFile(id, PGM_FILE))) {
@@ -469,7 +602,9 @@ public class MapAssetService {
   private void publish(Path staging, Path target) throws IOException {
     try {
       Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
-    } catch (AtomicMoveNotSupportedException ex) {
+    } catch (AtomicMoveNotSupportedException | AccessDeniedException ex) {
+      log.warn("Atomic map directory publish unavailable, falling back to regular move assetId={} reason={}",
+        target.getFileName(), ex.getClass().getSimpleName());
       Files.move(staging, target);
     }
   }
@@ -642,7 +777,86 @@ public class MapAssetService {
         && Objects.equals(upload.getPgmSha256(), prepared.pgmSha256())
       : Objects.equals(upload.getContentIdentitySha256(), prepared.contentIdentitySha256());
     if (!same) {
+      log.warn("Robot map upload idempotency conflict robotId={} key={} uploadId={} expectedIdentity={} actualIdentity={}",
+        upload.getRobotId(), keyFingerprint(upload.getIdempotencyKey()), upload.getId(),
+        shortHash(upload.getContentIdentitySha256()), shortHash(prepared.contentIdentitySha256()));
       throw ApiException.conflict("相同 Idempotency-Key 已用于不同的地图内容");
+    }
+  }
+
+  private UploadDecision claimExistingUpload(RobotMapUploadEntity upload, PreparedUpload prepared,
+      String robotId, String idempotencyKey) {
+    verifyHashes(upload, prepared);
+    String assetId = upload.getMapAssetId();
+    if ("SUCCEEDED".equals(upload.getStatus()) && assetId != null) {
+      Map<String, Object> asset = getForManagement(assetId);
+      if (!isRepairable(asset)) {
+        log.info("Robot map upload replayed robotId={} key={} assetId={}", robotId,
+          keyFingerprint(idempotencyKey), assetId);
+        return new UploadDecision(upload, asset, null);
+      }
+      String claimTime = Instant.now().toString();
+      if (robotMapUploadRepository.claimSucceededForRepair(
+          upload.getId(), assetId, upload.getUpdatedAt(), claimTime) != 1) {
+        throw ApiException.serviceUnavailable("相同 Idempotency-Key 的地图文件正在修复，请稍后使用原 key 重试");
+      }
+      log.warn("Robot map repair claimed robotId={} key={} uploadId={} assetId={}", robotId,
+        keyFingerprint(idempotencyKey), upload.getId(), assetId);
+      RobotMapUploadEntity claimed = robotMapUploadRepository.findById(upload.getId())
+        .orElseThrow(() -> ApiException.conflict("幂等上传记录不存在"));
+      return new UploadDecision(claimed, null, assetId);
+    }
+
+    String previousStatus = upload.getStatus();
+    Instant claimTime = Instant.now();
+    String processingCutoff = claimTime.minus(processingTimeout).toString();
+    if (!("FAILED".equals(previousStatus) || "PROCESSING".equals(previousStatus))
+        || robotMapUploadRepository.claimRetryable(upload.getId(), processingCutoff, claimTime.toString()) != 1) {
+      log.info("Robot map upload still processing robotId={} key={} uploadId={}", robotId,
+        keyFingerprint(idempotencyKey), upload.getId());
+      throw ApiException.serviceUnavailable("相同 Idempotency-Key 的上传正在处理，请稍后使用原 key 重试");
+    }
+    log.warn("Robot map upload reclaimed robotId={} key={} uploadId={} previousStatus={}", robotId,
+      keyFingerprint(idempotencyKey), upload.getId(), previousStatus);
+    RobotMapUploadEntity claimed = robotMapUploadRepository.findById(upload.getId())
+      .orElseThrow(() -> ApiException.conflict("幂等上传记录不存在"));
+    String repairAssetId = claimed.getMapAssetId();
+    if (repairAssetId != null && dataStore.find(DataCategory.MAP_ASSET, repairAssetId) == null) {
+      claimed.setMapAssetId(null);
+      claimed = robotMapUploadRepository.saveAndFlush(claimed);
+      repairAssetId = null;
+    }
+    return new UploadDecision(claimed, null, repairAssetId);
+  }
+
+  private boolean isRepairable(Map<String, Object> asset) {
+    return "PENDING_REVIEW".equals(String.valueOf(asset.get("status")))
+      && Boolean.FALSE.equals(asset.get("filesReady"));
+  }
+
+  private Instant parseInstant(Object value) {
+    if (value == null) return null;
+    try {
+      return Instant.parse(value.toString());
+    } catch (RuntimeException ex) {
+      return null;
+    }
+  }
+
+  private String keyFingerprint(String key) {
+    return key == null ? "none" : shortHash(sha256(key.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private String shortHash(String hash) {
+    return hash == null || hash.isBlank() ? "none" : hash.substring(0, Math.min(12, hash.length()));
+  }
+
+  private void publishChange(ResourceChangeEvent event) {
+    try {
+      messagingTemplate.convertAndSend("/topic/map-assets", event);
+    } catch (RuntimeException ex) {
+      log.warn("Map asset realtime notification failed assetId={} operation={}",
+        event.resourceId(), event.operation(), ex);
     }
   }
 
@@ -653,6 +867,10 @@ public class MapAssetService {
   }
 
   private record ClaimResult(RobotMapUploadEntity upload, boolean claimed) {
+  }
+
+  private record UploadDecision(RobotMapUploadEntity upload, Map<String, Object> replayAsset,
+      String repairAssetId) {
   }
 
   private MessageDigest sha256Digest() {

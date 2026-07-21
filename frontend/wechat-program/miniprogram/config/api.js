@@ -5,7 +5,7 @@
  * 本地改 baseUrl 可用 api.local.js（不含 mockMode）。
  */
 const defaults = {
-  baseUrl: 'http://localhost:8080/api/v1',
+  baseUrl: 'http://112.124.49.152:8080/api/v1',
   /** none: 真实后端；openapi: 对接 Prism Mock Server */
   mockMode: 'none',
   timeout: 15000,

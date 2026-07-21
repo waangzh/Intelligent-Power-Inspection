@@ -1,29 +1,48 @@
 <template>
-  <div>
+  <div class="record-page">
     <PageHeader title="巡检记录" description="历史巡检报告与异常汇总" :breadcrumbs="[{ label: '数据中心' }, { label: '巡检记录' }]">
       <template #actions>
-        <el-button v-if="can('record:export')" :loading="exporting" @click="exportRecords">
+        <el-button v-if="can('record:export')" plain class="export-btn" :loading="exporting" @click="exportRecords">
           <el-icon><Download /></el-icon>
           导出 CSV
         </el-button>
       </template>
     </PageHeader>
 
-    <el-card shadow="never" style="margin-bottom: 16px">
-      <el-form :inline="true" size="small">
-        <el-form-item label="关键词">
-          <el-input v-model="keyword" placeholder="任务/路线名称" clearable style="width: 180px" @change="searchRecords" />
-        </el-form-item>
-        <el-form-item label="告警">
-          <el-select v-model="alarmFilter" clearable style="width: 120px">
+    <el-card shadow="never" class="filter-card">
+      <div class="filter-bar">
+        <el-input
+          v-model="keyword"
+          placeholder="搜索任务 / 路线名称"
+          clearable
+          class="filter-search"
+          @change="searchRecords"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <div class="filter-item">
+          <span class="filter-label">告警</span>
+          <el-select v-model="alarmFilter" clearable placeholder="全部" style="width: 120px" @change="searchRecords">
             <el-option label="有告警" value="has" />
             <el-option label="无告警" value="none" />
           </el-select>
-        </el-form-item>
-      </el-form>
+        </div>
+        <el-button plain @click="resetFilters">
+          <el-icon><RefreshRight /></el-icon>
+          重置
+        </el-button>
+      </div>
     </el-card>
 
-    <el-card shadow="never">
+    <el-card shadow="never" class="table-card">
+      <template #header>
+        <div class="table-head">
+          <span class="table-title">巡检记录</span>
+          <span class="record-count">共 {{ filteredRecords.length }} 条</span>
+        </div>
+      </template>
       <el-table :data="filteredRecords" size="small">
         <el-table-column prop="taskName" label="任务名称" min-width="140" />
         <el-table-column prop="routeName" label="巡检路线" min-width="120" />
@@ -31,7 +50,7 @@
         <el-table-column prop="checkpointCount" label="检查点" width="80" align="center" />
         <el-table-column label="告警" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.alarmCount > 0 ? 'warning' : 'success'" size="small">{{ row.alarmCount }}</el-tag>
+            <el-tag :type="row.alarmCount > 0 ? 'warning' : 'success'" size="small" effect="light">{{ row.alarmCount }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="duration" label="耗时" width="90" />
@@ -39,32 +58,43 @@
         <el-table-column label="完成时间" width="160">
           <template #default="{ row }">{{ formatTime(row.completedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="100">
+        <el-table-column label="操作" width="100" class-name="actions-col" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="showDetail(row)">报告</el-button>
+            <div class="row-actions">
+              <el-button plain size="small" class="action-btn action-detail" @click="showDetail(row)">报告</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
       <ListPagination :total="taskStore.recordTotal" :page="recordPage" @change="loadRecordPage" />
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="巡检报告" width="640px">
+    <el-dialog v-model="detailVisible" title="巡检报告" width="680px" class="report-dialog">
       <template v-if="detailRecord">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="任务">{{ detailRecord.taskName }}</el-descriptions-item>
+        <div class="report-summary">
+          <div class="report-title">
+            <h3>{{ detailRecord.taskName }}</h3>
+            <el-tag :type="detailRecord.alarmCount > 0 ? 'warning' : 'success'" size="small" effect="light">
+              {{ detailRecord.alarmCount > 0 ? `${detailRecord.alarmCount} 条告警` : '无告警' }}
+            </el-tag>
+          </div>
+          <p>{{ detailRecord.summary }}</p>
+        </div>
+        <el-descriptions :column="2" border size="small" class="report-meta">
           <el-descriptions-item label="路线">{{ detailRecord.routeName }}</el-descriptions-item>
           <el-descriptions-item label="机器人">{{ detailRecord.robotName }}</el-descriptions-item>
           <el-descriptions-item label="耗时">{{ detailRecord.duration }}</el-descriptions-item>
-          <el-descriptions-item label="检查点" :span="2">{{ detailRecord.checkpointCount }} 个</el-descriptions-item>
-          <el-descriptions-item label="摘要" :span="2">{{ detailRecord.summary }}</el-descriptions-item>
+          <el-descriptions-item label="检查点">{{ detailRecord.checkpointCount }} 个</el-descriptions-item>
         </el-descriptions>
-        <el-divider>检查点明细（演示）</el-divider>
-        <el-table :data="checkpointRows" size="small">
+        <div class="report-section-head">
+          <span class="table-title">检查点明细</span>
+        </div>
+        <el-table :data="checkpointRows" size="small" class="report-table">
           <el-table-column prop="name" label="检查点" />
           <el-table-column prop="result" label="检测结果" />
-          <el-table-column prop="alarm" label="告警" width="80" />
+          <el-table-column prop="alarm" label="告警" width="80" align="center" />
         </el-table>
-        <div style="margin-top: 12px; text-align: right">
+        <div class="report-footer">
           <el-button v-if="can('record:export')" type="primary" :loading="exporting" @click="exportRecords">导出 CSV</el-button>
         </div>
       </template>
@@ -75,6 +105,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Download, RefreshRight, Search } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ListPagination from '@/components/ListPagination.vue'
 import { usePermission } from '@/composables/usePermission'
@@ -98,6 +129,12 @@ function loadRecordPage(page: number) {
 
 function searchRecords() {
   loadRecordPage(0)
+}
+
+function resetFilters() {
+  keyword.value = ''
+  alarmFilter.value = ''
+  searchRecords()
 }
 
 const filteredRecords = computed(() => {
@@ -150,3 +187,80 @@ async function exportRecords() {
   }
 }
 </script>
+
+<style scoped>
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-search {
+  width: min(280px, 100%);
+}
+
+.filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: var(--pi-muted);
+  white-space: nowrap;
+}
+
+.table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.export-btn {
+  border-radius: 8px;
+}
+
+.report-summary {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #f6f8fb;
+  border: 1px solid var(--pi-border-soft);
+}
+
+.report-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.report-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pi-text);
+}
+
+.report-summary p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--pi-muted);
+  line-height: 1.55;
+}
+
+.report-meta {
+  margin-bottom: 16px;
+}
+
+.report-section-head {
+  margin-bottom: 10px;
+}
+
+.report-footer {
+  margin-top: 14px;
+  text-align: right;
+}
+</style>

@@ -227,6 +227,7 @@ def run_smoke(base_url, store, platform) -> None:
     cached = store.deployment("deploy-1")
     assert cached and cached["robot_id"] == "robot-001" and cached["manifest"]["mapImageSha256"] == synced["mapImageSha256"]
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {})[0] == 401
+    assert request(base_url, "POST", "/robot-api/v1/inspection-images", {})[0] == 401
     heartbeat = {
         "protocolVersion": "1.0", "robotId": "robot-001", "bootId": "boot-1",
         "softwareVersion": "smoke", "state": "idle", "latestLocalEventSequence": 0, "health": {},

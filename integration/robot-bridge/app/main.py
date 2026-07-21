@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -16,6 +17,9 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from .store import Store, StoreConflict, now
+
+
+logger = logging.getLogger("robot_bridge.map_upload")
 
 
 class BridgeError(Exception):
@@ -52,6 +56,8 @@ def create_app() -> FastAPI:
     upload_request_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_REQUEST_MAX_BYTES", str(110 * 1024 * 1024)))
     upload_temp_root = Path(os.environ.get("BRIDGE_MAP_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/map-upload-tmp")).expanduser()
     inspection_upload_enabled = os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+    inspection_upload_connect_timeout = float(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_CONNECT_TIMEOUT_SEC", "10"))
+    inspection_upload_read_timeout = float(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_READ_TIMEOUT_SEC", "60"))
     inspection_upload_max = int(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_MAX_BYTES", str(20 * 1024 * 1024)))
     inspection_upload_temp_root = Path(os.environ.get(
         "BRIDGE_INSPECTION_IMAGE_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/inspection-image-upload-tmp"
@@ -59,9 +65,18 @@ def create_app() -> FastAPI:
     store = Store(os.environ.get("ROBOT_BRIDGE_STORAGE_PATH", "~/.local/share/ylhb/robot-bridge.db"))
     app.state.store = store
 
+    def valid_robot_authorization(value):
+        token = value[7:] if value.startswith("Bearer ") else ""
+        return bool(token) and any(
+            hmac.compare_digest(token, str(expected))
+            for expected in robot_tokens.values()
+        )
+
     @app.middleware("http")
     async def admin_auth(request: Request, call_next):
         if request.url.path.startswith("/bridge/v1") and (not bridge_token or not hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {bridge_token}")):
+            return JSONResponse(status_code=401, content={"code": "AUTH_FAILED", "message": "Bearer token required", "requestId": ""})
+        if request.url.path.startswith("/robot-api/") and not valid_robot_authorization(request.headers.get("authorization", "")):
             return JSONResponse(status_code=401, content={"code": "AUTH_FAILED", "message": "Bearer token required", "requestId": ""})
         return await call_next(request)
 
@@ -104,7 +119,7 @@ def create_app() -> FastAPI:
             while chunk := await upload.read(1024 * 1024):
                 size += len(chunk)
                 if size > limit:
-                    raise BridgeError("PAYLOAD_TOO_LARGE", "map file exceeds configured size limit", 413)
+                    raise BridgeError("PAYLOAD_TOO_LARGE", "uploaded file exceeds configured size limit", 413)
                 target.write(chunk)
                 digest.update(chunk)
         return size, digest.hexdigest()
@@ -297,6 +312,8 @@ def create_app() -> FastAPI:
         idempotency_key = request.headers.get("idempotency-key", "").strip()
         if not idempotency_key or len(idempotency_key) > 160:
             raise BridgeError("INVALID_REQUEST", "valid Idempotency-Key is required")
+        key_fingerprint = hashlib.sha256(idempotency_key.encode()).hexdigest()[:12]
+        logger.info("map upload received robot_id=%s key=%s", robot_id, key_fingerprint)
         yaml_name = safe_name(yaml_file.filename, (".yaml", ".yml"))
         pgm_name = safe_name(pgm_file.filename, (".pgm",))
         if not valid_sha256(content_identity) or not valid_sha256(yaml_sha256) or not valid_sha256(pgm_sha256):
@@ -307,6 +324,10 @@ def create_app() -> FastAPI:
         try:
             yaml_size, actual_yaml_sha = await save_upload(yaml_file, yaml_path, upload_yaml_max)
             pgm_size, actual_pgm_sha = await save_upload(pgm_file, pgm_path, upload_pgm_max)
+            logger.info(
+                "map upload buffered robot_id=%s key=%s yaml_bytes=%d pgm_bytes=%d",
+                robot_id, key_fingerprint, yaml_size, pgm_size,
+            )
             if yaml_size + pgm_size > upload_request_max:
                 raise BridgeError("PAYLOAD_TOO_LARGE", "map upload exceeds configured request size", 413)
             if not hmac.compare_digest(yaml_sha256.lower(), actual_yaml_sha):
@@ -337,14 +358,26 @@ def create_app() -> FastAPI:
                             },
                         )
             except httpx.HTTPError as exc:
+                logger.warning(
+                    "map upload platform unavailable robot_id=%s key=%s error=%s",
+                    robot_id, key_fingerprint, type(exc).__name__,
+                )
                 raise BridgeError("PLATFORM_UNREACHABLE", f"platform upload failed: {type(exc).__name__}", 503) from exc
             try:
                 payload = response.json()
             except ValueError as exc:
                 raise BridgeError("PLATFORM_UNREACHABLE", "platform returned invalid JSON", 503) from exc
             if response.status_code >= 400:
+                logger.warning(
+                    "map upload rejected robot_id=%s key=%s platform_status=%d",
+                    robot_id, key_fingerprint, response.status_code,
+                )
                 return platform_error(response.status_code, payload)
             asset = payload.get("data", payload)
+            logger.info(
+                "map upload succeeded robot_id=%s key=%s platform_status=%d asset_id=%s status=%s",
+                robot_id, key_fingerprint, response.status_code, asset.get("id"), asset.get("status"),
+            )
             return JSONResponse(status_code=response.status_code, content={
                 "mapAssetId": asset.get("id"),
                 "status": asset.get("status"),
@@ -403,7 +436,11 @@ def create_app() -> FastAPI:
             try:
                 with image_path.open("rb") as image_source:
                     async with httpx.AsyncClient(
-                        timeout=httpx.Timeout(upload_read_timeout, connect=upload_connect_timeout), trust_env=False
+                        timeout=httpx.Timeout(
+                            inspection_upload_read_timeout,
+                            connect=inspection_upload_connect_timeout,
+                        ),
+                        trust_env=False,
                     ) as client:
                         response = await client.post(
                             platform_url + "/api/v1/internal/robot-inspection-images",

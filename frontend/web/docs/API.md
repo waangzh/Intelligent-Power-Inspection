@@ -106,7 +106,7 @@ type Permission =
 
 ## 4. 前端 API 层接口（`src/api`）
 
-前端统一通过 `api/http.ts` 调用后端。默认 `Base URL` 为 `/api/v1`，开发环境由 Vite 代理到 `http://localhost:8080`。
+前端统一通过 `api/http.ts` 调用后端。默认 `Base URL` 为 `http://112.124.49.152:8080/api/v1`，开发环境由 Vite 代理到 `http://112.124.49.152:8080`。
 
 ### 4.1 认证与用户 — `auth.ts`
 

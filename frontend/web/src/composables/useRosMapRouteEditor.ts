@@ -39,6 +39,34 @@ type DragState =
   | { type: 'zonePoint'; id: string; index: number }
   | { type: 'yaw'; hit: YawTarget; moved: boolean }
 
+export function calculateAspectFitView(
+  containerWidth: number,
+  containerHeight: number,
+  mapWidth: number,
+  mapHeight: number,
+) {
+  const scale = Math.max(0.05, Math.min(containerWidth / mapWidth, containerHeight / mapHeight) * 0.96)
+  return {
+    scale,
+    offsetX: (containerWidth - mapWidth * scale) / 2,
+    offsetY: (containerHeight - mapHeight * scale) / 2,
+  }
+}
+
+export function calculateAspectFillView(
+  containerWidth: number,
+  containerHeight: number,
+  mapWidth: number,
+  mapHeight: number,
+) {
+  const scale = Math.max(0.05, Math.max(containerWidth / mapWidth, containerHeight / mapHeight))
+  return {
+    scale,
+    offsetX: (containerWidth - mapWidth * scale) / 2,
+    offsetY: (containerHeight - mapHeight * scale) / 2,
+  }
+}
+
 export function useRosMapRouteEditor(
   canvasRef: Ref<HTMLCanvasElement | null>,
   wrapRef: Ref<HTMLElement | null>,
@@ -50,7 +78,7 @@ export function useRosMapRouteEditor(
   },
 ) {
   const map = reactive<RosMapState>(createDefaultMapState())
-  const view = reactive({ scale: 1, offsetX: 0, offsetY: 0 })
+  const view = reactive({ scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 })
   const mode = ref<EditorMode>('start')
   const targets = shallowRef<RouteExecutorTarget[]>([])
   const keepoutZones = shallowRef<EditableKeepoutZone[]>([])
@@ -121,12 +149,16 @@ export function useRosMapRouteEditor(
     return index >= 0 ? `#${index + 1} ${targets.value[index].name}` : '巡检点'
   }
 
+  function viewUiScale() {
+    return Math.min(view.scaleX, view.scaleY)
+  }
+
   function canvasToPixel(clientX: number, clientY: number) {
     const canvas = canvasRef.value
     if (!canvas) return { x: 0, y: 0 }
     const rect = canvas.getBoundingClientRect()
-    const x = (clientX - rect.left - view.offsetX) / view.scale
-    const y = (clientY - rect.top - view.offsetY) / view.scale
+    const x = (clientX - rect.left - view.offsetX) / view.scaleX
+    const y = (clientY - rect.top - view.offsetY) / view.scaleY
     return { x, y }
   }
 
@@ -155,26 +187,38 @@ export function useRosMapRouteEditor(
     mapInfo.value = `${files} | ${map.width}x${map.height}px | ${wMeters}m x ${hMeters}m | origin=[${map.origin.join(', ')}] | res=${map.resolution} | x=${minX.toFixed(2)}..${maxX.toFixed(2)}, y=${minY.toFixed(2)}..${maxY.toFixed(2)}`
   }
 
-  function drawArrow(ctx: CanvasRenderingContext2D, x: number, y: number, yaw: number, color: string) {
-    const len = 24
-    const angle = -yaw
-    ctx.save()
-    ctx.translate(x, y)
-    ctx.rotate(angle)
+  function mapPixelToScreen(px: number, py: number) {
+    return {
+      x: view.offsetX + px * view.scaleX,
+      y: view.offsetY + py * view.scaleY,
+    }
+  }
+
+  function drawArrowAtMapPixel(ctx: CanvasRenderingContext2D, px: number, py: number, yaw: number, color: string) {
+    const start = mapPixelToScreen(px, py)
+    const tipPx = px + Math.cos(-yaw) * (24 / view.scaleX)
+    const tipPy = py + Math.sin(-yaw) * (24 / view.scaleY)
+    const tip = mapPixelToScreen(tipPx, tipPy)
+    const wingPx = px + Math.cos(-yaw) * (17 / view.scaleX) - Math.sin(-yaw) * (5 / view.scaleY)
+    const wingPy = py + Math.sin(-yaw) * (17 / view.scaleY) + Math.cos(-yaw) * (5 / view.scaleX)
+    const wingLeft = mapPixelToScreen(wingPx, wingPy)
+    const wingPx2 = px + Math.cos(-yaw) * (17 / view.scaleX) + Math.sin(-yaw) * (5 / view.scaleY)
+    const wingPy2 = py + Math.sin(-yaw) * (17 / view.scaleY) - Math.cos(-yaw) * (5 / view.scaleX)
+    const wingRight = mapPixelToScreen(wingPx2, wingPy2)
+
     ctx.strokeStyle = color
     ctx.fillStyle = color
-    ctx.lineWidth = 2 / view.scale
+    ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(0, 0)
-    ctx.lineTo(len / view.scale, 0)
+    ctx.moveTo(start.x, start.y)
+    ctx.lineTo(tip.x, tip.y)
     ctx.stroke()
     ctx.beginPath()
-    ctx.moveTo(len / view.scale, 0)
-    ctx.lineTo((len - 7) / view.scale, -5 / view.scale)
-    ctx.lineTo((len - 7) / view.scale, 5 / view.scale)
+    ctx.moveTo(tip.x, tip.y)
+    ctx.lineTo(wingLeft.x, wingLeft.y)
+    ctx.lineTo(wingRight.x, wingRight.y)
     ctx.closePath()
     ctx.fill()
-    ctx.restore()
   }
 
   function colorWithAlpha(hex: string, alpha: number) {
@@ -187,24 +231,30 @@ export function useRosMapRouteEditor(
     const blocked = status === 'outside' || status === 'occupied' || status === 'keepout'
     const baseColor = blocked ? '#b42318' : status === 'unknown' ? '#b54708' : color
     const path = (points: Array<{ x: number; y: number }>) => {
+      const screenPoints = points.map((point) => {
+        const pixel = mapToPixel(map, point.x, point.y)
+        return mapPixelToScreen(pixel.x, pixel.y)
+      })
       ctx.beginPath()
-      ctx.moveTo(points[0].x, points[0].y)
-      for (let index = 1; index < points.length; index += 1) ctx.lineTo(points[index].x, points[index].y)
+      ctx.moveTo(screenPoints[0].x, screenPoints[0].y)
+      for (let index = 1; index < screenPoints.length; index += 1) {
+        ctx.lineTo(screenPoints[index].x, screenPoints[index].y)
+      }
       ctx.closePath()
     }
     if (showFootprintPadding.value) {
-      path(transformFootprint(pose, true).map((point) => mapToPixel(map, point.x, point.y)))
+      path(transformFootprint(pose, true))
       ctx.fillStyle = colorWithAlpha(baseColor, alpha * 0.45)
       ctx.strokeStyle = colorWithAlpha(baseColor, 0.72)
-      ctx.lineWidth = 1.2 / view.scale
+      ctx.lineWidth = 1.2
       ctx.fill()
       ctx.stroke()
     }
     if (showFootprint.value) {
-      path(transformFootprint(pose).map((point) => mapToPixel(map, point.x, point.y)))
+      path(transformFootprint(pose))
       ctx.fillStyle = colorWithAlpha(baseColor, alpha)
       ctx.strokeStyle = baseColor
-      ctx.lineWidth = 1.4 / view.scale
+      ctx.lineWidth = 1.4
       ctx.fill()
       ctx.stroke()
     }
@@ -214,7 +264,10 @@ export function useRosMapRouteEditor(
   function drawKeepoutZones(ctx: CanvasRenderingContext2D) {
     for (const zone of keepoutZones.value) {
       if (!zone.polygon.length) continue
-      const points = zone.polygon.map((point) => mapToPixel(map, point.x, point.y))
+      const points = zone.polygon.map((point) => {
+        const pixel = mapToPixel(map, point.x, point.y)
+        return mapPixelToScreen(pixel.x, pixel.y)
+      })
       ctx.beginPath()
       ctx.moveTo(points[0].x, points[0].y)
       for (let index = 1; index < points.length; index += 1) ctx.lineTo(points[index].x, points[index].y)
@@ -222,42 +275,25 @@ export function useRosMapRouteEditor(
       const active = zone.id === activeZoneId.value
       ctx.fillStyle = zone.enabled ? 'rgba(180, 35, 24, 0.22)' : 'rgba(102, 112, 133, 0.16)'
       ctx.strokeStyle = active ? '#b42318' : zone.enabled ? '#d92d20' : '#667085'
-      ctx.lineWidth = (active ? 3 : 2) / view.scale
+      ctx.lineWidth = active ? 3 : 2
       if (points.length >= 3) ctx.fill()
       ctx.stroke()
       points.forEach((point, index) => {
         ctx.fillStyle = active ? '#b42318' : '#d92d20'
         ctx.beginPath()
-        ctx.arc(point.x, point.y, 4 / view.scale, 0, Math.PI * 2)
+        ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
         ctx.fill()
         ctx.fillStyle = '#111827'
-        ctx.font = `${11 / view.scale}px Microsoft YaHei, sans-serif`
-        ctx.fillText(String(index + 1), point.x + 5 / view.scale, point.y - 5 / view.scale)
+        ctx.font = '11px Microsoft YaHei, sans-serif'
+        ctx.fillText(String(index + 1), point.x + 5, point.y - 5)
       })
       ctx.fillStyle = '#111827'
-      ctx.font = `700 ${12 / view.scale}px Microsoft YaHei, sans-serif`
-      ctx.fillText(zone.name || zone.id, points[0].x + 10 / view.scale, points[0].y + 14 / view.scale)
+      ctx.font = '700 12px Microsoft YaHei, sans-serif'
+      ctx.fillText(zone.name || zone.id, points[0].x + 10, points[0].y + 14)
     }
   }
 
-  function draw() {
-    const canvas = canvasRef.value
-    const ctx = getCtx()
-    if (!canvas || !ctx) return
-    const rect = canvas.getBoundingClientRect()
-    ctx.clearRect(0, 0, rect.width, rect.height)
-    ctx.save()
-    ctx.translate(view.offsetX, view.offsetY)
-    ctx.scale(view.scale, view.scale)
-
-    if (mapBitmapCtx && map.width && map.height) {
-      ctx.imageSmoothingEnabled = false
-      ctx.drawImage(mapBitmapCanvas, 0, 0)
-    } else {
-      ctx.fillStyle = '#f8fafc'
-      ctx.fillRect(0, 0, Math.max(1, rect.width), Math.max(1, rect.height))
-    }
-
+  function drawMapOverlays(ctx: CanvasRenderingContext2D) {
     const allPoints = [
       { kind: 'start' as const, x: form.startX, y: form.startY, yaw: form.startYaw },
       ...targets.value.map((target, index) => ({ kind: 'target' as const, order: index + 1, ...target })),
@@ -267,22 +303,25 @@ export function useRosMapRouteEditor(
 
     if (targets.value.length > 0) {
       ctx.strokeStyle = '#2563eb'
-      ctx.lineWidth = 2 / view.scale
-      ctx.setLineDash([7 / view.scale, 5 / view.scale])
+      ctx.lineWidth = 2
+      ctx.setLineDash([7, 5])
       ctx.beginPath()
-      const startPx = mapToPixel(map, form.startX, form.startY)
-      ctx.moveTo(startPx.x, startPx.y)
+      const startPixel = mapToPixel(map, form.startX, form.startY)
+      const startScreen = mapPixelToScreen(startPixel.x, startPixel.y)
+      ctx.moveTo(startScreen.x, startScreen.y)
       for (const target of targets.value) {
-        const p = mapToPixel(map, target.x, target.y)
-        ctx.lineTo(p.x, p.y)
+        const pixel = mapToPixel(map, target.x, target.y)
+        const screen = mapPixelToScreen(pixel.x, pixel.y)
+        ctx.lineTo(screen.x, screen.y)
       }
-      if (form.returnToStart) ctx.lineTo(startPx.x, startPx.y)
+      if (form.returnToStart) ctx.lineTo(startScreen.x, startScreen.y)
       ctx.stroke()
       ctx.setLineDash([])
     }
 
     for (const point of allPoints) {
-      const p = mapToPixel(map, point.x, point.y)
+      const pixel = mapToPixel(map, point.x, point.y)
+      const screen = mapPixelToScreen(pixel.x, pixel.y)
       const isStart = point.kind === 'start'
       const selectedForYaw =
         yawTarget.value &&
@@ -293,35 +332,35 @@ export function useRosMapRouteEditor(
       const blocked = footprintKind === 'outside' || footprintKind === 'occupied' || footprintKind === 'keepout'
       const unknown = footprintKind === 'unknown'
       const color = blocked ? '#b42318' : unknown ? '#b54708' : isStart ? '#0f766e' : '#2563eb'
-      const radius = isStart ? 8 / view.scale : 7 / view.scale
+      const radius = isStart ? 8 : 7
       if (selectedForYaw || selectedTarget) {
         ctx.strokeStyle = selectedForYaw ? '#f59e0b' : '#0f766e'
-        ctx.lineWidth = 3 / view.scale
+        ctx.lineWidth = 3
         ctx.beginPath()
-        ctx.arc(p.x, p.y, radius + 5 / view.scale, 0, Math.PI * 2)
+        ctx.arc(screen.x, screen.y, radius + 5, 0, Math.PI * 2)
         ctx.stroke()
       }
       ctx.fillStyle = color
       ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = 2.5 / view.scale
+      ctx.lineWidth = 2.5
       ctx.beginPath()
-      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2)
+      ctx.arc(screen.x, screen.y, radius, 0, Math.PI * 2)
       ctx.fill()
       ctx.stroke()
-      drawArrow(ctx, p.x, p.y, point.yaw || 0, color)
+      drawArrowAtMapPixel(ctx, pixel.x, pixel.y, point.yaw || 0, color)
       if (!isStart && 'order' in point) {
         ctx.fillStyle = '#ffffff'
-        ctx.font = `700 ${10 / view.scale}px Microsoft YaHei, sans-serif`
+        ctx.font = '700 10px Microsoft YaHei, sans-serif'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.fillText(String(point.order), p.x, p.y)
+        ctx.fillText(String(point.order), screen.x, screen.y)
         ctx.textAlign = 'left'
         ctx.textBaseline = 'alphabetic'
       }
       ctx.fillStyle = blocked ? '#b42318' : unknown ? '#b54708' : '#111827'
-      ctx.font = `${12 / view.scale}px Microsoft YaHei, sans-serif`
+      ctx.font = '12px Microsoft YaHei, sans-serif'
       const label = isStart ? '起点' : `#${(point as { order: number; name: string }).order} ${point.name}`
-      ctx.fillText(label, p.x + 10 / view.scale, p.y - 8 / view.scale)
+      ctx.fillText(label, screen.x + 10, screen.y - 8)
     }
 
     if ((mode.value === 'start' || mode.value === 'target') && hoverPixel.value && !drag.value) {
@@ -331,35 +370,56 @@ export function useRosMapRouteEditor(
 
     if (mode.value === 'yaw' && yawPreview.value) {
       const hit = getSelectedYawHit()
-      let origin
+      let originPixel
       if (hit.kind === 'start') {
-        origin = mapToPixel(map, form.startX, form.startY)
+        originPixel = mapToPixel(map, form.startX, form.startY)
       } else {
         const target = targets.value.find((item) => item.id === hit.id)
-        if (target) origin = mapToPixel(map, target.x, target.y)
+        if (target) originPixel = mapToPixel(map, target.x, target.y)
       }
-      if (origin && yawPreview.value) {
+      if (originPixel && yawPreview.value) {
         const pose = hit.kind === 'start'
-          ? { x: form.startX, y: form.startY, yaw: round3(-Math.atan2(yawPreview.value.y - origin.y, yawPreview.value.x - origin.x)) }
+          ? { x: form.startX, y: form.startY, yaw: round3(-Math.atan2(yawPreview.value.y - originPixel.y, yawPreview.value.x - originPixel.x)) }
           : targets.value.find((item) => item.id === hit.id)
         if (pose) {
           const nextPose = 'id' in pose
-            ? { x: pose.x, y: pose.y, yaw: round3(-Math.atan2(yawPreview.value.y - origin.y, yawPreview.value.x - origin.x)) }
+            ? { x: pose.x, y: pose.y, yaw: round3(-Math.atan2(yawPreview.value.y - originPixel.y, yawPreview.value.x - originPixel.x)) }
             : pose
           drawFootprint(ctx, nextPose, '#f59e0b', 0.1)
         }
+        const originScreen = mapPixelToScreen(originPixel.x, originPixel.y)
+        const previewScreen = mapPixelToScreen(yawPreview.value.x, yawPreview.value.y)
         ctx.strokeStyle = '#f59e0b'
-        ctx.lineWidth = 2 / view.scale
-        ctx.setLineDash([6 / view.scale, 4 / view.scale])
+        ctx.lineWidth = 2
+        ctx.setLineDash([6, 4])
         ctx.beginPath()
-        ctx.moveTo(origin.x, origin.y)
-        ctx.lineTo(yawPreview.value.x, yawPreview.value.y)
+        ctx.moveTo(originScreen.x, originScreen.y)
+        ctx.lineTo(previewScreen.x, previewScreen.y)
         ctx.stroke()
         ctx.setLineDash([])
       }
     }
+  }
 
-    ctx.restore()
+  function draw() {
+    const canvas = canvasRef.value
+    const ctx = getCtx()
+    if (!canvas || !ctx) return
+    const rect = canvas.getBoundingClientRect()
+    ctx.clearRect(0, 0, rect.width, rect.height)
+    ctx.fillStyle = '#eef2f6'
+    ctx.fillRect(0, 0, rect.width, rect.height)
+
+    if (mapBitmapCtx && map.width && map.height) {
+      ctx.save()
+      ctx.translate(view.offsetX, view.offsetY)
+      ctx.scale(view.scaleX, view.scaleY)
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(mapBitmapCanvas, 0, 0)
+      ctx.restore()
+    }
+
+    drawMapOverlays(ctx)
     updateMapInfoText()
   }
 
@@ -368,9 +428,14 @@ export function useRosMapRouteEditor(
     const canvas = canvasRef.value
     if (!wrap || !canvas) return
     const rect = wrap.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
     const ratio = window.devicePixelRatio || 1
-    canvas.width = Math.max(1, Math.floor(rect.width * ratio))
-    canvas.height = Math.max(1, Math.floor(rect.height * ratio))
+    const cssWidth = Math.max(1, Math.floor(rect.width))
+    const cssHeight = Math.max(1, Math.floor(rect.height))
+    canvas.style.width = `${cssWidth}px`
+    canvas.style.height = `${cssHeight}px`
+    canvas.width = Math.max(1, Math.floor(cssWidth * ratio))
+    canvas.height = Math.max(1, Math.floor(cssHeight * ratio))
     const ctx = getCtx()
     ctx?.setTransform(ratio, 0, 0, ratio, 0, 0)
     draw()
@@ -383,12 +448,41 @@ export function useRosMapRouteEditor(
       return
     }
     const rect = wrap.getBoundingClientRect()
-    const scaleX = rect.width / map.width
-    const scaleY = rect.height / map.height
-    view.scale = Math.max(0.05, Math.min(scaleX, scaleY) * 0.96)
-    view.offsetX = (rect.width - map.width * view.scale) / 2
-    view.offsetY = (rect.height - map.height * view.scale) / 2
+    if (rect.width <= 0 || rect.height <= 0) return
+    resizeCanvas()
+    const filled = calculateAspectFillView(rect.width, rect.height, map.width, map.height)
+    view.scaleX = filled.scale
+    view.scaleY = filled.scale
+    view.offsetX = filled.offsetX
+    view.offsetY = filled.offsetY
     draw()
+  }
+
+  function fitMapToScreen() {
+    const wrap = wrapRef.value
+    if (!wrap || !map.width || !map.height) {
+      resizeCanvas()
+      return
+    }
+    const rect = wrap.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    resizeCanvas()
+    const fitted = calculateAspectFitView(rect.width, rect.height, map.width, map.height)
+    view.scaleX = fitted.scale
+    view.scaleY = fitted.scale
+    view.offsetX = fitted.offsetX
+    view.offsetY = fitted.offsetY
+    draw()
+  }
+
+  let fitFrameId = 0
+  function scheduleMapFitToScreen() {
+    fitFrameId += 1
+    const frame = fitFrameId
+    requestAnimationFrame(() => {
+      if (frame !== fitFrameId) return
+      fitMapToScreen()
+    })
   }
 
   function setMode(next: EditorMode) {
@@ -399,7 +493,7 @@ export function useRosMapRouteEditor(
   }
 
   function getPointHit(px: number, py: number): PointHit | null {
-    const threshold = 12 / view.scale
+    const threshold = 12 / viewUiScale()
     if (mode.value === 'keepout') {
       for (const zone of keepoutZones.value) {
         for (let index = 0; index < zone.polygon.length; index += 1) {
@@ -417,8 +511,10 @@ export function useRosMapRouteEditor(
     return null
   }
 
-  function pointHitToYaw(hit: PointHit): YawTarget {
-    return hit.kind === 'target' ? { kind: 'target', id: hit.id } : { kind: 'start', id: null }
+  function pointHitToYaw(hit: PointHit): YawTarget | null {
+    if (hit.kind === 'target') return { kind: 'target', id: hit.id }
+    if (hit.kind === 'start') return { kind: 'start', id: null }
+    return null
   }
 
   function setStartFromPixel(px: number, py: number) {
@@ -599,8 +695,8 @@ export function useRosMapRouteEditor(
     const wrap = wrapRef.value
     if (!wrap) return
     const rect = wrap.getBoundingClientRect()
-    const px = (rect.width / 2 - view.offsetX) / view.scale
-    const py = (rect.height / 2 - view.offsetY) / view.scale
+    const px = (rect.width / 2 - view.offsetX) / view.scaleX
+    const py = (rect.height / 2 - view.offsetY) / view.scaleY
     addTargetFromPixel(px, py)
   }
 
@@ -630,6 +726,7 @@ export function useRosMapRouteEditor(
     if (map.pixels) {
       mapBitmapCtx = mapBitmapCanvas.getContext('2d')
       rebuildMapBitmap(map, mapBitmapCanvas)
+      scheduleMapFitToScreen()
     }
     emitChange()
     draw()
@@ -651,7 +748,8 @@ export function useRosMapRouteEditor(
     map.pixels = parsed.pixels
     mapBitmapCtx = mapBitmapCanvas.getContext('2d')
     rebuildMapBitmap(map, mapBitmapCanvas)
-    fitToScreen()
+    fitMapToScreen()
+    scheduleMapFitToScreen()
     emitChange()
   }
 
@@ -692,7 +790,8 @@ export function useRosMapRouteEditor(
       : { kind: 'start', id: null }
     activeRouteIdSynced.value = true
     if (emit) emitChange()
-    draw()
+    if (map.width && map.height) scheduleMapFitToScreen()
+    else draw()
   }
 
   function exportDocument(): RouteExecutorDocument {
@@ -760,15 +859,18 @@ export function useRosMapRouteEditor(
     const hit = getPointHit(p.x, p.y)
     if (event.button === 2) {
       if (hit?.kind === 'zonePoint') return
-      setYawFromPointer(hit ? pointHitToYaw(hit) : getSelectedYawHit(), p.x, p.y)
+      const yawHit = hit ? pointHitToYaw(hit) : getSelectedYawHit()
+      if (yawHit) setYawFromPointer(yawHit, p.x, p.y)
       return
     }
     if (mode.value === 'yaw') {
+      if (hit?.kind === 'zonePoint') return
       yawPreview.value = p
-      const yawHit: YawTarget = hit ? pointHitToYaw(hit) : getSelectedYawHit()
+      const yawHit = hit ? pointHitToYaw(hit) : getSelectedYawHit()
+      if (!yawHit) return
       if (hit?.kind === 'target') selectedTargetId.value = hit.id
       if (hit) {
-        yawTarget.value = pointHitToYaw(hit)
+        yawTarget.value = yawHit
         drag.value = { type: 'yaw', hit: yawHit, moved: false }
       } else {
         setYawFromPointer(yawHit, p.x, p.y)
@@ -872,21 +974,24 @@ export function useRosMapRouteEditor(
     const rect = canvas.getBoundingClientRect()
     const before = canvasToPixel(event.clientX, event.clientY)
     const factor = event.deltaY < 0 ? 1.15 : 0.87
-    view.scale = Math.min(20, Math.max(0.04, view.scale * factor))
+    view.scaleX = Math.min(20, Math.max(0.04, view.scaleX * factor))
+    view.scaleY = Math.min(20, Math.max(0.04, view.scaleY * factor))
     const cx = event.clientX - rect.left
     const cy = event.clientY - rect.top
-    view.offsetX = cx - before.x * view.scale
-    view.offsetY = cy - before.y * view.scale
+    view.offsetX = cx - before.x * view.scaleX
+    view.offsetY = cy - before.y * view.scaleY
     draw()
   }
 
   function zoomIn() {
-    view.scale *= 1.2
+    view.scaleX *= 1.2
+    view.scaleY *= 1.2
     draw()
   }
 
   function zoomOut() {
-    view.scale /= 1.2
+    view.scaleX /= 1.2
+    view.scaleY /= 1.2
     draw()
   }
 
@@ -927,13 +1032,18 @@ export function useRosMapRouteEditor(
 
   watch([showFootprint, showFootprintPadding], draw)
 
+  function onViewportResize() {
+    if (map.width && map.height) fitMapToScreen()
+    else resizeCanvas()
+  }
+
   onMounted(() => {
-    resizeCanvas()
+    onViewportResize()
     if (typeof ResizeObserver !== 'undefined' && wrapRef.value) {
-      wrapResizeObserver = new ResizeObserver(() => resizeCanvas())
+      wrapResizeObserver = new ResizeObserver(() => onViewportResize())
       wrapResizeObserver.observe(wrapRef.value)
     }
-    window.addEventListener('resize', resizeCanvas)
+    window.addEventListener('resize', onViewportResize)
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
   })
@@ -941,7 +1051,7 @@ export function useRosMapRouteEditor(
   onUnmounted(() => {
     wrapResizeObserver?.disconnect()
     wrapResizeObserver = null
-    window.removeEventListener('resize', resizeCanvas)
+    window.removeEventListener('resize', onViewportResize)
     window.removeEventListener('mousemove', onMouseMove)
     window.removeEventListener('mouseup', onMouseUp)
   })
@@ -964,6 +1074,7 @@ export function useRosMapRouteEditor(
     showFootprintPadding,
     setMode,
     fitToScreen,
+    fitMapToScreen,
     zoomIn,
     zoomOut,
     applyYamlText,

@@ -49,7 +49,8 @@ public class TaskExecutionWorker {
 
   private void synchronize(String executionId) {
     TaskExecutionEntity execution = lifecycle.findByExecutionId(executionId);
-    if (execution == null || TaskExecutionStatus.CREATED.name().equals(execution.getStatus())) return;
+    if (execution == null || TaskExecutionStatus.CREATED.name().equals(execution.getStatus())
+        || execution.isManualReconciliationRequired()) return;
     if (TaskExecutionStatus.STARTING.name().equals(execution.getStatus()) || controls.needsStartDelivery(executionId)) deliverStart(execution);
     execution = lifecycle.findByExecutionId(executionId);
     if (execution == null || TaskExecutionStatus.TERMINAL.contains(execution.getStatus())) return;
