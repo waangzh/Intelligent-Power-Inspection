@@ -282,6 +282,8 @@ public class TaskExecutionLifecycleService {
     result.put("status", item.getStatus());
     result.put("startMode", TaskStartMode.defaulted(parseStartMode(item.getStartMode())).name());
     result.put("operatorId", item.getOperatorId());
+    result.put("startRequestId", item.getStartRequestId());
+    result.put("startCommandId", item.getStartCommandId());
     result.put("startRequestedAt", item.getStartRequestedAt());
     result.put("robotReadyAt", item.getRobotReadyAt());
     result.put("localConfirmedAt", item.getLocalConfirmedAt());
