@@ -72,7 +72,7 @@ class ManualDetectionControllerTests {
       "detections",
       "",
       MediaType.APPLICATION_JSON_VALUE,
-      "[{\"type\":\"SWITCH\",\"enabled\":true,\"prompt\":\"红色刀闸开关\",\"threshold\":0.75}]".getBytes(StandardCharsets.UTF_8)
+      "[{\"itemId\":\"person_custom\",\"type\":\"CUSTOM_PERSON\",\"name\":\"人员检测\",\"enabled\":true,\"displayLabel\":\"人员\",\"prompt\":\"定位图像中所有清晰可见的人员\",\"threshold\":0.75}]".getBytes(StandardCharsets.UTF_8)
     );
 
     String token = login("admin", "Admin@123");
@@ -110,6 +110,26 @@ class ManualDetectionControllerTests {
     DetectionRunEntity persisted = detectionRunRepository.findById(requestId).orElseThrow();
     assertThat(persisted.getSourceType()).isEqualTo("LOCAL_UPLOAD");
     assertThat(persisted.getStatus()).isEqualTo("SUCCEEDED");
+    JsonNode snapshot = objectMapper.readTree(persisted.getDetectionsJson()).get(0);
+    assertThat(snapshot.path("itemId").asText()).isEqualTo("person_custom");
+    assertThat(snapshot.path("name").asText()).isEqualTo("人员检测");
+    assertThat(snapshot.path("displayLabel").asText()).isEqualTo("人员");
+    assertThat(snapshot.path("prompt").asText()).isEqualTo("定位图像中所有清晰可见的人员");
+  }
+
+  @Test
+  void manualDetectionRejectsEnabledItemWithoutPrompt() throws Exception {
+    MockMultipartFile image = new MockMultipartFile(
+      "image", "person.jpg", MediaType.IMAGE_JPEG_VALUE, testImage());
+    MockMultipartFile detections = new MockMultipartFile(
+      "detections", "", MediaType.APPLICATION_JSON_VALUE,
+      "[{\"itemId\":\"person_custom\",\"type\":\"CUSTOM_PERSON\",\"name\":\"人员检测\",\"enabled\":true,\"displayLabel\":\"人员\",\"prompt\":\"   \"}]".getBytes(StandardCharsets.UTF_8));
+
+    mockMvc.perform(multipart("/api/v1/detections/manual")
+        .file(image)
+        .file(detections)
+        .header("Authorization", bearer(login("admin", "Admin@123"))))
+      .andExpect(status().isBadRequest());
   }
 
   private byte[] testImage() throws Exception {

@@ -127,12 +127,23 @@ public class ManualDetectionController {
 
   private Map<String, Object> normalizeDetection(Map<String, Object> raw) {
     Map<String, Object> item = new LinkedHashMap<>();
-    item.put("type", text(raw.get("type")));
+    String type = text(raw.get("type"));
+    String prompt = text(raw.get("prompt"));
+    if (!StringUtils.hasText(type) || !StringUtils.hasText(prompt)) {
+      throw ApiException.badRequest("已启用检测项必须填写类型和提示词");
+    }
+    type = type.trim();
+    prompt = prompt.trim();
+    String itemId = text(raw.get("itemId"));
+    String name = text(raw.get("name"));
+    item.put("itemId", StringUtils.hasText(itemId) ? itemId.trim() : type);
+    item.put("type", type);
+    item.put("name", StringUtils.hasText(name) ? name.trim() : type);
     String displayLabel = text(raw.get("displayLabel"));
     item.put("displayLabel", displayLabel == null || displayLabel.isBlank()
-      ? DetectionItems.displayLabel(text(raw.get("type")))
+      ? DetectionItems.displayLabel(type)
       : displayLabel.trim());
-    item.put("prompt", text(raw.get("prompt")));
+    item.put("prompt", prompt);
     item.put("threshold", raw.getOrDefault("threshold", 0.75));
     item.put("enabled", true);
     return item;

@@ -128,7 +128,7 @@ class RobotInspectionDetectionControllerTests {
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
         .content("""
-          {"imageId":"%s","detections":[{"type":"SWITCH","enabled":true,"displayLabel":"刀闸开关","prompt":"刀闸开关"}]}
+           {"imageId":"%s","detections":[{"itemId":"person_custom","type":"CUSTOM_PERSON","name":"人员检测","enabled":true,"displayLabel":"人员","prompt":"定位图像中所有清晰可见的人员"}]}
           """.formatted(imageId)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("RUNNING"))
@@ -138,8 +138,10 @@ class RobotInspectionDetectionControllerTests {
     JsonNode result = awaitRun(runId, token);
 
     assertThat(result.path("status").asText()).isEqualTo("SUCCEEDED");
-    assertThat(result.path("detections").get(0).path("displayLabel").asText()).isEqualTo("刀闸开关");
-    assertThat(result.path("detections").get(0).path("prompt").asText()).isEqualTo("刀闸开关");
+      assertThat(result.path("detections").get(0).path("itemId").asText()).isEqualTo("person_custom");
+      assertThat(result.path("detections").get(0).path("name").asText()).isEqualTo("人员检测");
+      assertThat(result.path("detections").get(0).path("displayLabel").asText()).isEqualTo("人员");
+      assertThat(result.path("detections").get(0).path("prompt").asText()).isEqualTo("定位图像中所有清晰可见的人员");
     assertThat(result.path("findings").get(0).path("type").asText()).isEqualTo("SWITCH");
     ArgumentCaptor<LocateAnythingRequest> request = ArgumentCaptor.forClass(LocateAnythingRequest.class);
     verify(locateAnythingGateway).detectCheckpoint(request.capture());
