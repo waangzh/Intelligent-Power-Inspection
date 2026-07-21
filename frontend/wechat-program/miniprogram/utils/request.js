@@ -95,7 +95,7 @@ function syncAppSession(session, options = {}) {
   try {
     const app = getApp()
     if (app && typeof app.applySession === 'function' && session) {
-      app.applySession(session, options)
+      app.applySession(session, { reloadPages: false, skipBadges: true, ...options })
     } else if (app && typeof app.handleSessionExpired === 'function' && !session) {
       app.handleSessionExpired()
     } else if (app && typeof app.clearUser === 'function' && !session) {
@@ -151,6 +151,16 @@ function tryRefreshSession() {
     })
   })
   return refreshPromise
+}
+
+/** 启动或发请求前：access token 将过期且有 refresh cookie 时先静默续期，减少 401 日志 */
+function ensureSessionFresh() {
+  const session = readSession()
+  if (!session?.token) return Promise.resolve(false)
+  const stillValid = session.expiresAt && Date.now() < session.expiresAt - 30_000
+  if (stillValid) return Promise.resolve(true)
+  if (!storedRefreshCookie()) return Promise.resolve(false)
+  return tryRefreshSession()
 }
 
 /**
@@ -248,4 +258,77 @@ function del(url, data) {
   return request({ url, method: 'DELETE', data })
 }
 
-module.exports = { request, get, post, put, patch, del }
+/**
+ * 文件上传 — 与 request 共用 401 refresh；响应体为 { code, data } 时返回 data
+ */
+function uploadFile({ url, filePath, name = 'file', formData = {}, auth = true, retried = false }) {
+  const { baseUrl, timeout } = apiConfig
+  const session = readSession()
+  const token = session?.token
+  const skipAuth = auth === false
+
+  return new Promise((resolve, reject) => {
+    wx.uploadFile({
+      url: `${baseUrl}${url}`,
+      filePath,
+      name,
+      formData,
+      timeout,
+      header: {
+        ...(!skipAuth && token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      success(res) {
+        let body = res.data
+        try {
+          body = typeof body === 'string' ? JSON.parse(body) : body
+        } catch {
+          body = res.data
+        }
+        const hasAppEnvelope = body && typeof body === 'object' && 'code' in body
+        const isAuthFailure = res.statusCode === 401
+          || (res.statusCode === 403 && !hasAppEnvelope)
+
+        if (isAuthFailure && !skipAuth && !retried) {
+          tryRefreshSession().then((refreshed) => {
+            if (refreshed) {
+              uploadFile({ url, filePath, name, formData, auth, retried: true }).then(resolve).catch(reject)
+            } else {
+              writeSession(null)
+              clearRefreshCookie()
+              syncAppSession(null)
+              reject(new Error('登录已过期，请重新登录'))
+            }
+          })
+          return
+        }
+
+        if (isAuthFailure && !skipAuth) {
+          writeSession(null)
+          clearRefreshCookie()
+          syncAppSession(null)
+          reject(new Error('登录已过期，请重新登录'))
+          return
+        }
+
+        if (hasAppEnvelope) {
+          if (body.code === 0) {
+            resolve(body.data)
+          } else {
+            reject(new Error(body.message || '上传失败'))
+          }
+          return
+        }
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(body)
+          return
+        }
+        reject(new Error(`HTTP ${res.statusCode}`))
+      },
+      fail() {
+        reject(new Error('网络异常，请检查后端服务是否启动'))
+      },
+    })
+  })
+}
+
+module.exports = { request, get, post, put, patch, del, uploadFile, ensureSessionFresh }

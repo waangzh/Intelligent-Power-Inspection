@@ -1,4 +1,4 @@
-const { getTabList, isNativeTabPage } = require('../config/tab-bar')
+const { getTabList, openPage } = require('../config/tab-bar')
 
 Component({
   data: {
@@ -22,7 +22,10 @@ Component({
       const app = getApp()
       const user = app.globalData.user
       const list = getTabList(app.globalData.permissions, user?.role)
-      this.setData({ list })
+      const route = getCurrentPages().slice(-1)[0]?.route || ''
+      const pagePath = route ? `/${route}` : ''
+      const selected = pagePath ? list.findIndex((t) => t.pagePath === pagePath) : 0
+      this.setData({ list, selected: selected >= 0 ? selected : 0 })
       if (app.registerTabBar) app.registerTabBar(this)
       if (app.applyTabBarBadges) app.applyTabBarBadges()
     },
@@ -38,12 +41,9 @@ Component({
 
     switchTab(e) {
       const { path, index } = e.currentTarget.dataset
-      if (isNativeTabPage(path)) {
-        wx.switchTab({ url: path })
-      } else {
-        wx.navigateTo({ url: path })
-      }
-      this.setData({ selected: Number(index) })
+      const app = getApp()
+      openPage(path, app.globalData.permissions, app.globalData.user?.role)
+      if (index !== undefined) this.setData({ selected: Number(index) })
     },
   },
 })

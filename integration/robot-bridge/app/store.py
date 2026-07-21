@@ -29,7 +29,8 @@ COMMAND_RESULT_EVENTS = {
     "TAKEOVER": "manual_takeover", "CANCEL": "route_canceled",
 }
 START_EVENT_TYPES = {
-    "command_accepted", "initial_pose_published", "route_started", "target_reached",
+    "command_accepted", "start_waiting_local_confirmation", "local_start_confirmed",
+    "initial_pose_published", "route_started", "target_reached",
     "target_task_finished", "return_home_started", "route_finished", "route_failed",
 }
 DELIVERY_FIELDS = {"leaseToken", "leaseUntil", "serverTime", "attemptCount", "deliveryAttempt", "deliveredAt", "nextHeartbeatSec"}
@@ -186,6 +187,12 @@ class Store:
                 previous_start = db.execute("SELECT request_id FROM commands WHERE execution_id=? AND command_type='START' LIMIT 1", (execution_id,)).fetchone()
                 if previous_start:
                     return None, "EXECUTION_CONFLICT"
+                active = db.execute(
+                    "SELECT execution_id FROM executions WHERE robot_id=? AND execution_id<>? AND state IN ('CREATED','DISPATCHING','RUNNING','PAUSED','MANUAL_TAKEOVER') LIMIT 1",
+                    (robot_id, execution_id),
+                ).fetchone()
+                if active:
+                    return None, "ROBOT_BUSY"
                 db.execute("INSERT OR IGNORE INTO executions(execution_id,robot_id,deployment_id,state,updated_at) VALUES (?,?,?,?,?)", (execution_id, robot_id, deployment_id, "CREATED", stamp))
             else:
                 execution = db.execute("SELECT * FROM executions WHERE execution_id=?", (execution_id,)).fetchone()
@@ -262,16 +269,23 @@ class Store:
         execution_id = str(event.get("execution_id") or "")
         deployment_id = str(event.get("deployment_id") or "")
         command_id = str(event.get("command_id") or "")
+        request_id = str(event.get("request_id") or "")
         if not execution_id or not command_id or row["execution_robot_id"] != robot_id or row["execution_deployment_id"] != deployment_id:
             raise StoreConflict("EVENT_OWNERSHIP_CONFLICT", "event execution does not belong to robot/deployment")
         if row["command_robot_id"] != robot_id or row["command_execution_id"] != execution_id or row["command_deployment_id"] != deployment_id:
             raise StoreConflict("EVENT_OWNERSHIP_CONFLICT", "event command does not belong to execution")
+        if row["command_request_id"] != request_id:
+            raise StoreConflict("EVENT_OWNERSHIP_CONFLICT", "event request does not belong to command")
         event_type = str(event.get("event") or "")
         expected = COMMAND_RESULT_EVENTS.get(row["command_type"])
         if event_type in set(COMMAND_RESULT_EVENTS.values()) and event_type != expected:
             raise StoreConflict("EVENT_COMMAND_MISMATCH", "event does not match command type")
         if event_type in START_EVENT_TYPES and row["command_type"] != "START":
             raise StoreConflict("EVENT_COMMAND_MISMATCH", "route event must belong to START")
+        if event_type in {"start_waiting_local_confirmation", "local_start_confirmed"}:
+            payload = json.loads(row["command_payload_json"] or "{}")
+            if payload.get("startMode", "REMOTE_IMMEDIATE") != "LOCAL_CONFIRM":
+                raise StoreConflict("EVENT_COMMAND_MISMATCH", "local confirmation event must belong to LOCAL_CONFIRM START")
 
     def accept_events(self, robot_id, events):
         with self.db() as db:
@@ -285,11 +299,18 @@ class Store:
                 if sequence <= 0:
                     raise StoreConflict("INVALID_EVENT", "event sequence must be positive")
                 command_id = str(event.get("command_id") or "")
-                row = db.execute("SELECT e.robot_id AS execution_robot_id,e.deployment_id AS execution_deployment_id,c.robot_id AS command_robot_id,c.execution_id AS command_execution_id,c.deployment_id AS command_deployment_id,c.command_type FROM executions e LEFT JOIN commands c ON c.command_id=? WHERE e.execution_id=?", (command_id, str(event.get("execution_id") or ""))).fetchone()
+                row = db.execute("SELECT e.robot_id AS execution_robot_id,e.deployment_id AS execution_deployment_id,c.robot_id AS command_robot_id,c.execution_id AS command_execution_id,c.deployment_id AS command_deployment_id,c.request_id AS command_request_id,c.command_type,c.payload_json AS command_payload_json FROM executions e LEFT JOIN commands c ON c.command_id=? WHERE e.execution_id=?", (command_id, str(event.get("execution_id") or ""))).fetchone()
                 if not row:
                     raise StoreConflict("EVENT_OWNERSHIP_CONFLICT", "event execution was not found")
                 self._validate_event(row, event, robot_id)
-                db.execute("INSERT OR IGNORE INTO events(robot_id,sequence,event_json,occurred_at) VALUES (?,?,?,?)", (robot_id, sequence, json.dumps(event, ensure_ascii=False), str(event.get("occurred_at") or now())))
+                encoded = json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                existing = db.execute("SELECT event_json FROM events WHERE robot_id=? AND sequence=?", (robot_id, sequence)).fetchone()
+                if existing:
+                    stored = json.dumps(json.loads(existing["event_json"]), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                    if stored != encoded:
+                        raise StoreConflict("EVENT_SEQUENCE_CONFLICT", "event sequence already has different content")
+                    continue
+                db.execute("INSERT INTO events(robot_id,sequence,event_json,occurred_at) VALUES (?,?,?,?)", (robot_id, sequence, encoded, event["occurred_at"]))
             new_accepted = accepted
             while db.execute("SELECT 1 FROM events WHERE robot_id=? AND sequence=?", (robot_id, new_accepted + 1)).fetchone():
                 new_accepted += 1

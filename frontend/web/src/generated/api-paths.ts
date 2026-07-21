@@ -59,10 +59,13 @@ export const robotInspectionImages = '/api/v1/robot-inspection-images' as const
 export const robotInspectionImagesImport = '/api/v1/robot-inspection-images/import' as const
 export const robotInspectionImagesId = '/api/v1/robot-inspection-images/{id}' as const
 export const robots = '/api/v1/robots' as const
+export const robotsLocations = '/api/v1/robots/locations' as const
 export const robotsStatus = '/api/v1/robots/status' as const
 export const robotsId = '/api/v1/robots/{id}' as const
 export const robotsIdTelemetry = '/api/v1/robots/{id}/telemetry' as const
+export const robotsRobotIdLocation = '/api/v1/robots/{robotId}/location' as const
 export const robotsRobotIdStatus = '/api/v1/robots/{robotId}/status' as const
+export const robotsRobotIdTrack = '/api/v1/robots/{robotId}/track' as const
 export const routeDeploymentsDeploymentId = '/api/v1/route-deployments/{deploymentId}' as const
 export const routeDeploymentsDeploymentIdReconcile = '/api/v1/route-deployments/{deploymentId}/reconcile' as const
 export const routeRevisionsRevisionId = '/api/v1/route-revisions/{revisionId}' as const
@@ -107,6 +110,7 @@ export const workOrders = '/api/v1/work-orders' as const
 export const workOrdersFromAlarmAlarmId = '/api/v1/work-orders/from-alarm/{alarmId}' as const
 export const workOrdersId = '/api/v1/work-orders/{id}' as const
 export const workOrdersIdClaim = '/api/v1/work-orders/{id}/claim' as const
+export const workOrdersIdPhotos = '/api/v1/work-orders/{id}/photos' as const
 export const workOrdersIdStatus = '/api/v1/work-orders/{id}/status' as const
 
 export const API_PATHS = {
@@ -170,10 +174,13 @@ export const API_PATHS = {
   robotInspectionImagesImport: '/api/v1/robot-inspection-images/import',
   robotInspectionImagesId: '/api/v1/robot-inspection-images/{id}',
   robots: '/api/v1/robots',
+  robotsLocations: '/api/v1/robots/locations',
   robotsStatus: '/api/v1/robots/status',
   robotsId: '/api/v1/robots/{id}',
   robotsIdTelemetry: '/api/v1/robots/{id}/telemetry',
+  robotsRobotIdLocation: '/api/v1/robots/{robotId}/location',
   robotsRobotIdStatus: '/api/v1/robots/{robotId}/status',
+  robotsRobotIdTrack: '/api/v1/robots/{robotId}/track',
   routeDeploymentsDeploymentId: '/api/v1/route-deployments/{deploymentId}',
   routeDeploymentsDeploymentIdReconcile: '/api/v1/route-deployments/{deploymentId}/reconcile',
   routeRevisionsRevisionId: '/api/v1/route-revisions/{revisionId}',
@@ -218,6 +225,7 @@ export const API_PATHS = {
   workOrdersFromAlarmAlarmId: '/api/v1/work-orders/from-alarm/{alarmId}',
   workOrdersId: '/api/v1/work-orders/{id}',
   workOrdersIdClaim: '/api/v1/work-orders/{id}/claim',
+  workOrdersIdPhotos: '/api/v1/work-orders/{id}/photos',
   workOrdersIdStatus: '/api/v1/work-orders/{id}/status',
 } as const
 

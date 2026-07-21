@@ -8,7 +8,9 @@ const PERMISSION_VALUES = [
   'alarm:policy',
   'detection:manage',
   'record:export',
+  'robot:location:view',
   'robot:manage',
+  'robot:track:view',
   'route:edit',
   'site:edit',
   'task:control',
@@ -35,7 +37,9 @@ const PERMISSIONS_BY_ROLE = {
     'alarm:policy',
     'detection:manage',
     'record:export',
+    'robot:location:view',
     'robot:manage',
+    'robot:track:view',
     'route:edit',
     'site:edit',
     'task:estop',
@@ -50,6 +54,8 @@ const PERMISSIONS_BY_ROLE = {
     'agent:view',
     'alarm:ack',
     'record:export',
+    'robot:location:view',
+    'robot:track:view',
     'route:edit',
     'site:edit',
     'task:control',
@@ -63,7 +69,9 @@ const PERMISSIONS_BY_ROLE = {
     'workorder:view',
   ],
   VIEWER: [
+    'robot:location:view',
     'task:view',
+    'workorder:view',
   ],
 }
 

@@ -44,6 +44,12 @@ import type {
 import type { WorkOrder, WorkOrderReviewInput, WorkOrderStatus } from '@/types/workOrder'
 import type { Site } from '@/types'
 import type { RobotHeartbeatStatus, RobotHeartbeatStatusPage, RobotHeartbeatStatusQuery } from '@/types/robotHeartbeat'
+import type {
+  RobotLocation,
+  RobotLocationQuery,
+  RobotTrackQuery,
+  RobotTrackResponse,
+} from '@/types/robotLocation'
 import { buildMapAssetQuery } from '@/utils/mapAssetReview'
 import type { DashboardOverview, ListQuery, PageResult } from '@/types/pagination'
 import { listQueryString } from '@/types/pagination'
@@ -150,6 +156,24 @@ export const resourcesApi = {
     return http.get<RobotHeartbeatStatusPage>(`/robots/status${suffix}`)
   },
   getRobotHeartbeatStatus: (robotId: string) => http.get<RobotHeartbeatStatus>(`/robots/${encodeURIComponent(robotId)}/status`),
+
+  getRobotLocation: (robotId: string) => http.get<RobotLocation>(`/robots/${encodeURIComponent(robotId)}/location`),
+  listRobotLocations: (query: RobotLocationQuery = {}) => {
+    const params = new URLSearchParams()
+    if (query.siteId) params.set('siteId', query.siteId)
+    if (query.online !== undefined) params.set('online', String(query.online))
+    const suffix = params.size ? `?${params.toString()}` : ''
+    return http.get<RobotLocation[]>(`/robots/locations${suffix}`)
+  },
+  getRobotTrack: (robotId: string, query: RobotTrackQuery = {}) => {
+    const params = new URLSearchParams()
+    if (query.start) params.set('start', query.start)
+    if (query.end) params.set('end', query.end)
+    if (query.executionId) params.set('executionId', query.executionId)
+    if (query.limit !== undefined) params.set('limit', String(query.limit))
+    const suffix = params.size ? `?${params.toString()}` : ''
+    return http.get<RobotTrackResponse>(`/robots/${encodeURIComponent(robotId)}/track${suffix}`)
+  },
 
   listDetectionTemplates: (query: ListQuery = {}) => http.get<PageResult<DetectionTemplate>>(`/detection-templates${listQueryString(query)}`),
   getDetectionTemplate: (id: string) => http.get<DetectionTemplate>(`/detection-templates/${encodeURIComponent(id)}`),

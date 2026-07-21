@@ -1,2 +1,20 @@
-.act-item { margin-bottom: 16rpx; }
-.act-msg { margin-top: 8rpx; font-size: 28rpx; }
+.act-item {
+  margin-bottom: 20rpx;
+}
+
+.act-head {
+  align-items: center;
+  gap: 16rpx;
+}
+
+.act-time {
+  font-size: 24rpx;
+  flex-shrink: 0;
+}
+
+.act-msg {
+  margin-top: 16rpx;
+  font-size: 28rpx;
+  line-height: 1.5;
+  color: var(--pi-text);
+}

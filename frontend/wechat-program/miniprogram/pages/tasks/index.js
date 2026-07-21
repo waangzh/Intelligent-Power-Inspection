@@ -34,8 +34,11 @@ Page({
     const app = getApp()
     if (!app.requireAuth('/pages/tasks/index')) return
     if (!app.requirePermission('task:view')) return
+    if (typeof wx.hideHomeButton === 'function') wx.hideHomeButton()
     syncTabBar(this)
-    app.refreshBadges()
+    app.refreshBadges().then(() => {
+      this.selectComponent('#inlineTabBar')?.refresh?.()
+    })
     const user = app.globalData.user
     const perms = app.globalData.permissions
     this.setData({

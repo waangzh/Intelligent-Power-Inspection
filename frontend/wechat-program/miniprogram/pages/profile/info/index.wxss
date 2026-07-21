@@ -2,17 +2,31 @@
 .profile-meta { flex: 1; }
 .profile-name { display: block; font-size: 34rpx; font-weight: 700; color: var(--pi-text); }
 .bio-preview { display: block; font-size: 24rpx; margin-top: 4rpx; }
-.avatar-edit { display: flex; flex-direction: column; align-items: center; gap: 16rpx; margin-bottom: 24rpx; padding-bottom: 24rpx; border-bottom: 1rpx solid var(--pi-border-soft); }
+.avatar-edit { display: flex; flex-direction: column; align-items: center; gap: 16rpx; margin-bottom: 32rpx; padding-bottom: 32rpx; border-bottom: 1rpx solid var(--pi-border-soft); }
 .avatar-edit-preview { width: 160rpx; height: 160rpx; border-radius: 50%; overflow: hidden; }
 .avatar-edit-image { width: 160rpx; height: 160rpx; border-radius: 50%; }
 .avatar-edit-actions { display: flex; gap: 16rpx; flex-wrap: wrap; justify-content: center; }
-.info-row { display: flex; justify-content: space-between; padding: 12rpx 0; border-bottom: 1rpx solid var(--pi-border-soft); }
+.info-row { display: flex; justify-content: space-between; padding: 28rpx 0; border-bottom: 1rpx solid var(--pi-border-soft); }
 .info-row:last-child { border-bottom: none; }
 .quick-entry { margin-bottom: 16rpx; }
-.hint { font-size: 22rpx; color: var(--pi-muted-light); margin-bottom: 12rpx; display: block; }
-.form-row { display: flex; align-items: center; gap: 16rpx; margin-bottom: 16rpx; }
-.form-label { width: 100rpx; color: var(--pi-muted); }
-.form-row input { flex: 1; border: 1rpx solid var(--pi-border); border-radius: 16rpx; padding: 12rpx; }
+.hint { font-size: 22rpx; color: var(--pi-muted-light); margin-bottom: 24rpx; display: block; }
+.form-item { margin-bottom: 36rpx; }
+.form-label { display: block; margin-bottom: 16rpx; font-size: 28rpx; font-weight: 600; color: var(--pi-text); }
+.form-input {
+  display: block;
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--pi-border);
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  color: var(--pi-text);
+  background: #fff;
+}
+.form-placeholder { color: var(--pi-muted-light); font-size: 28rpx; }
+.save-btn { width: 100%; margin-top: 8rpx; border-radius: 16rpx; }
 .menu-link { display: flex; justify-content: space-between; padding: 28rpx 0; border-bottom: 1rpx solid var(--pi-border-soft); }
 .menu-link:last-child { border-bottom: none; }
 .arrow { color: var(--pi-border-strong); font-size: 32rpx; }

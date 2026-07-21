@@ -71,7 +71,8 @@
               :center="mapCenter"
               :fallback-center="fallbackCenter"
               :route="activeRoute"
-              :robot-position="robotPos"
+              :robot-location="activeRobotLocation"
+              :robot-label="activeRobotName"
             />
           </div>
         </el-col>
@@ -86,9 +87,9 @@
       />
       <div class="action-bar">
         <el-button
-          v-if="canAny('task:start-local', 'task:start-remote') && taskStore.executionFor(activeTask.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(activeTask))"
+          v-if="taskStore.executionFor(activeTask.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(activeTask))"
           type="primary"
-          :disabled="!taskStore.eligibilityFor(activeTask.id)?.eligible"
+          :disabled="!!startDisabledReason(activeTask.id)"
           :title="startDisabledReason(activeTask.id)"
           @click="openStartOptions(activeTask.id)"
         >选择启动方式</el-button>
@@ -159,11 +160,11 @@
           <template #default="{ row }">
             <div class="progress-cell">
               <el-button
-                v-if="canAny('task:start-local', 'task:start-remote') && taskStore.executionFor(row.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(row))"
+                v-if="taskStore.executionFor(row.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(row))"
                 plain
                 size="small"
                 class="action-btn action-detail"
-                :disabled="!taskStore.eligibilityFor(row.id)?.eligible"
+                :disabled="!!startDisabledReason(row.id)"
                 :title="startDisabledReason(row.id)"
                 @click="openStartOptions(row.id)"
               >启动</el-button>
@@ -227,7 +228,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   CircleCheck,
@@ -247,6 +248,7 @@ import ListPagination from '@/components/ListPagination.vue'
 import TaskStatusTag from '@/components/TaskStatusTag.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useRobotStore } from '@/stores/robot'
+import { useRobotLocationStore } from '@/stores/robotLocation'
 import { useRouteStore } from '@/stores/route'
 import { useSiteStore } from '@/stores/site'
 import { latestReadyRevision, useTaskStore } from '@/stores/task'
@@ -270,6 +272,7 @@ const statIcons = [List, VideoPlay, Clock, CircleCheck]
 const taskStore = useTaskStore()
 const routeStore = useRouteStore()
 const robotStore = useRobotStore()
+const locationStore = useRobotLocationStore()
 const siteStore = useSiteStore()
 
 const dialogVisible = ref(false)
@@ -295,9 +298,26 @@ const fallbackCenter = computed(() => {
   const route = activeRoute.value
   return route ? siteStore.getSiteById(route.siteId)?.center ?? siteStore.sites[0]?.center : siteStore.sites[0]?.center
 })
-const robotPos = computed(() => {
-  if (!activeTask.value) return null
-  return robotStore.getRobotById(activeTask.value.robotId)?.position ?? null
+const activeRobotLocation = computed(() => {
+  const robotId = activeTask.value?.robotId
+  return robotId ? locationStore.getLocation(robotId) ?? null : null
+})
+const activeRobotName = computed(() => {
+  const robotId = activeTask.value?.robotId
+  return robotId ? robotStore.getRobotById(robotId)?.name ?? robotId : ''
+})
+
+watch(
+  () => activeTask.value?.robotId,
+  (robotId) => {
+    locationStore.stopPolling()
+    if (robotId) locationStore.startRobotPolling(robotId)
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  locationStore.stopPolling()
 })
 
 const overviewStats = computed(() => {
@@ -457,7 +477,13 @@ async function controlTask(id: string, action: 'PAUSE' | 'RESUME' | 'TAKEOVER') 
 
 function startDisabledReason(taskId: string) {
   const eligibility = taskStore.eligibilityFor(taskId)
+  if (!canAny('task:start-local', 'task:start-remote')) {
+    return '当前账号没有任务启动权限；如权限刚更新，请重新登录'
+  }
   if (!eligibility) return '正在核验启动条件'
+  if (!eligibility.supportsRemoteImmediateStart && !eligibility.supportsLocalConfirmStart) {
+    return '机器人不支持远程立即启动或本地确认启动'
+  }
   return eligibility.eligible ? '' : eligibility.ineligibleReason || '启动条件未满足'
 }
 

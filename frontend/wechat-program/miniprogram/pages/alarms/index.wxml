@@ -20,20 +20,26 @@
     </view>
   </view>
 
-  <view class="card alarm-card {{selected && selected.id===item.id?'sel':''}}" wx:for="{{filtered}}" wx:key="id" bindtap="selectAlarm" data-id="{{item.id}}">
-    <view class="flex-between">
-      <text class="tag tag-{{item.sevType}}">{{item.severityLabel}}</text>
-      <text class="muted">{{item.time}}</text>
+  <view class="card alarm-list-wrap" wx:if="{{alarms.length}}">
+    <view class="card-title flex-between">
+      <text>告警列表</text>
+      <text class="muted" wx:if="{{filtered.length}}">共 {{filtered.length}} 条</text>
     </view>
-    <view class="alarm-msg">{{item.message}}</view>
-    <view class="muted">{{item.routeName}} · {{item.typeLabel}}</view>
-    <view class="alarm-actions" catchtap="stop">
-      <text wx:if="{{item.acknowledged}}" class="tag tag-success">已确认</text>
-      <button wx:if="{{!item.acknowledged && canAck}}" size="mini" catchtap="ackOne" data-id="{{item.id}}">确认</button>
-      <text wx:if="{{item.hasWorkOrder}}" class="tag tag-info">{{item.workOrderLabel}}</text>
+    <view class="alarm-card {{selected && selected.id===item.id?'sel':''}}" wx:for="{{filtered}}" wx:key="id" bindtap="selectAlarm" data-id="{{item.id}}">
+      <view class="flex-between">
+        <text class="tag tag-{{item.sevType}}">{{item.severityLabel}}</text>
+        <text class="muted">{{item.time}}</text>
+      </view>
+      <view class="alarm-msg">{{item.message}}</view>
+      <view class="muted">{{item.routeName}} · {{item.typeLabel}}</view>
+      <view class="alarm-actions" catchtap="stop">
+        <text wx:if="{{item.acknowledged}}" class="tag tag-success">已确认</text>
+        <button wx:if="{{!item.acknowledged && canAck}}" size="mini" catchtap="ackOne" data-id="{{item.id}}">确认</button>
+        <text wx:if="{{item.hasWorkOrder}}" class="tag tag-info">{{item.workOrderLabel}}</text>
+      </view>
     </view>
+    <view wx:if="{{!filtered.length && alarms.length}}" class="list-empty-hint">无符合条件的告警</view>
   </view>
-  <view wx:if="{{!filtered.length}}" class="empty-hint">暂无告警</view>
 
   <view class="card" wx:if="{{selected}}">
     <view class="card-title">告警详情</view>

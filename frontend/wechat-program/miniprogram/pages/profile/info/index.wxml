@@ -30,14 +30,20 @@
       </view>
       <text class="hint">支持 JPG / PNG / WebP，不超过 2MB</text>
     </view>
-    <view class="form-row"><text class="form-label">姓名</text><input data-field="displayName" value="{{form.displayName}}" bindinput="onInput" /></view>
-    <view class="form-row"><text class="form-label">手机</text><input data-field="phone" value="{{form.phone}}" bindinput="onInput" placeholder="选填" /></view>
-    <view class="form-row">
-      <text class="form-label">简介</text>
-      <input data-field="bio" value="{{form.bio}}" bindinput="onInput" maxlength="80" placeholder="最多 80 字" />
+    <view class="form-item">
+      <view class="form-label">姓名</view>
+      <input class="form-input" data-field="displayName" value="{{form.displayName}}" bindinput="onInput" placeholder-class="form-placeholder" />
+    </view>
+    <view class="form-item">
+      <view class="form-label">手机</view>
+      <input class="form-input" data-field="phone" value="{{form.phone}}" bindinput="onInput" placeholder="选填" placeholder-class="form-placeholder" />
+    </view>
+    <view class="form-item">
+      <view class="form-label">简介</view>
+      <input class="form-input" data-field="bio" value="{{form.bio}}" bindinput="onInput" maxlength="80" placeholder="最多 80 字" placeholder-class="form-placeholder" />
     </view>
     <text class="hint">{{form.bio ? form.bio.length : 0}}/80</text>
-    <button type="primary" size="mini" bindtap="saveProfile">保存</button>
+    <button class="save-btn" type="primary" bindtap="saveProfile">保存</button>
   </view>
 
   <view class="card quick-entry" bindtap="goNotifications">

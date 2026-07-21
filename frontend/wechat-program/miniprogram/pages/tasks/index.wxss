@@ -1,5 +1,113 @@
-.form-row { display: flex; align-items: center; margin-bottom: 16rpx; }
-.form-label { width: 160rpx; color: var(--pi-muted); font-size: 26rpx; }
-.picker-val { color: var(--pi-primary); }
-.task-name { color: var(--pi-primary); font-weight: 500; }
-.task-actions { display: flex; gap: 12rpx; margin-top: 12rpx; flex-wrap: wrap; }
+.task-list-card .card-title {
+  margin-bottom: 20rpx;
+}
+
+.task-item {
+  padding: 28rpx 0;
+  border-bottom: 1rpx solid var(--pi-border-soft);
+}
+
+.task-item:last-child {
+  border-bottom: none;
+  padding-bottom: 8rpx;
+}
+
+.task-head {
+  margin-bottom: 12rpx;
+}
+
+.form-input {
+  display: block;
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--pi-border);
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  color: var(--pi-text);
+  background: #fff;
+}
+
+.form-placeholder {
+  color: var(--pi-muted-light);
+  font-size: 28rpx;
+}
+
+.form-picker {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1rpx solid var(--pi-border);
+  border-radius: 16rpx;
+  padding: 24rpx;
+  font-size: 28rpx;
+  color: var(--pi-primary);
+  background: #fff;
+}
+
+.task-name {
+  color: var(--pi-primary);
+  font-weight: 600;
+  font-size: 28rpx;
+}
+
+.task-actions {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 16rpx;
+  flex-wrap: wrap;
+}
+
+.list-empty-hint {
+  text-align: center;
+  color: var(--pi-muted-light);
+  padding: 80rpx 24rpx;
+  font-size: 28rpx;
+}
+
+.form-item {
+  margin-bottom: 28rpx;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--pi-text);
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.form-actions button {
+  width: 100%;
+  margin: 0;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 16rpx 0;
+}
+
+.voice-hint {
+  margin: 16rpx 0;
+  font-size: 24rpx;
+  color: var(--pi-muted);
+  line-height: 1.5;
+}
+
+.link {
+  color: var(--pi-primary);
+  font-size: 26rpx;
+}
+
+.active-card {
+  margin-bottom: 28rpx;
+}

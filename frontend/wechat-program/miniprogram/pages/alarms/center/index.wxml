@@ -1,0 +1,60 @@
+<view class="container">
+  <page-header title="告警中心" description="管理员/调度员告警处置，可确认并转工单" />
+
+  <view class="stat-grid">
+    <view class="stat-item"><view class="stat-value">{{stats.unack}}</view><view class="stat-label">未确认</view></view>
+    <view class="stat-item"><view class="stat-value">{{stats.critical}}</view><view class="stat-label">紧急</view></view>
+    <view class="stat-item"><view class="stat-value">{{stats.high}}</view><view class="stat-label">高</view></view>
+    <view class="stat-item"><view class="stat-value">{{stats.total}}</view><view class="stat-label">总数</view></view>
+  </view>
+
+  <view class="card toolbar">
+    <input placeholder="搜索告警内容" value="{{keyword}}" bindinput="onKeyword" />
+    <view class="filter-row">
+      <text class="filter-chip {{ackFilter==='all'?'on':''}}" bindtap="setAckFilter" data-v="all">全部</text>
+      <text class="filter-chip {{ackFilter==='pending'?'on':''}}" bindtap="setAckFilter" data-v="pending">未确认</text>
+      <picker mode="selector" range="{{severityOptions}}" range-key="label" bindchange="onSeverityChange">
+        <text class="filter-chip">{{severityLabel}} ▾</text>
+      </picker>
+      <button wx:if="{{canAck}}" size="mini" bindtap="ackAll">全部确认</button>
+    </view>
+  </view>
+
+  <view class="card alarm-list-wrap" wx:if="{{alarms.length}}">
+    <view class="card-title flex-between">
+      <text>告警列表</text>
+      <text class="muted" wx:if="{{filtered.length}}">共 {{filtered.length}} 条</text>
+    </view>
+    <view class="alarm-card {{selected && selected.id===item.id?'sel':''}}" wx:for="{{filtered}}" wx:key="id" bindtap="selectAlarm" data-id="{{item.id}}">
+      <view class="flex-between">
+        <text class="tag tag-{{item.sevType}}">{{item.severityLabel}}</text>
+        <text class="muted">{{item.time}}</text>
+      </view>
+      <view class="alarm-msg">{{item.message}}</view>
+      <view class="muted">{{item.routeName}} · {{item.typeLabel}}</view>
+      <view class="alarm-actions" catchtap="stop">
+        <text wx:if="{{item.acknowledged}}" class="tag tag-success">已确认</text>
+        <button wx:if="{{!item.acknowledged && canAck}}" size="mini" catchtap="ackOne" data-id="{{item.id}}">确认</button>
+        <button wx:if="{{!item.hasWorkOrder && canCreateWorkOrder}}" size="mini" type="primary" catchtap="createFromAlarm" data-id="{{item.id}}">转工单</button>
+        <text wx:if="{{item.hasWorkOrder}}" class="tag tag-info">{{item.workOrderLabel}}</text>
+      </view>
+    </view>
+    <view wx:if="{{!filtered.length && alarms.length}}" class="list-empty-hint">无符合条件的告警</view>
+  </view>
+
+  <view class="card" wx:if="{{selected}}">
+    <view class="card-title">告警详情</view>
+    <view class="detail-row"><text class="muted">级别</text><text>{{selected.severityLabel}}</text></view>
+    <view class="detail-row"><text class="muted">类型</text><text>{{selected.typeLabel}}</text></view>
+    <view class="detail-row"><text class="muted">路线</text><text>{{selected.routeName}}</text></view>
+    <view class="detail-row"><text class="muted">检查点</text><text>{{selected.checkpointName || '路线行进中'}}</text></view>
+    <image wx:if="{{selected.imageUrl}}" class="alarm-img" src="{{selected.imageUrl}}" mode="aspectFill" />
+  </view>
+
+  <view class="card">
+    <view class="card-title">级别分布</view>
+    <simple-chart type="bar" data="{{severityChart}}" />
+  </view>
+</view>
+
+<inline-tab-bar id="inlineTabBar" activePath="/pages/dashboard/index" />

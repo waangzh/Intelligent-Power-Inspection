@@ -1,29 +1,34 @@
 <view class="container">
   <page-header title="任务调度" description="巡检任务创建与执行控制" />
 
-  <view class="card toolbar" wx:if="{{canCreate}}">
-    <button size="mini" type="primary" bindtap="toggleCreate">{{showCreate ? '取消' : '新建任务'}}</button>
-  </view>
-
   <view class="card form-card" wx:if="{{showCreate}}">
     <view class="card-title">新建巡检任务</view>
-    <view class="form-row">
-      <text class="form-label">任务名称</text>
-      <input placeholder="请输入任务名称" value="{{form.name}}" bindinput="onNameInput" />
+    <view class="form-item">
+      <view class="form-label">任务名称</view>
+      <input
+        class="form-input"
+        placeholder="请输入任务名称"
+        placeholder-class="form-placeholder"
+        value="{{form.name}}"
+        bindinput="onNameInput"
+      />
     </view>
-    <view class="form-row">
-      <text class="form-label">巡检路线</text>
+    <view class="form-item">
+      <view class="form-label">巡检路线</view>
       <picker mode="selector" range="{{routes}}" range-key="label" value="{{form.routeIndex}}" bindchange="onRouteChange">
-        <view class="picker-val">{{routes[form.routeIndex].label || '请选择'}} ▾</view>
+        <view class="form-picker">{{routes[form.routeIndex].label || '请选择'}} ▾</view>
       </picker>
     </view>
-    <view class="form-row">
-      <text class="form-label">执行机器人</text>
+    <view class="form-item">
+      <view class="form-label">执行机器人</view>
       <picker mode="selector" range="{{availableRobots}}" range-key="label" value="{{form.robotIndex}}" bindchange="onRobotChange">
-        <view class="picker-val">{{availableRobots[form.robotIndex].label || '请选择'}} ▾</view>
+        <view class="form-picker">{{availableRobots[form.robotIndex].label || '请选择'}} ▾</view>
       </picker>
     </view>
-    <button type="primary" class="btn-primary" bindtap="submitCreate">创建任务</button>
+    <view class="form-actions">
+      <button type="primary" bindtap="submitCreate">创建任务</button>
+      <button class="btn-plain" bindtap="toggleCreate">取消</button>
+    </view>
   </view>
 
   <view class="card active-card" wx:if="{{activeTask}}">
@@ -46,10 +51,13 @@
     </view>
   </view>
 
-  <view class="card">
-    <view class="card-title">任务列表</view>
-    <view class="list-item" wx:for="{{tasks}}" wx:key="id">
-      <view class="flex-between" bindtap="goDetail" data-id="{{item.id}}">
+  <view class="card task-list-card">
+    <view class="card-title flex-between">
+      <text>任务列表</text>
+      <text wx:if="{{canCreate}}" class="link" bindtap="toggleCreate">{{showCreate ? '取消' : '新建任务'}}</text>
+    </view>
+    <view class="task-item" wx:for="{{tasks}}" wx:key="id">
+      <view class="flex-between task-head" bindtap="goDetail" data-id="{{item.id}}">
         <text class="task-name">{{item.name}}</text>
         <task-status-tag status="{{item.status}}" />
       </view>
@@ -62,6 +70,8 @@
         <button wx:if="{{canCancel && item.status!=='COMPLETED' && item.status!=='CANCELLED'}}" size="mini" catchtap="cancel" data-id="{{item.id}}">{{cancelLabel}}</button>
       </view>
     </view>
-    <view wx:if="{{!tasks.length}}" class="empty-hint">暂无任务</view>
+    <view wx:if="{{!tasks.length}}" class="list-empty-hint">暂无任务</view>
   </view>
 </view>
+
+<inline-tab-bar id="inlineTabBar" activePath="/pages/tasks/index" />

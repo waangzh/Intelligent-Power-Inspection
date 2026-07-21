@@ -50,6 +50,6 @@ export const ROLE_SUMMARIES: Record<UserRole, { title: string; scope: string }> 
   },
   VIEWER: {
     title: '监督查阅者',
-    scope: '查看监控、告警、任务与记录；不可操作任务、机器人与工单',
+    scope: '查看监控、告警、工单记录与任务；不可操作任务、机器人与工单处置',
   },
 }

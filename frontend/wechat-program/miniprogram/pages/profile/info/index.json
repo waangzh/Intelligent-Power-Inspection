@@ -1,5 +1,8 @@
 {
   "navigationBarTitleText": "我的",
+  "backgroundColor": "#f5f8fc",
+  "backgroundColorTop": "#071e42",
+  "backgroundColorBottom": "#f5f8fc",
   "usingComponents": {
     "page-header": "/components/page-header/index",
     "user-avatar": "/components/user-avatar/index"

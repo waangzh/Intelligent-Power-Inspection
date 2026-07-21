@@ -4,6 +4,7 @@
     "pages/dashboard/index",
     "pages/monitor/index",
     "pages/alarms/index",
+    "pages/alarms/center/index",
     "pages/tasks/index",
     "pages/profile/info/index",
     "pages/auth/register/index",
@@ -22,7 +23,10 @@
     "navigationBarBackgroundColor": "#071e42",
     "navigationBarTitleText": "电力智能巡检",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#f5f8fc"
+    "backgroundColor": "#f5f8fc",
+    "backgroundColorContent": "#f5f8fc",
+    "backgroundColorTop": "#071e42",
+    "backgroundColorBottom": "#f5f8fc"
   },
   "tabBar": {
     "custom": true,
@@ -40,8 +44,8 @@
       {
         "pagePath": "pages/workorders/index",
         "text": "工单",
-        "iconPath": "assets/tabbar/tasks.png",
-        "selectedIconPath": "assets/tabbar/tasks-active.png"
+        "iconPath": "assets/tabbar/workorders.png",
+        "selectedIconPath": "assets/tabbar/workorders-active.png"
       },
       {
         "pagePath": "pages/alarms/index",
@@ -50,10 +54,10 @@
         "selectedIconPath": "assets/tabbar/alarms-active.png"
       },
       {
-        "pagePath": "pages/tasks/index",
-        "text": "任务",
-        "iconPath": "assets/tabbar/tasks.png",
-        "selectedIconPath": "assets/tabbar/tasks-active.png"
+        "pagePath": "pages/profile/users/index",
+        "text": "用户",
+        "iconPath": "assets/tabbar/users.png",
+        "selectedIconPath": "assets/tabbar/users-active.png"
       },
       {
         "pagePath": "pages/profile/info/index",
