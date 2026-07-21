@@ -5,7 +5,7 @@
 | 项目 | 值 |
 | --- | --- |
 | 线上 `protocolVersion` | `1.0` |
-| 文档修订号 | `1.1.0` |
+| 文档修订号 | `1.2.0` |
 | 适用提交 | Robot `79df249` 及以后；Platform Bridge `c5b16e7` 及以后 |
 | 更新时间 | 2026-07-17 |
 | 稳定性等级 | RC：源码闭环已实现，待服务器部署与实机验收 |
@@ -407,7 +407,7 @@ HTTP：`200`、`400 INVALID_REQUEST/ROUTE_HASH_MISMATCH/MAP_HASH_MISMATCH/INVALI
 
 ### 7.4 `POST /bridge/v1/executions/{executionId}/start`
 
-请求字段：`robotId`、`deploymentId`、`executorRouteId`、`requestId` 必填；`taskId`、`profile` 可选。
+请求字段：`robotId`、`deploymentId`、`executorRouteId`、`requestId` 必填；`taskId`、`profile`、`startMode` 可选。`startMode` 为 `REMOTE_IMMEDIATE` 或 `LOCAL_CONFIRM`，省略时按 `REMOTE_IMMEDIATE` 处理。
 
 ```json
 {
@@ -416,6 +416,7 @@ HTTP：`200`、`400 INVALID_REQUEST/ROUTE_HASH_MISMATCH/MAP_HASH_MISMATCH/INVALI
   "executorRouteId": "deployment-demo",
   "requestId": "request-demo",
   "taskId": "execution-demo",
+  "startMode": "LOCAL_CONFIRM",
   "profile": "inspection"
 }
 ```
@@ -518,7 +519,11 @@ stateDiagram-v2
     [*] --> CREATED
     CREATED --> STARTING: Spring 接受 START
     START_FAILED --> STARTING: 用户重试 START
+    STARTING --> WAITING_LOCAL_CONFIRM: start_waiting_local_confirmation
     STARTING --> RUNNING: route_started
+    WAITING_LOCAL_CONFIRM --> RUNNING: route_started
+    WAITING_LOCAL_CONFIRM --> CANCELLING: CANCEL 入队
+    WAITING_LOCAL_CONFIRM --> FAILED: 失败或本地确认超时
     RUNNING --> PAUSING: PAUSE 入队
     PAUSING --> PAUSED: route_paused
     PAUSED --> RESUMING: RESUME 入队
@@ -539,7 +544,7 @@ stateDiagram-v2
     RECOVERING --> RUNNING: 恢复原状态
 ```
 
-Spring 平台状态包括 `CREATED/STARTING/RUNNING/PAUSING/PAUSED/RESUMING/CANCELLING/TAKEOVER_PENDING/MANUAL_TAKEOVER/COMPLETED/START_FAILED/FAILED/CANCELLED/DISCONNECTED/RECOVERING`。Bridge 内部 `DISPATCHING` 对应 Spring 的 `STARTING` 或控制等待态。`COMPLETED/FAILED/CANCELLED` 为吸收终态，不允许回到 RUNNING；`START_FAILED` 只允许由用户显式重试 START。
+Spring 平台状态包括 `CREATED/STARTING/WAITING_LOCAL_CONFIRM/RUNNING/PAUSING/PAUSED/RESUMING/CANCELLING/TAKEOVER_PENDING/MANUAL_TAKEOVER/COMPLETED/START_FAILED/FAILED/CANCELLED/DISCONNECTED/RECOVERING`。Bridge 内部 `DISPATCHING` 对应 Spring 的 `STARTING` 或控制等待态。`WAITING_LOCAL_CONFIRM` 表示机器人已完成部署校验但尚未由触摸屏确认；该状态是活动、非运行状态。`COMPLETED/FAILED/CANCELLED` 为吸收终态，不允许回到 RUNNING；`START_FAILED` 只允许由用户显式重试 START。
 
 ## 10. 事件与 sequence
 
@@ -550,6 +555,7 @@ Spring 平台状态包括 `CREATED/STARTING/RUNNING/PAUSING/PAUSED/RESUMING/CANC
 - 事件必须同时属于鉴权 robot、execution、deployment 和 command；不一致返回 ownership/mismatch 错误。
 - 终态保护优先于旧事件；晚到 `route_started` 不能把 COMPLETED 改回 RUNNING。
 - 控制结果事件必须绑定对应控制 command；路线进度事件与 `route_finished/route_failed` 继续绑定 START command。
+- `start_waiting_local_confirmation` 只把 `LOCAL_CONFIRM` 执行推进到 `WAITING_LOCAL_CONFIRM`；可选的 `local_start_confirmed` 仅用于审计。两种启动模式都只有 `route_started` 能进入 `RUNNING`。
 
 ## 11. Deployment 合同
 
@@ -569,6 +575,10 @@ Spring 平台状态包括 `CREATED/STARTING/RUNNING/PAUSING/PAUSED/RESUMING/CANC
 | `ROBOT_NOT_FOUND` | 404/409 | robot 未配置或未先 heartbeat |
 | `ROBOT_BUSY` | 409 | 机器人已有活动执行 |
 | `ROBOT_OFFLINE` | 409/503 | 超过离线阈值；等待 heartbeat |
+| `ROBOT_START_MODE_UNSUPPORTED` | 409 | 机器人未声明支持所选启动模式 |
+| `START_COMMAND_TIMEOUT` | 业务错误 | 启动命令在配置期限内未被通信链路接受 |
+| `LOCAL_CONFIRM_TIMEOUT` | 业务错误 | 等待机器人本地确认超过配置期限 |
+| `ROUTE_START_TIMEOUT` | 业务错误 | 启动命令已入队但未在配置期限内收到 `route_started` |
 | `PLATFORM_UNREACHABLE` | 503 | Bridge 无法读取 Spring；可退避重试 |
 | `DEPLOYMENT_NOT_FOUND` | 404 | deployment 未同步或不属于 robot |
 | `DEPLOYMENT_CONFLICT` | 409 | 同 ID 内容/身份不同或缓存不完整 |
@@ -614,11 +624,11 @@ Spring 平台状态包括 `CREATED/STARTING/RUNNING/PAUSING/PAUSED/RESUMING/CANC
 | --- | --- | --- |
 | `POST /api/v1/tasks` | `name`、`robotId`、`routeRevisionId` 必填；可选 `routeId` 必须与 revision 所属路线一致 | 同事务创建 Task 与不可变 `TaskExecution`，初始 `CREATED`，响应含 `executionId` |
 | `GET /api/v1/tasks/{taskId}/start-eligibility` | 校验 robot CONNECTED、部署 READY、身份/哈希/active route 一致、无冲突活动 execution | `eligible=true` 才可请求启动 |
-| `POST /api/v1/tasks/{taskId}/start` | 必须带 `Idempotency-Key` | HTTP `202`，Spring 已接受启动意图并等待 worker 向 Bridge 入队 |
+| `POST /api/v1/tasks/{taskId}/start` | 必须带 `Idempotency-Key`；请求体可带 `startMode`，省略默认 `REMOTE_IMMEDIATE` | HTTP `202`，Spring 已接受启动意图并等待 worker 向 Bridge 入队 |
 | `POST /api/v1/tasks/{taskId}/pause` | execution 为 `RUNNING` | HTTP `202`，进入 `PAUSING` |
 | `POST /api/v1/tasks/{taskId}/resume` | execution 为 `PAUSED` | HTTP `202`，进入 `RESUMING` |
 | `POST /api/v1/tasks/{taskId}/takeover` | execution 为 `RUNNING`，带接管原因 | HTTP `202`，进入 `TAKEOVER_PENDING` |
-| `POST /api/v1/tasks/{taskId}/cancel` | execution 为 `RUNNING` 或 `PAUSED` | HTTP `202`，进入 `CANCELLING` |
+| `POST /api/v1/tasks/{taskId}/cancel` | execution 为 `STARTING`、`WAITING_LOCAL_CONFIRM`、`RUNNING` 或 `PAUSED` | HTTP `202`，进入 `CANCELLING` |
 
 旧式 `/dispatch` 仅保留给 simulation/legacy 任务，不用于绑定 `routeRevisionId` 的 Bridge 任务。所有 `202` 都只表示请求已接受或命令已入队；只有 Jetson ACK、ROS publish 和对应真实事件逐级出现后，才能确认后续阶段。
 

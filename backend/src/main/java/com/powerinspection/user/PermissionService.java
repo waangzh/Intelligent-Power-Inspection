@@ -38,6 +38,8 @@ public class PermissionService {
             Permission.TASK_VIEW,
             Permission.TASK_CREATE,
             Permission.TASK_DISPATCH,
+            Permission.TASK_START_LOCAL,
+            Permission.TASK_START_REMOTE,
             Permission.TASK_CONTROL,
             Permission.TASK_TAKEOVER,
             Permission.SITE_EDIT,

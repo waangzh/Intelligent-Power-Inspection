@@ -11,12 +11,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 唯一允许把机器人事件映射为 RUNNING、COMPLETED、FAILED 等真实执行结果的服务。 */
 @Service
 public class RobotEventIngestionService {
+  private static final Logger log = LoggerFactory.getLogger(RobotEventIngestionService.class);
   private final TaskExecutionRepository executions;
   private final RobotExecutionEventRepository eventRepository;
   private final TaskExecutionControlCommandRepository controlCommands;
@@ -41,6 +44,8 @@ public class RobotEventIngestionService {
     String deploymentId = input.text("deployment_id");
     String eventType = input.text("event");
     long sequence = input.sequence();
+    log.debug("event=robot_event_received robotId={} executionId={} deploymentId={} requestId={} eventType={} sequence={}",
+      robotId, executionId, deploymentId, input.text("request_id"), eventType, sequence);
     String eventId = nonBlank(input.text("event_id")) ? input.text("event_id") : robotId + ":" + sequence;
     RobotExecutionEventEntity duplicate = eventRepository.findByRobotIdAndSequence(robotId, sequence)
       .or(() -> eventRepository.findByEventId(eventId)).orElse(null);
@@ -50,6 +55,9 @@ public class RobotEventIngestionService {
         duplicate.setConflictCode("EVENT_SEQUENCE_CONFLICT");
         eventRepository.save(duplicate);
         conflict(expectedExecutionId, "EVENT_SEQUENCE_CONFLICT", "机器人同一事件序列或 eventId 的内容发生冲突");
+      } else {
+        log.debug("event=duplicate_robot_event_ignored robotId={} executionId={} eventType={} sequence={}",
+          robotId, executionId, eventType, sequence);
       }
       return;
     }
@@ -117,12 +125,36 @@ public class RobotEventIngestionService {
 
     boolean starting = TaskExecutionStatus.STARTING.name().equals(status)
       || (TaskExecutionStatus.RECOVERING.name().equals(status) && TaskExecutionStatus.STARTING.name().equals(execution.getRecoveryStatus()));
+    boolean waitingLocal = TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name().equals(status)
+      || (TaskExecutionStatus.RECOVERING.name().equals(status)
+        && TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name().equals(execution.getRecoveryStatus()));
     boolean running = TaskExecutionStatus.RUNNING.name().equals(status)
       || (TaskExecutionStatus.RECOVERING.name().equals(status) && TaskExecutionStatus.RUNNING.name().equals(execution.getRecoveryStatus()));
-    if ("route_started".equals(type) && starting) {
+    String occurredAt = event.text("occurred_at");
+    if ("start_waiting_local_confirmation".equals(type) && starting
+        && TaskStartMode.LOCAL_CONFIRM.name().equals(execution.getStartMode())) {
+      execution.setStatus(TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name());
+      execution.setRecoveryStatus(null);
+      execution.setRobotReadyAt(occurredAt);
+      audit.setProcessingResult("APPLIED");
+      log.info("event=robot_waiting_local_confirmation taskId={} robotId={} executionId={} deploymentId={} requestId={} startMode={} executionStatus={}",
+        execution.getTaskId(), execution.getRobotId(), execution.getExecutionId(), execution.getDeploymentId(),
+        execution.getStartRequestId(), execution.getStartMode(), execution.getStatus());
+    } else if ("local_start_confirmed".equals(type) && waitingLocal) {
+      execution.setLocalConfirmedAt(occurredAt);
+      audit.setProcessingResult("APPLIED");
+    } else if ("route_started".equals(type) && (starting || waitingLocal)) {
       execution.setStatus(TaskExecutionStatus.RUNNING.name());
       execution.setRecoveryStatus(null);
+      execution.setStartedAt(occurredAt);
+      if (TaskStartMode.LOCAL_CONFIRM.name().equals(execution.getStartMode())
+          && !nonBlank(execution.getLocalConfirmedAt())) {
+        execution.setLocalConfirmedAt(occurredAt);
+      }
       audit.setProcessingResult("APPLIED");
+      log.info("event=robot_route_started taskId={} robotId={} executionId={} deploymentId={} requestId={} startMode={} executionStatus={}",
+        execution.getTaskId(), execution.getRobotId(), execution.getExecutionId(), execution.getDeploymentId(),
+        execution.getStartRequestId(), execution.getStartMode(), execution.getStatus());
     } else if ("target_reached".equals(type) && running) {
       updateProgress(execution, event.payload());
       audit.setProcessingResult("APPLIED");
@@ -133,6 +165,7 @@ public class RobotEventIngestionService {
       audit.setProcessingResult("APPLIED");
     } else if ("route_failed".equals(type) || "command_rejected".equals(type) || "command_failed".equals(type)) {
       if (starting) execution.setStatus(TaskExecutionStatus.START_FAILED.name());
+      else if (waitingLocal) execution.setStatus(TaskExecutionStatus.FAILED.name());
       else if (running) execution.setStatus(TaskExecutionStatus.FAILED.name());
       else {
         audit.setProcessingResult("INVALID_TRANSITION");
@@ -177,6 +210,7 @@ public class RobotEventIngestionService {
   private boolean validOwnership(TaskExecutionEntity execution, RobotBridgeExecutionEvent event, String robotId,
       String executionId, String deploymentId, String type, long sequence) {
     if (!"1.0".equals(event.text("schema_version")) || sequence <= 0 || !nonBlank(type)
+        || !validOccurredAt(event.text("occurred_at"))
         || !Objects.equals(execution.getRobotId(), robotId) || !Objects.equals(execution.getExecutionId(), executionId)
         || !Objects.equals(execution.getDeploymentId(), deploymentId) || !nonBlank(event.text("command_id"))) return false;
     boolean startCommand = Objects.equals(execution.getStartRequestId(), event.text("request_id"))
@@ -290,6 +324,8 @@ public class RobotEventIngestionService {
     event.setErrorCode(code);
     event.setErrorMessage(safeMessage(message, "事件校验失败"));
     eventRepository.save(event);
+    log.warn("event=robot_event_rejected robotId={} executionId={} deploymentId={} eventType={} sequence={} errorCode={}",
+      event.getRobotId(), event.getExecutionId(), event.getDeploymentId(), event.getEventType(), event.getSequence(), code);
   }
 
   private void conflict(String executionId, String code, String message) {
@@ -348,5 +384,8 @@ public class RobotEventIngestionService {
     return message.substring(0, Math.min(500, message.length()));
   }
   private static boolean nonBlank(String value) { return value != null && !value.isBlank(); }
+  private static boolean validOccurredAt(String value) {
+    try { Instant.parse(value); return true; } catch (Exception ignored) { return false; }
+  }
   private static String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }
 }

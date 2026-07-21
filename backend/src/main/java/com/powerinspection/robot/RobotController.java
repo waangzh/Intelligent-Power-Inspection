@@ -59,6 +59,8 @@ public class RobotController extends CrudSupport {
     }
     validateSite(body.get("siteId"));
     body.putIfAbsent("status", "OFFLINE");
+    body.putIfAbsent("supportsRemoteImmediateStart", true);
+    body.putIfAbsent("supportsLocalConfirmStart", false);
     Map<String, Object> robot = create(DataCategory.ROBOT, "robot", body);
     publishRobot(robot);
     return ApiResponse.ok(robot);

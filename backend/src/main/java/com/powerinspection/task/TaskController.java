@@ -102,9 +102,13 @@ public class TaskController {
 
   @PostMapping("/{id}/start")
   public ResponseEntity<ApiResponse<Map<String, Object>>> start(@PathVariable String id,
-      @RequestHeader("Idempotency-Key") String idempotencyKey) {
-    permissionService.require(currentUser.get(), Permission.TASK_DISPATCH);
-    return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.ok(executionLifecycleService.start(id, idempotencyKey)));
+      @RequestHeader("Idempotency-Key") String idempotencyKey,
+      @RequestBody(required = false) StartTaskRequest request) {
+    TaskStartMode startMode = TaskStartMode.defaulted(request == null ? null : request.startMode());
+    permissionService.require(currentUser.get(), startMode == TaskStartMode.LOCAL_CONFIRM
+      ? Permission.TASK_START_LOCAL : Permission.TASK_START_REMOTE);
+    return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.ok(
+      executionLifecycleService.start(id, idempotencyKey, startMode, currentUser.get().getId())));
   }
 
   @PostMapping("/{id}/pause")

@@ -17,6 +17,7 @@ const tagType = computed(() => {
     CREATED: 'info',
     DISPATCHED: 'info',
     STARTING: 'warning',
+    WAITING_LOCAL_CONFIRM: 'warning',
     RUNNING: 'success',
     PAUSING: 'warning',
     PAUSED: 'warning',

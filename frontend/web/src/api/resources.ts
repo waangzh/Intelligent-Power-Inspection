@@ -12,6 +12,7 @@ import type {
   InspectionTask,
   TaskExecution,
   TaskStartEligibility,
+  TaskStartMode,
   ManualDetectionResponse,
   MapAsset,
   MapAssetQuery,
@@ -98,8 +99,8 @@ export const resourcesApi = {
   dispatchTask: (id: string) => http.post<InspectionTask>(`/tasks/${id}/dispatch`),
   getTaskExecution: (id: string) => http.get<TaskExecution>(`/tasks/${encodeURIComponent(id)}/execution`),
   getTaskStartEligibility: (id: string) => http.get<TaskStartEligibility>(`/tasks/${encodeURIComponent(id)}/start-eligibility`),
-  startTask: (id: string, idempotencyKey: string) =>
-    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/start`, undefined, { 'Idempotency-Key': idempotencyKey }),
+  startTask: (id: string, startMode: TaskStartMode, idempotencyKey: string) =>
+    http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/start`, { startMode }, { 'Idempotency-Key': idempotencyKey }),
   pauseTask: (id: string, idempotencyKey: string) =>
     http.post<TaskExecution>(`/tasks/${encodeURIComponent(id)}/pause`, undefined, { 'Idempotency-Key': idempotencyKey }),
   resumeTask: (id: string, idempotencyKey: string) =>

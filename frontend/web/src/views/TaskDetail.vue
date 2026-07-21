@@ -7,12 +7,19 @@
           :manual-reconciliation-required="execution?.manualReconciliationRequired"
         />
         <el-button
-          v-if="can('task:dispatch') && execution && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(task))"
+          v-if="can('task:start-local') && canShowLocalStart"
           type="primary"
-          :disabled="!eligibility?.eligible"
-          :title="startDisabledReason"
-          @click="startInspection"
-        >启动巡检</el-button>
+          :disabled="!!startDisabledReason('LOCAL_CONFIRM')"
+          :title="startDisabledReason('LOCAL_CONFIRM')"
+          @click="startInspection('LOCAL_CONFIRM')"
+        >下发并等待本地启动</el-button>
+        <el-button
+          v-if="can('task:start-remote') && canShowRemoteStart"
+          type="warning"
+          :disabled="!!startDisabledReason('REMOTE_IMMEDIATE')"
+          :title="startDisabledReason('REMOTE_IMMEDIATE')"
+          @click="confirmRemoteStart"
+        >远程立即启动</el-button>
         <el-button v-if="can('task:dispatch') && !task.executionId && task.status === 'CREATED'" type="primary" @click="taskStore.dispatch(task.id)">下发</el-button>
         <el-button v-if="canPause" :loading="controlBusy" :disabled="controlBusy" @click="sendControl('PAUSE')">暂停</el-button>
         <el-button v-if="canResume" type="primary" :loading="controlBusy" :disabled="controlBusy" @click="sendControl('RESUME')">恢复</el-button>
@@ -49,12 +56,16 @@
             </el-descriptions-item>
             <el-descriptions-item label="当前检查点">第 {{ task.currentCheckpointSeq }} / {{ route?.checkpoints.length ?? 0 }} 个</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ fmt(task.createdAt) }}</el-descriptions-item>
-            <el-descriptions-item label="开始时间">{{ task.startedAt ? fmt(task.startedAt) : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="开始时间">{{ execution?.startedAt ? fmt(execution.startedAt) : '-' }}</el-descriptions-item>
           </el-descriptions>
           <el-descriptions v-if="execution" :column="2" border size="small" style="margin-top: 12px">
             <el-descriptions-item label="执行 ID">{{ execution.executionId }}</el-descriptions-item>
             <el-descriptions-item label="路线修订">{{ execution.routeRevisionId }}</el-descriptions-item>
             <el-descriptions-item label="部署 ID">{{ execution.deploymentId || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="启动方式">{{ execution.startMode === 'LOCAL_CONFIRM' ? '机器人本地确认' : '远程立即启动' }}</el-descriptions-item>
+            <el-descriptions-item label="任务下发时间">{{ execution.startRequestedAt ? fmt(execution.startRequestedAt) : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="机器人准备完成">{{ execution.robotReadyAt ? fmt(execution.robotReadyAt) : '-' }}</el-descriptions-item>
+            <el-descriptions-item label="本地确认时间">{{ execution.localConfirmedAt ? fmt(execution.localConfirmedAt) : '-' }}</el-descriptions-item>
             <el-descriptions-item label="当前目标">{{ execution.currentTargetId || '-' }}</el-descriptions-item>
             <el-descriptions-item label="最后事件">{{ execution.lastEventAt ? fmt(execution.lastEventAt) : '-' }}</el-descriptions-item>
             <el-descriptions-item label="路线哈希">{{ shortHash(execution.routeContentSha256) }}</el-descriptions-item>
@@ -62,8 +73,26 @@
           </el-descriptions>
           <el-alert
             v-if="execution && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(task))"
-            :title="startDisabledReason || `部署为${DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT}且身份、路线哈希、地图哈希一致后才允许启动`"
+            :title="eligibilityReason || `部署为${DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT}且身份、路线哈希、地图哈希一致后才允许启动`"
             :type="eligibility?.eligible ? 'success' : 'warning'"
+            :closable="false"
+            show-icon
+            style="margin-top: 12px"
+          />
+          <el-alert
+            v-if="execution && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(task)) && canShowLocalStart"
+            title="本地确认启动"
+            description="任务将下发到机器人。机器人完成路线和地图校验后，需要在机器人触摸屏上确认，机器人不会立即移动。"
+            type="info"
+            :closable="false"
+            show-icon
+            style="margin-top: 12px"
+          />
+          <el-alert
+            v-if="executionStatus === 'WAITING_LOCAL_CONFIRM'"
+            title="等待机器人本地确认"
+            :description="`${robot?.name || execution?.robotId || '机器人'}已准备完成，已等待 ${waitingDuration}。请前往机器人触摸屏确认启动。`"
+            type="warning"
             :closable="false"
             show-icon
             style="margin-top: 12px"
@@ -204,20 +233,26 @@ const execution = computed(() => taskStore.executionFor(taskId.value))
 const eligibility = computed(() => taskStore.eligibilityFor(taskId.value))
 const controlBusy = computed(() => !!taskStore.controlInFlight[taskId.value])
 const executionStatus = computed(() => execution.value?.status)
+const startable = computed(() => !!execution.value && !!task.value
+  && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(task.value)))
+const canShowLocalStart = computed(() => startable.value
+  && (eligibility.value?.supportsLocalConfirmStart ?? robot.value?.supportsLocalConfirmStart ?? false))
+const canShowRemoteStart = computed(() => startable.value
+  && (eligibility.value?.supportsRemoteImmediateStart ?? robot.value?.supportsRemoteImmediateStart ?? true))
 const canPause = computed(() => !!execution.value && can('task:control') && executionStatus.value === 'RUNNING')
 const canResume = computed(() => !!execution.value && can('task:control') && executionStatus.value === 'PAUSED')
 const canTakeover = computed(() => !!execution.value && can('task:takeover') && executionStatus.value === 'RUNNING')
 const canCancelTask = computed(() => {
   if (!task.value || !can('task:control')) return false
   const status = taskStore.statusOf(task.value)
-  if (task.value.executionId) return ['STARTING', 'RUNNING', 'PAUSED'].includes(status)
+  if (task.value.executionId) return ['STARTING', 'WAITING_LOCAL_CONFIRM', 'RUNNING', 'PAUSED'].includes(status)
   return !['COMPLETED', 'CANCELLED', 'ESTOPPED'].includes(task.value.status)
 })
 const canEstopTask = computed(() => {
   if (!task.value || !can('task:estop')) return false
   const status = taskStore.statusOf(task.value)
   if (['COMPLETED', 'CANCELLED', 'ESTOPPED', 'ESTOPPING', 'CANCELLING'].includes(status)) return false
-  if (task.value.executionId) return ['STARTING', 'RUNNING', 'PAUSED'].includes(status)
+  if (task.value.executionId) return ['STARTING', 'WAITING_LOCAL_CONFIRM', 'RUNNING', 'PAUSED'].includes(status)
   return true
 })
 const commandFeedback = computed(() => {
@@ -254,24 +289,51 @@ function eventLabel(type: TaskEvent['type']) {
   }[type]
 }
 
-const startDisabledReason = computed(() => {
+const eligibilityReason = computed(() => {
   if (!execution.value) return '任务未绑定不可变路线修订执行快照'
   if (!eligibility.value) return '正在核验启动条件'
   return eligibility.value.eligible ? '' : eligibility.value.ineligibleReason || '启动条件未满足'
 })
 
+const waitingDuration = computed(() => {
+  if (!execution.value?.robotReadyAt) return '0 秒'
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(execution.value.robotReadyAt).getTime()) / 1000))
+  if (seconds < 60) return `${seconds} 秒`
+  const minutes = Math.floor(seconds / 60)
+  return minutes < 60 ? `${minutes} 分钟` : `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟`
+})
+
+function startDisabledReason(mode: 'REMOTE_IMMEDIATE' | 'LOCAL_CONFIRM') {
+  if (eligibilityReason.value) return eligibilityReason.value
+  if (robot.value?.status === 'OFFLINE') return '机器人离线'
+  if (robot.value?.status === 'BUSY') return '机器人正忙'
+  if (mode === 'LOCAL_CONFIRM' && !canShowLocalStart.value) return '机器人不支持本地确认启动'
+  if (mode === 'REMOTE_IMMEDIATE' && !canShowRemoteStart.value) return '机器人不支持远程立即启动'
+  return ''
+}
+
 function shortHash(value: string) {
   return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-8)}` : value
 }
 
-async function startInspection() {
+async function startInspection(startMode: 'REMOTE_IMMEDIATE' | 'LOCAL_CONFIRM') {
   if (!task.value) return
   try {
-    await taskStore.startInspection(task.value.id)
-    ElMessage.success('启动命令已受理，等待机器人 route_started 事件确认运行')
+    await taskStore.startInspection(task.value.id, startMode)
+    ElMessage.success(startMode === 'LOCAL_CONFIRM'
+      ? '任务已下发，等待机器人准备完成并在触摸屏确认'
+      : '远程启动命令已受理，等待机器人 route_started 事件确认运行')
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '启动巡检失败')
   }
+}
+
+function confirmRemoteStart() {
+  ElMessageBox.confirm(
+    '机器人将在任务校验成功后立即开始移动。请确认现场无人、通道无障碍且急停状态正常。',
+    '确认远程立即启动',
+    { type: 'warning', confirmButtonText: '确认启动', cancelButtonText: '取消' },
+  ).then(() => startInspection('REMOTE_IMMEDIATE')).catch(() => {})
 }
 
 function timelineType(type: TaskEvent['type']) {

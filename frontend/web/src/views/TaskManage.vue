@@ -86,12 +86,12 @@
       />
       <div class="action-bar">
         <el-button
-          v-if="can('task:dispatch') && taskStore.executionFor(activeTask.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(activeTask))"
+          v-if="canAny('task:start-local', 'task:start-remote') && taskStore.executionFor(activeTask.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(activeTask))"
           type="primary"
           :disabled="!taskStore.eligibilityFor(activeTask.id)?.eligible"
           :title="startDisabledReason(activeTask.id)"
-          @click="startInspection(activeTask.id)"
-        >启动巡检</el-button>
+          @click="openStartOptions(activeTask.id)"
+        >选择启动方式</el-button>
         <el-button v-if="can('task:dispatch') && !activeTask.executionId && activeTask.status === 'CREATED'" type="primary" @click="taskStore.dispatch(activeTask.id)">下发任务</el-button>
         <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'RUNNING'" @click="taskStore.pause(activeTask.id)">暂停</el-button>
         <el-button v-if="can('task:control') && !activeTask.executionId && activeTask.status === 'PAUSED'" type="primary" @click="taskStore.resume(activeTask.id)">恢复</el-button>
@@ -159,13 +159,13 @@
           <template #default="{ row }">
             <div class="progress-cell">
               <el-button
-                v-if="can('task:dispatch') && taskStore.executionFor(row.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(row))"
+                v-if="canAny('task:start-local', 'task:start-remote') && taskStore.executionFor(row.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(row))"
                 plain
                 size="small"
                 class="action-btn action-detail"
                 :disabled="!taskStore.eligibilityFor(row.id)?.eligible"
                 :title="startDisabledReason(row.id)"
-                @click="startInspection(row.id)"
+                @click="openStartOptions(row.id)"
               >启动</el-button>
               <el-progress :percentage="taskStore.executionFor(row.id)?.progress ?? row.progress" :stroke-width="8" />
             </div>
@@ -255,12 +255,12 @@ import { DEPLOYMENT_STATE_LABELS } from '@/utils/routeDeployment'
 
 const readyDeploymentLabel = DEPLOYMENT_STATE_LABELS.READY_FOR_ROBOT
 
-const RUNNING_STATUSES: TaskStatus[] = ['STARTING', 'RUNNING', 'PAUSING', 'PAUSED', 'RESUMING', 'MANUAL_TAKEOVER', 'TAKEOVER_PENDING']
+const RUNNING_STATUSES: TaskStatus[] = ['STARTING', 'WAITING_LOCAL_CONFIRM', 'RUNNING', 'PAUSING', 'PAUSED', 'RESUMING', 'MANUAL_TAKEOVER', 'TAKEOVER_PENDING']
 const PENDING_STATUSES: TaskStatus[] = ['CREATED', 'DISPATCHED', 'START_FAILED']
 const DONE_STATUSES: TaskStatus[] = ['COMPLETED', 'CANCELLED', 'ESTOPPED', 'FAILED']
 
 const router = useRouter()
-const { can } = usePermission()
+const { can, canAny } = usePermission()
 const taskPage = ref(0)
 const keyword = ref('')
 const statusFilter = ref('')
@@ -434,7 +434,7 @@ async function submitTask() {
 function canCancelTask(task: InspectionTask) {
   if (!can('task:control')) return false
   const status = taskStore.statusOf(task)
-  if (task.executionId) return ['STARTING', 'RUNNING', 'PAUSED'].includes(status)
+  if (task.executionId) return ['STARTING', 'WAITING_LOCAL_CONFIRM', 'RUNNING', 'PAUSED'].includes(status)
   return !['COMPLETED', 'CANCELLED', 'ESTOPPED'].includes(task.status)
 }
 
@@ -442,7 +442,7 @@ function canEstopTask(task: InspectionTask) {
   if (!can('task:estop')) return false
   const status = taskStore.statusOf(task)
   if (['COMPLETED', 'CANCELLED', 'ESTOPPED', 'ESTOPPING', 'CANCELLING'].includes(status)) return false
-  if (task.executionId) return ['STARTING', 'RUNNING', 'PAUSED'].includes(status)
+  if (task.executionId) return ['STARTING', 'WAITING_LOCAL_CONFIRM', 'RUNNING', 'PAUSED'].includes(status)
   return ['CREATED', 'DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER', 'STARTING'].includes(task.status)
 }
 
@@ -461,13 +461,8 @@ function startDisabledReason(taskId: string) {
   return eligibility.eligible ? '' : eligibility.ineligibleReason || '启动条件未满足'
 }
 
-async function startInspection(taskId: string) {
-  try {
-    await taskStore.startInspection(taskId)
-    ElMessage.success('启动命令已受理，等待机器人 route_started 事件确认运行')
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '启动巡检失败')
-  }
+function openStartOptions(taskId: string) {
+  router.push(`/tasks/${taskId}`)
 }
 
 function cancelTask(id: string) {

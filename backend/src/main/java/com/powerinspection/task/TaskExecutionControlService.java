@@ -189,7 +189,8 @@ public class TaskExecutionControlService {
       case CANCEL, ESTOP -> List.of(
         TaskExecutionStatus.RUNNING.name(),
         TaskExecutionStatus.PAUSED.name(),
-        TaskExecutionStatus.STARTING.name()
+        TaskExecutionStatus.STARTING.name(),
+        TaskExecutionStatus.WAITING_LOCAL_CONFIRM.name()
       ).contains(execution.getStatus());
     };
     if (!valid) throw ApiException.conflict("当前执行状态不允许该控制操作");

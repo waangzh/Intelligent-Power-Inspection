@@ -5,6 +5,7 @@ import java.util.Set;
 public enum TaskExecutionStatus {
   CREATED,
   STARTING,
+  WAITING_LOCAL_CONFIRM,
   RUNNING,
   PAUSING,
   PAUSED,
@@ -23,9 +24,9 @@ public enum TaskExecutionStatus {
 
   public static final Set<String> TERMINAL = Set.of(
     COMPLETED.name(), START_FAILED.name(), FAILED.name(), CANCELLED.name(), ESTOPPED.name());
-  public static final Set<String> ACTIVE = Set.of(STARTING.name(), RUNNING.name(), PAUSING.name(), PAUSED.name(), RESUMING.name(),
+  public static final Set<String> ACTIVE = Set.of(STARTING.name(), WAITING_LOCAL_CONFIRM.name(), RUNNING.name(), PAUSING.name(), PAUSED.name(), RESUMING.name(),
     CANCELLING.name(), ESTOPPING.name(), TAKEOVER_PENDING.name(), MANUAL_TAKEOVER.name(), DISCONNECTED.name(), RECOVERING.name());
-  public static final Set<String> NON_TERMINAL = Set.of(CREATED.name(), STARTING.name(), RUNNING.name(), PAUSING.name(), PAUSED.name(),
+  public static final Set<String> NON_TERMINAL = Set.of(CREATED.name(), STARTING.name(), WAITING_LOCAL_CONFIRM.name(), RUNNING.name(), PAUSING.name(), PAUSED.name(),
     RESUMING.name(), CANCELLING.name(), ESTOPPING.name(), TAKEOVER_PENDING.name(), MANUAL_TAKEOVER.name(), DISCONNECTED.name(),
     RECOVERING.name());
 }
