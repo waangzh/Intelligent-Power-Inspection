@@ -40,7 +40,7 @@ class DetectionTemplateControllerTests {
   }
 
   @Test
-  void rejectsDetectionTypeOutsideTemplateScope() throws Exception {
+  void acceptsCustomDetectionItemsOutsidePresetTypes() throws Exception {
     String token = login("admin", "Admin@123");
 
     mockMvc.perform(post("/api/v1/detection-templates")
@@ -48,14 +48,25 @@ class DetectionTemplateControllerTests {
         .contentType(MediaType.APPLICATION_JSON)
         .content("""
           {
-            "name":"非法路线模板",
-            "scope":"ROUTE",
+            "name":"人员专项模板",
+            "scope":"CHECKPOINT",
             "description":"",
-            "items":[{"type":"METER","enabled":true,"prompt":"压力表"}]
+            "items":[{
+              "itemId":"person_custom",
+              "type":"CUSTOM_PERSON",
+              "name":"人员检测",
+              "displayLabel":"人员",
+              "enabled":true,
+              "prompt":"定位图像中所有清晰可见的人员"
+            }]
           }
           """))
-      .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.message").value("检测类型 METER 不适用于 ROUTE 模板"));
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items[0].itemId").value("person_custom"))
+      .andExpect(jsonPath("$.data.items[0].type").value("CUSTOM_PERSON"))
+      .andExpect(jsonPath("$.data.items[0].name").value("人员检测"))
+      .andExpect(jsonPath("$.data.items[0].displayLabel").value("人员"))
+      .andExpect(jsonPath("$.data.items[0].prompt").value("定位图像中所有清晰可见的人员"));
   }
 
   @Test
@@ -74,7 +85,7 @@ class DetectionTemplateControllerTests {
           }
           """))
       .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.message").value("已启用检测项 SWITCH 必须填写提示词"));
+      .andExpect(jsonPath("$.message").value("已启用检测项 开关/刀闸状态 必须填写提示词"));
   }
 
   @Test

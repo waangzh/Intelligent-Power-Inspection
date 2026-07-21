@@ -10,7 +10,7 @@ export type {
   MapAssetUploadInput,
 } from './mapAsset'
 
-export type DetectionType =
+export type PresetDetectionType =
   | 'PERSON'
   | 'HELMET'
   | 'OBSTACLE'
@@ -20,11 +20,13 @@ export type DetectionType =
   | 'OIL_LEAK'
   | 'FOREIGN_OBJECT'
 
+export type DetectionType = PresetDetectionType | (string & {})
+
 /** 路线级检测项 */
-export const ROUTE_DETECTIONS: DetectionType[] = ['PERSON', 'HELMET', 'OBSTACLE', 'FIRE']
+export const ROUTE_DETECTIONS: PresetDetectionType[] = ['PERSON', 'HELMET', 'OBSTACLE', 'FIRE']
 
 /** 检查点级检测项 */
-export const CHECKPOINT_DETECTIONS: DetectionType[] = [
+export const CHECKPOINT_DETECTIONS: PresetDetectionType[] = [
   'SWITCH',
   'METER',
   'OIL_LEAK',
@@ -32,7 +34,7 @@ export const CHECKPOINT_DETECTIONS: DetectionType[] = [
   'FOREIGN_OBJECT',
 ]
 
-export const DETECTION_LABELS: Record<DetectionType, string> = {
+export const DETECTION_LABELS: Record<string, string> = {
   PERSON: '人员检测',
   HELMET: '安全帽检测',
   OBSTACLE: '障碍物检测',
@@ -43,7 +45,7 @@ export const DETECTION_LABELS: Record<DetectionType, string> = {
   FOREIGN_OBJECT: '异物检测',
 }
 
-export const DETECTION_TARGET_LABELS: Record<DetectionType, string> = {
+export const DETECTION_TARGET_LABELS: Record<string, string> = {
   PERSON: '人员',
   HELMET: '安全帽',
   OBSTACLE: '障碍物',
@@ -143,7 +145,9 @@ export interface Area {
 }
 
 export interface DetectionItem {
+  itemId?: string
   type: DetectionType
+  name?: string
   enabled: boolean
   displayLabel: string
   prompt?: string

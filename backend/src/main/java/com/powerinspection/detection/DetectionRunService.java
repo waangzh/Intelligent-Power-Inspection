@@ -221,7 +221,10 @@ public class DetectionRunService {
       Map<String, Object> normalized = new LinkedHashMap<>(item);
       normalized.put("type", type);
       normalized.put("prompt", prompt);
-      normalized.put("displayLabel", DetectionItems.displayLabel(type));
+      String displayLabel = text(item.get("displayLabel"));
+      normalized.put("displayLabel", displayLabel == null || displayLabel.isBlank()
+        ? DetectionItems.displayLabel(type)
+        : displayLabel.trim());
       normalized.put("enabled", true);
       normalized.putIfAbsent("threshold", 0.75);
       return normalized;

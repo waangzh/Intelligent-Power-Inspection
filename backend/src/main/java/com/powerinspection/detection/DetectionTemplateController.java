@@ -29,10 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/detection-templates")
 public class DetectionTemplateController extends CrudSupport {
-  private static final Map<String, Set<String>> SCOPE_TYPES =
-      Map.of(
-          "ROUTE", Set.of("PERSON", "HELMET", "OBSTACLE", "FIRE"),
-          "CHECKPOINT", Set.of("SWITCH", "METER", "OIL_LEAK", "FIRE", "FOREIGN_OBJECT"));
+  private static final Set<String> SCOPES = Set.of("ROUTE", "CHECKPOINT");
   private static final Map<String, String> DEFAULT_PROMPTS =
       Map.of(
           "PERSON", "巡检区域内的人员",
@@ -137,7 +134,14 @@ public class DetectionTemplateController extends CrudSupport {
         if (enabled && (prompt == null || prompt.isBlank())) {
           prompt = DEFAULT_PROMPTS.get(type);
         }
-        items.add(item(type, enabled, prompt, displayLabel));
+        items.add(
+            item(
+                text(raw.get("itemId")),
+                type,
+                text(raw.get("name")),
+                enabled,
+                prompt,
+                displayLabel));
       }
     } else if (source.get("types") instanceof List<?> types) {
       for (Object rawType : types) {
@@ -161,7 +165,7 @@ public class DetectionTemplateController extends CrudSupport {
     if (name == null || name.isBlank()) {
       throw ApiException.badRequest("检测模板名称不能为空");
     }
-    if (!SCOPE_TYPES.containsKey(scope)) {
+    if (!SCOPES.contains(scope)) {
       throw ApiException.badRequest("检测模板范围必须是 ROUTE 或 CHECKPOINT");
     }
     if (!(source.get("items") instanceof List<?> rawItems) || rawItems.isEmpty()) {
@@ -169,6 +173,7 @@ public class DetectionTemplateController extends CrudSupport {
     }
 
     List<Map<String, Object>> items = new ArrayList<>();
+    Set<String> itemIds = new LinkedHashSet<>();
     Set<String> types = new LinkedHashSet<>();
     Map<String, String> prompts = new LinkedHashMap<>();
     for (Object value : rawItems) {
@@ -176,16 +181,24 @@ public class DetectionTemplateController extends CrudSupport {
         throw ApiException.badRequest("检测项格式错误");
       }
       String type = text(raw.get("type"));
-      if (!SCOPE_TYPES.get(scope).contains(type)) {
-        throw ApiException.badRequest("检测类型 " + type + " 不适用于 " + scope + " 模板");
+      if (type == null || type.isBlank()) {
+        throw ApiException.badRequest("检测项类型不能为空");
       }
       if (!types.add(type)) {
         throw ApiException.badRequest("检测类型不能重复：" + type);
       }
+      String itemId = text(raw.get("itemId"));
+      String normalizedItemId = itemId == null || itemId.isBlank() ? type : itemId.trim();
+      if (!itemIds.add(normalizedItemId)) {
+        throw ApiException.badRequest("检测项标识不能重复：" + normalizedItemId);
+      }
+      String itemName = text(raw.get("name"));
+      String normalizedName =
+          itemName == null || itemName.isBlank() ? detectionName(type) : itemName.trim();
       boolean enabled = !Boolean.FALSE.equals(raw.get("enabled"));
       String prompt = text(raw.get("prompt"));
       if (enabled && (prompt == null || prompt.isBlank())) {
-        throw ApiException.badRequest("已启用检测项 " + type + " 必须填写提示词");
+        throw ApiException.badRequest("已启用检测项 " + normalizedName + " 必须填写提示词");
       }
       String normalizedPrompt = prompt == null ? "" : prompt.trim();
       String displayLabel = text(raw.get("displayLabel"));
@@ -193,7 +206,14 @@ public class DetectionTemplateController extends CrudSupport {
           displayLabel == null || displayLabel.isBlank()
               ? DetectionItems.displayLabel(type)
               : displayLabel.trim();
-      items.add(item(type, enabled, normalizedPrompt, normalizedDisplayLabel));
+      items.add(
+          item(
+              normalizedItemId,
+              type.trim(),
+              normalizedName,
+              enabled,
+              normalizedPrompt,
+              normalizedDisplayLabel));
       if (!normalizedPrompt.isBlank()) {
         prompts.put(type, normalizedPrompt);
       }
@@ -215,8 +235,20 @@ public class DetectionTemplateController extends CrudSupport {
 
   private Map<String, Object> item(
       String type, boolean enabled, String prompt, String displayLabel) {
+    return item(type, type, detectionName(type), enabled, prompt, displayLabel);
+  }
+
+  private Map<String, Object> item(
+      String itemId,
+      String type,
+      String name,
+      boolean enabled,
+      String prompt,
+      String displayLabel) {
     Map<String, Object> item = new LinkedHashMap<>();
+    item.put("itemId", itemId == null || itemId.isBlank() ? type : itemId.trim());
     item.put("type", type);
+    item.put("name", name == null || name.isBlank() ? detectionName(type) : name.trim());
     item.put("enabled", enabled);
     item.put(
         "displayLabel",
@@ -226,6 +258,20 @@ public class DetectionTemplateController extends CrudSupport {
     item.put("prompt", prompt == null ? "" : prompt);
     item.put("threshold", 0.75);
     return item;
+  }
+
+  private String detectionName(String type) {
+    return switch (type == null ? "" : type) {
+      case "PERSON" -> "人员检测";
+      case "HELMET" -> "安全帽检测";
+      case "OBSTACLE" -> "障碍物检测";
+      case "FIRE" -> "火源/烟雾检测";
+      case "SWITCH" -> "开关/刀闸状态";
+      case "METER" -> "表计/指示灯";
+      case "OIL_LEAK" -> "漏油检测";
+      case "FOREIGN_OBJECT" -> "异物检测";
+      default -> type == null || type.isBlank() ? "自定义检测项" : type;
+    };
   }
 
   private void copyIfPresent(Map<String, Object> source, Map<String, Object> target, String key) {

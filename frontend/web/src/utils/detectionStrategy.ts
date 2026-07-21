@@ -1,13 +1,14 @@
 import {
   CHECKPOINT_DETECTIONS,
   DETECTION_TARGET_LABELS,
+  DETECTION_LABELS,
   type DetectionItem,
-  type DetectionType,
+  type PresetDetectionType,
   type RobotInspectionImage,
   type Route,
 } from '@/types'
 
-const DEFAULT_PROMPTS: Record<DetectionType, string> = {
+const DEFAULT_PROMPTS: Record<string, string> = {
   PERSON: '巡检区域内的人员',
   HELMET: '人员头部佩戴的安全帽',
   OBSTACLE: '机器人行进路线上的障碍物',
@@ -18,9 +19,11 @@ const DEFAULT_PROMPTS: Record<DetectionType, string> = {
   FOREIGN_OBJECT: '设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物',
 }
 
-export function defaultDetectionItem(type: DetectionType): DetectionItem {
+export function defaultDetectionItem(type: PresetDetectionType): DetectionItem {
   return {
+    itemId: type,
     type,
+    name: DETECTION_LABELS[type],
     enabled: true,
     displayLabel: DETECTION_TARGET_LABELS[type],
     prompt: DEFAULT_PROMPTS[type],
@@ -29,13 +32,28 @@ export function defaultDetectionItem(type: DetectionType): DetectionItem {
 }
 
 export function cloneDetectionItems(items: DetectionItem[]): DetectionItem[] {
-  return items.map((item) => ({ ...item, threshold: 0.75 }))
+  return items.map((item) => ({
+    ...item,
+    itemId: item.itemId?.trim() || item.type,
+    name: item.name?.trim() || DETECTION_LABELS[item.type] || item.type,
+    displayLabel: item.displayLabel?.trim() || DETECTION_TARGET_LABELS[item.type] || '',
+    prompt: item.prompt?.trim() || DEFAULT_PROMPTS[item.type] || '',
+    threshold: 0.75,
+  }))
+}
+
+export function formatDetectionElapsed(startedAt: string | number | undefined, now = Date.now()): string {
+  const start = typeof startedAt === 'number' ? startedAt : Date.parse(startedAt || '')
+  const elapsedSeconds = Number.isFinite(start) ? Math.max(0, Math.floor((now - start) / 1000)) : 0
+  const minutes = Math.floor(elapsedSeconds / 60)
+  const seconds = elapsedSeconds % 60
+  return minutes ? `已运行 ${minutes} 分 ${seconds} 秒` : `已运行 ${seconds} 秒`
 }
 
 export function ensureDetectionPrompts(items: DetectionItem[]): DetectionItem[] {
   return items.map((item) => ({
     ...item,
-    prompt: item.prompt?.trim() || defaultDetectionItem(item.type).prompt,
+    prompt: item.prompt?.trim() || DEFAULT_PROMPTS[item.type] || '',
   }))
 }
 

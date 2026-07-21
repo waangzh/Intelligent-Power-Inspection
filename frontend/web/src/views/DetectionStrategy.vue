@@ -69,6 +69,44 @@
             <span class="pane-title">检测配置</span>
           </div>
           <div class="config-body">
+            <div class="template-toolbar">
+              <el-select
+                v-model="selectedTemplateId"
+                clearable
+                placeholder="选择检测模板"
+                @change="applySelectedTemplate"
+              >
+                <el-option
+                  v-for="template in checkpointTemplates"
+                  :key="template.id"
+                  :label="template.name"
+                  :value="template.id"
+                />
+              </el-select>
+              <div class="template-actions">
+                <el-button size="small" :disabled="!selectedTemplateId" :loading="templateSaving" @click="saveSelectedTemplate">
+                  <el-icon><Check /></el-icon>
+                  保存
+                </el-button>
+                <el-button size="small" @click="openSaveAsTemplate">
+                  <el-icon><CopyDocument /></el-icon>
+                  另存为
+                </el-button>
+                <el-tooltip content="删除当前模板" placement="top">
+                  <el-button
+                    size="small"
+                    type="danger"
+                    plain
+                    circle
+                    :disabled="!selectedTemplateId"
+                    aria-label="删除当前检测模板"
+                    @click="removeSelectedTemplate"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </div>
+            </div>
             <div v-if="sourceMode === 'ROBOT' && selectedRobotImage" class="config-source">
               {{ manualConfigSource }}
             </div>
@@ -90,13 +128,21 @@
           </div>
           <div class="result-body">
             <div v-if="manualResult" class="result-stack">
-              <el-alert
+              <div
                 v-if="manualResult.status === 'RUNNING'"
-                title="模型检测中，结果会自动刷新"
-                type="info"
-                show-icon
-                :closable="false"
-              />
+                class="running-progress"
+                role="status"
+                aria-live="polite"
+              >
+                <div class="running-progress__header">
+                  <strong>模型检测中</strong>
+                  <span>{{ manualElapsedLabel }}</span>
+                </div>
+                <div class="running-progress__track" aria-hidden="true">
+                  <span class="running-progress__indicator" />
+                </div>
+                <small>结果会自动刷新</small>
+              </div>
               <el-alert
                 v-if="manualResult.status === 'FAILED'"
                 :title="manualResult.errorMessage || '模型检测失败'"
@@ -112,16 +158,30 @@
                 show-icon
                 :closable="false"
               />
-              <el-progress
-                v-if="manualResult.status === 'RUNNING'"
-                :percentage="100"
-                :indeterminate="true"
-                :duration="3"
-              />
               <div v-if="manualResult.resultImageUrl" class="result-image">
                 <figure>
                   <figcaption>检测结果（所有目标已合并标注）</figcaption>
-                  <img :src="manualResult.resultImageUrl" alt="合并标注结果图" />
+                  <div class="result-image__canvas">
+                    <el-image
+                      ref="resultImageRef"
+                      :src="manualResult.resultImageUrl"
+                      :preview-src-list="[manualResult.resultImageUrl]"
+                      fit="contain"
+                      class="result-image__preview"
+                      alt="合并标注结果图"
+                    />
+                    <el-tooltip content="放大查看" placement="top">
+                      <el-button
+                        class="result-image__zoom"
+                        circle
+                        size="small"
+                        aria-label="放大查看检测结果"
+                        @click="openResultImagePreview"
+                      >
+                        <el-icon><ZoomIn /></el-icon>
+                      </el-button>
+                    </el-tooltip>
+                  </div>
                 </figure>
               </div>
               <div v-else-if="manualResult.status === 'RUNNING'" class="result-image">
@@ -202,12 +262,27 @@
         <el-button type="primary" :loading="importingImage" @click="importRobotImage">导入</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="saveTemplateDialogVisible" title="另存为检测模板" width="520px">
+      <el-form label-width="90px">
+        <el-form-item label="模板名称" required>
+          <el-input v-model="templateForm.name" maxlength="80" placeholder="例如：人员专项检测" />
+        </el-form-item>
+        <el-form-item label="模板说明">
+          <el-input v-model="templateForm.description" type="textarea" :rows="3" maxlength="300" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="saveTemplateDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="templateSaving" @click="createDetectionTemplate">保存模板</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Search, UploadFilled } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Check, CopyDocument, Delete, Search, UploadFilled, ZoomIn } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ListPagination from '@/components/ListPagination.vue'
 import DetectionConfig from '@/components/DetectionConfig.vue'
@@ -217,8 +292,10 @@ import { useRouteStore } from '@/stores/route'
 import { useRobotStore } from '@/stores/robot'
 import { useTaskStore } from '@/stores/task'
 import {
+  cloneDetectionItems,
   defaultCheckpointDetectionItems,
   ensureDetectionPrompts,
+  formatDetectionElapsed,
   resolveRobotImageDetectionItems,
 } from '@/utils/detectionStrategy'
 import {
@@ -254,7 +331,15 @@ const importingImage = ref(false)
 const importForm = reactive({ taskId: '', robotId: '', checkpointId: '', file: null as File | null })
 const manualItems = ref<DetectionItem[]>(defaultCheckpointDetectionItems())
 const manualConfigSource = ref('使用默认检查点检测配置')
+const selectedTemplateId = ref('')
+const saveTemplateDialogVisible = ref(false)
+const templateSaving = ref(false)
+const templateForm = reactive({ name: '', description: '' })
+const resultImageRef = ref<{ showPreview?: () => void } | null>(null)
+const manualRunStartedAt = ref<number | null>(null)
+const elapsedNow = ref(Date.now())
 let manualPollingTimer: ReturnType<typeof setInterval> | null = null
+let manualElapsedTimer: ReturnType<typeof setInterval> | null = null
 
 const selectedRobotImage = computed(() => detectionStore.images.find((item) => item.id === selectedRobotImageId.value))
 const activePreviewUrl = computed(() => sourceMode.value === 'LOCAL' ? previewUrl.value : selectedRobotImage.value?.imageUrl ?? '')
@@ -265,6 +350,7 @@ const importTask = computed(() => taskStore.getTaskById(importForm.taskId))
 const importRoute = computed(() => importTask.value ? routeStore.getRouteById(importTask.value.routeId) : undefined)
 const importCheckpoints = computed(() => importRoute.value?.checkpoints ?? [])
 const importRobotName = computed(() => robotStore.getRobotById(importForm.robotId)?.name ?? importForm.robotId)
+const checkpointTemplates = computed(() => detectionStore.templates.filter((template) => template.scope === 'CHECKPOINT'))
 
 const manualStatusLabel = computed(() => {
   if (!manualResult.value) return ''
@@ -280,8 +366,106 @@ const manualStatusTagType = computed(() => {
   return 'warning'
 })
 
+const manualElapsedLabel = computed(() => formatDetectionElapsed(
+  manualResult.value?.startedAt ?? manualRunStartedAt.value ?? undefined,
+  elapsedNow.value,
+))
+
+function openResultImagePreview() {
+  resultImageRef.value?.showPreview?.()
+}
+
 function updateManualItems(items: DetectionItem[]) {
   manualItems.value = items
+}
+
+function templatePayload(name: string, description: string) {
+  const items = manualItems.value.map((item) => ({ ...item }))
+  return {
+    name: name.trim(),
+    scope: 'CHECKPOINT' as const,
+    description: description.trim(),
+    items,
+    types: items.map((item) => item.type),
+    prompts: Object.fromEntries(items.filter((item) => item.prompt).map((item) => [item.type, item.prompt!])),
+  }
+}
+
+function applySelectedTemplate() {
+  const template = checkpointTemplates.value.find((item) => item.id === selectedTemplateId.value)
+  if (!template) return
+  manualItems.value = cloneDetectionItems(template.items)
+  manualConfigSource.value = `已加载模板“${template.name}”，本次修改需点击保存才会更新模板`
+}
+
+async function saveSelectedTemplate() {
+  const template = checkpointTemplates.value.find((item) => item.id === selectedTemplateId.value)
+  if (!template || !validateTemplateItems()) return
+  templateSaving.value = true
+  try {
+    await detectionStore.updateTemplate(template.id, templatePayload(template.name, template.description))
+    ElMessage.success('检测模板已保存')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '检测模板保存失败')
+  } finally {
+    templateSaving.value = false
+  }
+}
+
+function openSaveAsTemplate() {
+  if (!validateTemplateItems()) return
+  const selected = checkpointTemplates.value.find((item) => item.id === selectedTemplateId.value)
+  templateForm.name = selected ? `${selected.name} 副本` : ''
+  templateForm.description = selected?.description ?? ''
+  saveTemplateDialogVisible.value = true
+}
+
+async function createDetectionTemplate() {
+  if (!templateForm.name.trim() || !validateTemplateItems()) {
+    if (!templateForm.name.trim()) ElMessage.warning('请填写模板名称')
+    return
+  }
+  templateSaving.value = true
+  try {
+    const saved = await detectionStore.addTemplate(templatePayload(templateForm.name, templateForm.description))
+    selectedTemplateId.value = saved.id
+    manualConfigSource.value = `已加载模板“${saved.name}”`
+    saveTemplateDialogVisible.value = false
+    ElMessage.success('检测模板已创建')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '检测模板创建失败')
+  } finally {
+    templateSaving.value = false
+  }
+}
+
+async function removeSelectedTemplate() {
+  const template = checkpointTemplates.value.find((item) => item.id === selectedTemplateId.value)
+  if (!template) return
+  try {
+    await ElMessageBox.confirm(`确认删除检测模板“${template.name}”？`, '删除模板', { type: 'warning' })
+  } catch {
+    return
+  }
+  await detectionStore.removeTemplate(template.id)
+  selectedTemplateId.value = ''
+  manualItems.value = defaultCheckpointDetectionItems()
+  manualConfigSource.value = '使用默认检查点检测配置'
+  ElMessage.success('检测模板已删除')
+}
+
+function validateTemplateItems() {
+  if (!manualItems.value.length) {
+    ElMessage.warning('模板至少需要一个检测项')
+    return false
+  }
+  manualItems.value = cloneDetectionItems(manualItems.value)
+  const invalid = manualItems.value.find((item) => !item.name?.trim() || !item.displayLabel.trim() || !item.prompt?.trim())
+  if (invalid) {
+    ElMessage.warning('每个检测项都必须填写名称、框上名称和 Prompt')
+    return false
+  }
+  return true
 }
 
 function triggerFileInput() {
@@ -316,13 +500,14 @@ async function submitManualDetection() {
     ElMessage.warning('该原始图片已按保留策略清理，不能再次检测')
     return
   }
+  manualItems.value = cloneDetectionItems(manualItems.value)
   const enabled = manualItems.value.filter((item) => item.enabled)
   if (!enabled.length) {
     ElMessage.warning('请至少启用一个检测项')
     return
   }
-  if (enabled.some((item) => !item.displayLabel?.trim())) {
-    ElMessage.warning('已启用检测项必须填写框上目标名称')
+  if (enabled.some((item) => !item.name?.trim() || !item.displayLabel?.trim() || !item.prompt?.trim())) {
+    ElMessage.warning('已启用检测项必须填写名称、框上名称和 Prompt')
     return
   }
 
@@ -348,6 +533,13 @@ async function submitManualDetection() {
 
 function startManualDetectionPolling(requestId: string) {
   stopManualDetectionPolling()
+  manualRunStartedAt.value ??= Date.now()
+  elapsedNow.value = Date.now()
+  if (!manualElapsedTimer) {
+    manualElapsedTimer = setInterval(() => {
+      elapsedNow.value = Date.now()
+    }, 1000)
+  }
   manualPollingTimer = setInterval(() => {
     void refreshManualDetection(requestId)
   }, 3000)
@@ -360,6 +552,8 @@ async function refreshManualDetection(requestId: string) {
     manualResult.value = result
     if (result.status === 'RUNNING') return
     stopManualDetectionPolling()
+    stopManualElapsedTimer()
+    manualRunStartedAt.value = null
     detecting.value = false
     if (result.status === 'SUCCEEDED') {
       ElMessage.success('模型检测完成')
@@ -368,8 +562,17 @@ async function refreshManualDetection(requestId: string) {
     }
   } catch (error) {
     stopManualDetectionPolling()
+    stopManualElapsedTimer()
+    manualRunStartedAt.value = null
     detecting.value = false
     ElMessage.error(error instanceof Error ? error.message : '查询检测结果失败')
+  }
+}
+
+function stopManualElapsedTimer() {
+  if (manualElapsedTimer) {
+    clearInterval(manualElapsedTimer)
+    manualElapsedTimer = null
   }
 }
 
@@ -382,6 +585,8 @@ function stopManualDetectionPolling() {
 
 function resetManualDetection() {
   stopManualDetectionPolling()
+  stopManualElapsedTimer()
+  manualRunStartedAt.value = null
   selectedFile.value = null
   selectedRobotImageId.value = ''
   manualResult.value = null
@@ -416,6 +621,8 @@ function onRobotTaskChange() {
 
 async function selectRobotImage(image: RobotInspectionImage) {
   stopManualDetectionPolling()
+  stopManualElapsedTimer()
+  manualRunStartedAt.value = null
   selectedRobotImageId.value = image.id
   manualResult.value = null
   detecting.value = false
@@ -504,6 +711,8 @@ function runAssociation(run: DetectionRun) {
 
 function openRun(run: DetectionRun) {
   stopManualDetectionPolling()
+  stopManualElapsedTimer()
+  manualRunStartedAt.value = null
   manualResult.value = run
   detecting.value = run.status === 'RUNNING'
   if (run.status === 'RUNNING') startManualDetectionPolling(run.runId)
@@ -514,17 +723,20 @@ function bboxText(bbox: number[]) {
 }
 
 onMounted(() => {
+  void detectionStore.load({ size: 100 })
   void detectionStore.loadRuns({ size: 20 })
 })
 
 onBeforeUnmount(() => {
   stopManualDetectionPolling()
+  stopManualElapsedTimer()
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
 })
 
 watch(sourceMode, (mode) => {
   resetManualDetection()
   manualItems.value = defaultCheckpointDetectionItems()
+  selectedTemplateId.value = ''
   manualConfigSource.value = '使用默认检查点检测配置'
   if (mode === 'ROBOT') void loadRobotImages()
 })
@@ -616,6 +828,25 @@ watch(sourceMode, (mode) => {
 .config-body {
   display: flex;
   flex-direction: column;
+}
+
+.template-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.template-toolbar .el-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.template-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .config-source {
@@ -757,6 +988,59 @@ watch(sourceMode, (mode) => {
   gap: 14px;
 }
 
+.running-progress {
+  padding: 12px 14px;
+  border: 1px solid #a0cfff;
+  border-radius: 6px;
+  background: #ecf5ff;
+  color: #337ecc;
+}
+
+.running-progress__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.running-progress__header span,
+.running-progress small {
+  font-size: 12px;
+}
+
+.running-progress__track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d9ecff;
+}
+
+.running-progress__indicator {
+  display: block;
+  width: 28%;
+  height: 100%;
+  border-radius: inherit;
+  background: #409eff;
+  animation: running-progress-slide 1.5s ease-in-out infinite;
+}
+
+.running-progress small {
+  display: block;
+  margin-top: 8px;
+  color: #606266;
+}
+
+@keyframes running-progress-slide {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(360%);
+  }
+}
+
 .result-image figure {
   margin: 0;
   overflow: hidden;
@@ -765,18 +1049,47 @@ watch(sourceMode, (mode) => {
 }
 
 .result-image figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 8px 10px;
   font-size: 12px;
   color: #667085;
   border-bottom: 1px solid var(--panel-border);
 }
 
-.result-image img {
+.result-image__canvas {
+  position: relative;
+}
+
+.result-image__preview {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  object-fit: contain;
   background: #0f172a;
+}
+
+.result-image__preview :deep(img) {
+  display: block;
+  width: 100%;
+  object-fit: contain;
+}
+
+.result-image__zoom {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  border-color: rgba(255, 255, 255, 0.8);
+  background: rgba(15, 23, 42, 0.7);
+  color: #fff;
+}
+
+.result-image__zoom:hover,
+.result-image__zoom:focus-visible {
+  border-color: #fff;
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
 }
 
 .history-panel {
