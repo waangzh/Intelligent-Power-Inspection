@@ -29,7 +29,10 @@ App({
     if (invalidateSessionIfApiBaseChanged()) {
       console.warn('[power-inspection] API 地址已变更，已清除旧登录状态')
     }
-    this.restoreSession()
+    // 延迟恢复会话，避免 onLaunch 阶段 reLaunch 导致模拟器白屏/启动失败
+    const restore = () => this.restoreSession()
+    if (typeof wx.nextTick === 'function') wx.nextTick(restore)
+    else setTimeout(restore, 100)
   },
 
   reloadVisiblePages() {
@@ -61,11 +64,15 @@ App({
           this.clearUser({ redirect: true })
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn('[power-inspection] restoreSession failed', err?.message || err)
         if (!api.getSession()) {
-          this.clearUser({ redirect: true })
+          this.clearUser({ redirect: false })
           return
         }
+        // 启动时在登录页且网络失败，不 reLaunch，避免模拟器白屏
+        const route = getCurrentPages().slice(-1)[0]?.route || ''
+        if (route.includes('auth/login')) return
         this.refreshBadges()
         this.scheduleEnterMainApp()
       })
@@ -190,27 +197,18 @@ App({
   },
 
   applyTabBarBadges() {
-    const badges = getDisplayBadges(this.globalData)
+    const emptyBadges = { alarms: 0, workorders: 0, profile: 0 }
     const tabBar = this.globalData.tabBarComponent
     if (tabBar && typeof tabBar.updateBadges === 'function') {
-      tabBar.updateBadges(badges)
+      tabBar.updateBadges(emptyBadges)
     } else if (tabBar && typeof tabBar.syncBadges === 'function') {
       tabBar.syncBadges()
-    } else {
-      try {
-        if (badges.alarms > 0) {
-          wx.setTabBarBadge({ index: 2, text: badges.alarms > 99 ? '99+' : String(badges.alarms) })
-        } else {
-          wx.removeTabBarBadge({ index: 2 })
-        }
-        if (badges.profile > 0) {
-          wx.setTabBarBadge({ index: 4, text: badges.profile > 99 ? '99+' : String(badges.profile) })
-        } else {
-          wx.removeTabBarBadge({ index: 4 })
-        }
-      } catch (e) {
-        // tab bar may not be ready
-      }
+    }
+    try {
+      wx.removeTabBarBadge({ index: 2 })
+      wx.removeTabBarBadge({ index: 4 })
+    } catch (e) {
+      // ignore
     }
     this.refreshCurrentInlineTabBar()
   },

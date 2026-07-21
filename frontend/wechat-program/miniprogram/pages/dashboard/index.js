@@ -64,12 +64,8 @@ Page({
       { label: '站点数量', value: counts.sites, trend: `覆盖 ${counts.sites} 座变电站`, up: true },
       { label: '巡检路线', value: counts.routes, trend: `共 ${counts.routes} 条路线`, up: true },
       { label: '进行中任务', value: counts.activeTasks, trend: '实时更新', up: true },
+      { label: '未确认告警', value: unack, trend: unack ? '需及时处理' : '暂无待处理', up: !unack },
     ]
-    if (!this.data.isDispatcher) {
-      stats.push({ label: '未确认告警', value: unack, trend: unack ? '需及时处理' : '暂无待处理', up: !unack })
-    } else {
-      stats.push({ label: '工单处置', value: '—', trend: '请至工单 Tab 接单', up: true })
-    }
 
       this.setData({
         stats,

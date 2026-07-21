@@ -7,6 +7,16 @@
   border-radius: 16rpx;
 }
 
+.load-error {
+  margin-bottom: 24rpx;
+  padding: 28rpx;
+  color: #b42318;
+  background: #fef3f2;
+  border: 1rpx solid #fecdca;
+  line-height: 1.6;
+  font-size: 26rpx;
+}
+
 .scope-tab {
   flex: 1;
   display: flex;
@@ -246,6 +256,32 @@
 .mode-chip { flex: 1; text-align: center; padding: 14rpx 20rpx; background: var(--pi-bg-muted); border-radius: 12rpx; font-size: 24rpx; color: var(--pi-muted); }
 .mode-chip.on { background: var(--pi-primary); color: #fff; }
 .form-actions { display: flex; gap: 16rpx; justify-content: flex-end; margin-top: 8rpx; }
+.resolve-panel {
+  display: flex;
+  flex-direction: column;
+  width: 90%;
+  max-height: 85vh;
+  padding: 32rpx 32rpx 24rpx;
+  overflow: hidden;
+}
+.resolve-title {
+  flex-shrink: 0;
+  margin-bottom: 16rpx;
+}
+.resolve-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: calc(85vh - 200rpx);
+}
+.resolve-actions {
+  flex-shrink: 0;
+  padding-top: 24rpx;
+  margin-top: 8rpx;
+  border-top: 1rpx solid var(--pi-border-soft);
+}
+.resolve-actions button {
+  min-width: 180rpx;
+}
 .pending-item { padding: 16rpx 0; border-bottom: 1rpx solid var(--pi-border-soft); }
 .pending-item:last-child { border-bottom: none; }
 .pending-msg { margin: 8rpx 0; font-size: 26rpx; color: var(--pi-text); }

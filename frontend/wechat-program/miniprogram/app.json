@@ -19,6 +19,7 @@
     "pages/profile/activity/index",
     "pages/profile/settings/index"
   ],
+  "subPackages": [],
   "window": {
     "navigationBarBackgroundColor": "#071e42",
     "navigationBarTitleText": "电力智能巡检",

@@ -22,7 +22,6 @@ const TAB_WORKORDERS = {
   text: '工单',
   iconPath: '/assets/tabbar/workorders.png',
   selectedIconPath: '/assets/tabbar/workorders-active.png',
-  badgeKey: 'workorders',
 }
 
 const TAB_ALARMS = {
@@ -30,7 +29,6 @@ const TAB_ALARMS = {
   text: '告警',
   iconPath: '/assets/tabbar/alarms.png',
   selectedIconPath: '/assets/tabbar/alarms-active.png',
-  badgeKey: 'alarms',
 }
 
 const TAB_TASKS = {
@@ -52,7 +50,6 @@ const TAB_PROFILE = {
   text: '我的',
   iconPath: '/assets/tabbar/profile.png',
   selectedIconPath: '/assets/tabbar/profile-active.png',
-  badgeKey: 'profile',
 }
 
 /** 调度员：总览 / 工单 / 监控 / 任务 / 我的（无告警中心） */

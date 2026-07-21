@@ -68,6 +68,7 @@ Page({
     poolCount: 0,
     mineCount: 0,
     emptyHint: '暂无工单',
+    loadError: '',
     isDispatcher: false,
     isViewer: false,
     pageTitle: '工单管理',
@@ -132,15 +133,17 @@ Page({
   },
 
   async load() {
+    this.setData({ loadError: '' })
     try {
       const { user, role } = require('../../utils/session-user').resolveSession()
-      const userRef = user || this.data.user || getApp().globalData.user
+      const userRef = { ...(user || this.data.user || getApp().globalData.user || {}), role }
       const perms = getApp().globalData.permissions
       const canCreate = workOrderPerm.canCreateWorkOrder(userRef, perms)
       let pendingAlarms = []
       let orders = []
 
       const isDispatcherRole = role === 'DISPATCHER'
+      const isViewerRole = role === 'VIEWER'
       const [sites, allAlarms] = await Promise.all([
         api.getSites().catch(() => []),
         isDispatcherRole ? Promise.resolve([]) : api.getAlarms().catch(() => []),
@@ -171,7 +174,7 @@ Page({
             time: formatDateTimeShort(a.createdAt),
           }))
       } else {
-        orders = await api.getWorkOrders().catch(() => [])
+        orders = await api.getWorkOrders()
       }
       orders = workOrderPerm.filterVisibleWorkOrders(orders, userRef)
       orders = orders.map((o) => {
@@ -199,10 +202,15 @@ Page({
         ? orders.filter((o) => workOrderPerm.isWorkOrderAssignee(o, userRef)).length
         : 0
 
-      this.setData({ orders, poolCount, mineCount, pendingAlarms, isDispatcher })
+      this.setData({ orders, poolCount, mineCount, pendingAlarms, isDispatcher, isViewer: isViewerRole, loadError: '' })
       this.rebuildFilters()
     } catch (e) {
-      wx.showToast({ title: e.message || '加载失败', icon: 'none' })
+      const message = e.message || '加载失败'
+      const loadError = message.includes('无权限')
+        ? '当前后端未开放观察员工单查看权限，请更新并重启后端服务后重新登录'
+        : message
+      this.setData({ loadError, orders: [], filtered: [] })
+      wx.showToast({ title: loadError, icon: 'none', duration: 3000 })
     }
   },
 
@@ -462,6 +470,10 @@ Page({
     if (submittingResolve) return
     if (!resolveForm.faultType || !resolveForm.handlingMethod || !resolveForm.testResult.trim()) {
       wx.showToast({ title: '请填写故障类型、处理方式、试验结果', icon: 'none' })
+      return
+    }
+    if (resolveForm.testResult.trim().length < 4) {
+      wx.showToast({ title: '试验结果过短，请补充说明', icon: 'none' })
       return
     }
     if (!resolveForm.conclusion) {

@@ -1,3 +1,5 @@
+const { DEFAULT_CENTER, normalizeGeoPoint, toMapPoint } = require('../../utils/geo-coord')
+
 Component({
   properties: {
     center: { type: Object, value: { lat: 30.2741, lng: 120.1551 } },
@@ -9,8 +11,8 @@ Component({
     height: { type: Number, value: 360 },
   },
   data: {
-    latitude: 30.2741,
-    longitude: 120.1551,
+    latitude: DEFAULT_CENTER.lat,
+    longitude: DEFAULT_CENTER.lng,
     scale: 16,
     markers: [],
     polyline: [],
@@ -24,7 +26,7 @@ Component({
   },
   methods: {
     render() {
-      const center = this.properties.center || { lat: 30.2741, lng: 120.1551 }
+      const center = normalizeGeoPoint(this.properties.center)
       const route = this.properties.route
       const areas = this.properties.areas || []
       const robot = this.properties.robotPosition
@@ -33,10 +35,12 @@ Component({
 
       if (route && route.checkpoints) {
         route.checkpoints.forEach((cp) => {
+          const pos = toMapPoint(cp.position)
+          if (!pos) return
           markers.push({
             id: id++,
-            latitude: cp.position.lat,
-            longitude: cp.position.lng,
+            latitude: pos.latitude,
+            longitude: pos.longitude,
             title: cp.name,
             label: { content: String(cp.seq), color: '#fff', bgColor: '#ff8a00', padding: 4, borderRadius: 8 },
             width: 24,
@@ -46,11 +50,12 @@ Component({
         })
       }
 
-      if (robot) {
+      const robotPoint = toMapPoint(robot)
+      if (robotPoint) {
         markers.push({
           id: id++,
-          latitude: robot.lat,
-          longitude: robot.lng,
+          latitude: robotPoint.latitude,
+          longitude: robotPoint.longitude,
           width: 28,
           height: 28,
           label: { content: '机', color: '#fff', bgColor: '#12b76a', padding: 6, borderRadius: 14 },
@@ -59,20 +64,27 @@ Component({
 
       const polyline = []
       if (route && route.path && route.path.length > 1) {
-        polyline.push({
-          points: route.path.map((p) => ({ latitude: p.lat, longitude: p.lng })),
-          color: '#1768f2',
-          width: 4,
-          arrowLine: true,
-        })
+        const points = route.path.map((p) => toMapPoint(p)).filter(Boolean)
+        if (points.length > 1) {
+          polyline.push({
+            points,
+            color: '#1768f2',
+            width: 4,
+            arrowLine: true,
+          })
+        }
       }
 
-      const polygons = areas.map((a, i) => ({
-        points: (a.polygon || []).map((p) => ({ latitude: p.lat, longitude: p.lng })),
-        strokeWidth: 2,
-        strokeColor: '#1768f288',
-        fillColor: '#1768f222',
-      }))
+      const polygons = areas.map((a) => {
+        const points = (a.polygon || []).map((p) => toMapPoint(p)).filter(Boolean)
+        if (points.length < 3) return null
+        return {
+          points,
+          strokeWidth: 2,
+          strokeColor: '#1768f288',
+          fillColor: '#1768f222',
+        }
+      }).filter(Boolean)
 
       this.setData({
         latitude: center.lat,

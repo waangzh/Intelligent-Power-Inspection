@@ -7,6 +7,7 @@ const {
   canShowTaskCancel,
 } = require('../../utils/permission')
 const { syncTabBar, refreshTabBarBadges } = require('../../utils/tab-page')
+const { DEFAULT_CENTER, isValidGeoPoint, normalizeGeoPoint, cloneCenter } = require('../../utils/geo-coord')
 
 Page({
   data: {
@@ -18,7 +19,7 @@ Page({
     activeRoute: null,
     activeRouteName: '',
     activeRobotName: '',
-    mapCenter: { lat: 30.2741, lng: 120.1551 },
+    mapCenter: cloneCenter(DEFAULT_CENTER),
     robotPos: null,
     showCreate: false,
     form: { name: '', routeIndex: 0, robotIndex: 0 },
@@ -70,15 +71,18 @@ Page({
       let activeRoute = null
       let activeRouteName = ''
       let activeRobotName = ''
-      let mapCenter = { lat: 30.2741, lng: 120.1551 }
+      let mapCenter = cloneCenter(DEFAULT_CENTER)
       let robotPos = null
       if (activeTask) {
         activeRoute = routes.find((r) => r.id === activeTask.routeId) || null
         const robot = robots.find((r) => r.id === activeTask.robotId)
         activeRouteName = activeRoute?.name || '-'
         activeRobotName = robot?.name || '-'
-        mapCenter = activeRoute?.path?.[0] || mapCenter
-        robotPos = robot?.position || null
+        const site = activeRoute ? sites.find((s) => s.id === activeRoute.siteId) : null
+        const fallbackCenter = normalizeGeoPoint(site?.center, DEFAULT_CENTER)
+        const routeStart = activeRoute?.path?.[0]
+        mapCenter = isValidGeoPoint(routeStart) ? normalizeGeoPoint(routeStart, fallbackCenter) : fallbackCenter
+        robotPos = isValidGeoPoint(robot?.position) ? normalizeGeoPoint(robot.position, fallbackCenter) : null
       }
       this.setData({
         tasks: decoratedTasks,

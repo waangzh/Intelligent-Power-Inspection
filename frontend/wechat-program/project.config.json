@@ -30,7 +30,7 @@
     "enhance": true,
     "useMultiFrameRuntime": true,
     "useApiHook": true,
-    "useApiHostProcess": true,
+    "useApiHostProcess": false,
     "showShadowRootInWxmlPanel": true,
     "packNpmManually": false,
     "enableEngineNative": false,
@@ -52,7 +52,7 @@
     "disableSWC": true
   },
   "compileType": "miniprogram",
-  "libVersion": "3.16.1",
+  "libVersion": "2.30.4",
   "appid": "wx1c7328cd369d11ba",
   "projectname": "power-inspection-wechat",
   "condition": {},

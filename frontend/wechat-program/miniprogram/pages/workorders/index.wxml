@@ -1,6 +1,8 @@
 <view class="container">
   <page-header title="{{pageTitle}}" description="{{pageDesc}}" />
 
+  <view wx:if="{{loadError}}" class="card load-error">{{loadError}}</view>
+
   <view class="card pending-alarms" wx:if="{{canCreate && pendingAlarms.length}}">
     <view class="card-title flex-between">
       <text>待转工单告警</text>
@@ -128,50 +130,52 @@
   </view>
 
   <view class="modal-mask" wx:if="{{showResolve}}">
-    <view class="modal-panel form-panel" catchtap="stop">
-      <view class="card-title">提交现场处理结果</view>
-      <view class="form-item required">
-        <text class="form-label">故障类型</text>
-        <picker mode="selector" range="{{faultTypeOptions}}" value="{{resolveForm.faultTypeIndex}}" bindchange="onFaultTypeChange">
-          <view class="form-picker">{{resolveForm.faultType || '请选择故障类型'}}</view>
-        </picker>
-      </view>
-      <view class="form-item required">
-        <text class="form-label">处理方式</text>
-        <picker mode="selector" range="{{handlingMethodOptions}}" value="{{resolveForm.handlingMethodIndex}}" bindchange="onHandlingMethodChange">
-          <view class="form-picker">{{resolveForm.handlingMethod || '请选择处理方式'}}</view>
-        </picker>
-      </view>
-      <view class="form-item">
-        <text class="form-label">更换部件</text>
-        <input class="form-input" placeholder="部件名称/型号（选填）" placeholder-class="form-placeholder" value="{{resolveForm.replacedParts}}" data-field="replacedParts" bindinput="onResolveFieldInput" />
-      </view>
-      <view class="form-item required">
-        <text class="form-label">试验结果</text>
-        <textarea class="form-textarea" placeholder="如：复测正常、绝缘合格等" placeholder-class="form-placeholder" value="{{resolveForm.testResult}}" data-field="testResult" bindinput="onResolveFieldInput" />
-      </view>
-      <view class="form-item required">
-        <text class="form-label">处理结论</text>
-        <picker mode="selector" range="{{conclusionOptions}}" value="{{resolveForm.conclusionIndex}}" bindchange="onConclusionChange">
-          <view class="form-picker">{{conclusionOptions[resolveForm.conclusionIndex] || '请选择处理结论'}}</view>
-        </picker>
-      </view>
-      <view class="form-item {{needsFollowUpPlan ? 'required' : ''}}">
-        <text class="form-label">补充说明</text>
-        <textarea class="form-textarea" placeholder="{{needsFollowUpPlan ? '部分消缺/未消缺时必须填写遗留风险与后续计划' : '其他现场情况'}}" placeholder-class="form-placeholder" value="{{resolveForm.remarks}}" data-field="remarks" bindinput="onResolveFieldInput" />
-      </view>
-      <view class="form-item">
-        <text class="form-label">现场照片</text>
-        <text class="photo-hint">建议拍摄故障点、处理前后对比，最多 3 张</text>
-        <view class="photo-grid">
-          <view class="photo-item" wx:for="{{resolveForm.photoItems}}" wx:key="localPath">
-            <image class="photo-thumb" src="{{item.localPath}}" mode="aspectFill" bindtap="previewResolvePhoto" data-index="{{index}}" />
-            <text class="photo-remove" catchtap="removePhoto" data-index="{{index}}">×</text>
-          </view>
-          <view class="photo-add" wx:if="{{resolveForm.photoItems.length < 3}}" bindtap="choosePhotos">+</view>
+    <view class="modal-panel form-panel resolve-panel" catchtap="stop">
+      <view class="card-title resolve-title">提交现场处理结果</view>
+      <scroll-view class="resolve-scroll" scroll-y>
+        <view class="form-item required">
+          <text class="form-label">故障类型</text>
+          <picker mode="selector" range="{{faultTypeOptions}}" value="{{resolveForm.faultTypeIndex}}" bindchange="onFaultTypeChange">
+            <view class="form-picker">{{resolveForm.faultType || '请选择故障类型'}}</view>
+          </picker>
         </view>
-      </view>
-      <view class="form-actions">
+        <view class="form-item required">
+          <text class="form-label">处理方式</text>
+          <picker mode="selector" range="{{handlingMethodOptions}}" value="{{resolveForm.handlingMethodIndex}}" bindchange="onHandlingMethodChange">
+            <view class="form-picker">{{resolveForm.handlingMethod || '请选择处理方式'}}</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">更换部件</text>
+          <input class="form-input" placeholder="部件名称/型号（选填）" placeholder-class="form-placeholder" value="{{resolveForm.replacedParts}}" data-field="replacedParts" bindinput="onResolveFieldInput" />
+        </view>
+        <view class="form-item required">
+          <text class="form-label">试验结果</text>
+          <textarea class="form-textarea" placeholder="如：复测正常、绝缘合格等（至少 4 字）" placeholder-class="form-placeholder" value="{{resolveForm.testResult}}" data-field="testResult" bindinput="onResolveFieldInput" />
+        </view>
+        <view class="form-item required">
+          <text class="form-label">处理结论</text>
+          <picker mode="selector" range="{{conclusionOptions}}" value="{{resolveForm.conclusionIndex}}" bindchange="onConclusionChange">
+            <view class="form-picker">{{conclusionOptions[resolveForm.conclusionIndex] || '请选择处理结论'}}</view>
+          </picker>
+        </view>
+        <view class="form-item {{needsFollowUpPlan ? 'required' : ''}}">
+          <text class="form-label">补充说明</text>
+          <textarea class="form-textarea" placeholder="{{needsFollowUpPlan ? '部分消缺/未消缺时必须填写遗留风险与后续计划' : '其他现场情况'}}" placeholder-class="form-placeholder" value="{{resolveForm.remarks}}" data-field="remarks" bindinput="onResolveFieldInput" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">现场照片</text>
+          <text class="photo-hint">建议拍摄故障点、处理前后对比，最多 3 张</text>
+          <view class="photo-grid">
+            <view class="photo-item" wx:for="{{resolveForm.photoItems}}" wx:key="localPath">
+              <image class="photo-thumb" src="{{item.localPath}}" mode="aspectFill" bindtap="previewResolvePhoto" data-index="{{index}}" />
+              <text class="photo-remove" catchtap="removePhoto" data-index="{{index}}">×</text>
+            </view>
+            <view class="photo-add" wx:if="{{resolveForm.photoItems.length < 3}}" bindtap="choosePhotos">+</view>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="form-actions resolve-actions">
         <button size="mini" bindtap="closeResolve">取消</button>
         <button size="mini" type="primary" loading="{{submittingResolve}}" disabled="{{submittingResolve}}" bindtap="submitResolve">提交复核</button>
       </view>

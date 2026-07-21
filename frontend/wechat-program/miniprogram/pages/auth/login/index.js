@@ -16,7 +16,18 @@ Page({
     if (options.redirect) this.setData({ redirect: decodeURIComponent(options.redirect) })
     if (api.getSession()) {
       this.setData({ entering: true, enterText: '正在进入系统…' })
+      // 自动登录超时则回到登录表单，避免一直卡在「正在进入系统」
+      this._enterTimer = setTimeout(() => {
+        if (this.data.entering && !getApp().globalData.user) {
+          this.setData({ entering: false, loading: false })
+          wx.showToast({ title: '自动登录失败，请手动登录', icon: 'none' })
+        }
+      }, 8000)
     }
+  },
+
+  onUnload() {
+    if (this._enterTimer) clearTimeout(this._enterTimer)
   },
 
   onShow() {

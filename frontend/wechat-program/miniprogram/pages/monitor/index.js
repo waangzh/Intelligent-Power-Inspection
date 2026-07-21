@@ -1,6 +1,7 @@
 const api = require('../../services/index')
 const { resolveRobotPresence } = require('../../utils/robot-status')
 const { syncTabBar, refreshTabBarBadges } = require('../../utils/tab-page')
+const { DEFAULT_CENTER, isValidGeoPoint, normalizeGeoPoint, cloneCenter } = require('../../utils/geo-coord')
 
 Page({
   data: {
@@ -11,7 +12,7 @@ Page({
     selectedId: '',
     selected: null,
     activeRoute: null,
-    mapCenter: { lat: 30.2741, lng: 120.1551 },
+    mapCenter: cloneCenter(DEFAULT_CENTER),
     robotPos: null,
     bridgeOnline: false,
     videoHint: '暂无视频流',
@@ -60,7 +61,9 @@ Page({
       const task = tasks.find((t) => t.robotId === selected.id && ['RUNNING', 'PAUSED', 'DISPATCHED', 'MANUAL_TAKEOVER'].includes(t.status))
       const activeRoute = task ? routes.find((r) => r.id === task.routeId) : null
       const siteCenter = selected.siteId ? sites.find((s) => s.id === selected.siteId)?.center : null
-      const mapCenter = selected.position || siteCenter || { lat: 30.2741, lng: 120.1551 }
+      const fallbackCenter = normalizeGeoPoint(siteCenter, DEFAULT_CENTER)
+      const mapCenter = isValidGeoPoint(selected.position) ? normalizeGeoPoint(selected.position, fallbackCenter) : fallbackCenter
+      const robotPos = isValidGeoPoint(selected.position) ? normalizeGeoPoint(selected.position, fallbackCenter) : null
       const bridgeOnline = telemetry?.bridgeReachable === true && telemetry?.online === true
       this.setData({
         robots: list,
@@ -70,7 +73,7 @@ Page({
         selected: { ...selected, telemetry: telemetry || selected.telemetry || null },
         activeRoute,
         mapCenter,
-        robotPos: selected.position || null,
+        robotPos: robotPos,
         bridgeOnline,
         videoHint: bridgeOnline
           ? `Bridge 在线 · ${telemetry?.systemMode || '运行中'}`

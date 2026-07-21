@@ -19,26 +19,11 @@
     </view>
   </view>
 
-  <view class="card chart-row" wx:if="{{!isDispatcher}}">
+  <view class="card chart-row">
     <view class="chart-half">
       <view class="card-title">告警趋势（7日）</view>
       <simple-chart type="line" data="{{alarmChartData}}" />
     </view>
-    <view class="chart-half">
-      <view class="card-title">任务完成率</view>
-      <simple-chart type="gauge" value="{{completionRate}}" title="完成率" />
-    </view>
-  </view>
-
-  <view class="card" wx:if="{{isDispatcher}}">
-    <view class="card-title flex-between">
-      <text>工单处置</text>
-      <text class="link" bindtap="go" data-url="/pages/workorders/index">接单大厅</text>
-    </view>
-    <view class="empty-hint">待接工单与现场处置请进入「工单」Tab</view>
-  </view>
-
-  <view class="card chart-row" wx:if="{{isDispatcher}}">
     <view class="chart-half">
       <view class="card-title">任务完成率</view>
       <simple-chart type="gauge" value="{{completionRate}}" title="完成率" />

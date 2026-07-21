@@ -261,8 +261,9 @@ function request({ url, method = 'GET', data, auth = true, headers = {}, retried
           reject(new Error(`HTTP ${res.statusCode}`))
         }
       },
-      fail() {
-        reject(new Error('网络异常，请检查后端服务是否启动'))
+      fail(err) {
+        const detail = err?.errMsg || '网络请求失败'
+        reject(new Error(`${detail} → ${baseUrl}${url}`))
       },
     })
   })
@@ -354,8 +355,9 @@ function uploadFile({ url, filePath, name = 'file', formData = {}, auth = true, 
         }
         reject(new Error(`HTTP ${res.statusCode}`))
       },
-      fail() {
-        reject(new Error('网络异常，请检查后端服务是否启动'))
+      fail(err) {
+        const detail = err?.errMsg || '网络请求失败'
+        reject(new Error(`${detail} → ${baseUrl}${url}`))
       },
     })
   })

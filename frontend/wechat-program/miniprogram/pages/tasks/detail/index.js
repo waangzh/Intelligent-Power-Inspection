@@ -9,6 +9,7 @@ const {
 } = require('../../../utils/permission')
 const { formatDateTime } = require('../../../utils/date-time')
 const { formatBusinessMessage } = require('../../../utils/display-text')
+const { DEFAULT_CENTER, isValidGeoPoint, normalizeGeoPoint, cloneCenter } = require('../../../utils/geo-coord')
 
 const EVENT_LABELS = {
   DISPATCH: '下发', ARRIVE: '到点', INSPECT: '采集', DETECT: '检测',
@@ -27,7 +28,7 @@ Page({
     route: null,
     routeName: '-',
     robotName: '-',
-    mapCenter: { lat: 30.2741, lng: 120.1551 },
+    mapCenter: cloneCenter(DEFAULT_CENTER),
     robotPos: null,
     checkpointTotal: 0,
     createdLabel: '-',
@@ -80,13 +81,16 @@ Page({
       evType: EVENT_TYPES[e.type] || 'primary',
       message: formatBusinessMessage(e.message),
     }))
-    const mapCenter = route?.path?.[0] || { lat: 30.2741, lng: 120.1551 }
+    const fallbackCenter = normalizeGeoPoint(null, DEFAULT_CENTER)
+    const routeStart = route?.path?.[0]
+    const mapCenter = isValidGeoPoint(routeStart) ? normalizeGeoPoint(routeStart, fallbackCenter) : fallbackCenter
+    const robotPos = isValidGeoPoint(robot?.position) ? normalizeGeoPoint(robot.position, fallbackCenter) : null
     this.setData({
       task,
       route,
       routeName: route?.name || '-',
       robotName: robot?.name || '-',
-      robotPos: robot?.position || null,
+      robotPos,
       checkpointTotal: route?.checkpoints?.length || 0,
       createdLabel: task ? fmt(task.createdAt) : '-',
       startedLabel: task ? fmt(task.startedAt) : '-',
