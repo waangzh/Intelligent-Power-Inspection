@@ -115,4 +115,21 @@ class DetectionAlarmServiceTests {
     assertThat(created).singleElement().satisfies(alarm ->
         assertThat(alarm).containsEntry("itemId", "person-risk").containsEntry("severity", "HIGH"));
   }
+
+  @Test
+  void fallsBackToTypeAndPromptForLegacyFindingWithoutItemId() {
+    LocateAnythingFinding finding = new LocateAnythingFinding(
+        "FIRE", "定位明火", 0.0, List.of(5, 6, 20, 30), "明火", null, Map.of());
+    List<Map<String, Object>> detections = List.of(
+        Map.of("itemId", "fire-risk", "type", "FIRE", "prompt", "定位明火",
+            "enabled", true, "alarmMode", "ON_FINDING", "alarmSeverity", "HIGH"));
+    when(alarmRepository.existsByFindingKey("run-3:fire-risk:[5, 6, 20, 30]")).thenReturn(false);
+    when(alarmService.create(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    List<Map<String, Object>> created = service.createAlarms(
+        "run-3", "DETECTION_RUN", Map.of(), detections, List.of(finding));
+
+    assertThat(created).singleElement().satisfies(alarm ->
+        assertThat(alarm).containsEntry("itemId", "fire-risk").containsEntry("severity", "HIGH"));
+  }
 }

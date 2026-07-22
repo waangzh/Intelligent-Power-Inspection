@@ -85,11 +85,18 @@ public class DetectionAlarmService {
     if (!StringUtils.hasText(findingItemId) && finding.rawResult() != null) {
       findingItemId = text(finding.rawResult().get("itemId"));
     }
-    if (!StringUtils.hasText(findingItemId)) return null;
-    String expectedItemId = findingItemId;
+    if (StringUtils.hasText(findingItemId)) {
+      String expectedItemId = findingItemId;
+      return detections.stream()
+          .filter(item -> !Boolean.FALSE.equals(item.get("enabled")))
+          .filter(item -> expectedItemId.equals(text(item.get("itemId"))))
+          .findFirst().orElse(null);
+    }
     return detections.stream()
         .filter(item -> !Boolean.FALSE.equals(item.get("enabled")))
-        .filter(item -> expectedItemId.equals(text(item.get("itemId"))))
+        .filter(item -> text(item.get("type")) != null && text(item.get("type")).equals(finding.type()))
+        .filter(item -> !StringUtils.hasText(text(item.get("prompt")))
+            || text(item.get("prompt")).equals(finding.prompt()))
         .findFirst().orElse(null);
   }
 
