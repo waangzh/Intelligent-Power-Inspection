@@ -99,32 +99,109 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="siteDialogVisible" :title="editingSite ? '编辑站点' : '新建站点'" width="480px">
-      <el-form :model="siteForm" label-width="90px">
-        <el-form-item label="站点名称" required>
-          <el-input v-model="siteForm.name" />
-        </el-form-item>
-        <el-form-item label="地址">
-          <el-input v-model="siteForm.address" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="siteForm.description" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="中心纬度">
-          <el-input-number v-model="siteForm.center.lat" :step="0.0001" :precision="4" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="中心经度">
-          <el-input-number v-model="siteForm.center.lng" :step="0.0001" :precision="4" style="width: 100%" />
-        </el-form-item>
-        <el-form-item label="设备建图">
-          <el-tag :type="siteForm.deviceMapUploaded ? 'success' : 'info'" size="small">
-            {{ siteForm.deviceMapUploaded ? '设备端已上传地图' : '等待设备端推送地图数据' }}
+    <el-dialog
+      v-model="siteDialogVisible"
+      :title="editingSite ? '编辑站点' : '新建站点'"
+      width="560px"
+      class="site-dialog"
+      :close-on-click-modal="false"
+    >
+      <div class="dialog-intro">
+        <strong>站点基础信息</strong>
+        <span>中心坐标用于地图定位与区域初始化，保存前请确认经纬度顺序。</span>
+      </div>
+
+      <el-form :model="siteForm" label-position="top" class="site-form">
+        <div class="form-grid">
+          <el-form-item label="站点名称" required class="form-field-full">
+            <el-input
+              v-model="siteForm.name"
+              maxlength="80"
+              show-word-limit
+              clearable
+              placeholder="例如：城东 220kV 变电站"
+            />
+          </el-form-item>
+          <el-form-item label="地址" class="form-field-full">
+            <el-input
+              v-model="siteForm.address"
+              maxlength="160"
+              clearable
+              placeholder="填写省、市、区及详细位置"
+            />
+          </el-form-item>
+          <el-form-item label="站点描述" class="form-field-full">
+            <el-input
+              v-model="siteForm.description"
+              type="textarea"
+              :rows="3"
+              maxlength="500"
+              show-word-limit
+              placeholder="简要说明电压等级、设备区域或巡检范围"
+            />
+          </el-form-item>
+        </div>
+
+        <section class="coordinate-panel" :class="{ invalid: coordinateIssue }">
+          <div class="coordinate-heading">
+            <div>
+              <strong>地理坐标</strong>
+              <span>WGS-84 坐标系 · 不会自动交换经纬度</span>
+            </div>
+            <span class="coordinate-order">Lat / Lng</span>
+          </div>
+          <div class="coordinate-grid">
+            <el-form-item label="中心纬度（Lat）" required>
+              <el-input
+                v-model.number="siteForm.center.lat"
+                type="number"
+                min="-90"
+                max="90"
+                step="0.000001"
+                inputmode="decimal"
+              >
+                <template #suffix>°</template>
+              </el-input>
+              <span class="field-range">合法范围：-90 ～ 90</span>
+            </el-form-item>
+            <el-form-item label="中心经度（Lng）" required>
+              <el-input
+                v-model.number="siteForm.center.lng"
+                type="number"
+                min="-180"
+                max="180"
+                step="0.000001"
+                inputmode="decimal"
+              >
+                <template #suffix>°</template>
+              </el-input>
+              <span class="field-range">合法范围：-180 ～ 180</span>
+            </el-form-item>
+          </div>
+          <el-alert
+            v-if="coordinateIssue"
+            :title="coordinateIssue.title"
+            :description="coordinateIssue.description"
+            :type="coordinateIssue.type"
+            :closable="false"
+            show-icon
+          />
+          <p v-else class="coordinate-help">示例：杭州约为纬度 30.274100，经度 120.155100。</p>
+        </section>
+
+        <div class="map-status-row">
+          <div>
+            <strong>设备建图</strong>
+            <span>{{ siteForm.deviceMapUploaded ? '设备端已推送地图，可用于后续路线规划。' : '状态由设备端上报，不能在此手动修改。' }}</span>
+          </div>
+          <el-tag :type="siteForm.deviceMapUploaded ? 'success' : 'info'" size="small" effect="light">
+            {{ siteForm.deviceMapUploaded ? '已上传' : '等待上传' }}
           </el-tag>
-        </el-form-item>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="siteDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveSite">保存</el-button>
+        <el-button type="primary" :loading="siteSaving" :disabled="!canSaveSite" @click="saveSite">保存</el-button>
       </template>
     </el-dialog>
 
@@ -159,6 +236,11 @@ import ListPagination from '@/components/ListPagination.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useSiteStore } from '@/stores/site'
 import type { Site } from '@/types'
+import {
+  defaultGeoCenter,
+  isSuspectedCoordinateSwap,
+  isValidGeoCoordinate,
+} from '@/utils/geoCoordinate'
 
 const siteStore = useSiteStore()
 const { can } = usePermission()
@@ -185,12 +267,13 @@ watch(
 const siteDialogVisible = ref(false)
 const areaDialogVisible = ref(false)
 const editingSite = ref<Site | null>(null)
+const siteSaving = ref(false)
 
 const siteForm = reactive({
   name: '',
   address: '',
   description: '',
-  center: { lat: 30.2741, lng: 120.1551 },
+  center: defaultGeoCenter(),
   deviceMapUploaded: false,
 })
 
@@ -207,6 +290,30 @@ const filteredSites = computed(() => {
     (site) => site.name.includes(q) || site.address.includes(q),
   )
 })
+
+const coordinateIssue = computed(() => {
+  const center = siteForm.center
+  if (isSuspectedCoordinateSwap(center)) {
+    return {
+      type: 'warning' as const,
+      title: '坐标疑似填写反了',
+      description: '纬度超过 90，而经度落在纬度范围内。请核对原始数据后手动更正，系统不会自动交换。',
+    }
+  }
+  if (!isValidGeoCoordinate(center)) {
+    const latitudeInvalid = !Number.isFinite(center.lat) || Math.abs(center.lat) > 90
+    return {
+      type: 'error' as const,
+      title: '中心坐标超出合法范围',
+      description: latitudeInvalid
+        ? '中心纬度必须在 -90 到 90 之间。'
+        : '中心经度必须在 -180 到 180 之间。',
+    }
+  }
+  return null
+})
+
+const canSaveSite = computed(() => Boolean(siteForm.name.trim()) && !coordinateIssue.value)
 
 function mapUploaded(site: Site) {
   return Boolean(site.deviceMapUploaded || site.lingbotMapId)
@@ -244,39 +351,46 @@ function openSiteDialog(site?: Site) {
       name: '',
       address: '',
       description: '',
-      center: { lat: 30.2741, lng: 120.1551 },
+      center: defaultGeoCenter(),
       deviceMapUploaded: false,
     })
   }
   siteDialogVisible.value = true
 }
 
-function saveSite() {
+async function saveSite() {
   if (!siteForm.name.trim()) {
     ElMessage.warning('请填写站点名称')
     return
   }
-  if (editingSite.value) {
-    siteStore.updateSite(editingSite.value.id, {
-      name: siteForm.name,
-      address: siteForm.address,
-      description: siteForm.description,
-      center: { ...siteForm.center },
-      deviceMapUploaded: siteForm.deviceMapUploaded,
-    })
-    ElMessage.success('站点已更新')
-  } else {
-    const site = siteStore.addSite({
-      name: siteForm.name,
-      address: siteForm.address,
-      description: siteForm.description,
-      center: { ...siteForm.center },
-      deviceMapUploaded: siteForm.deviceMapUploaded,
-    })
-    currentSite.value = site
-    ElMessage.success('站点已创建')
+  if (coordinateIssue.value) {
+    ElMessage.warning(coordinateIssue.value.description)
+    return
   }
-  siteDialogVisible.value = false
+
+  const payload = {
+    name: siteForm.name.trim(),
+    address: siteForm.address.trim(),
+    description: siteForm.description.trim(),
+    center: { ...siteForm.center },
+    deviceMapUploaded: siteForm.deviceMapUploaded,
+  }
+
+  siteSaving.value = true
+  try {
+    if (editingSite.value) {
+      currentSite.value = await siteStore.updateSite(editingSite.value.id, payload)
+      ElMessage.success('站点已更新')
+    } else {
+      currentSite.value = await siteStore.addSite(payload)
+      ElMessage.success('站点已创建')
+    }
+    siteDialogVisible.value = false
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '站点保存失败，请稍后重试')
+  } finally {
+    siteSaving.value = false
+  }
 }
 
 function removeSite(id: string) {
@@ -480,6 +594,156 @@ function saveArea() {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.dialog-intro {
+  display: grid;
+  gap: 4px;
+  margin: -2px 0 18px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--pi-primary);
+  border-radius: 0 8px 8px 0;
+  background: #f5f8fc;
+}
+
+.dialog-intro strong {
+  color: var(--pi-text);
+  font-size: 14px;
+}
+
+.dialog-intro span {
+  color: var(--pi-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.site-form :deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+
+.site-form :deep(.el-form-item__label) {
+  margin-bottom: 7px;
+  color: #405674;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+
+.form-field-full {
+  grid-column: 1 / -1;
+}
+
+.coordinate-panel {
+  margin-top: 2px;
+  padding: 14px;
+  border: 1px solid #dce6f3;
+  border-radius: 10px;
+  background: #f8fafd;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.coordinate-panel.invalid {
+  border-color: #e6a23c;
+  background: #fffaf2;
+}
+
+.coordinate-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
+}
+
+.coordinate-heading div {
+  display: grid;
+  gap: 3px;
+}
+
+.coordinate-heading strong,
+.map-status-row strong {
+  color: var(--pi-text);
+  font-size: 13px;
+}
+
+.coordinate-heading div span,
+.map-status-row div span {
+  color: var(--pi-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.coordinate-order {
+  flex: none;
+  padding: 3px 7px;
+  border: 1px solid #d8e3f0;
+  border-radius: 5px;
+  background: #fff;
+  color: #5d7391;
+  font: 11px/1.2 Consolas, 'Courier New', monospace;
+}
+
+.coordinate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.coordinate-grid :deep(.el-form-item) {
+  margin-bottom: 10px;
+}
+
+.field-range {
+  display: block;
+  margin-top: 5px;
+  color: #8190a5;
+  font-size: 10px;
+}
+
+.coordinate-help {
+  margin: 1px 0 0;
+  color: #6d7f97;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.coordinate-panel :deep(.el-alert) {
+  margin-top: 3px;
+  align-items: flex-start;
+}
+
+.coordinate-panel :deep(.el-alert__description) {
+  line-height: 1.5;
+}
+
+.map-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--pi-border-soft);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.map-status-row div {
+  display: grid;
+  gap: 3px;
+}
+
+@media (max-width: 640px) {
+  .form-grid,
+  .coordinate-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 900px) {

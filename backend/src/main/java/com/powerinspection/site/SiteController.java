@@ -75,12 +75,14 @@ public class SiteController extends CrudSupport {
   @PostMapping
   public ApiResponse<Map<String, Object>> createSite(@RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.SITE_EDIT);
+    SiteCoordinateValidator.validateForCreate(body);
     return ApiResponse.ok(create(DataCategory.SITE, "site", body));
   }
 
   @PatchMapping("/{id}")
   public ApiResponse<Map<String, Object>> updateSite(@PathVariable String id, @RequestBody Map<String, Object> body) {
     permissionService.require(currentUser.get(), Permission.SITE_EDIT);
+    SiteCoordinateValidator.validateForUpdate(body);
     return ApiResponse.ok(update(DataCategory.SITE, id, body));
   }
 

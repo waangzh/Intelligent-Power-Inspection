@@ -16,6 +16,7 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import type { Area, LatLng, Route } from '@/types'
 import type { RobotLocation, RobotTrackPoint } from '@/types/robotLocation'
+import { defaultGeoCenter, isValidGeoCoordinate } from '@/utils/geoCoordinate'
 import {
   GNSS_FIX_COLORS,
   GNSS_FIX_TYPE_LABELS,
@@ -87,15 +88,6 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => HTML_ESCAPES[character] ?? character)
 }
 
-function hasValidGeoCoordinate(latlng: LatLng): boolean {
-  return (
-    Number.isFinite(latlng.lat)
-    && Number.isFinite(latlng.lng)
-    && Math.abs(latlng.lat) <= 90
-    && Math.abs(latlng.lng) <= 180
-  )
-}
-
 function isRosLocalCoordinate(latlng: LatLng): boolean {
   const point = latlng as MapPoint
   return (
@@ -107,13 +99,13 @@ function isRosLocalCoordinate(latlng: LatLng): boolean {
 }
 
 function canDrawOnGeoMap(latlng: LatLng): boolean {
-  return hasValidGeoCoordinate(latlng) && !isRosLocalCoordinate(latlng)
+  return isValidGeoCoordinate(latlng) && !isRosLocalCoordinate(latlng)
 }
 
 function safeCenter(latlng: LatLng): LatLng {
   if (canDrawOnGeoMap(latlng)) return latlng
   if (props.fallbackCenter && canDrawOnGeoMap(props.fallbackCenter)) return props.fallbackCenter
-  return latlng
+  return defaultGeoCenter()
 }
 
 function toLeaflet(latlng: LatLng): L.LatLngExpression {
