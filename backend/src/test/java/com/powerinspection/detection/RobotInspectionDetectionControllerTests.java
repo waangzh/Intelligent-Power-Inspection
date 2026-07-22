@@ -118,7 +118,8 @@ class RobotInspectionDetectionControllerTests {
   @Test
   void imageIdDetectionUsesControlledModelUrlAndPersistsResult() throws Exception {
     given(locateAnythingGateway.detectCheckpoint(any())).willReturn(new LocateAnythingResult(List.of(
-      new LocateAnythingFinding("SWITCH", "刀闸开关", 0.91, List.of(1, 2, 3, 4), "switch", null,
+      new LocateAnythingFinding("CUSTOM_PERSON", "定位图像中所有清晰可见的人员", 0.0,
+        List.of(1, 2, 3, 4), "人员", null,
         Map.of("rawAnswer", "<box><1><2><3><4></box>"))
     ), List.of(), null));
     String token = login("admin", "Admin@123");
@@ -128,7 +129,7 @@ class RobotInspectionDetectionControllerTests {
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
         .content("""
-           {"imageId":"%s","detections":[{"itemId":"person_custom","type":"CUSTOM_PERSON","name":"人员检测","enabled":true,"displayLabel":"人员","prompt":"定位图像中所有清晰可见的人员"}]}
+           {"imageId":"%s","detections":[{"itemId":"person_custom","type":"CUSTOM_PERSON","name":"人员检测","enabled":true,"displayLabel":"人员","prompt":"定位图像中所有清晰可见的人员","alarmEnabled":true,"alarmOnFinding":true,"alarmSeverity":"HIGH","alarmMessage":"检查点发现{label}"}]}
           """.formatted(imageId)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("RUNNING"))
@@ -142,7 +143,17 @@ class RobotInspectionDetectionControllerTests {
       assertThat(result.path("detections").get(0).path("name").asText()).isEqualTo("人员检测");
       assertThat(result.path("detections").get(0).path("displayLabel").asText()).isEqualTo("人员");
       assertThat(result.path("detections").get(0).path("prompt").asText()).isEqualTo("定位图像中所有清晰可见的人员");
-    assertThat(result.path("findings").get(0).path("type").asText()).isEqualTo("SWITCH");
+    assertThat(result.path("findings").get(0).path("type").asText()).isEqualTo("CUSTOM_PERSON");
+    assertThat(result.path("alarmCount").asInt()).isEqualTo(1);
+    Map<String, Object> alarm = dataStore.list(DataCategory.ALARM).stream()
+      .filter(item -> runId.equals(item.get("detectionRunId")))
+      .findFirst().orElseThrow();
+    assertThat(alarm).containsEntry("sourceType", "DETECTION_RUN")
+      .containsEntry("imageId", imageId)
+      .containsEntry("taskId", "task_demo_active")
+      .containsEntry("checkpointId", "cp_demo_101")
+      .containsEntry("itemId", "person_custom")
+      .containsEntry("severity", "HIGH");
     ArgumentCaptor<LocateAnythingRequest> request = ArgumentCaptor.forClass(LocateAnythingRequest.class);
     verify(locateAnythingGateway).detectCheckpoint(request.capture());
     assertThat(request.getValue().imageUrl())
@@ -171,6 +182,47 @@ class RobotInspectionDetectionControllerTests {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.originalAvailable").value(false))
       .andExpect(jsonPath("$.data.inputImageUrl").doesNotExist());
+  }
+
+  @Test
+  void robotImageDetectionDefaultsMissingRiskRulesToAlarmDisabled() throws Exception {
+    given(locateAnythingGateway.detectCheckpoint(any()))
+      .willReturn(new LocateAnythingResult(List.of(), List.of(), null));
+    String token = login("admin", "Admin@123");
+    String imageId = importedImageId(token, "task_demo_active", "robot_demo_004", "cp_demo_101");
+
+    mockMvc.perform(post("/api/v1/detections/robot-image")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {"imageId":"%s","detections":[{
+            "itemId":"person_custom","type":"CUSTOM_PERSON","name":"人员检测",
+            "enabled":true,"displayLabel":"人员","prompt":"定位人员"
+          }]}
+          """.formatted(imageId)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.detections[0].alarmEnabled").value(false))
+      .andExpect(jsonPath("$.data.detections[0].alarmOnFinding").value(false))
+      .andExpect(jsonPath("$.data.detections[0].alarmSeverity").value("MEDIUM"))
+      .andExpect(jsonPath("$.data.detections[0].alarmMessage").value(""));
+  }
+
+  @Test
+  void robotImageDetectionRejectsInvalidAlarmSeverity() throws Exception {
+    String token = login("admin", "Admin@123");
+    String imageId = importedImageId(token, "task_demo_active", "robot_demo_004", "cp_demo_101");
+
+    mockMvc.perform(post("/api/v1/detections/robot-image")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {"imageId":"%s","detections":[{
+            "type":"FIRE","enabled":true,"prompt":"定位明火",
+            "alarmEnabled":true,"alarmOnFinding":true,"alarmSeverity":"critical"
+          }]}
+          """.formatted(imageId)))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("告警级别必须是 LOW、MEDIUM、HIGH 或 CRITICAL"));
   }
 
   @Test

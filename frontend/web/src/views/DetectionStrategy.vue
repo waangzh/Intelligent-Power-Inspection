@@ -108,7 +108,15 @@
               </div>
             </div>
             <div v-if="sourceMode === 'ROBOT' && selectedRobotImage" class="config-source">
-              {{ manualConfigSource }}
+              <span>{{ manualConfigSource }}</span>
+              <el-button
+                size="small"
+                :loading="checkpointSaving"
+                @click="saveCheckpointDetectionConfig"
+              >
+                <el-icon><Check /></el-icon>
+                保存到检查点
+              </el-button>
             </div>
             <DetectionConfig :items="manualItems" @change="updateManualItems" />
           </div>
@@ -158,6 +166,15 @@
                 show-icon
                 :closable="false"
               />
+              <div v-if="manualResult.status === 'SUCCEEDED'" class="result-alarm-summary">
+                <span>本次生成 {{ manualResult.alarmCount ?? 0 }} 条告警</span>
+                <el-button
+                  v-if="(manualResult.alarmCount ?? 0) > 0"
+                  link
+                  type="primary"
+                  @click="openRunAlarms(manualResult)"
+                >查看告警</el-button>
+              </div>
               <div v-if="manualResult.resultImageUrl" class="result-image">
                 <figure>
                   <figcaption>检测结果（所有目标已合并标注）</figcaption>
@@ -217,9 +234,9 @@
         <div class="history-toolbar">
           <el-button plain size="small" @click="detectionStore.loadRuns({ size: 20 })">刷新</el-button>
         </div>
-        <el-table :data="detectionStore.runs" size="small">
-          <el-table-column label="来源" width="110">
-            <template #default="{ row }: { row: DetectionRun }">{{ row.sourceType === 'ROBOT_IMAGE' ? '机器人图片' : '本地上传' }}</template>
+          <el-table :data="detectionStore.runs" size="small">
+            <el-table-column label="来源" width="110">
+              <template #default="{ row }: { row: DetectionRun }">{{ runSourceLabel(row.sourceType) }}</template>
           </el-table-column>
           <el-table-column label="任务 / 检查点" min-width="180">
             <template #default="{ row }: { row: DetectionRun }">{{ runAssociation(row) }}</template>
@@ -229,6 +246,18 @@
           </el-table-column>
           <el-table-column label="结果" width="90">
             <template #default="{ row }: { row: DetectionRun }">{{ row.findings.length }}</template>
+          </el-table-column>
+          <el-table-column label="告警" width="90">
+            <template #default="{ row }: { row: DetectionRun }">
+              <el-button
+                v-if="row.status === 'SUCCEEDED' && row.alarmCount > 0"
+                link
+                type="primary"
+                size="small"
+                @click="openRunAlarms(row)"
+              >{{ row.alarmCount }}</el-button>
+              <span v-else>{{ row.status === 'SUCCEEDED' ? row.alarmCount : '-' }}</span>
+            </template>
           </el-table-column>
           <el-table-column label="创建时间" width="180">
             <template #default="{ row }: { row: DetectionRun }">{{ row.createdAt ? fmt(row.createdAt) : '-' }}</template>
@@ -281,6 +310,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, CopyDocument, Delete, Search, UploadFilled, ZoomIn } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -308,6 +338,8 @@ import {
 } from '@/types'
 
 const detectionStore = useDetectionStore()
+const route = useRoute()
+const router = useRouter()
 const routeStore = useRouteStore()
 const robotStore = useRobotStore()
 const taskStore = useTaskStore()
@@ -334,6 +366,7 @@ const manualConfigSource = ref('使用默认检查点检测配置')
 const selectedTemplateId = ref('')
 const saveTemplateDialogVisible = ref(false)
 const templateSaving = ref(false)
+const checkpointSaving = ref(false)
 const templateForm = reactive({ name: '', description: '' })
 const resultImageRef = ref<{ showPreview?: () => void } | null>(null)
 const manualRunStartedAt = ref<number | null>(null)
@@ -375,6 +408,14 @@ function openResultImagePreview() {
   resultImageRef.value?.showPreview?.()
 }
 
+function resultRunId(result: ManualDetectionResponse | DetectionRun) {
+  return 'runId' in result ? result.runId : result.requestId
+}
+
+function openRunAlarms(result: ManualDetectionResponse | DetectionRun) {
+  void router.push({ path: '/alarms', query: { detectionRunId: resultRunId(result) } })
+}
+
 function updateManualItems(items: DetectionItem[]) {
   manualItems.value = items
 }
@@ -409,6 +450,27 @@ async function saveSelectedTemplate() {
     ElMessage.error(error instanceof Error ? error.message : '检测模板保存失败')
   } finally {
     templateSaving.value = false
+  }
+}
+
+async function saveCheckpointDetectionConfig() {
+  const image = selectedRobotImage.value
+  if (!image || !validateTemplateItems()) return
+  checkpointSaving.value = true
+  try {
+    let sourceRoute = routeStore.getRouteById(image.routeId)
+    if (!sourceRoute) sourceRoute = await routeStore.loadOne(image.routeId)
+    const checkpoint = sourceRoute.checkpoints.find((item) => item.id === image.checkpointId)
+    if (!checkpoint) throw new Error('图片关联的检查点不存在')
+    await routeStore.updateCheckpoint(sourceRoute.id, checkpoint.id, {
+      detections: cloneDetectionItems(manualItems.value),
+    })
+    manualConfigSource.value = `已保存为检查点“${checkpoint.name}”的正式任务检测配置`
+    ElMessage.success('检查点检测配置已保存')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '检查点检测配置保存失败')
+  } finally {
+    checkpointSaving.value = false
   }
 }
 
@@ -548,7 +610,9 @@ function startManualDetectionPolling(requestId: string) {
 
 async function refreshManualDetection(requestId: string) {
   try {
-    const result = await detectionStore.getRun(requestId)
+    const result = requestId.startsWith('manual_det_')
+      ? await resourcesApi.getManualLocateDetection(requestId)
+      : await detectionStore.getRun(requestId)
     manualResult.value = result
     if (result.status === 'RUNNING') return
     stopManualDetectionPolling()
@@ -701,6 +765,12 @@ function statusTagType(status: DetectionRun['status']) {
   return status === 'SUCCEEDED' ? 'success' : status === 'FAILED' ? 'danger' : 'warning'
 }
 
+function runSourceLabel(sourceType: DetectionRun['sourceType']) {
+  if (sourceType === 'ROBOT_IMAGE') return '机器人图片'
+  if (sourceType === 'TASK_CHECKPOINT') return '正式任务'
+  return '本地上传'
+}
+
 function runAssociation(run: DetectionRun) {
   if (!run.taskId) return '-'
   const taskName = taskStore.getTaskById(run.taskId)?.name ?? run.taskId
@@ -722,10 +792,28 @@ function bboxText(bbox: number[]) {
   return bbox && bbox.length ? bbox.join(', ') : '-'
 }
 
+async function openRunFromQuery() {
+  const rawRunId = route.query.runId
+  const runId = Array.isArray(rawRunId) ? rawRunId[0] : rawRunId
+  if (!runId) return
+  try {
+    const result = runId.startsWith('manual_det_')
+      ? await resourcesApi.getManualLocateDetection(runId)
+      : await detectionStore.getRun(runId)
+    manualResult.value = result
+    detecting.value = result.status === 'RUNNING'
+    if (result.status === 'RUNNING') startManualDetectionPolling(result.requestId)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '查询检测结果失败')
+  }
+}
+
 onMounted(() => {
   void detectionStore.load({ size: 100 })
   void detectionStore.loadRuns({ size: 20 })
 })
+
+watch(() => route.query.runId, () => void openRunFromQuery(), { immediate: true })
 
 onBeforeUnmount(() => {
   stopManualDetectionPolling()
@@ -854,6 +942,10 @@ watch(sourceMode, (mode) => {
   color: #606266;
   font-size: 13px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .action-bar {
@@ -986,6 +1078,20 @@ watch(sourceMode, (mode) => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.result-alarm-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #b3e19d;
+  border-radius: 6px;
+  background: #f0f9eb;
+  color: #529b2e;
+  font-size: 13px;
 }
 
 .running-progress {

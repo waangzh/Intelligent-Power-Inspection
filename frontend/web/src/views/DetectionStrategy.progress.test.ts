@@ -25,4 +25,23 @@ describe('DetectionStrategy running progress', () => {
     expect(source).toContain('@click="openResultImagePreview"')
     expect(source).toContain('resultImageRef.value?.showPreview?.()')
   })
+
+  it('shows the alarm count and links a completed run to its alarms', () => {
+    expect(source).toContain('alarmCount')
+    expect(source).toContain('查看告警')
+    expect(source).toContain('detectionRunId')
+    expect(source).toContain("path: '/alarms'")
+  })
+
+  it('opens a run supplied by the existing detection page query', () => {
+    expect(source).toContain('route.query.runId')
+    expect(source).toContain('getManualLocateDetection')
+    expect(source).toContain('detectionStore.getRun')
+  })
+
+  it('can persist robot-image risk rules back to the source checkpoint', () => {
+    expect(source).toContain('保存到检查点')
+    expect(source).toContain('saveCheckpointDetectionConfig')
+    expect(source).toContain('routeStore.updateCheckpoint')
+  })
 })

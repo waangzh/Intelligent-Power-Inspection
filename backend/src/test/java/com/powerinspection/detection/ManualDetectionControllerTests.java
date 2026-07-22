@@ -72,7 +72,7 @@ class ManualDetectionControllerTests {
       "detections",
       "",
       MediaType.APPLICATION_JSON_VALUE,
-      "[{\"itemId\":\"person_custom\",\"type\":\"CUSTOM_PERSON\",\"name\":\"人员检测\",\"enabled\":true,\"displayLabel\":\"人员\",\"prompt\":\"定位图像中所有清晰可见的人员\",\"threshold\":0.75}]".getBytes(StandardCharsets.UTF_8)
+      "[{\"itemId\":\"person_custom\",\"type\":\"CUSTOM_PERSON\",\"name\":\"人员检测\",\"enabled\":true,\"displayLabel\":\"人员\",\"prompt\":\"定位图像中所有清晰可见的人员\",\"threshold\":0.75,\"alarmEnabled\":false,\"alarmOnFinding\":false,\"alarmSeverity\":\"HIGH\",\"alarmMessage\":\"  人员风险  \"}]".getBytes(StandardCharsets.UTF_8)
     );
 
     String token = login("admin", "Admin@123");
@@ -115,6 +115,10 @@ class ManualDetectionControllerTests {
     assertThat(snapshot.path("name").asText()).isEqualTo("人员检测");
     assertThat(snapshot.path("displayLabel").asText()).isEqualTo("人员");
     assertThat(snapshot.path("prompt").asText()).isEqualTo("定位图像中所有清晰可见的人员");
+    assertThat(snapshot.path("alarmEnabled").asBoolean()).isFalse();
+    assertThat(snapshot.path("alarmOnFinding").asBoolean()).isFalse();
+    assertThat(snapshot.path("alarmSeverity").asText()).isEqualTo("HIGH");
+    assertThat(snapshot.path("alarmMessage").asText()).isEqualTo("  人员风险  ");
   }
 
   @Test
@@ -130,6 +134,22 @@ class ManualDetectionControllerTests {
         .file(detections)
         .header("Authorization", bearer(login("admin", "Admin@123"))))
       .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void manualDetectionRejectsNonCanonicalAlarmSeverity() throws Exception {
+    MockMultipartFile image = new MockMultipartFile(
+      "image", "fire.jpg", MediaType.IMAGE_JPEG_VALUE, testImage());
+    MockMultipartFile detections = new MockMultipartFile(
+      "detections", "", MediaType.APPLICATION_JSON_VALUE,
+      "[{\"type\":\"FIRE\",\"enabled\":true,\"prompt\":\"定位明火\",\"alarmEnabled\":true,\"alarmOnFinding\":true,\"alarmSeverity\":\"critical\"}]".getBytes(StandardCharsets.UTF_8));
+
+    mockMvc.perform(multipart("/api/v1/detections/manual")
+        .file(image)
+        .file(detections)
+        .header("Authorization", bearer(login("admin", "Admin@123"))))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("告警级别必须是 LOW、MEDIUM、HIGH 或 CRITICAL"));
   }
 
   private byte[] testImage() throws Exception {

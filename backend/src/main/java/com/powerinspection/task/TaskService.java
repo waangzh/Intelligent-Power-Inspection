@@ -1,6 +1,5 @@
 package com.powerinspection.task;
 
-import com.powerinspection.alarm.AlarmService;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.common.Ids;
 import com.powerinspection.common.ListQuery;
@@ -8,8 +7,8 @@ import com.powerinspection.common.PageResult;
 import com.powerinspection.common.ResourceChangeEvent;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.detection.DetectionRunService;
 import com.powerinspection.model.DetectionItems;
-import com.powerinspection.model.LocateAnythingFinding;
 import com.powerinspection.model.LocateAnythingGateway;
 import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.LocateAnythingResult;
@@ -27,7 +26,6 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -67,56 +65,32 @@ public class TaskService {
           "routeContentSha256",
           "mapImageSha256",
           "status");
-  private static final List<String> ROUTE_ALARM_TYPES =
-      List.of("PERSON", "HELMET", "FIRE", "OBSTACLE");
-  private static final Map<String, String> SEVERITY =
-      Map.of(
-          "PERSON", "MEDIUM",
-          "HELMET", "HIGH",
-          "OBSTACLE", "MEDIUM",
-          "FIRE", "CRITICAL",
-          "SWITCH", "HIGH",
-          "METER", "LOW",
-          "OIL_LEAK", "HIGH",
-          "FOREIGN_OBJECT", "MEDIUM");
-  private static final Map<String, String> LABELS =
-      Map.of(
-          "PERSON", "人员检测",
-          "HELMET", "安全帽检测",
-          "OBSTACLE", "障碍物检测",
-          "FIRE", "火源/烟雾检测",
-          "SWITCH", "开关/刀闸状态",
-          "METER", "表计/指示灯",
-          "OIL_LEAK", "漏油检测",
-          "FOREIGN_OBJECT", "异物检测");
-
   private final DataStoreService dataStore;
-  private final AlarmService alarmService;
   private final SimpMessagingTemplate messagingTemplate;
   private final RobotGateway robotGateway;
   private final LocateAnythingGateway locateAnythingGateway;
   private final RouteRevisionService routeRevisionService;
   private final TaskExecutionService taskExecutionService;
+  private final DetectionRunService detectionRunService;
   private final RobotProperties robotProperties;
-  private final Random random = new Random();
 
   public TaskService(
       DataStoreService dataStore,
-      AlarmService alarmService,
       SimpMessagingTemplate messagingTemplate,
       RobotGateway robotGateway,
       LocateAnythingGateway locateAnythingGateway,
       RouteRevisionService routeRevisionService,
       TaskExecutionService taskExecutionService,
-      RobotProperties robotProperties) {
+      RobotProperties robotProperties,
+      DetectionRunService detectionRunService) {
     this.dataStore = dataStore;
-    this.alarmService = alarmService;
     this.messagingTemplate = messagingTemplate;
     this.robotGateway = robotGateway;
     this.locateAnythingGateway = locateAnythingGateway;
     this.routeRevisionService = routeRevisionService;
     this.taskExecutionService = taskExecutionService;
     this.robotProperties = robotProperties;
+    this.detectionRunService = detectionRunService;
   }
 
   public List<Map<String, Object>> tasks() {
@@ -401,9 +375,6 @@ public class TaskService {
     if (nextProgress >= 100) {
       complete(task, route, checkpoints.size());
     } else {
-      if (random.nextDouble() < 0.12) {
-        maybeRouteAlarm(task, route);
-      }
       saveTask(task);
     }
   }
@@ -504,30 +475,13 @@ public class TaskService {
     publishChange("taskEvent", taskId, "/topic/tasks/" + taskId + "/events", "/topic/task-events");
   }
 
-  private void maybeRouteAlarm(Map<String, Object> task, Map<String, Object> route) {
-    String type = ROUTE_ALARM_TYPES.get(random.nextInt(ROUTE_ALARM_TYPES.size()));
-    String message =
-        switch (type) {
-          case "PERSON" -> "路线行进中检测到未授权人员";
-          case "HELMET" -> "检测到作业人员未佩戴安全帽";
-          case "OBSTACLE" -> "前方检测到障碍物，机器人已减速避障";
-          default -> "路线视野内检测到疑似火源/烟雾";
-        };
-    createAlarm(
-        text(task.get("id")),
-        text(route.get("name")),
-        null,
-        type,
-        message,
-        "https://picsum.photos/seed/" + System.currentTimeMillis() + "/400/240");
-  }
-
   private void detectCheckpoint(
       Map<String, Object> task,
       Map<String, Object> route,
       Map<String, Object> cp,
       RobotInspectionImage image) {
     try {
+      List<Map<String, Object>> detections = checkpointDetections(cp);
       LocateAnythingResult result =
           locateAnythingGateway.detectCheckpoint(
               new LocateAnythingRequest(
@@ -537,7 +491,7 @@ public class TaskService {
                   image.url(),
                   image.width(),
                   image.height(),
-                  checkpointDetections(cp)));
+                  detections));
       for (String warning : result.warnings()) {
         addEvent(
             text(task.get("id")),
@@ -546,9 +500,8 @@ public class TaskService {
             text(cp.get("name")),
             image.url());
       }
-      for (LocateAnythingFinding finding : result.findings()) {
-        createCheckpointAlarm(task, route, cp, finding);
-      }
+      detectionRunService.recordTaskResult(
+          task, route, cp, image, detections, result);
     } catch (ModelServiceException ex) {
       addEvent(
           text(task.get("id")),
@@ -559,98 +512,12 @@ public class TaskService {
     }
   }
 
-  private void createCheckpointAlarm(
-      Map<String, Object> task,
-      Map<String, Object> route,
-      Map<String, Object> cp,
-      LocateAnythingFinding finding) {
-    String type = finding.type();
-    String prompt = finding.prompt();
-    String message =
-        "检查点「"
-            + cp.get("name")
-            + "」"
-            + LABELS.getOrDefault(type, type)
-            + "异常"
-            + (prompt == null ? "" : "（LocateAnything: " + prompt + "）");
-    createAlarm(
-        text(task.get("id")),
-        text(route.get("name")),
-        text(cp.get("name")),
-        type,
-        message,
-        finding.imageUrl(),
-        findingToMap(finding));
-  }
-
-  private void createAlarm(
-      String taskId,
-      String routeName,
-      String checkpointName,
-      String type,
-      String message,
-      String imageUrl) {
-    createAlarm(taskId, routeName, checkpointName, type, message, imageUrl, null);
-  }
-
-  private void createAlarm(
-      String taskId,
-      String routeName,
-      String checkpointName,
-      String type,
-      String message,
-      String imageUrl,
-      Map<String, Object> finding) {
-    Map<String, Object> alarm =
-        map(
-            "id",
-            Ids.next("alarm"),
-            "taskId",
-            taskId,
-            "routeName",
-            routeName,
-            "type",
-            type,
-            "severity",
-            SEVERITY.getOrDefault(type, "MEDIUM"),
-            "message",
-            message,
-            "imageUrl",
-            imageUrl,
-            "acknowledged",
-            false,
-            "createdAt",
-            Instant.now().toString());
-    if (checkpointName != null) {
-      alarm.put("checkpointName", checkpointName);
-    }
-    if (finding != null) {
-      alarm.put("finding", finding);
-    }
-    alarmService.create(alarm);
-  }
-
   @SuppressWarnings("unchecked")
   private List<Map<String, Object>> checkpointDetections(Map<String, Object> cp) {
     if (cp.get("detections") instanceof List<?> detections) {
       return DetectionItems.enabled((List<Map<String, Object>>) detections);
     }
     return List.of();
-  }
-
-  private Map<String, Object> findingToMap(LocateAnythingFinding finding) {
-    Map<String, Object> item =
-        map(
-            "type", finding.type(),
-            "prompt", finding.prompt(),
-            "score", finding.score(),
-            "bbox", finding.bbox(),
-            "label", finding.label(),
-            "imageUrl", finding.imageUrl());
-    if (finding.rawResult() != null) {
-      item.put("rawResult", finding.rawResult());
-    }
-    return item;
   }
 
   public Map<String, Object> activeTask() {

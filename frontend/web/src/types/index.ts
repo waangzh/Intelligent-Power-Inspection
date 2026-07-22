@@ -152,6 +152,10 @@ export interface DetectionItem {
   displayLabel: string
   prompt?: string
   threshold: number
+  alarmEnabled?: boolean
+  alarmOnFinding?: boolean
+  alarmSeverity?: AlarmSeverity
+  alarmMessage?: string
 }
 
 export interface Checkpoint {
@@ -388,7 +392,7 @@ export interface TaskStartEligibility extends TaskExecution {
 
 export interface Alarm {
   id: string
-  taskId: string
+  taskId?: string
   routeName: string
   checkpointName?: string
   type: DetectionType
@@ -402,7 +406,24 @@ export interface Alarm {
   workOrderConversionError?: string
   workOrderId?: string
   convertedAt?: string
+  /** Detection provenance is optional for legacy alarms. */
+  sourceType?: string
+  detectionRunId?: string
+  imageId?: string
+  checkpointId?: string
+  itemId?: string
+  finding?: AlarmFinding
   createdAt: string
+}
+
+export interface AlarmFinding {
+  type?: DetectionType
+  prompt?: string
+  score?: number
+  bbox?: number[]
+  label?: string
+  imageUrl?: string
+  rawResult?: Record<string, unknown>
 }
 
 export interface InspectionRecord {
@@ -439,6 +460,7 @@ export interface ManualDetectionResponse {
   createdAt?: string
   startedAt?: string
   completedAt?: string
+  alarmCount: number
 }
 
 export interface RobotInspectionImage {
@@ -468,7 +490,7 @@ export interface RobotInspectionImage {
 
 export interface DetectionRun extends Omit<ManualDetectionResponse, 'inputImageUrl'> {
   runId: string
-  sourceType: 'LOCAL_UPLOAD' | 'ROBOT_IMAGE'
+  sourceType: 'LOCAL_UPLOAD' | 'ROBOT_IMAGE' | 'TASK_CHECKPOINT'
   imageId?: string
   taskId?: string
   checkpointId?: string

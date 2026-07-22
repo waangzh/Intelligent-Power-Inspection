@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.eq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.config.ModelFileWebConfig;
@@ -32,6 +34,7 @@ class ManualDetectionServiceTests {
 
   private HttpServer server;
   private ManualDetectionService service;
+  private DetectionAlarmService detectionAlarmService;
   private Path resultFile;
   private AtomicInteger imageDownloads;
 
@@ -85,6 +88,8 @@ class ManualDetectionServiceTests {
     properties.getLocateAnything().setBaseUrl(modelBaseUrl);
     properties.getLocateAnything().setTimeoutSeconds(5);
     Map<String, DetectionRunEntity> runs = new ConcurrentHashMap<>();
+    detectionAlarmService = mock(DetectionAlarmService.class);
+    when(detectionAlarmService.countForRun(REQUEST_ID)).thenReturn(1L);
     DetectionRunRepository repository = mock(DetectionRunRepository.class);
     when(repository.saveAndFlush(any())).thenAnswer(invocation -> {
       DetectionRunEntity run = invocation.getArgument(0);
@@ -97,7 +102,7 @@ class ManualDetectionServiceTests {
       return run;
     });
     when(repository.findById(any())).thenAnswer(invocation -> Optional.ofNullable(runs.get(invocation.getArgument(0))));
-    service = new ManualDetectionService(gateway, properties, repository, new ObjectMapper());
+    service = new ManualDetectionService(gateway, properties, repository, new ObjectMapper(), detectionAlarmService);
 
     service.submit(
       REQUEST_ID,
@@ -122,6 +127,9 @@ class ManualDetectionServiceTests {
     assertThat(capturedRequest.get().imageUrl()).isEqualTo("http://127.0.0.1:18080/model-files/locate-anything/uploads/input.jpg");
     assertThat(capturedRequest.get().imageWidth()).isEqualTo(640);
     assertThat(capturedRequest.get().imageHeight()).isEqualTo(480);
+    assertThat(result.alarmCount()).isEqualTo(1);
+    verify(detectionAlarmService).createAlarms(
+      eq(REQUEST_ID), eq("DETECTION_RUN"), any(), any(), any());
   }
 
   private ManualDetectionController.ManualDetectionResponse awaitResult() throws Exception {

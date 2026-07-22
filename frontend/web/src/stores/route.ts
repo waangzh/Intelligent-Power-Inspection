@@ -2,15 +2,18 @@ import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
 import { resourcesApi } from '@/api/resources'
 import type { Checkpoint, DetectionItem, DetectionType, Route } from '@/types'
-import { CHECKPOINT_DETECTIONS, DETECTION_TARGET_LABELS, ROUTE_DETECTIONS } from '@/types'
+import { CHECKPOINT_DETECTIONS, DETECTION_LABELS, DETECTION_TARGET_LABELS, ROUTE_DETECTIONS } from '@/types'
 import type { RouteExecutorDocument } from '@/types/routeExecutor'
 import type { ListQuery } from '@/types/pagination'
+import { cloneDetectionItems } from '@/utils/detectionStrategy'
 import { withPlatformRouteName } from '@/utils/routeExecutorJson'
 import { uid } from '@/utils/storage'
 
 function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
   return types.map((type) => ({
+    itemId: type,
     type,
+    name: DETECTION_LABELS[type],
     enabled: true,
     displayLabel: DETECTION_TARGET_LABELS[type],
     threshold: 0.75,
@@ -26,6 +29,10 @@ function defaultDetectionItems(types: DetectionType[]): DetectionItem[] {
               : type === 'FOREIGN_OBJECT'
                 ? '设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物'
                 : undefined,
+    alarmEnabled: false,
+    alarmOnFinding: false,
+    alarmSeverity: 'MEDIUM',
+    alarmMessage: '',
   }))
 }
 
@@ -33,8 +40,13 @@ function normalizeRoute(route: Route): Route {
   return {
     ...route,
     path: Array.isArray(route.path) ? route.path : [],
-    routeDetections: Array.isArray(route.routeDetections) ? route.routeDetections : [],
-    checkpoints: Array.isArray(route.checkpoints) ? route.checkpoints : [],
+    routeDetections: Array.isArray(route.routeDetections) ? cloneDetectionItems(route.routeDetections) : [],
+    checkpoints: Array.isArray(route.checkpoints)
+      ? route.checkpoints.map((checkpoint) => ({
+          ...checkpoint,
+          detections: Array.isArray(checkpoint.detections) ? cloneDetectionItems(checkpoint.detections) : [],
+        }))
+      : [],
     mapMode: route.mapMode ?? '2d',
   }
 }

@@ -124,4 +124,21 @@ describe('路线列表加载', () => {
       mapMode: '2d',
     })
   })
+
+  it('creates route detection items with explicit alarm-safe defaults', async () => {
+    vi.mocked(resourcesApi.createRoute).mockImplementationOnce(async (route) => route)
+    const store = useRouteStore()
+
+    await store.createRoute('site-east', '风险契约路线')
+
+    const payload = vi.mocked(resourcesApi.createRoute).mock.calls[0][0]
+    expect(payload.routeDetections.length).toBeGreaterThan(0)
+    expect(payload.routeDetections.every((item) =>
+      item.itemId === item.type
+      && item.alarmEnabled === false
+      && item.alarmOnFinding === false
+      && item.alarmSeverity === 'MEDIUM'
+      && item.alarmMessage === '',
+    )).toBe(true)
+  })
 })

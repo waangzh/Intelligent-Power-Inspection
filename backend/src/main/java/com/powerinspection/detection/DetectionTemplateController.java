@@ -141,7 +141,8 @@ public class DetectionTemplateController extends CrudSupport {
                 text(raw.get("name")),
                 enabled,
                 prompt,
-                displayLabel));
+                displayLabel,
+                raw));
       }
     } else if (source.get("types") instanceof List<?> types) {
       for (Object rawType : types) {
@@ -152,7 +153,8 @@ public class DetectionTemplateController extends CrudSupport {
                 type,
                 true,
                 configuredPrompt == null ? DEFAULT_PROMPTS.get(type) : text(configuredPrompt),
-                null));
+                null,
+                Map.of()));
       }
     }
     upgraded.put("items", items);
@@ -213,7 +215,8 @@ public class DetectionTemplateController extends CrudSupport {
               normalizedName,
               enabled,
               normalizedPrompt,
-              normalizedDisplayLabel));
+              normalizedDisplayLabel,
+              raw));
       if (!normalizedPrompt.isBlank()) {
         prompts.put(type, normalizedPrompt);
       }
@@ -235,7 +238,12 @@ public class DetectionTemplateController extends CrudSupport {
 
   private Map<String, Object> item(
       String type, boolean enabled, String prompt, String displayLabel) {
-    return item(type, type, detectionName(type), enabled, prompt, displayLabel);
+    return item(type, type, detectionName(type), enabled, prompt, displayLabel, Map.of());
+  }
+
+  private Map<String, Object> item(
+      String type, boolean enabled, String prompt, String displayLabel, Map<?, ?> source) {
+    return item(type, type, detectionName(type), enabled, prompt, displayLabel, source);
   }
 
   private Map<String, Object> item(
@@ -244,7 +252,8 @@ public class DetectionTemplateController extends CrudSupport {
       String name,
       boolean enabled,
       String prompt,
-      String displayLabel) {
+      String displayLabel,
+      Map<?, ?> source) {
     Map<String, Object> item = new LinkedHashMap<>();
     item.put("itemId", itemId == null || itemId.isBlank() ? type : itemId.trim());
     item.put("type", type);
@@ -257,6 +266,7 @@ public class DetectionTemplateController extends CrudSupport {
             : displayLabel.trim());
     item.put("prompt", prompt == null ? "" : prompt);
     item.put("threshold", 0.75);
+    DetectionRiskRules.normalize(source, item);
     return item;
   }
 

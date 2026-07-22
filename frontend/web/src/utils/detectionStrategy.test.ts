@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as detectionStrategy from '@/utils/detectionStrategy'
 import { cloneDetectionItems, resolveRobotImageDetectionItems } from '@/utils/detectionStrategy'
-import type { RobotInspectionImage, Route } from '@/types'
+import type { DetectionItem, RobotInspectionImage, Route } from '@/types'
 
 const image = {
   routeId: 'route-1',
@@ -22,7 +22,41 @@ describe('cloneDetectionItems', () => {
       name: '开关/刀闸状态',
       displayLabel: '刀闸开关',
       prompt: '变电设备上的刀闸开关操作手柄、连杆及触头区域',
+      alarmEnabled: false,
+      alarmOnFinding: false,
+      alarmSeverity: 'MEDIUM',
+      alarmMessage: '',
     })
+  })
+
+  it('preserves all configured alarm fields when cloning template items', () => {
+    const cloned = cloneDetectionItems([{
+      type: 'FIRE',
+      enabled: true,
+      displayLabel: '火焰',
+      threshold: 0.75,
+      alarmEnabled: true,
+      alarmOnFinding: true,
+      alarmSeverity: 'CRITICAL',
+      alarmMessage: '发现明火，请立即处置',
+    }])
+
+    expect(cloned[0]).toMatchObject({
+      alarmEnabled: true,
+      alarmOnFinding: true,
+      alarmSeverity: 'CRITICAL',
+      alarmMessage: '发现明火，请立即处置',
+    })
+  })
+
+  it('rejects an invalid alarm severity from runtime data', () => {
+    expect(() => cloneDetectionItems([{
+      type: 'FIRE',
+      enabled: true,
+      displayLabel: '火焰',
+      threshold: 0.75,
+      alarmSeverity: 'URGENT',
+    } as unknown as DetectionItem])).toThrow('非法告警级别')
   })
 })
 
@@ -62,6 +96,12 @@ describe('resolveRobotImageDetectionItems', () => {
       'FOREIGN_OBJECT',
     ])
     expect(resolved.every((item) => item.enabled && item.displayLabel && item.prompt)).toBe(true)
+    expect(resolved.every((item) => (
+      item.alarmEnabled === false
+      && item.alarmOnFinding === false
+      && item.alarmSeverity === 'MEDIUM'
+      && item.alarmMessage === ''
+    ))).toBe(true)
   })
 })
 

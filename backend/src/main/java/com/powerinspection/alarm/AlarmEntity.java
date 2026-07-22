@@ -16,7 +16,8 @@ import java.util.Set;
 public class AlarmEntity {
   private static final Set<String> KNOWN = Set.of(
     "id", "siteId", "routeId", "robotId", "taskId", "type", "severity", "status", "message",
-    "routeName", "checkpointName", "imageUrl", "acknowledged", "workOrderId",
+    "routeName", "checkpointName", "imageUrl", "acknowledged", "sourceType", "detectionRunId",
+    "imageId", "checkpointId", "itemId", "findingKey", "workOrderId",
     "workOrderModeApplied", "workOrderConversionSource", "workOrderConversionStatus",
     "workOrderConversionError", "workOrderConversionFailedAt", "convertedAt", "version", "createdAt", "updatedAt"
   );
@@ -45,6 +46,18 @@ public class AlarmEntity {
   private String imageUrl;
   @Column(nullable = false)
   private Boolean acknowledged = false;
+  @Column(name = "source_type")
+  private String sourceType;
+  @Column(name = "detection_run_id")
+  private String detectionRunId;
+  @Column(name = "image_id")
+  private String imageId;
+  @Column(name = "checkpoint_id")
+  private String checkpointId;
+  @Column(name = "item_id")
+  private String itemId;
+  @Column(name = "finding_key")
+  private String findingKey;
   @Column(name = "work_order_id")
   private String workOrderId;
   @Column(name = "work_order_mode_applied")
@@ -88,6 +101,12 @@ public class AlarmEntity {
     checkpointName = text(map.get("checkpointName"));
     imageUrl = text(map.get("imageUrl"));
     acknowledged = bool(map.get("acknowledged"), false);
+    sourceType = text(map.get("sourceType"));
+    detectionRunId = text(map.get("detectionRunId"));
+    imageId = text(map.get("imageId"));
+    checkpointId = text(map.get("checkpointId"));
+    itemId = text(map.get("itemId"));
+    findingKey = text(map.get("findingKey"));
     workOrderId = text(map.get("workOrderId"));
     workOrderModeApplied = text(map.get("workOrderModeApplied"));
     workOrderConversionSource = text(map.get("workOrderConversionSource"));
@@ -115,6 +134,12 @@ public class AlarmEntity {
     put(map, "checkpointName", checkpointName);
     put(map, "imageUrl", imageUrl);
     map.put("acknowledged", Boolean.TRUE.equals(acknowledged));
+    put(map, "sourceType", sourceType);
+    put(map, "detectionRunId", detectionRunId);
+    put(map, "imageId", imageId);
+    put(map, "checkpointId", checkpointId);
+    put(map, "itemId", itemId);
+    put(map, "findingKey", findingKey);
     put(map, "workOrderId", workOrderId);
     put(map, "workOrderModeApplied", workOrderModeApplied);
     put(map, "workOrderConversionSource", workOrderConversionSource);

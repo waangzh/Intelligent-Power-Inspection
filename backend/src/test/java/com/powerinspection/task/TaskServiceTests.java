@@ -7,10 +7,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.powerinspection.alarm.AlarmService;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.detection.DetectionRunService;
 import com.powerinspection.model.LocateAnythingGateway;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotProperties;
@@ -28,12 +28,12 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 @ExtendWith(MockitoExtension.class)
 class TaskServiceTests {
   @Mock private DataStoreService dataStore;
-  @Mock private AlarmService alarmService;
   @Mock private SimpMessagingTemplate messagingTemplate;
   @Mock private RobotGateway robotGateway;
   @Mock private LocateAnythingGateway locateAnythingGateway;
   @Mock private RouteRevisionService routeRevisionService;
   @Mock private TaskExecutionService taskExecutionService;
+  @Mock private DetectionRunService detectionRunService;
   private TaskService service;
 
   @BeforeEach
@@ -43,13 +43,13 @@ class TaskServiceTests {
     service =
         new TaskService(
             dataStore,
-            alarmService,
             messagingTemplate,
             robotGateway,
             locateAnythingGateway,
             routeRevisionService,
             taskExecutionService,
-            properties);
+            properties,
+            detectionRunService);
   }
 
   @Test

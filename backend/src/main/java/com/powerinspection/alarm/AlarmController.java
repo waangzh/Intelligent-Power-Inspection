@@ -46,7 +46,9 @@ public class AlarmController {
     return ApiResponse.ok(dataStore.page(
       DataCategory.ALARM, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
       query.getUpdatedAfter(), query.getQ(),
-      query.filters("siteId", "routeId", "robotId", "taskId", "status", "severity", "acknowledged", "type")
+      query.filters(
+        "siteId", "routeId", "robotId", "taskId", "status", "severity", "acknowledged", "type",
+        "sourceType", "detectionRunId", "imageId", "checkpointId", "itemId")
     ));
   }
 
