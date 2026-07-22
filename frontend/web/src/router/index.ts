@@ -10,6 +10,7 @@ declare module 'vue-router' {
     permission?: Permission
     roles?: UserRole[]
     breadcrumbs?: { label: string; to?: string }[]
+    supportsFocusMode?: boolean
   }
 }
 
@@ -53,7 +54,7 @@ const router = createRouter({
           path: 'monitor',
           name: 'Monitor',
           component: () => import('@/views/Monitor.vue'),
-          meta: { title: '实时监控', requiresAuth: true, breadcrumbs: [{ label: '监控中心' }, { label: '实时监控' }] },
+          meta: { title: '实时监控', requiresAuth: true, supportsFocusMode: true, breadcrumbs: [{ label: '监控中心' }, { label: '实时监控' }] },
         },
         {
           path: 'alarms',
@@ -89,7 +90,7 @@ const router = createRouter({
           path: 'routes',
           name: 'Routes',
           component: () => import('@/views/RoutePlan.vue'),
-          meta: { title: '巡检规划', requiresAuth: true, permission: 'route:edit', breadcrumbs: [{ label: '巡检业务' }, { label: 'ROS 地图路线标注' }] },
+          meta: { title: '巡检规划', requiresAuth: true, permission: 'route:edit', supportsFocusMode: true, breadcrumbs: [{ label: '巡检业务' }, { label: 'ROS 地图路线标注' }] },
         },
         {
           path: 'tasks',
@@ -113,7 +114,7 @@ const router = createRouter({
           path: 'robot-map-review',
           name: 'RobotMapReview',
           component: () => import('@/views/MapReviewCenter.vue'),
-          meta: { title: '建图审核中心', requiresAuth: true, breadcrumbs: [{ label: '巡检业务' }, { label: '建图审核中心' }] },
+          meta: { title: '建图审核中心', requiresAuth: true, supportsFocusMode: true, breadcrumbs: [{ label: '巡检业务' }, { label: '建图审核中心' }] },
         },
         {
           path: 'robot-scene-review',

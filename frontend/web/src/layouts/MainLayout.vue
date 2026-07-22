@@ -1,12 +1,18 @@
 <template>
-  <el-container class="layout-root">
-    <el-aside v-show="!isSidebarCollapsed" width="220px" :class="['sidebar', 'desktop-sidebar']">
+  <el-container :class="['layout-root', `layout-${sidebarMode}`]">
+    <el-aside
+      v-if="!isFocusMode"
+      :width="sidebarWidth"
+      :class="['sidebar', 'desktop-sidebar', { 'is-collapsed': isSidebarCollapsed }]"
+    >
       <div class="brand">
-        <el-icon :size="22" color="#ffd700"><Lightning /></el-icon>
+        <span class="brand-mark">
+          <el-icon :size="23"><Lightning /></el-icon>
+        </span>
         <strong v-show="!isSidebarCollapsed">电力智能巡检</strong>
       </div>
       <el-scrollbar class="menu-scroll">
-        <template v-for="group in visibleMenuGroups" :key="group.title">
+        <div v-for="group in visibleMenuGroups" :key="group.title" class="menu-group">
           <div v-show="!isSidebarCollapsed" class="menu-group-title">{{ group.title }}</div>
           <el-menu
             :default-active="route.path"
@@ -19,25 +25,39 @@
               v-for="item in group.items"
               :key="item.path"
               :index="item.path"
+              :aria-label="item.label"
               @mouseenter="preloadRouteView(item.path)"
               @focusin="preloadRouteView(item.path)"
             >
               <el-icon><component :is="item.icon" /></el-icon>
-              <span>{{ item.label }}</span>
+              <template #title>{{ item.label }}</template>
             </el-menu-item>
           </el-menu>
-        </template>
+        </div>
       </el-scrollbar>
     </el-aside>
 
-    <el-container>
-      <el-header class="topbar">
+    <el-container class="workspace-shell">
+      <el-header :class="['topbar', { 'is-focus': isFocusMode }]">
         <div class="topbar-left">
-          <el-button class="sidebar-trigger" text :aria-label="isMobile ? '打开导航菜单' : isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'" @click="toggleNavigation">
-            <el-icon :size="20"><component :is="isSidebarCollapsed ? 'Menu' : 'Fold'" /></el-icon>
-          </el-button>
+          <el-tooltip v-if="isMobile || !isFocusMode" :content="navigationToggleLabel" placement="bottom" :show-after="300">
+            <el-button class="topbar-control" text :aria-label="navigationToggleLabel" @click="toggleNavigation">
+              <el-icon :size="20"><component :is="isMobile || isSidebarCollapsed ? 'Menu' : 'Fold'" /></el-icon>
+            </el-button>
+          </el-tooltip>
+          <el-tooltip v-if="supportsFocusMode && !isMobile" :content="isFocusMode ? '退出专注模式' : '进入专注模式'" placement="bottom" :show-after="300">
+            <el-button
+              :class="['topbar-control', 'focus-trigger', { active: isFocusMode }]"
+              text
+              :aria-label="isFocusMode ? '退出专注模式' : '进入专注模式'"
+              :aria-pressed="isFocusMode"
+              @click="toggleFocusMode"
+            >
+              <el-icon :size="19"><Aim /></el-icon>
+            </el-button>
+          </el-tooltip>
           <span class="page-title">{{ currentTitle }}</span>
-          <el-tag type="info" size="small" effect="plain">LocateAnything · ROS 建图巡检</el-tag>
+          <el-tag v-if="!isFocusMode" type="info" size="small" effect="plain">LocateAnything · ROS 建图巡检</el-tag>
         </div>
         <div class="topbar-right">
           <el-tooltip content="消息中心" placement="bottom">
@@ -92,19 +112,21 @@
         </div>
       </el-header>
 
-      <el-main class="main-content">
+      <el-main :class="['main-content', { 'focus-content': isFocusMode }]">
         <router-view />
       </el-main>
     </el-container>
 
-    <el-drawer v-model="mobileNavVisible" direction="ltr" size="220px" :with-header="false" class="mobile-nav-drawer">
+    <el-drawer v-model="mobileNavVisible" direction="ltr" size="228px" :with-header="false" class="mobile-nav-drawer">
       <aside class="sidebar mobile-sidebar">
         <div class="brand">
-          <el-icon :size="22" color="#ffd700"><Lightning /></el-icon>
+          <span class="brand-mark">
+            <el-icon :size="23"><Lightning /></el-icon>
+          </span>
           <strong>电力智能巡检</strong>
         </div>
         <el-scrollbar class="menu-scroll">
-          <template v-for="group in visibleMenuGroups" :key="group.title">
+          <div v-for="group in visibleMenuGroups" :key="group.title" class="menu-group">
             <div class="menu-group-title">{{ group.title }}</div>
             <el-menu :default-active="route.path" router class="sidebar-menu" @select="mobileNavVisible = false">
               <el-menu-item
@@ -115,10 +137,10 @@
                 @focusin="preloadRouteView(item.path)"
               >
                 <el-icon><component :is="item.icon" /></el-icon>
-                <span>{{ item.label }}</span>
+                <template #title>{{ item.label }}</template>
               </el-menu-item>
             </el-menu>
-          </template>
+          </div>
         </el-scrollbar>
       </aside>
     </el-drawer>
@@ -126,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { menuGroups } from '@/config/menu'
@@ -142,10 +164,24 @@ const router = useRouter()
 const alarmStore = useAlarmStore()
 const notificationStore = useNotificationStore()
 const authStore = useAuthStore()
-const isSidebarCollapsed = ref(false)
+type SidebarMode = 'expanded' | 'collapsed' | 'focus'
+type SidebarPresentation = Exclude<SidebarMode, 'focus'>
+
+const sidebarPresentation = ref<SidebarPresentation>('expanded')
+const focusModeEnabled = ref(false)
 const isMobile = ref(window.innerWidth < 900)
 const mobileNavVisible = ref(false)
 const preloadedRoutePaths = new Set<string>()
+
+const supportsFocusMode = computed(() => route.meta.supportsFocusMode === true)
+const isFocusMode = computed(() => focusModeEnabled.value)
+const isSidebarCollapsed = computed(() => sidebarPresentation.value === 'collapsed')
+const sidebarMode = computed<SidebarMode>(() => (isFocusMode.value ? 'focus' : sidebarPresentation.value))
+const sidebarWidth = computed(() => (isSidebarCollapsed.value ? '68px' : '228px'))
+const navigationToggleLabel = computed(() => {
+  if (isMobile.value) return '打开导航菜单'
+  return isSidebarCollapsed.value ? '展开侧边栏' : '折叠侧边栏'
+})
 
 const roleLabel = computed(() => (authStore.user ? ROLE_LABELS[authStore.user.role] : ''))
 
@@ -170,6 +206,7 @@ const currentTitle = computed(() => (route.meta.title as string) || '电力智�
 
 function syncViewport() {
   isMobile.value = window.innerWidth < 900
+  if (isMobile.value) focusModeEnabled.value = false
   if (!isMobile.value) mobileNavVisible.value = false
 }
 
@@ -178,7 +215,12 @@ function toggleNavigation() {
     mobileNavVisible.value = true
     return
   }
-  isSidebarCollapsed.value = !isSidebarCollapsed.value
+  sidebarPresentation.value = isSidebarCollapsed.value ? 'expanded' : 'collapsed'
+}
+
+function toggleFocusMode() {
+  if (!supportsFocusMode.value || isMobile.value) return
+  focusModeEnabled.value = !focusModeEnabled.value
 }
 
 function preloadRouteView(path: string) {
@@ -192,8 +234,16 @@ function preloadRouteView(path: string) {
   })
 }
 
-onMounted(() => window.addEventListener('resize', syncViewport))
-onUnmounted(() => window.removeEventListener('resize', syncViewport))
+watch(supportsFocusMode, (supported) => {
+  if (!supported) focusModeEnabled.value = false
+})
+
+onMounted(() => {
+  window.addEventListener('resize', syncViewport)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', syncViewport)
+})
 
 function handleUserCommand(command: string) {
   if (command === 'profile') {
@@ -214,96 +264,142 @@ function handleUserCommand(command: string) {
 <style scoped>
 .layout-root {
   height: 100vh;
+  min-width: 0;
+  background: var(--pi-bg);
+}
+
+.workspace-shell {
+  min-width: 0;
 }
 
 .sidebar {
-  background:
-    radial-gradient(circle at 20% 8%, rgba(43, 129, 255, 0.24), transparent 26%),
-    radial-gradient(circle at 88% 46%, rgba(21, 110, 224, 0.18), transparent 30%),
-    linear-gradient(160deg, #071e42 0%, #0a3265 100%);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: width 210ms ease-out;
+  flex: 0 0 auto;
+  border-right: 1px solid rgba(181, 211, 242, 0.12);
+  background: linear-gradient(180deg, #142d4d 0%, #1d3d62 100%);
+  box-shadow: 6px 0 18px rgba(15, 37, 64, 0.08);
+  transition: width 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   min-height: 64px;
-  padding: 16px;
+  padding: 0 17px;
   color: #fff;
   font-size: 16px;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(225, 238, 251, 0.1);
+}
+
+.brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  color: #ffd529;
+}
+
+.brand strong {
+  overflow: hidden;
+  text-overflow: clip;
 }
 
 .menu-scroll {
   flex: 1;
 }
 
+.menu-scroll :deep(.el-scrollbar__wrap) {
+  overflow-x: hidden;
+}
+
+.menu-group {
+  padding-top: 5px;
+}
+
 .menu-group-title {
-  padding: 16px 16px 7px;
+  padding: 10px 18px 5px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.35);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  line-height: 18px;
+  color: rgba(207, 224, 244, 0.54);
+  letter-spacing: 0;
 }
 
 .sidebar-menu {
+  width: 100%;
   border-right: none;
   background: transparent;
 }
 
 .sidebar-menu :deep(.el-menu-item) {
-  min-height: 44px;
-  height: 44px;
-  margin: 3px 10px;
-  padding-left: 14px !important;
+  min-height: 42px;
+  height: 42px;
+  margin: 2px 10px;
+  padding-left: 13px !important;
   border: 1px solid transparent;
-  border-radius: 8px;
-  color: rgba(220, 235, 255, 0.75);
+  border-radius: 6px;
+  color: rgba(225, 236, 249, 0.78);
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.1px;
-  transition: background-color 180ms ease-out, border-color 180ms ease-out, box-shadow 180ms ease-out;
+  letter-spacing: 0;
+  transition: background-color 160ms ease-out, color 160ms ease-out, box-shadow 160ms ease-out;
 }
 
 .sidebar-menu :deep(.el-menu-item .el-icon) {
   margin-right: 11px;
-  font-size: 17px;
-  color: rgba(182, 211, 249, 0.86);
+  font-size: 18px;
+  color: rgba(203, 222, 244, 0.9);
 }
 
 .sidebar-menu :deep(.el-menu-item:hover) {
-  background: rgba(83, 157, 255, 0.12);
+  background: rgba(93, 157, 236, 0.16);
   color: #fff;
 }
 
 .sidebar-menu :deep(.el-menu-item.is-active) {
-  background: linear-gradient(90deg, rgba(31, 117, 255, 0.38), rgba(45, 135, 255, 0.14));
-  border-color: rgba(98, 174, 255, 0.72);
-  box-shadow: inset 3px 0 0 #70c4ff, 0 0 15px rgba(46, 137, 255, 0.16);
+  border-color: rgba(122, 180, 255, 0.42);
+  background: linear-gradient(90deg, #2e73d8 0%, #357fe9 100%);
+  box-shadow: 0 5px 12px rgba(5, 28, 63, 0.22);
   color: #fff;
 }
 
 .sidebar-menu :deep(.el-menu-item.is-active .el-icon) {
-  color: #8dd5ff;
+  color: #fff;
 }
 
-.collapsed .brand {
+.is-collapsed .brand {
   justify-content: center;
   padding-inline: 0;
 }
 
-.collapsed .sidebar-menu :deep(.el-menu-item) {
-  margin-inline: 10px;
+.is-collapsed .menu-group {
+  margin: 0 10px;
+  padding: 8px 0 4px;
+  border-top: 1px solid rgba(225, 238, 251, 0.09);
+}
+
+.is-collapsed .menu-group:first-child {
+  border-top: 0;
+}
+
+.is-collapsed .sidebar-menu :deep(.el-menu-item) {
+  width: 44px;
+  margin: 2px auto;
   padding: 0 !important;
   justify-content: center;
 }
 
-.collapsed .sidebar-menu :deep(.el-menu-item .el-icon) {
+.is-collapsed .sidebar-menu :deep(.el-menu-tooltip__trigger) {
+  padding: 0;
+  justify-content: center;
+}
+
+.is-collapsed .sidebar-menu :deep(.el-menu-item .el-icon) {
   margin: 0;
 }
 
@@ -323,22 +419,27 @@ function handleUserCommand(command: string) {
   gap: 12px;
 }
 
-.sidebar-trigger {
-  width: 38px;
-  height: 38px;
+.topbar-control {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  padding: 0;
+  border-radius: 6px;
   color: #315272;
 }
 
-.sidebar-trigger:hover {
+.topbar-control:hover,
+.focus-trigger.active {
   color: var(--pi-primary);
   background: #edf5ff;
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.35px;
+  letter-spacing: 0;
   color: var(--pi-text);
+  white-space: nowrap;
 }
 
 .topbar-right {
@@ -396,6 +497,17 @@ function handleUserCommand(command: string) {
   padding: 14px 16px 20px;
   overflow: auto;
   background: var(--pi-bg);
+  transition: padding 180ms ease-out;
+}
+
+.focus-content {
+  padding: 10px 12px 14px;
+}
+
+.focus-content > :deep(*) {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
 }
 
 .mobile-nav-drawer :deep(.el-drawer__body) {
