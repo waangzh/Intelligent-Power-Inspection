@@ -133,6 +133,97 @@ def normalize_health(value):
     return normalized
 
 
+FIX_TYPES = {"NO_FIX", "SINGLE_POINT", "DGPS", "RTK_FIXED", "RTK_FLOAT", "UNKNOWN"}
+
+
+def finite_or_none(value):
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed == parsed and parsed not in (float("inf"), float("-inf")) else None
+
+
+def int_or_none(value):
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def non_negative_int_or_none(value):
+    parsed = int_or_none(value)
+    return parsed if parsed is not None and parsed >= 0 else None
+
+
+def non_negative_float_or_none(value):
+    parsed = finite_or_none(value)
+    return parsed if parsed is not None and parsed >= 0 else None
+
+
+def normalize_fix_type(value):
+    text = str(value or "UNKNOWN").strip().upper()
+    return text if text in FIX_TYPES else "UNKNOWN"
+
+
+def normalize_instant(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return text
+
+
+def normalize_gnss_fix(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        logger.warning("event=bridge_gnss_fix_invalid reason=not_object")
+        return None
+    latitude = finite_or_none(value.get("latitude"))
+    longitude = finite_or_none(value.get("longitude"))
+    if latitude is not None and not -90.0 <= latitude <= 90.0:
+        logger.warning("event=bridge_gnss_fix_invalid reason=latitude_out_of_range robotId=%s", value.get("robotId"))
+        return None
+    if longitude is not None and not -180.0 <= longitude <= 180.0:
+        logger.warning("event=bridge_gnss_fix_invalid reason=longitude_out_of_range robotId=%s", value.get("robotId"))
+        return None
+    return {
+        "valid": bool(value.get("valid")),
+        "stale": bool(value.get("stale")),
+        "frame": str(value.get("frame") or ""),
+        "latitude": latitude,
+        "longitude": longitude,
+        "altitude": finite_or_none(value.get("altitude")),
+        "quality": int_or_none(value.get("quality")),
+        "fixType": normalize_fix_type(value.get("fixType")),
+        "satellites": non_negative_int_or_none(value.get("satellites")),
+        "hdop": non_negative_float_or_none(value.get("hdop")),
+        "differentialAge": non_negative_float_or_none(value.get("differentialAge")),
+        "baseStationId": str(value.get("baseStationId") or ""),
+        "ageSec": non_negative_float_or_none(value.get("ageSec")),
+        "observedAt": normalize_instant(value.get("observedAt")),
+    }
+
+
+def normalize_patrol(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        logger.warning("event=bridge_patrol_invalid reason=not_object")
+        return None
+    return value
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Robot Platform Bridge", version="1.0")
     try:
@@ -389,6 +480,8 @@ def create_app() -> FastAPI:
                 "localConfirmStartReady": health.get("localConfirmStartReady", False),
                 "localConfirmStartError": health.get("localConfirmStartError"),
             },
+            "executionId": status.get("executionId") or status.get("activeExecutionId"),
+            "patrol": status.get("patrol"),
             "gnssFix": status.get("gnssFix"),
         }
 
@@ -417,6 +510,8 @@ def create_app() -> FastAPI:
         ):
             raise BridgeError("INVALID_REQUEST", "invalid heartbeat payload")
         body["health"] = normalize_health(body.get("health"))
+        body["patrol"] = normalize_patrol(body.get("patrol"))
+        body["gnssFix"] = normalize_gnss_fix(body.get("gnssFix"))
         capabilities = normalize_capabilities(body.get("capabilities"))
         if capabilities is not None:
             body["capabilities"] = capabilities

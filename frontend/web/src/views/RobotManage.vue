@@ -178,6 +178,8 @@
                 <el-tag size="small" :type="selectedRobotLocation.realtime ? 'success' : 'warning'" effect="plain">
                   {{ locationModeLabel(selectedRobotLocation) }}
                 </el-tag>
+                <span v-if="selectedRobotLocation.state">状态 {{ selectedRobotLocation.state }}</span>
+                <span v-if="selectedRobotLocation.executionId">执行 {{ selectedRobotLocation.executionId }}</span>
                 <span v-if="selectedRobotLocation.gnssFix">
                   {{ GNSS_FIX_TYPE_LABELS[selectedRobotLocation.gnssFix.fixType] }}
                   · 卫星 {{ selectedRobotLocation.gnssFix.satellites ?? '-' }}
@@ -196,6 +198,7 @@
                 />
                 <el-button size="small" type="primary" :loading="trackLoading" @click="queryTrack">查询轨迹</el-button>
                 <el-button size="small" plain @click="clearTrack">清除</el-button>
+                <span v-if="trackContextLabel" class="track-context">{{ trackContextLabel }}</span>
               </div>
               <div class="location-map">
                 <Map2D
@@ -308,6 +311,16 @@ const robot = computed(() => robotStore.getRobotById(selectedRobotId.value))
 const selectedRobotLocation = computed<RobotLocation | null>(() => {
   const robotId = selectedRobotId.value
   return robotId ? locationStore.getLocation(robotId) ?? null : null
+})
+const trackContextLabel = computed(() => {
+  const last = trackPoints.value[trackPoints.value.length - 1]
+  if (!last) return ''
+  const parts: string[] = []
+  if (last.cycleIndex != null) parts.push(`第 ${last.cycleIndex} 轮`)
+  if (last.targetId) parts.push(`目标 ${last.targetId}`)
+  if (last.navigationPhase) parts.push(last.navigationPhase)
+  if (last.robotState) parts.push(last.robotState)
+  return parts.length ? parts.join(' · ') : ''
 })
 const mapCenter = computed(() => {
   const siteCenter = robot.value?.siteId ? siteStore.getSiteById(robot.value.siteId)?.center : undefined
@@ -821,6 +834,11 @@ function fmt(iso?: string | null) {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 12px;
+}
+
+.track-context {
+  font-size: 12px;
+  color: var(--pi-muted);
 }
 
 .location-map {

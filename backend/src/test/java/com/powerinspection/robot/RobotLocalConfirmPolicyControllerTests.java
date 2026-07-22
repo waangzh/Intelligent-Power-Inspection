@@ -92,8 +92,8 @@ class RobotLocalConfirmPolicyControllerTests {
   }
 
   private BridgeRobotSnapshot snapshot(Instant at, boolean reported, String version, boolean ready) {
-    return new BridgeRobotSnapshot(ROBOT_ID, at, "1.0", "boot-policy", "idle", "test-build", 0,
-      Map.of("systemMode", "ready"), null, true, reported, version, ready,
+    return new BridgeRobotSnapshot(ROBOT_ID, at, "1.0", "boot-policy", "idle", null, "test-build", 0,
+      Map.of("systemMode", "ready"), null, null, true, reported, version, ready,
       ready ? null : "UI_CONFIRM_ENDPOINT_UNAVAILABLE", at);
   }
 

@@ -12,6 +12,37 @@ final class GnssFixParser {
 
   static BridgeGnssFix parse(Object raw) {
     if (!(raw instanceof Map<?, ?> map)) return null;
+    return parseMap(map, null, false);
+  }
+
+  static BridgeGnssFix withServerStale(BridgeGnssFix fix, Instant receivedAt, double staleTimeoutSeconds) {
+    if (fix == null || receivedAt == null || fix.observedAt() == null) return fix;
+    double ageSec = Math.max(0, (receivedAt.toEpochMilli() - fix.observedAt().toEpochMilli()) / 1000.0);
+    boolean stale = ageSec > Math.max(0.1, staleTimeoutSeconds);
+    boolean coordinateValid = coordinateValid(fix.latitude(), fix.longitude());
+    boolean valid = !stale
+        && coordinateValid
+        && fix.quality() != null
+        && fix.quality() > 0
+        && !Boolean.TRUE.equals(fix.stale());
+    return new BridgeGnssFix(
+        valid,
+        stale,
+        fix.frame(),
+        fix.latitude(),
+        fix.longitude(),
+        fix.altitude(),
+        fix.quality(),
+        fix.fixType(),
+        fix.satellites(),
+        fix.hdop(),
+        fix.differentialAge(),
+        fix.baseStationId(),
+        ageSec,
+        fix.observedAt());
+  }
+
+  private static BridgeGnssFix parseMap(Map<?, ?> map, Instant receivedAt, boolean applyServerStale) {
     Double latitude = finiteDouble(map.get("latitude"));
     Double longitude = finiteDouble(map.get("longitude"));
     Double altitude = finiteDouble(map.get("altitude"));
@@ -29,7 +60,7 @@ final class GnssFixParser {
     boolean coordinateValid = coordinateValid(latitude, longitude);
     boolean valid = bool(map.get("valid")) && coordinateValid && quality != null && quality > 0 && !stale;
     if (!coordinateValid && (latitude != null || longitude != null)) return null;
-    return new BridgeGnssFix(
+    BridgeGnssFix parsed = new BridgeGnssFix(
         valid,
         stale,
         text(map.get("frame")),
@@ -44,6 +75,10 @@ final class GnssFixParser {
         baseStationId,
         ageSec,
         observedAt);
+    if (applyServerStale && receivedAt != null) {
+      return withServerStale(parsed, receivedAt, 0);
+    }
+    return parsed;
   }
 
   static boolean coordinateValid(Double latitude, Double longitude) {

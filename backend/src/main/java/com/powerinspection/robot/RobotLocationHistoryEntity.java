@@ -30,6 +30,21 @@ public class RobotLocationHistoryEntity {
   @Column(name = "task_id", length = 128)
   private String taskId;
 
+  @Column(name = "route_id", length = 128)
+  private String routeId;
+
+  @Column(name = "target_id", length = 128)
+  private String targetId;
+
+  @Column(name = "cycle_index")
+  private Integer cycleIndex;
+
+  @Column(name = "robot_state", length = 32)
+  private String robotState;
+
+  @Column(name = "navigation_phase", length = 32)
+  private String navigationPhase;
+
   @Column(name = "observed_at", nullable = false)
   private Instant observedAt;
 
@@ -61,6 +76,16 @@ public class RobotLocationHistoryEntity {
   public void setExecutionId(String executionId) { this.executionId = executionId; }
   public String getTaskId() { return taskId; }
   public void setTaskId(String taskId) { this.taskId = taskId; }
+  public String getRouteId() { return routeId; }
+  public void setRouteId(String routeId) { this.routeId = routeId; }
+  public String getTargetId() { return targetId; }
+  public void setTargetId(String targetId) { this.targetId = targetId; }
+  public Integer getCycleIndex() { return cycleIndex; }
+  public void setCycleIndex(Integer cycleIndex) { this.cycleIndex = cycleIndex; }
+  public String getRobotState() { return robotState; }
+  public void setRobotState(String robotState) { this.robotState = robotState; }
+  public String getNavigationPhase() { return navigationPhase; }
+  public void setNavigationPhase(String navigationPhase) { this.navigationPhase = navigationPhase; }
   public Instant getObservedAt() { return observedAt; }
   public void setObservedAt(Instant observedAt) { this.observedAt = observedAt; }
   public Instant getReceivedAt() { return receivedAt; }

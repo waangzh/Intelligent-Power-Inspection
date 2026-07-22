@@ -26,4 +26,9 @@ public interface RobotLocationHistoryRepository extends JpaRepository<RobotLocat
       Pageable pageable);
 
   RobotLocationHistoryEntity findTopByRobotIdOrderByObservedAtDesc(String robotId);
+
+  boolean existsByRobotIdAndExecutionIdAndRobotStateIn(
+      String robotId, String executionId, List<String> robotStates);
+
+  long deleteByObservedAtBefore(Instant cutoff);
 }

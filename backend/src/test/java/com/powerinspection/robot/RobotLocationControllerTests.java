@@ -51,11 +51,14 @@ class RobotLocationControllerTests {
 
   @Test
   void locationAndTrackApisExposeGnssFix() throws Exception {
-    Instant now = Instant.parse("2026-07-15T06:00:00Z");
+    Instant now = Instant.now();
     BridgeGnssFix fix = new BridgeGnssFix(
         true, false, "gps_link", 31.2304, 121.4737, 12.5, 4, "RTK_FIXED", 18, 0.8, 0.2, "BS-01", 0.5, now);
+    BridgePatrolSnapshot patrol = new BridgePatrolSnapshot(
+        "route-1", "cp-2", "2号配电柜", 1, 6, "target", 2, 5, false, null, null);
     BridgeRobotSnapshot snapshot = new BridgeRobotSnapshot(
-        ROBOT_ID, now, "1.0", "boot-gps", "running", "test-build", 1, Map.of(), fix);
+        ROBOT_ID, now, "1.0", "boot-gps", "running", "exec-gps-1", "test-build", 1, Map.of(),
+        patrol, fix, true, false, null, false, null, null);
     heartbeatService.applyBridgeSnapshot(snapshot, now);
     locationService.applySnapshot(snapshot, now);
 
@@ -65,6 +68,8 @@ class RobotLocationControllerTests {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.robotId").value(ROBOT_ID))
         .andExpect(jsonPath("$.data.locationAvailable").value(true))
+        .andExpect(jsonPath("$.data.state").value("running"))
+        .andExpect(jsonPath("$.data.executionId").value("exec-gps-1"))
         .andExpect(jsonPath("$.data.gnssFix.latitude").value(31.2304))
         .andExpect(jsonPath("$.data.gnssFix.fixType").value("RTK_FIXED"));
 
@@ -74,11 +79,13 @@ class RobotLocationControllerTests {
 
     mockMvc.perform(get("/api/v1/robots/{id}/track", ROBOT_ID)
             .header("Authorization", bearer(token))
-            .param("start", "2026-07-15T05:00:00Z")
-            .param("end", "2026-07-15T07:00:00Z"))
+            .param("start", now.minusSeconds(3600).toString())
+            .param("end", now.plusSeconds(60).toString()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.robotId").value(ROBOT_ID))
-        .andExpect(jsonPath("$.data.points[0].latitude").value(31.2304));
+        .andExpect(jsonPath("$.data.points[0].latitude").value(31.2304))
+        .andExpect(jsonPath("$.data.points[0].targetId").value("cp-2"))
+        .andExpect(jsonPath("$.data.points[0].cycleIndex").value(2));
   }
 
   @Test

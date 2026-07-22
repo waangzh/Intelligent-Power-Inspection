@@ -28,6 +28,8 @@ export interface RobotLocation {
   online: boolean
   locationAvailable: boolean
   realtime: boolean
+  state?: string | null
+  executionId?: string | null
   gnssFix?: GnssFix | null
 }
 
@@ -38,11 +40,16 @@ export interface RobotTrackPoint {
   fixType?: GnssFixType
   satellites?: number | null
   hdop?: number | null
+  robotState?: string | null
+  navigationPhase?: string | null
+  targetId?: string | null
+  cycleIndex?: number | null
   observedAt: string
 }
 
 export interface RobotTrackResponse {
   robotId: string
+  executionId?: string | null
   start: string
   end: string
   points: RobotTrackPoint[]

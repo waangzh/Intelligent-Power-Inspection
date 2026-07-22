@@ -45,7 +45,10 @@ public class RobotBridgeHeartbeatClient {
     Map<String, Object> body = get("/bridge/v1/robots/" + robotId);
     if (!robotId.equals(text(body.get("robotId")))) throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD);
     String lastSeen = text(body.get("lastSeen"));
-    if (lastSeen.isBlank()) return new BridgeRobotSnapshot(robotId, null, "", "", "", "", 0, Map.of(), null);
+    if (lastSeen.isBlank()) {
+      return new BridgeRobotSnapshot(robotId, null, "", "", "", null, "", 0, Map.of(), null, null,
+        true, false, null, false, null, null);
+    }
     Instant lastHeartbeatAt;
     try { lastHeartbeatAt = Instant.parse(lastSeen); }
     catch (RuntimeException ex) { throw new BridgeRobotClientException(BridgeRobotClientException.Reason.INVALID_PAYLOAD); }
@@ -65,9 +68,12 @@ public class RobotBridgeHeartbeatClient {
     String localProtocolVersion = nullableText(capabilityMap.get("localConfirmProtocolVersion"));
     boolean localReady = bool(healthMap.get("localConfirmStartReady"), false);
     String localError = nullableText(healthMap.get("localConfirmStartError"));
+    String executionId = nullableText(body.get("executionId"));
+    if (executionId == null) executionId = nullableText(body.get("activeExecutionId"));
+    BridgePatrolSnapshot patrol = PatrolSnapshotParser.parse(body.get("patrol"));
     return new BridgeRobotSnapshot(robotId, lastHeartbeatAt, text(body.get("protocolVersion")), text(body.get("bootId")), text(body.get("state")),
-      text(body.get("softwareVersion")), number(body.get("acceptedEventSequence")), Map.copyOf(normalizedHealth),
-      GnssFixParser.parse(body.get("gnssFix")), reportedRemote, reportedLocal, localProtocolVersion,
+      executionId, text(body.get("softwareVersion")), number(body.get("acceptedEventSequence")), Map.copyOf(normalizedHealth),
+      patrol, GnssFixParser.parse(body.get("gnssFix")), reportedRemote, reportedLocal, localProtocolVersion,
       localReady, localError, instant(body.get("capabilityReportedAt")));
   }
 

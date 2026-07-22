@@ -153,8 +153,10 @@ function robotPopupHtml(): string {
   const lines = [
     `<b>${label}</b>`,
     `${locationModeLabel(location)}${location?.online === false ? ' · 离线' : ''}`,
-    `经纬度：${latlng.lat.toFixed(7)}, ${latlng.lng.toFixed(7)}`,
   ]
+  if (location?.state) lines.push(`巡逻状态：${escapeHtml(location.state)}`)
+  if (location?.executionId) lines.push(`执行 ID：${escapeHtml(location.executionId)}`)
+  lines.push(`经纬度：${latlng.lat.toFixed(7)}, ${latlng.lng.toFixed(7)}`)
   if (fix) {
     lines.push(`RTK：${GNSS_FIX_TYPE_LABELS[fix.fixType]}`)
     if (fix.satellites != null) lines.push(`卫星数：${fix.satellites}`)

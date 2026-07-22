@@ -64,6 +64,8 @@ public class RobotTelemetryEntity {
   private Instant gpsObservedAt;
   @Column(name = "gps_received_at")
   private Instant gpsReceivedAt;
+  @Column(name = "last_execution_id", length = 128)
+  private String lastExecutionId;
   @Column(name = "payload_json", columnDefinition = "LONGTEXT")
   private String payloadJson;
   @Column(name = "updated_at", nullable = false)
@@ -141,6 +143,8 @@ public class RobotTelemetryEntity {
   public String getGpsBaseStationId() { return gpsBaseStationId; }
   public Instant getGpsObservedAt() { return gpsObservedAt; }
   public Instant getGpsReceivedAt() { return gpsReceivedAt; }
+  public String getLastExecutionId() { return lastExecutionId; }
+  public void setLastExecutionId(String lastExecutionId) { this.lastExecutionId = lastExecutionId; }
 
   public void applyGnssFix(BridgeGnssFix fix, Instant receivedAt) {
     if (fix == null) return;
