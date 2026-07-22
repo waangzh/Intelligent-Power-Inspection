@@ -18,7 +18,7 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://112.124.49.152:8080',
+        target: 'wss://waang.top',
         ws: true,
       },
     },

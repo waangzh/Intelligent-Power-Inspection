@@ -24,28 +24,27 @@ export const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    title: '运维中心',
+    title: '运维处置',
     items: [
       { path: '/workorders', label: '工单管理', icon: 'Tickets', permission: 'workorder:view' },
-      { path: '/notifications', label: '消息中心', icon: 'Message' },
-      { path: '/agents', label: '巡检研判助手', icon: 'Connection', permission: 'agent:view' },
+      { path: '/agents', label: '智能研判', icon: 'Connection', permission: 'agent:view' },
+      { path: '/notifications', label: '通知中心', icon: 'Message' },
     ],
   },
   {
-    title: '巡检业务',
+    title: '巡检作业',
+    items: [
+      { path: '/tasks', label: '任务调度', icon: 'VideoPlay', permission: 'task:view' },
+      { path: '/routes', label: '路线规划', icon: 'MapLocation', permission: 'route:edit' },
+      { path: '/robot-map-review', label: '建图审核', icon: 'Checked' },
+    ],
+  },
+  {
+    title: '基础资源',
     items: [
       { path: '/sites', label: '站点管理', icon: 'OfficeBuilding', permission: 'site:edit' },
-      { path: '/routes', label: '巡检规划', icon: 'MapLocation', permission: 'route:edit' },
-      { path: '/robot-map-review', label: '机器人建图审核', icon: 'Checked' },
-      { path: '/robot-scene-review', label: '三维建图审核', icon: 'DataAnalysis' },
-      { path: '/tasks', label: '任务调度', icon: 'VideoPlay', permission: 'task:view' },
-    ],
-  },
-  {
-    title: '资产感知',
-    items: [
       { path: '/robots', label: '机器人管理', icon: 'Cpu', permission: 'robot:manage' },
-      { path: '/detection', label: '检测策略', icon: 'View', permission: 'detection:manage' },
+      { path: '/detection', label: 'AI 检测', icon: 'View', permission: 'detection:manage' },
     ],
   },
   {

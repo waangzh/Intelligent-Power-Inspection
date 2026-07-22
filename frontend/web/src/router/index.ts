@@ -112,14 +112,14 @@ const router = createRouter({
         {
           path: 'robot-map-review',
           name: 'RobotMapReview',
-          component: () => import('@/views/RobotMapReview.vue'),
-          meta: { title: '机器人建图审核', requiresAuth: true, breadcrumbs: [{ label: '巡检业务' }, { label: '机器人建图审核' }] },
+          component: () => import('@/views/MapReviewCenter.vue'),
+          meta: { title: '建图审核中心', requiresAuth: true, breadcrumbs: [{ label: '巡检业务' }, { label: '建图审核中心' }] },
         },
         {
           path: 'robot-scene-review',
           name: 'RobotSceneReview',
-          component: () => import('@/views/RobotSceneReview.vue'),
-          meta: { title: '机器人三维建图审核', requiresAuth: true, breadcrumbs: [{ label: '巡检业务' }, { label: '三维建图审核' }] },
+          redirect: { path: '/robot-map-review', query: { type: 'scene' } },
+          meta: { title: '建图审核中心', requiresAuth: true },
         },
         {
           path: 'robots/status',
