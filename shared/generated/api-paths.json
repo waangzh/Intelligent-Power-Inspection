@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T04:18:13.171Z",
+  "generatedAt": "2026-07-22T10:07:13.577Z",
   "paths": [
     {
       "apiPath": "/api/v1/agent-actions/{actionId}",
