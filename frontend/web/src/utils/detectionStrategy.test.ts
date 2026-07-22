@@ -22,14 +22,13 @@ describe('cloneDetectionItems', () => {
       name: '开关/刀闸状态',
       displayLabel: '刀闸开关',
       prompt: '变电设备上的刀闸开关操作手柄、连杆及触头区域',
-      alarmEnabled: false,
-      alarmOnFinding: false,
+      alarmMode: 'OFF',
       alarmSeverity: 'MEDIUM',
       alarmMessage: '',
     })
   })
 
-  it('preserves all configured alarm fields when cloning template items', () => {
+  it('upgrades legacy alarm switches to the canonical alarm mode', () => {
     const cloned = cloneDetectionItems([{
       type: 'FIRE',
       enabled: true,
@@ -42,11 +41,12 @@ describe('cloneDetectionItems', () => {
     }])
 
     expect(cloned[0]).toMatchObject({
-      alarmEnabled: true,
-      alarmOnFinding: true,
+      alarmMode: 'ON_FINDING',
       alarmSeverity: 'CRITICAL',
       alarmMessage: '发现明火，请立即处置',
     })
+    expect(cloned[0]).not.toHaveProperty('alarmEnabled')
+    expect(cloned[0]).not.toHaveProperty('alarmOnFinding')
   })
 
   it('rejects an invalid alarm severity from runtime data', () => {
@@ -89,16 +89,15 @@ describe('resolveRobotImageDetectionItems', () => {
     const resolved = resolveRobotImageDetectionItems(image, undefined)
 
     expect(resolved.map((item) => item.type)).toEqual([
-      'SWITCH',
-      'METER',
+      'SWITCH_STATE',
+      'METER_READING',
       'OIL_LEAK',
-      'FIRE',
+      'FIRE_SMOKE',
       'FOREIGN_OBJECT',
     ])
     expect(resolved.every((item) => item.enabled && item.displayLabel && item.prompt)).toBe(true)
     expect(resolved.every((item) => (
-      item.alarmEnabled === false
-      && item.alarmOnFinding === false
+      item.alarmMode === 'OFF'
       && item.alarmSeverity === 'MEDIUM'
       && item.alarmMessage === ''
     ))).toBe(true)

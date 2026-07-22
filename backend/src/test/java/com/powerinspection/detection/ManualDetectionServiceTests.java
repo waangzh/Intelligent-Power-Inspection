@@ -75,6 +75,7 @@ class ManualDetectionServiceTests {
     LocateAnythingGateway gateway = request -> {
       capturedRequest.set(request);
       return new LocateAnythingResult(List.of(new LocateAnythingFinding(
+        "switch-state",
         "SWITCH",
         "红色刀闸开关",
         0.88,
@@ -111,7 +112,7 @@ class ManualDetectionServiceTests {
       "http://localhost:8080/model-files/locate-anything/results/",
       640,
       480,
-      List.of(Map.of("type", "SWITCH", "displayLabel", "红色刀闸开关", "enabled", true))
+      List.of(Map.of("itemId", "switch-state", "type", "SWITCH", "displayLabel", "红色刀闸开关", "enabled", true))
     );
 
     ManualDetectionController.ManualDetectionResponse result = awaitResult();

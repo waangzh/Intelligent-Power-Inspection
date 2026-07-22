@@ -43,6 +43,7 @@ class HttpModelGatewayTests {
         "resultImageUrl": "http://example.test/combined.jpg",
         "findings": [
           {
+            "itemId": "switch_main",
             "type": "SWITCH",
             "prompt": "红色刀闸开关",
             "label": "红色刀闸开关",
@@ -67,10 +68,11 @@ class HttpModelGatewayTests {
       "http://example.test/input.jpg",
       400,
       200,
-      List.of(Map.of("type", "SWITCH", "displayLabel", "红色刀闸开关", "prompt", "定位红色刀闸开关", "enabled", true))
+      List.of(Map.of("itemId", "switch_main", "type", "SWITCH", "displayLabel", "红色刀闸开关", "prompt", "定位红色刀闸开关", "enabled", true))
     ));
 
     assertThat(result.findings()).hasSize(1);
+    assertThat(result.findings().get(0).itemId()).isEqualTo("switch_main");
     assertThat(result.findings().get(0).type()).isEqualTo("SWITCH");
     assertThat(result.findings().get(0).bbox()).containsExactly(48, 32, 144, 104);
     assertThat(result.findings().get(0).label()).isEqualTo("红色刀闸开关");
@@ -81,6 +83,7 @@ class HttpModelGatewayTests {
     assertThat(requestBody.get()).contains("\"generationMode\":\"fast\"");
     assertThat(requestBody.get()).contains("\"imageWidth\":400");
     assertThat(requestBody.get()).contains("\"imageHeight\":200");
+    assertThat(requestBody.get()).contains("\"itemId\":\"switch_main\"");
     assertThat(requestBody.get()).contains("\"displayLabel\":\"红色刀闸开关\"");
   }
 

@@ -5,15 +5,20 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class DetectionItems {
-  private static final Map<String, String> DEFAULT_LABELS = Map.of(
-    "PERSON", "人员",
-    "HELMET", "安全帽",
-    "OBSTACLE", "障碍物",
-    "FIRE", "明火烟雾",
-    "SWITCH", "刀闸开关",
-    "METER", "压力表",
-    "OIL_LEAK", "漏油区域",
-    "FOREIGN_OBJECT", "异物"
+  private static final Map<String, String> DEFAULT_LABELS = Map.ofEntries(
+    Map.entry("PERSON", "人员"),
+    Map.entry("HELMET", "安全帽"),
+    Map.entry("NO_HELMET", "未佩戴安全帽"),
+    Map.entry("OBSTACLE", "障碍物"),
+    Map.entry("FIRE", "明火烟雾"),
+    Map.entry("FIRE_SMOKE", "明火烟雾"),
+    Map.entry("SWITCH", "刀闸开关"),
+    Map.entry("SWITCH_STATE", "刀闸开关"),
+    Map.entry("METER", "压力表"),
+    Map.entry("METER_READING", "表计读数"),
+    Map.entry("OIL_LEAK", "漏油区域"),
+    Map.entry("FOREIGN_OBJECT", "异物"),
+    Map.entry("CUSTOM", "自定义目标")
   );
 
   private DetectionItems() {

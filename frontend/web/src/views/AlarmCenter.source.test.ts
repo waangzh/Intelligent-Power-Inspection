@@ -9,7 +9,9 @@ describe('AlarmCenter detection provenance', () => {
     expect(source).toContain('detectionRunId')
     expect(source).toContain('imageId')
     expect(source).toContain('checkpointId')
-    expect(source).toContain('itemId')
+    expect(source).toContain('itemName')
+    expect(source).toContain('displayLabel')
+    expect(source).not.toContain('return alarm.itemId')
     expect(source).toContain('finding')
   })
 

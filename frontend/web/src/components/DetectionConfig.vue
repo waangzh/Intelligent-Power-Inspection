@@ -9,7 +9,7 @@
     </div>
     <el-alert
       class="confidence-notice"
-      title="当前模型不返回可校准置信度，策略按启用状态与框上目标名称执行。"
+      title="告警规则只决定模型命中后是否创建告警，不使用未校准的置信度。"
       type="info"
       :closable="false"
       show-icon
@@ -25,9 +25,11 @@
           <el-switch v-model="row.enabled" size="small" @change="emitChange" />
         </template>
       </el-table-column>
-      <el-table-column label="风险告警" width="86" align="center">
+      <el-table-column label="告警规则" width="150" align="center">
         <template #default="{ row }: { row: DetectionItem }">
-          <el-switch v-model="row.alarmEnabled" size="small" @change="emitChange" />
+          <el-select v-model="row.alarmMode" size="small" @change="emitChange">
+            <el-option v-for="option in alarmModeOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
         </template>
       </el-table-column>
       <el-table-column label="框上目标名称" min-width="130">
@@ -53,6 +55,11 @@
 
     <el-dialog v-model="dialogVisible" :title="editingIndex === null ? '添加检测项' : '编辑检测项'" width="520px" append-to-body>
       <el-form label-width="100px">
+        <el-form-item label="检测类型" required>
+          <el-select v-model="draft.type" style="width: 100%">
+            <el-option v-for="option in DETECTION_TYPE_OPTIONS" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="检测项名称" required>
           <el-input v-model="draft.name" placeholder="例如：人员检测" maxlength="60" />
         </el-form-item>
@@ -70,12 +77,13 @@
           />
         </el-form-item>
         <el-form-item label="启用"><el-switch v-model="draft.enabled" /></el-form-item>
-        <el-form-item label="风险告警"><el-switch v-model="draft.alarmEnabled" /></el-form-item>
-        <el-form-item label="命中即告警">
-          <el-switch v-model="draft.alarmOnFinding" :disabled="!draft.alarmEnabled" />
+        <el-form-item label="告警规则">
+          <el-select v-model="draft.alarmMode" style="width: 100%">
+            <el-option v-for="option in alarmModeOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
         </el-form-item>
         <el-form-item label="告警级别">
-          <el-select v-model="draft.alarmSeverity" :disabled="!draft.alarmEnabled">
+          <el-select v-model="draft.alarmSeverity" :disabled="draft.alarmMode === 'OFF'">
             <el-option
               v-for="option in alarmSeverityOptions"
               :key="option.value"
@@ -91,7 +99,7 @@
             :rows="2"
             maxlength="200"
             show-word-limit
-            :disabled="!draft.alarmEnabled"
+            :disabled="draft.alarmMode === 'OFF'"
             placeholder="可选，留空时使用检测项默认描述"
           />
         </el-form-item>
@@ -108,29 +116,32 @@
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import type { AlarmSeverity, DetectionItem } from '@/types'
-import { ALARM_SEVERITY_LABELS, DETECTION_LABELS } from '@/types'
+import type { AlarmMode, AlarmSeverity, DetectionItem } from '@/types'
+import { ALARM_SEVERITY_LABELS, DETECTION_LABELS, DETECTION_TYPE_OPTIONS } from '@/types'
+import { uid } from '@/utils/storage'
 
 const props = defineProps<{ items: DetectionItem[] }>()
 const emit = defineEmits<{ change: [DetectionItem[]] }>()
 const alarmSeverityOptions = (Object.entries(ALARM_SEVERITY_LABELS) as [AlarmSeverity, string][])
   .map(([value, label]) => ({ value, label }))
+const alarmModeOptions: Array<{ value: AlarmMode; label: string }> = [
+  { value: 'OFF', label: '不告警' },
+  { value: 'ON_FINDING', label: '检测到目标时告警' },
+]
 const dialogVisible = ref(false)
 const editingIndex = ref<number | null>(null)
 const draft = reactive<DetectionItem>(emptyItem())
 
 function emptyItem(): DetectionItem {
-  const id = `custom_${Date.now().toString(36)}`
   return {
-    itemId: id,
-    type: id.toUpperCase(),
+    itemId: uid('det'),
+    type: 'CUSTOM',
     name: '',
     enabled: true,
     displayLabel: '',
     prompt: '',
     threshold: 0.75,
-    alarmEnabled: false,
-    alarmOnFinding: false,
+    alarmMode: 'OFF',
     alarmSeverity: 'MEDIUM',
     alarmMessage: '',
   }
@@ -138,8 +149,8 @@ function emptyItem(): DetectionItem {
 
 function assignDraft(item: DetectionItem) {
   Object.assign(draft, item, {
-    alarmEnabled: item.alarmEnabled ?? false,
-    alarmOnFinding: item.alarmOnFinding ?? false,
+    alarmMode: item.alarmMode
+      ?? (item.alarmEnabled === true && item.alarmOnFinding === true ? 'ON_FINDING' : 'OFF'),
     alarmSeverity: item.alarmSeverity ?? 'MEDIUM',
     alarmMessage: item.alarmMessage ?? '',
   })
@@ -158,7 +169,7 @@ function openEdit(item: DetectionItem, index: number) {
 }
 
 function saveItem() {
-  if (!draft.name?.trim() || !draft.displayLabel.trim() || !draft.prompt?.trim()) {
+  if (!draft.type || !draft.name?.trim() || !draft.displayLabel.trim() || !draft.prompt?.trim()) {
     ElMessage.warning('请填写检测项名称、框上名称和 Prompt')
     return
   }
@@ -166,8 +177,14 @@ function saveItem() {
     ElMessage.warning('请选择有效的告警级别')
     return
   }
+  if (!alarmModeOptions.some((option) => option.value === draft.alarmMode)) {
+    ElMessage.warning('请选择有效的告警规则')
+    return
+  }
   const items = props.items.map((item) => ({ ...item }))
   const saved = { ...draft, name: draft.name.trim(), displayLabel: draft.displayLabel.trim(), prompt: draft.prompt.trim() }
+  delete saved.alarmEnabled
+  delete saved.alarmOnFinding
   if (editingIndex.value === null) items.push(saved)
   else items[editingIndex.value] = saved
   emit('change', items)

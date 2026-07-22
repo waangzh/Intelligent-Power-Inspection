@@ -135,8 +135,7 @@ describe('路线列表加载', () => {
     expect(payload.routeDetections.length).toBeGreaterThan(0)
     expect(payload.routeDetections.every((item) =>
       item.itemId === item.type
-      && item.alarmEnabled === false
-      && item.alarmOnFinding === false
+      && item.alarmMode === 'OFF'
       && item.alarmSeverity === 'MEDIUM'
       && item.alarmMessage === '',
     )).toBe(true)

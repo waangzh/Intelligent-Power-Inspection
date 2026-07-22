@@ -27,7 +27,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,7 +45,6 @@ public class ManualDetectionController {
   private static final TypeReference<List<Map<String, Object>>> DETECTION_LIST_TYPE = new TypeReference<>() {
   };
   private static final Path UPLOAD_DIR = ModelFileWebConfig.MODEL_FILE_ROOT.resolve("locate-anything").resolve("uploads");
-  private static final Set<String> ALARM_SEVERITIES = Set.of("LOW", "MEDIUM", "HIGH", "CRITICAL");
 
   private final ManualDetectionService manualDetectionService;
   private final ObjectMapper objectMapper;
@@ -148,16 +146,7 @@ public class ManualDetectionController {
     item.put("prompt", prompt);
     item.put("threshold", raw.getOrDefault("threshold", 0.75));
     item.put("enabled", true);
-    item.put("alarmEnabled", Boolean.TRUE.equals(raw.get("alarmEnabled")));
-    item.put("alarmOnFinding", Boolean.TRUE.equals(raw.get("alarmOnFinding")));
-    String alarmSeverity = text(raw.get("alarmSeverity"));
-    alarmSeverity = alarmSeverity == null ? "MEDIUM" : alarmSeverity;
-    if (!ALARM_SEVERITIES.contains(alarmSeverity)) {
-      throw ApiException.badRequest("告警级别必须是 LOW、MEDIUM、HIGH 或 CRITICAL");
-    }
-    item.put("alarmSeverity", alarmSeverity);
-    String alarmMessage = text(raw.get("alarmMessage"));
-    item.put("alarmMessage", alarmMessage == null ? "" : alarmMessage);
+    DetectionRiskRules.normalize(raw, item);
     return item;
   }
 
@@ -224,6 +213,7 @@ public class ManualDetectionController {
     String status,
     String inputImageUrl,
     String resultImageUrl,
+    List<Map<String, Object>> detections,
     List<LocateAnythingFinding> findings,
     List<String> warnings,
     String errorMessage,

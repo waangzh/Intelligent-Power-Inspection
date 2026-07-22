@@ -33,6 +33,7 @@ public class MockLocateAnythingGateway implements LocateAnythingGateway {
     rawResult.put("inputImageUrl", request.imageUrl());
 
     return new LocateAnythingResult(List.of(new LocateAnythingFinding(
+      text(detection.get("itemId")),
       type,
       prompt,
       0.75 + random.nextDouble() * 0.2,

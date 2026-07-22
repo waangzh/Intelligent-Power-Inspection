@@ -118,7 +118,7 @@ class RobotInspectionDetectionControllerTests {
   @Test
   void imageIdDetectionUsesControlledModelUrlAndPersistsResult() throws Exception {
     given(locateAnythingGateway.detectCheckpoint(any())).willReturn(new LocateAnythingResult(List.of(
-      new LocateAnythingFinding("CUSTOM_PERSON", "定位图像中所有清晰可见的人员", 0.0,
+      new LocateAnythingFinding("person_custom", "PERSON", "定位图像中所有清晰可见的人员", 0.0,
         List.of(1, 2, 3, 4), "人员", null,
         Map.of("rawAnswer", "<box><1><2><3><4></box>"))
     ), List.of(), null));
@@ -129,7 +129,7 @@ class RobotInspectionDetectionControllerTests {
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
         .content("""
-           {"imageId":"%s","detections":[{"itemId":"person_custom","type":"CUSTOM_PERSON","name":"人员检测","enabled":true,"displayLabel":"人员","prompt":"定位图像中所有清晰可见的人员","alarmEnabled":true,"alarmOnFinding":true,"alarmSeverity":"HIGH","alarmMessage":"检查点发现{label}"}]}
+           {"imageId":"%s","detections":[{"itemId":"person_custom","type":"PERSON","name":"人员检测","enabled":true,"displayLabel":"人员","prompt":"定位图像中所有清晰可见的人员","alarmMode":"ON_FINDING","alarmSeverity":"HIGH","alarmMessage":"检查点发现{label}"}]}
           """.formatted(imageId)))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("RUNNING"))
@@ -143,7 +143,8 @@ class RobotInspectionDetectionControllerTests {
       assertThat(result.path("detections").get(0).path("name").asText()).isEqualTo("人员检测");
       assertThat(result.path("detections").get(0).path("displayLabel").asText()).isEqualTo("人员");
       assertThat(result.path("detections").get(0).path("prompt").asText()).isEqualTo("定位图像中所有清晰可见的人员");
-    assertThat(result.path("findings").get(0).path("type").asText()).isEqualTo("CUSTOM_PERSON");
+    assertThat(result.path("findings").get(0).path("itemId").asText()).isEqualTo("person_custom");
+    assertThat(result.path("findings").get(0).path("type").asText()).isEqualTo("PERSON");
     assertThat(result.path("alarmCount").asInt()).isEqualTo(1);
     Map<String, Object> alarm = dataStore.list(DataCategory.ALARM).stream()
       .filter(item -> runId.equals(item.get("detectionRunId")))
@@ -201,8 +202,7 @@ class RobotInspectionDetectionControllerTests {
           }]}
           """.formatted(imageId)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.detections[0].alarmEnabled").value(false))
-      .andExpect(jsonPath("$.data.detections[0].alarmOnFinding").value(false))
+      .andExpect(jsonPath("$.data.detections[0].alarmMode").value("OFF"))
       .andExpect(jsonPath("$.data.detections[0].alarmSeverity").value("MEDIUM"))
       .andExpect(jsonPath("$.data.detections[0].alarmMessage").value(""));
   }
@@ -218,7 +218,7 @@ class RobotInspectionDetectionControllerTests {
         .content("""
           {"imageId":"%s","detections":[{
             "type":"FIRE","enabled":true,"prompt":"定位明火",
-            "alarmEnabled":true,"alarmOnFinding":true,"alarmSeverity":"critical"
+            "alarmMode":"ON_FINDING","alarmSeverity":"critical"
           }]}
           """.formatted(imageId)))
       .andExpect(status().isBadRequest())

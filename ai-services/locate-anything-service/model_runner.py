@@ -311,6 +311,7 @@ class LocateAnythingRunner:
                     self.warnings.append(f"Unparsed model output: type={detection.type}, prompt={prompt}, rawAnswer={answer[:500]}")
                 continue
             parsed_findings.append({
+                "itemId": detection.itemId,
                 "type": detection.type,
                 "prompt": detection.prompt,
                 "label": detection.displayLabel or detection.type,
@@ -336,6 +337,7 @@ class LocateAnythingRunner:
 
         findings = [
                 LocateFinding(
+                    itemId=finding["itemId"],
                     type=finding["type"],
                     prompt=finding["prompt"],
                     label=finding["label"],

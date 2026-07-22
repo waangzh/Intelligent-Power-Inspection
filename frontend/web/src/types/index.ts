@@ -14,48 +14,79 @@ export type { SceneAsset, SceneAssetFormat, SceneAssetKind, SceneAssetQuery, Sce
 export type PresetDetectionType =
   | 'PERSON'
   | 'HELMET'
+  | 'NO_HELMET'
   | 'OBSTACLE'
   | 'FIRE'
+  | 'FIRE_SMOKE'
   | 'SWITCH'
+  | 'SWITCH_STATE'
   | 'METER'
+  | 'METER_READING'
   | 'OIL_LEAK'
   | 'FOREIGN_OBJECT'
+  | 'CUSTOM'
 
 export type DetectionType = PresetDetectionType | (string & {})
 
 /** 路线级检测项 */
-export const ROUTE_DETECTIONS: PresetDetectionType[] = ['PERSON', 'HELMET', 'OBSTACLE', 'FIRE']
+export const ROUTE_DETECTIONS: PresetDetectionType[] = ['PERSON', 'NO_HELMET', 'OBSTACLE', 'FIRE_SMOKE']
 
 /** 检查点级检测项 */
 export const CHECKPOINT_DETECTIONS: PresetDetectionType[] = [
-  'SWITCH',
-  'METER',
+  'SWITCH_STATE',
+  'METER_READING',
   'OIL_LEAK',
-  'FIRE',
+  'FIRE_SMOKE',
   'FOREIGN_OBJECT',
 ]
 
 export const DETECTION_LABELS: Record<string, string> = {
   PERSON: '人员检测',
   HELMET: '安全帽检测',
+  NO_HELMET: '未佩戴安全帽',
   OBSTACLE: '障碍物检测',
   FIRE: '火源/烟雾检测',
+  FIRE_SMOKE: '明火/烟雾风险',
   SWITCH: '开关/刀闸状态',
+  SWITCH_STATE: '开关/刀闸状态',
   METER: '表计/指示灯',
+  METER_READING: '表计读数',
   OIL_LEAK: '漏油检测',
   FOREIGN_OBJECT: '异物检测',
+  CUSTOM: '自定义检测',
 }
 
 export const DETECTION_TARGET_LABELS: Record<string, string> = {
   PERSON: '人员',
   HELMET: '安全帽',
+  NO_HELMET: '未佩戴安全帽',
   OBSTACLE: '障碍物',
   FIRE: '明火烟雾',
+  FIRE_SMOKE: '明火烟雾',
   SWITCH: '刀闸开关',
+  SWITCH_STATE: '刀闸开关',
   METER: '压力表',
+  METER_READING: '表计读数',
   OIL_LEAK: '漏油区域',
   FOREIGN_OBJECT: '异物',
+  CUSTOM: '自定义目标',
 }
+
+export const DETECTION_TYPE_OPTIONS: Array<{ value: PresetDetectionType; label: string }> = [
+  { value: 'PERSON', label: '人员' },
+  { value: 'HELMET', label: '安全帽目标' },
+  { value: 'NO_HELMET', label: '未佩戴安全帽' },
+  { value: 'FIRE', label: '火源/烟雾（兼容类型）' },
+  { value: 'FIRE_SMOKE', label: '明火/烟雾' },
+  { value: 'OIL_LEAK', label: '漏油' },
+  { value: 'FOREIGN_OBJECT', label: '异物' },
+  { value: 'OBSTACLE', label: '障碍物' },
+  { value: 'SWITCH', label: '开关/刀闸（兼容类型）' },
+  { value: 'SWITCH_STATE', label: '开关/刀闸状态' },
+  { value: 'METER', label: '表计（兼容类型）' },
+  { value: 'METER_READING', label: '表计读数' },
+  { value: 'CUSTOM', label: '自定义' },
+]
 
 export type TaskStatus =
   | 'CREATED'
@@ -101,6 +132,7 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 }
 
 export type AlarmSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+export type AlarmMode = 'OFF' | 'ON_FINDING'
 export type AlarmWorkOrderMode = 'AUTO' | 'MANUAL'
 export type WorkOrderConversionStatus = 'PROCESSING' | 'WAITING_MANUAL' | 'SUCCEEDED' | 'FAILED'
 
@@ -153,6 +185,8 @@ export interface DetectionItem {
   displayLabel: string
   prompt?: string
   threshold: number
+  alarmMode?: AlarmMode
+  /** Legacy fields are accepted while stored route/template data is upgraded. */
   alarmEnabled?: boolean
   alarmOnFinding?: boolean
   alarmSeverity?: AlarmSeverity
@@ -433,11 +467,14 @@ export interface Alarm {
   imageId?: string
   checkpointId?: string
   itemId?: string
+  itemName?: string
+  displayLabel?: string
   finding?: AlarmFinding
   createdAt: string
 }
 
 export interface AlarmFinding {
+  itemId?: string
   type?: DetectionType
   prompt?: string
   score?: number
@@ -461,6 +498,7 @@ export interface InspectionRecord {
 }
 
 export interface LocateAnythingFinding {
+  itemId?: string
   type: DetectionType
   prompt?: string
   score: number
@@ -475,6 +513,7 @@ export interface ManualDetectionResponse {
   status: 'RUNNING' | 'SUCCEEDED' | 'FAILED'
   inputImageUrl: string
   resultImageUrl?: string
+  detections?: DetectionItem[]
   findings: LocateAnythingFinding[]
   warnings: string[]
   errorMessage?: string

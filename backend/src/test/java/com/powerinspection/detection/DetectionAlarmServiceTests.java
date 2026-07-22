@@ -31,7 +31,7 @@ class DetectionAlarmServiceTests {
   @Test
   void onlyExplicitRiskItemsCreateSourceLinkedAlarmsAndDuplicatesAreIgnored() {
     LocateAnythingFinding finding = new LocateAnythingFinding(
-        "FIRE", "火焰", 0.0, List.of(1, 2, 30, 40), "明火", "/annotated.jpg", Map.of());
+        "fire-risk", "FIRE", "火焰", 0.0, List.of(1, 2, 30, 40), "明火", "/annotated.jpg", Map.of());
     Map<String, Object> context = Map.of(
         "taskId", "task-1", "routeName", "路线 A", "checkpointName", "检查点 1",
         "checkpointId", "cp-1", "imageId", "img-1");
@@ -58,7 +58,7 @@ class DetectionAlarmServiceTests {
         .containsEntry("severity", "CRITICAL")
         .containsEntry("message", "发现明火");
     assertThat(created.get(0).get("finding")).isEqualTo(Map.of(
-        "type", "FIRE", "prompt", "火焰", "score", 0.0,
+        "itemId", "fire-risk", "type", "FIRE", "prompt", "火焰", "score", 0.0,
         "bbox", List.of(1, 2, 30, 40), "label", "明火", "imageUrl", "/annotated.jpg"));
     assertThat(repeated).isEmpty();
   }
@@ -66,7 +66,7 @@ class DetectionAlarmServiceTests {
   @Test
   void skipsFindingAlreadyPersistedByDatabaseKey() {
     LocateAnythingFinding finding = new LocateAnythingFinding(
-        "FIRE", "fire", 0.0, List.of(1, 2, 30, 40), "flame", "/annotated.jpg", Map.of());
+        "fire-risk", "FIRE", "fire", 0.0, List.of(1, 2, 30, 40), "flame", "/annotated.jpg", Map.of());
     List<Map<String, Object>> detections = List.of(
         Map.of("itemId", "fire-risk", "type", "FIRE", "prompt", "fire",
             "enabled", true, "alarmEnabled", true, "alarmOnFinding", true,
@@ -83,7 +83,7 @@ class DetectionAlarmServiceTests {
   @Test
   void treatsUniqueConstraintRaceAsAnIdempotentDuplicate() {
     LocateAnythingFinding finding = new LocateAnythingFinding(
-        "FIRE", "fire", 0.0, List.of(1, 2, 30, 40), "flame", "/annotated.jpg", Map.of());
+        "fire-risk", "FIRE", "fire", 0.0, List.of(1, 2, 30, 40), "flame", "/annotated.jpg", Map.of());
     List<Map<String, Object>> detections = List.of(
         Map.of("itemId", "fire-risk", "type", "FIRE", "prompt", "fire",
             "enabled", true, "alarmEnabled", true, "alarmOnFinding", true,
@@ -96,5 +96,23 @@ class DetectionAlarmServiceTests {
         "run-1", "DETECTION_RUN", Map.of(), detections, List.of(finding));
 
     assertThat(created).isEmpty();
+  }
+
+  @Test
+  void matchesFindingByStableItemIdInsteadOfTypeAndPrompt() {
+    LocateAnythingFinding finding = new LocateAnythingFinding(
+        "person-risk", "CUSTOM", "模型返回的提示词", 0.0, List.of(5, 6, 20, 30), "人员", null,
+        Map.of());
+    List<Map<String, Object>> detections = List.of(
+        Map.of("itemId", "person-risk", "type", "PERSON", "prompt", "配置中的提示词",
+            "enabled", true, "alarmMode", "ON_FINDING", "alarmSeverity", "HIGH"));
+    when(alarmRepository.existsByFindingKey("run-2:person-risk:[5, 6, 20, 30]")).thenReturn(false);
+    when(alarmService.create(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    List<Map<String, Object>> created = service.createAlarms(
+        "run-2", "DETECTION_RUN", Map.of(), detections, List.of(finding));
+
+    assertThat(created).singleElement().satisfies(alarm ->
+        assertThat(alarm).containsEntry("itemId", "person-risk").containsEntry("severity", "HIGH"));
   }
 }

@@ -290,6 +290,7 @@ public class DetectionRunService {
   private List<LocateAnythingFinding> withResultImage(List<LocateAnythingFinding> findings, String resultImageUrl) {
     if (!StringUtils.hasText(resultImageUrl)) return findings;
     return findings.stream().map(finding -> new LocateAnythingFinding(
+      finding.itemId(),
       finding.type(), finding.prompt(), finding.score(), finding.bbox(), finding.label(), resultImageUrl, finding.rawResult())).toList();
   }
 

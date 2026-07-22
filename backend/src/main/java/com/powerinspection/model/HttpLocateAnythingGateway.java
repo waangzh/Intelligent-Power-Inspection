@@ -64,6 +64,7 @@ public class HttpLocateAnythingGateway implements LocateAnythingGateway {
       if (raw instanceof Map<?, ?> map) {
         Map<String, Object> finding = normalize(map);
         items.add(new LocateAnythingFinding(
+          text(finding.get("itemId")),
           text(finding.get("type")),
           text(finding.get("prompt")),
           number(finding.get("score"), 0),
