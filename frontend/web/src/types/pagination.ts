@@ -11,6 +11,7 @@ export interface ListQuery {
   routeId?: string
   robotId?: string
   taskId?: string
+  detectionRunId?: string
   checkpointId?: string
   imageId?: string
   capturedFrom?: string

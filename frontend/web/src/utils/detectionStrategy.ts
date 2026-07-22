@@ -2,6 +2,7 @@ import {
   CHECKPOINT_DETECTIONS,
   DETECTION_TARGET_LABELS,
   DETECTION_LABELS,
+  type AlarmSeverity,
   type DetectionItem,
   type PresetDetectionType,
   type RobotInspectionImage,
@@ -19,6 +20,14 @@ const DEFAULT_PROMPTS: Record<string, string> = {
   FOREIGN_OBJECT: '设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物',
 }
 
+const ALARM_SEVERITIES: AlarmSeverity[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+
+function normalizeAlarmSeverity(severity: DetectionItem['alarmSeverity']): AlarmSeverity {
+  if (severity === undefined) return 'MEDIUM'
+  if (!ALARM_SEVERITIES.includes(severity)) throw new Error(`非法告警级别: ${String(severity)}`)
+  return severity
+}
+
 export function defaultDetectionItem(type: PresetDetectionType): DetectionItem {
   return {
     itemId: type,
@@ -28,6 +37,10 @@ export function defaultDetectionItem(type: PresetDetectionType): DetectionItem {
     displayLabel: DETECTION_TARGET_LABELS[type],
     prompt: DEFAULT_PROMPTS[type],
     threshold: 0.75,
+    alarmEnabled: false,
+    alarmOnFinding: false,
+    alarmSeverity: 'MEDIUM',
+    alarmMessage: '',
   }
 }
 
@@ -39,6 +52,10 @@ export function cloneDetectionItems(items: DetectionItem[]): DetectionItem[] {
     displayLabel: item.displayLabel?.trim() || DETECTION_TARGET_LABELS[item.type] || '',
     prompt: item.prompt?.trim() || DEFAULT_PROMPTS[item.type] || '',
     threshold: 0.75,
+    alarmEnabled: item.alarmEnabled ?? false,
+    alarmOnFinding: item.alarmOnFinding ?? false,
+    alarmSeverity: normalizeAlarmSeverity(item.alarmSeverity),
+    alarmMessage: item.alarmMessage ?? '',
   }))
 }
 

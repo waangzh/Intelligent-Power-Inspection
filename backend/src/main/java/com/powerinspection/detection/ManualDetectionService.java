@@ -44,6 +44,7 @@ public class ManualDetectionService {
   private final LocateAnythingGateway locateAnythingGateway;
   private final DetectionRunRepository repository;
   private final ObjectMapper objectMapper;
+  private final DetectionAlarmService detectionAlarmService;
   private final URI modelBaseUri;
   private final Duration modelTimeout;
   private final HttpClient httpClient;
@@ -59,10 +60,12 @@ public class ManualDetectionService {
       LocateAnythingGateway locateAnythingGateway,
       ModelProperties modelProperties,
       DetectionRunRepository repository,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      DetectionAlarmService detectionAlarmService) {
     this.locateAnythingGateway = locateAnythingGateway;
     this.repository = repository;
     this.objectMapper = objectMapper;
+    this.detectionAlarmService = detectionAlarmService;
     this.modelBaseUri = URI.create(modelProperties.getLocateAnything().getBaseUrl());
     this.modelTimeout = Duration.ofSeconds(modelProperties.getLocateAnything().getTimeoutSeconds());
     this.httpClient = HttpClient.newBuilder().connectTimeout(modelTimeout).build();
@@ -161,6 +164,7 @@ public class ManualDetectionService {
       current.setFindingsJson(json(findings));
       current.setWarningsJson(json(result.warnings()));
       current.setErrorMessage(null);
+      createAlarms(requestId, detections, findings);
     } catch (Exception ex) {
       String message = ex.getMessage() == null ? "模型检测失败" : ex.getMessage();
       finalStatus = STATUS_FAILED;
@@ -211,6 +215,21 @@ public class ManualDetectionService {
 
   private String firstText(String preferred, String fallback) {
     return preferred == null || preferred.isBlank() ? fallback : preferred;
+  }
+
+  private void createAlarms(
+      String requestId,
+      List<Map<String, Object>> detections,
+      List<LocateAnythingFinding> findings) {
+    Map<String, Object> context = map(
+        "routeName", "手工检测",
+        "checkpointId", "manual_checkpoint",
+        "checkpointName", "本地上传");
+    try {
+      detectionAlarmService.createAlarms(requestId, "DETECTION_RUN", context, detections, findings);
+    } catch (RuntimeException ignored) {
+      // 告警链路失败不改变已完成的模型检测状态。
+    }
   }
 
   private void downloadAnnotatedImage(String imageUrl, String filename) {
@@ -303,7 +322,8 @@ public class ManualDetectionService {
         job.getErrorMessage(),
         job.getCreatedAt(),
         job.getStartedAt(),
-        job.getCompletedAt());
+        job.getCompletedAt(),
+        detectionAlarmService.countForRun(job.getId()));
   }
 
   @PreDestroy

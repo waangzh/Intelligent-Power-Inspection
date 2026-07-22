@@ -13,6 +13,7 @@ import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.LocateAnythingResult;
 import com.powerinspection.model.ModelProperties;
 import com.powerinspection.model.ModelServiceException;
+import com.powerinspection.robot.RobotInspectionImage;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
@@ -48,6 +49,7 @@ public class DetectionRunService {
   private final RobotInspectionImageService imageService;
   private final LocateAnythingGateway gateway;
   private final ObjectMapper objectMapper;
+  private final DetectionAlarmService detectionAlarmService;
   private final URI modelBaseUri;
   private final Duration timeout;
   private final HttpClient httpClient;
@@ -58,11 +60,13 @@ public class DetectionRunService {
   });
 
   public DetectionRunService(DetectionRunRepository repository, RobotInspectionImageService imageService,
-      LocateAnythingGateway gateway, ObjectMapper objectMapper, ModelProperties properties) {
+      LocateAnythingGateway gateway, ObjectMapper objectMapper, ModelProperties properties,
+      DetectionAlarmService detectionAlarmService) {
     this.repository = repository;
     this.imageService = imageService;
     this.gateway = gateway;
     this.objectMapper = objectMapper;
+    this.detectionAlarmService = detectionAlarmService;
     this.modelBaseUri = URI.create(properties.getLocateAnything().getBaseUrl());
     this.timeout = Duration.ofSeconds(properties.getLocateAnything().getTimeoutSeconds());
     this.httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
@@ -105,6 +109,54 @@ public class DetectionRunService {
     return saved;
   }
 
+  public DetectionRunEntity recordTaskResult(
+      Map<String, Object> task,
+      Map<String, Object> route,
+      Map<String, Object> checkpoint,
+      RobotInspectionImage image,
+      List<Map<String, Object>> detections,
+      LocateAnythingResult modelResult) {
+    String now = Instant.now().toString();
+    DetectionRunEntity run = new DetectionRunEntity();
+    run.setId(Ids.next("det_run"));
+    run.setSourceType("TASK_CHECKPOINT");
+    run.setImageId(image == null ? null : image.id());
+    run.setTaskId(text(task.get("id")));
+    run.setCheckpointId(text(checkpoint.get("id")));
+    run.setStatus("SUCCEEDED");
+    run.setDetectionsJson(json(detections == null ? List.of() : detections));
+    List<LocateAnythingFinding> findings = modelResult == null || modelResult.findings() == null
+        ? List.of() : modelResult.findings();
+    List<String> warnings = modelResult == null || modelResult.warnings() == null
+        ? List.of() : modelResult.warnings();
+    run.setFindingsJson(json(findings));
+    run.setWarningsJson(json(warnings));
+    run.setInputImageUrl(image == null ? null : image.url());
+    run.setResultImageUrl(modelResult == null ? null : modelResult.resultImageUrl());
+    run.setCreatedBy(text(task.get("robotId")));
+    run.setCreatedAt(now);
+    run.setStartedAt(now);
+    run.setCompletedAt(now);
+    run.setUpdatedAt(now);
+    DetectionRunEntity saved = repository.saveAndFlush(run);
+
+    Map<String, Object> context = new LinkedHashMap<>();
+    copy(task, context, "siteId", "robotId", "taskId");
+    context.put("taskId", run.getTaskId());
+    context.put("routeId", text(route.get("id")));
+    context.put("routeName", route.get("name"));
+    context.put("checkpointId", run.getCheckpointId());
+    context.put("checkpointName", checkpoint.get("name"));
+    context.put("imageId", run.getImageId());
+    try {
+      detectionAlarmService.createAlarms(run.getId(), "DETECTION_RUN", context,
+          detections == null ? List.of() : detections, findings);
+    } catch (RuntimeException ignored) {
+      // 告警链路失败不改变已完成的模型检测状态。
+    }
+    return saved;
+  }
+
   public DetectionRunEntity get(String id) {
     return repository.findById(id).orElseThrow(() -> ApiException.notFound("检测运行不存在"));
   }
@@ -138,6 +190,7 @@ public class DetectionRunService {
     result.put("createdAt", run.getCreatedAt());
     result.put("startedAt", run.getStartedAt());
     result.put("completedAt", run.getCompletedAt());
+    result.put("alarmCount", detectionAlarmService.countForRun(run.getId()));
     return result;
   }
 
@@ -165,6 +218,7 @@ public class DetectionRunService {
       run.setResultImageUrl(stored == null ? null : stored.publicUrl());
       run.setResultStorageKey(stored == null ? null : stored.storageKey());
       run.setErrorMessage(null);
+      createAlarms(run, image, context, detections, findings);
     } catch (Exception ex) {
       run.setStatus("FAILED");
       run.setErrorMessage(safeMessage(ex));
@@ -174,6 +228,33 @@ public class DetectionRunService {
     run.setCompletedAt(completedAt);
     run.setUpdatedAt(completedAt);
     repository.save(run);
+  }
+
+  private void createAlarms(
+      DetectionRunEntity run,
+      RobotInspectionImageEntity image,
+      RobotInspectionImageService.DetectionContext context,
+      List<Map<String, Object>> detections,
+      List<LocateAnythingFinding> findings) {
+    Map<String, Object> alarmContext = new LinkedHashMap<>();
+    copy(context.task(), alarmContext, "siteId", "robotId", "taskId");
+    alarmContext.put("taskId", run.getTaskId());
+    alarmContext.put("routeId", image.getRouteId());
+    alarmContext.put("routeName", context.route().get("name"));
+    alarmContext.put("robotId", image.getRobotId());
+    alarmContext.put("checkpointId", run.getCheckpointId());
+    alarmContext.put("checkpointName", image.getCheckpointName());
+    alarmContext.put("imageId", run.getImageId());
+    try {
+      detectionAlarmService.createAlarms(run.getId(), "DETECTION_RUN", alarmContext, detections, findings);
+    } catch (RuntimeException ignored) {
+      // 告警链路失败不改变已完成的模型检测状态。
+    }
+  }
+
+  private void copy(Map<String, Object> source, Map<String, Object> target, String... keys) {
+    if (source == null) return;
+    for (String key : keys) if (source.get(key) != null) target.put(key, source.get(key));
   }
 
   private StoredResult storeAnnotatedImage(String runId, String imageUrl) {
@@ -221,12 +302,17 @@ public class DetectionRunService {
       Map<String, Object> normalized = new LinkedHashMap<>(item);
       normalized.put("type", type);
       normalized.put("prompt", prompt);
+      String itemId = text(item.get("itemId"));
+      String name = text(item.get("name"));
+      normalized.put("itemId", itemId == null ? type : itemId);
+      normalized.put("name", name == null ? type : name);
       String displayLabel = text(item.get("displayLabel"));
       normalized.put("displayLabel", displayLabel == null || displayLabel.isBlank()
         ? DetectionItems.displayLabel(type)
         : displayLabel.trim());
       normalized.put("enabled", true);
       normalized.putIfAbsent("threshold", 0.75);
+      DetectionRiskRules.normalize(item, normalized);
       return normalized;
     }).toList();
   }

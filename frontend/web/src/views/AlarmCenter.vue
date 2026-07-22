@@ -33,6 +33,14 @@
     <el-row :gutter="16" class="alarm-body">
       <el-col :xs="24" :lg="16">
         <el-card shadow="never" class="filter-card">
+          <el-alert
+            v-if="detectionRunFilter"
+            class="run-filter-alert"
+            type="info"
+            :closable="false"
+            show-icon
+            :title="`仅显示检测运行 ${detectionRunFilter} 生成的告警`"
+          />
           <div class="filter-bar">
             <el-input
               v-model="keyword"
@@ -65,7 +73,7 @@
           <template #header>
             <div class="table-head">
               <span class="table-title">告警列表</span>
-              <span class="record-count">共 {{ filteredAlarms.length }} 条记录</span>
+              <span class="record-count">共 {{ alarmTotal }} 条记录</span>
             </div>
           </template>
           <el-table :data="filteredAlarms" size="small" highlight-current-row @row-click="selectAlarm">
@@ -76,8 +84,11 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="类型" width="120">
-              <template #default="{ row }: { row: Alarm }">{{ DETECTION_LABELS[row.type] }}</template>
+            <el-table-column label="检测项" width="130" show-overflow-tooltip>
+              <template #default="{ row }: { row: Alarm }">{{ alarmItemLabel(row) }}</template>
+            </el-table-column>
+            <el-table-column label="检测来源" width="110">
+              <template #default="{ row }: { row: Alarm }">{{ alarmSourceLabel(row) }}</template>
             </el-table-column>
             <el-table-column prop="message" label="告警内容" min-width="180" show-overflow-tooltip />
             <el-table-column prop="routeName" label="路线" width="120" show-overflow-tooltip />
@@ -124,7 +135,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <ListPagination :total="alarmStore.total" :page="alarmPage" @change="loadAlarmPage" />
+          <ListPagination :total="alarmTotal" :page="alarmPage" @change="loadAlarmPage" />
         </el-card>
       </el-col>
 
@@ -139,9 +150,18 @@
             </div>
           </template>
           <el-descriptions :column="1" size="small" border>
-            <el-descriptions-item label="类型">{{ DETECTION_LABELS[selected.type] }}</el-descriptions-item>
+            <el-descriptions-item label="检测项">{{ alarmItemLabel(selected) }}</el-descriptions-item>
+            <el-descriptions-item label="检测来源">{{ alarmSourceLabel(selected) }}</el-descriptions-item>
             <el-descriptions-item label="路线">{{ selected.routeName }}</el-descriptions-item>
             <el-descriptions-item label="检查点">{{ selected.checkpointName || '路线行进中' }}</el-descriptions-item>
+            <el-descriptions-item v-if="selected.checkpointId" label="检查点 ID">{{ selected.checkpointId }}</el-descriptions-item>
+            <el-descriptions-item v-if="selected.imageId" label="图片 ID">{{ selected.imageId }}</el-descriptions-item>
+            <el-descriptions-item v-if="selected.detectionRunId" label="检测运行">
+              <el-button v-if="can('detection:manage')" link type="primary" @click="openDetectionRun(selected)">{{ selected.detectionRunId }}</el-button>
+              <span v-else>{{ selected.detectionRunId }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="selected.finding?.label" label="检测目标">{{ selected.finding.label }}</el-descriptions-item>
+            <el-descriptions-item v-if="selected.finding?.bbox?.length" label="边界框">{{ bboxText(selected.finding.bbox) }}</el-descriptions-item>
             <el-descriptions-item label="描述">{{ selected.message }}</el-descriptions-item>
             <el-descriptions-item label="工单转换">{{ conversionLabel(selected) }}</el-descriptions-item>
             <el-descriptions-item v-if="selected.workOrderConversionError" label="转换错误">{{ selected.workOrderConversionError }}</el-descriptions-item>
@@ -205,8 +225,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Bell, InfoFilled, RefreshRight, Search, Setting, Warning, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ChartCard from '@/components/ChartCard.vue'
@@ -220,6 +240,7 @@ import type { Alarm, AlarmSeverity, AlarmWorkOrderMode } from '@/types'
 import { ALARM_SEVERITY_LABELS, DETECTION_LABELS } from '@/types'
 
 const router = useRouter()
+const route = useRoute()
 const alarmStore = useAlarmStore()
 const authStore = useAuthStore()
 const workOrderStore = useWorkOrderStore()
@@ -238,6 +259,8 @@ const policyRows = reactive<Array<{ severity: AlarmSeverity; label: string; mode
   { severity: 'MEDIUM', label: '中 MEDIUM', mode: 'MANUAL' },
   { severity: 'LOW', label: '低 LOW', mode: 'MANUAL' },
 ])
+
+const detectionRunFilter = computed(() => queryText(route.query.detectionRunId))
 
 const severityStats = computed(() => [
   {
@@ -268,10 +291,13 @@ const severityStats = computed(() => [
 
 const filteredAlarms = computed(() => {
   let list = alarmStore.alarms
+  if (detectionRunFilter.value) list = list.filter((a) => a.detectionRunId === detectionRunFilter.value)
   if (severityFilter.value) list = list.filter((a) => a.severity === severityFilter.value)
   if (keyword.value) list = list.filter((a) => a.message.includes(keyword.value))
   return list
 })
+
+const alarmTotal = computed(() => alarmStore.total)
 
 const showAlarmActions = computed(
   () => can('workorder:create') || can('task:dispatch') || can('agent:run'),
@@ -307,6 +333,7 @@ function loadAlarmPage(page: number) {
     size: 20,
     q: keyword.value,
     severity: severityFilter.value || undefined,
+    detectionRunId: detectionRunFilter.value || undefined,
   })
 }
 
@@ -324,6 +351,29 @@ const chartOption = computed(() => ({
 
 function selectAlarm(row: Alarm) {
   selected.value = row
+}
+
+function queryText(value: unknown) {
+  if (Array.isArray(value)) return value.length ? String(value[0] ?? '') : ''
+  return typeof value === 'string' ? value : ''
+}
+
+function alarmItemLabel(alarm: Alarm) {
+  return alarm.itemId || DETECTION_LABELS[alarm.type] || alarm.type
+}
+
+function alarmSourceLabel(alarm: Alarm) {
+  if (alarm.sourceType === 'DETECTION_RUN') return '模型检测'
+  return alarm.sourceType || '历史告警'
+}
+
+function bboxText(bbox: number[]) {
+  return bbox.join(', ')
+}
+
+function openDetectionRun(alarm: Alarm) {
+  if (!alarm.detectionRunId) return
+  void router.push({ path: '/detection', query: { runId: alarm.detectionRunId } })
 }
 
 function formatTime(iso: string) {
@@ -426,11 +476,23 @@ async function savePolicy() {
 function openAgentForAlarm(alarm: Alarm) {
   router.push({ path: '/agents', query: { alarmId: alarm.id } })
 }
+
+watch(filteredAlarms, (alarms) => {
+  if (!selected.value || !alarms.some((alarm) => alarm.id === selected.value?.id)) {
+    selected.value = alarms[0] ?? null
+  }
+}, { immediate: true })
+
+watch(detectionRunFilter, () => loadAlarmPage(0), { immediate: true })
 </script>
 
 <style scoped>
 .alarm-body {
   margin-bottom: 0;
+}
+
+.run-filter-alert {
+  margin-bottom: 12px;
 }
 
 .detail-card {

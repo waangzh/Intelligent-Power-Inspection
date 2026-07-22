@@ -25,6 +25,11 @@
           <el-switch v-model="row.enabled" size="small" @change="emitChange" />
         </template>
       </el-table-column>
+      <el-table-column label="风险告警" width="86" align="center">
+        <template #default="{ row }: { row: DetectionItem }">
+          <el-switch v-model="row.alarmEnabled" size="small" @change="emitChange" />
+        </template>
+      </el-table-column>
       <el-table-column label="框上目标名称" min-width="130">
         <template #default="{ row }: { row: DetectionItem }">
           <el-input
@@ -65,6 +70,31 @@
           />
         </el-form-item>
         <el-form-item label="启用"><el-switch v-model="draft.enabled" /></el-form-item>
+        <el-form-item label="风险告警"><el-switch v-model="draft.alarmEnabled" /></el-form-item>
+        <el-form-item label="命中即告警">
+          <el-switch v-model="draft.alarmOnFinding" :disabled="!draft.alarmEnabled" />
+        </el-form-item>
+        <el-form-item label="告警级别">
+          <el-select v-model="draft.alarmSeverity" :disabled="!draft.alarmEnabled">
+            <el-option
+              v-for="option in alarmSeverityOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="告警消息">
+          <el-input
+            v-model="draft.alarmMessage"
+            type="textarea"
+            :rows="2"
+            maxlength="200"
+            show-word-limit
+            :disabled="!draft.alarmEnabled"
+            placeholder="可选，留空时使用检测项默认描述"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -78,22 +108,41 @@
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import type { DetectionItem } from '@/types'
-import { DETECTION_LABELS } from '@/types'
+import type { AlarmSeverity, DetectionItem } from '@/types'
+import { ALARM_SEVERITY_LABELS, DETECTION_LABELS } from '@/types'
 
 const props = defineProps<{ items: DetectionItem[] }>()
 const emit = defineEmits<{ change: [DetectionItem[]] }>()
+const alarmSeverityOptions = (Object.entries(ALARM_SEVERITY_LABELS) as [AlarmSeverity, string][])
+  .map(([value, label]) => ({ value, label }))
 const dialogVisible = ref(false)
 const editingIndex = ref<number | null>(null)
 const draft = reactive<DetectionItem>(emptyItem())
 
 function emptyItem(): DetectionItem {
   const id = `custom_${Date.now().toString(36)}`
-  return { itemId: id, type: id.toUpperCase(), name: '', enabled: true, displayLabel: '', prompt: '', threshold: 0.75 }
+  return {
+    itemId: id,
+    type: id.toUpperCase(),
+    name: '',
+    enabled: true,
+    displayLabel: '',
+    prompt: '',
+    threshold: 0.75,
+    alarmEnabled: false,
+    alarmOnFinding: false,
+    alarmSeverity: 'MEDIUM',
+    alarmMessage: '',
+  }
 }
 
 function assignDraft(item: DetectionItem) {
-  Object.assign(draft, item)
+  Object.assign(draft, item, {
+    alarmEnabled: item.alarmEnabled ?? false,
+    alarmOnFinding: item.alarmOnFinding ?? false,
+    alarmSeverity: item.alarmSeverity ?? 'MEDIUM',
+    alarmMessage: item.alarmMessage ?? '',
+  })
 }
 
 function openAdd() {
@@ -111,6 +160,10 @@ function openEdit(item: DetectionItem, index: number) {
 function saveItem() {
   if (!draft.name?.trim() || !draft.displayLabel.trim() || !draft.prompt?.trim()) {
     ElMessage.warning('请填写检测项名称、框上名称和 Prompt')
+    return
+  }
+  if (!alarmSeverityOptions.some((option) => option.value === draft.alarmSeverity)) {
+    ElMessage.warning('请选择有效的告警级别')
     return
   }
   const items = props.items.map((item) => ({ ...item }))

@@ -66,7 +66,99 @@ class DetectionTemplateControllerTests {
       .andExpect(jsonPath("$.data.items[0].type").value("CUSTOM_PERSON"))
       .andExpect(jsonPath("$.data.items[0].name").value("人员检测"))
       .andExpect(jsonPath("$.data.items[0].displayLabel").value("人员"))
-      .andExpect(jsonPath("$.data.items[0].prompt").value("定位图像中所有清晰可见的人员"));
+      .andExpect(jsonPath("$.data.items[0].prompt").value("定位图像中所有清晰可见的人员"))
+      .andExpect(jsonPath("$.data.items[0].alarmEnabled").value(false));
+  }
+
+  @Test
+  void persistsDetectionRiskRules() throws Exception {
+    String token = login("admin", "Admin@123");
+
+    String created = mockMvc.perform(post("/api/v1/detection-templates")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {
+            "name":"明火风险模板",
+            "scope":"CHECKPOINT",
+            "items":[{
+              "itemId":"fire-risk",
+              "type":"FIRE",
+              "name":"明火风险",
+              "displayLabel":"明火",
+              "enabled":true,
+              "prompt":"定位明火",
+              "alarmEnabled":true,
+              "alarmOnFinding":true,
+              "alarmSeverity":"CRITICAL",
+              "alarmMessage":"  检查点发现{label}  "
+            }]
+          }
+          """))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items[0].alarmEnabled").value(true))
+      .andExpect(jsonPath("$.data.items[0].alarmOnFinding").value(true))
+      .andExpect(jsonPath("$.data.items[0].alarmSeverity").value("CRITICAL"))
+      .andExpect(jsonPath("$.data.items[0].alarmMessage").value("  检查点发现{label}  "))
+      .andReturn()
+      .getResponse()
+      .getContentAsString(StandardCharsets.UTF_8);
+    String id = objectMapper.readTree(created).path("data").path("id").asText();
+
+    mockMvc.perform(get("/api/v1/detection-templates/" + id)
+        .header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items[0].alarmEnabled").value(true))
+      .andExpect(jsonPath("$.data.items[0].alarmOnFinding").value(true))
+      .andExpect(jsonPath("$.data.items[0].alarmSeverity").value("CRITICAL"))
+      .andExpect(jsonPath("$.data.items[0].alarmMessage").value("  检查点发现{label}  "));
+  }
+
+  @Test
+  void rejectsInvalidAlarmSeverity() throws Exception {
+    String token = login("admin", "Admin@123");
+
+    mockMvc.perform(post("/api/v1/detection-templates")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {"name":"非法风险级别","scope":"CHECKPOINT","items":[{
+            "type":"FIRE","enabled":true,"prompt":"定位明火",
+            "alarmEnabled":true,"alarmOnFinding":true,"alarmSeverity":"URGENT"
+          }]}
+          """))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("告警级别必须是 LOW、MEDIUM、HIGH 或 CRITICAL"));
+  }
+
+  @Test
+  void rejectsAlarmSeverityWithDifferentCasing() throws Exception {
+    String token = login("admin", "Admin@123");
+
+    mockMvc.perform(post("/api/v1/detection-templates")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {"name":"小写风险级别","scope":"CHECKPOINT","items":[{
+            "type":"FIRE","enabled":true,"prompt":"定位明火",
+            "alarmEnabled":true,"alarmOnFinding":true,"alarmSeverity":"critical"
+          }]}
+          """))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("告警级别必须是 LOW、MEDIUM、HIGH 或 CRITICAL"));
+  }
+
+  @Test
+  void legacyTemplateExplicitlyDefaultsToAlarmDisabled() throws Exception {
+    String token = login("admin", "Admin@123");
+
+    mockMvc.perform(get("/api/v1/detection-templates/tpl_route_001")
+        .header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items[0].alarmEnabled").value(false))
+      .andExpect(jsonPath("$.data.items[0].alarmOnFinding").value(false))
+      .andExpect(jsonPath("$.data.items[0].alarmSeverity").value("MEDIUM"))
+      .andExpect(jsonPath("$.data.items[0].alarmMessage").value(""));
   }
 
   @Test

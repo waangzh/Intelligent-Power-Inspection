@@ -189,6 +189,9 @@ public class DomainStoreService {
       if (message != null && message.toLowerCase().contains("uq_work_orders_alarm")) {
         throw ApiException.conflict("该告警已存在工单");
       }
+      if (message != null && message.toLowerCase().contains("uq_alarms_detection_finding")) {
+        throw ApiException.conflict("检测结果告警已存在");
+      }
       throw ApiException.badRequest("数据约束冲突，请检查关联对象是否存在或状态是否合法");
     }
   }
