@@ -7,8 +7,8 @@ spring:
     name: power-inspection-backend
   servlet:
     multipart:
-      max-file-size: 100MB
-      max-request-size: 110MB
+      max-file-size: ${SPRING_MULTIPART_MAX_FILE_SIZE:1GB}
+      max-request-size: ${SPRING_MULTIPART_MAX_REQUEST_SIZE:1050MB}
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/power_inspection?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${DB_USERNAME:root}
@@ -35,6 +35,12 @@ app:
     processing-timeout-seconds: ${MAP_ASSET_PROCESSING_TIMEOUT_SECONDS:300}
     rejected-retention-days: ${MAP_ASSET_REJECTED_RETENTION_DAYS:30}
     rejected-cleanup-cron: ${MAP_ASSET_REJECTED_CLEANUP_CRON:0 30 3 * * *}
+  scene-assets:
+    max-model-bytes: ${SCENE_ASSET_MAX_MODEL_BYTES:1073741824}
+    max-metadata-bytes: ${SCENE_ASSET_MAX_METADATA_BYTES:1048576}
+    processing-timeout-seconds: ${SCENE_ASSET_PROCESSING_TIMEOUT_SECONDS:1800}
+    staging-timeout-seconds: ${SCENE_ASSET_STAGING_TIMEOUT_SECONDS:7200}
+    staging-cleanup-cron: ${SCENE_ASSET_STAGING_CLEANUP_CRON:0 45 3 * * *}
   jwt:
     secret: ${JWT_SECRET:dev-secret-change-me-for-production}
     access-ttl-seconds: ${JWT_ACCESS_TTL_SECONDS:900}

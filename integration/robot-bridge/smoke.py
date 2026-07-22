@@ -31,6 +31,7 @@ class PlatformStub:
         self.map_hash = hashlib.sha256(self.pgm).hexdigest()
         self.upload_identity = ""
         self.upload_requests = 0
+        self.scene_upload_requests = 0
         self.inspection_upload_requests = 0
         owner = self
 
@@ -81,6 +82,19 @@ class PlatformStub:
                         "id": "map-upload-1", "status": "PENDING_REVIEW",
                         "contentIdentitySha256": owner.upload_identity,
                         "yamlSha256": "a" * 64, "pgmSha256": owner.map_hash,
+                    }}, status=201)
+                if self.path == "/api/v1/internal/robot-scene-assets":
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length)
+                    assert self.headers.get("Authorization") == "Bearer platform-placeholder"
+                    assert self.headers.get("X-Bridge-Robot-Id") == "robot-001"
+                    assert self.headers.get("Idempotency-Key") == "scene-upload-smoke"
+                    assert b'name="model"' in body and b'name="metadata"' in body
+                    owner.scene_upload_requests += 1
+                    return self.respond_json({"data": {
+                        "id": "scene-upload-1", "status": "PENDING_REVIEW",
+                        "modelSha256": hashlib.sha256(b"ply\nformat ascii 1.0\nelement vertex 0\nend_header\n").hexdigest(),
+                        "createdAt": "2026-07-22T00:00:00Z",
                     }}, status=201)
                 self.send_response(404)
                 self.end_headers()
@@ -184,6 +198,8 @@ def main() -> None:
             "PLATFORM_BEARER_TOKEN": "platform-placeholder",
             "BRIDGE_MAP_UPLOAD_ENABLED": "true",
             "BRIDGE_MAP_UPLOAD_TEMP_DIR": str(Path(temporary) / "uploads"),
+            "BRIDGE_SCENE_UPLOAD_ENABLED": "true",
+            "BRIDGE_SCENE_UPLOAD_TEMP_DIR": str(Path(temporary) / "scene-uploads"),
             "BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED": "true",
             "BRIDGE_INSPECTION_IMAGE_UPLOAD_TEMP_DIR": str(Path(temporary) / "inspection-uploads"),
             "NO_PROXY": "127.0.0.1,localhost",
@@ -366,6 +382,23 @@ def run_smoke(base_url, store, platform) -> None:
         token="token-placeholder", idempotency_key="map-upload-smoke")
     assert status == 201 and uploaded.get("mapAssetId") == "map-upload-1", (status, uploaded)
     assert uploaded["contentIdentitySha256"] == identity and platform.upload_requests == 1
+    scene_model = b"ply\nformat ascii 1.0\nelement vertex 0\nend_header\n"
+    scene_fields = {
+        "modelSha256": hashlib.sha256(scene_model).hexdigest(), "assetKind": "POINT_CLOUD",
+        "format": "PLY", "sourceSessionId": "reconstruct-smoke",
+        "reconstructedAt": "2026-07-22T00:00:00Z", "coordinateSystem": "RIGHT_HANDED_Z_UP",
+        "unit": "METER", "pointCount": "0",
+    }
+    scene_files = {
+        "model": ("pointcloud.ply", scene_model, "application/octet-stream"),
+        "metadata": ("metadata.json", b'{"reconstructProfile":"smoke"}', "application/json"),
+    }
+    assert multipart_request(base_url, "/robot-api/v1/scene-assets", scene_fields, scene_files)[0] == 401
+    status, scene_uploaded = multipart_request(
+        base_url, "/robot-api/v1/scene-assets", scene_fields, scene_files,
+        token="token-placeholder", idempotency_key="scene-upload-smoke")
+    assert status == 201 and scene_uploaded.get("sceneAssetId") == "scene-upload-1", (status, scene_uploaded)
+    assert platform.scene_upload_requests == 1
     inspection = b"\xff\xd8\xff\xdbsmoke-inspection-image"
     inspection_fields = {
         "executionId": "execution-1", "taskId": "task-1", "checkpointId": "checkpoint-1",

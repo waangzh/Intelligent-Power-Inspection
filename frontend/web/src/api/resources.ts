@@ -17,6 +17,9 @@ import type {
   MapAsset,
   MapAssetQuery,
   MapAssetReviewInput,
+  SceneAsset,
+  SceneAssetQuery,
+  SceneAssetReviewInput,
   Robot,
   RobotInspectionImage,
   Route,
@@ -51,6 +54,7 @@ import type {
   RobotTrackResponse,
 } from '@/types/robotLocation'
 import { buildMapAssetQuery } from '@/utils/mapAssetReview'
+import { buildSceneAssetQuery } from '@/utils/sceneAsset'
 import type { DashboardOverview, ListQuery, PageResult } from '@/types/pagination'
 import { listQueryString } from '@/types/pagination'
 
@@ -98,6 +102,13 @@ export const resourcesApi = {
   removeMapAsset: (id: string) => http.delete<void>(`/map-assets/${id}`),
   reviewMapAsset: (id: string, input: MapAssetReviewInput) =>
     http.post<MapAsset>(`/map-assets/${encodeURIComponent(id)}/review`, input),
+  listSceneAssets: (query: SceneAssetQuery = {}) => http.get<SceneAsset[]>(`/scene-assets${buildSceneAssetQuery(query)}`),
+  getSceneAsset: (id: string) => http.get<SceneAsset>(`/scene-assets/${encodeURIComponent(id)}`),
+  getSceneAssetModel: (id: string) => http.get<Blob>(`/scene-assets/${encodeURIComponent(id)}/model`),
+  getSceneAssetPreview: (id: string) => http.get<Blob>(`/scene-assets/${encodeURIComponent(id)}/preview`),
+  getSceneAssetMetadata: (id: string) => http.get<Blob>(`/scene-assets/${encodeURIComponent(id)}/metadata`),
+  reviewSceneAsset: (id: string, input: SceneAssetReviewInput) => http.post<SceneAsset>(`/scene-assets/${encodeURIComponent(id)}/review`, input),
+  removeSceneAsset: (id: string) => http.delete<void>(`/scene-assets/${encodeURIComponent(id)}`),
 
   listTasks: (query: ListQuery = {}) => http.get<PageResult<InspectionTask>>(`/tasks${listQueryString(query)}`),
   getTask: (id: string) => http.get<InspectionTask>(`/tasks/${encodeURIComponent(id)}`),
