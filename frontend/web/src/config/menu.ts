@@ -37,7 +37,6 @@ export const menuGroups: MenuGroup[] = [
       { path: '/tasks', label: '任务调度', icon: 'VideoPlay', permission: 'task:view' },
       { path: '/routes', label: '路线规划', icon: 'MapLocation', permission: 'route:edit' },
       { path: '/robot-map-review', label: '建图审核', icon: 'Checked' },
-      { path: '/robot-scene-review', label: '三维建图审核', icon: 'DataAnalysis' },
     ],
   },
   {
