@@ -43,7 +43,8 @@ class MapAssetControllerTests {
     mockMvc.perform(post("/api/v1/sites")
         .header("Authorization", bearer(token))
         .contentType(MediaType.APPLICATION_JSON)
-        .content(json("id", siteId, "name", "地图资产测试站点")))
+        .content(json("id", siteId, "name", "地图资产测试站点",
+          "center", Map.of("lat", 30.1, "lng", 120.1))))
       .andExpect(status().isOk());
 
     mockMvc.perform(post("/api/v1/routes")

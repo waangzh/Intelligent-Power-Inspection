@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -503,7 +504,9 @@ public class SceneAssetService {
   private void publishDirectory(Path staging, Path target) throws IOException {
     try {
       Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
-    } catch (AtomicMoveNotSupportedException ex) {
+    } catch (AtomicMoveNotSupportedException | AccessDeniedException ex) {
+      log.warn("Atomic scene directory publish unavailable, falling back to regular move assetId={} reason={}",
+        target.getFileName(), ex.getClass().getSimpleName());
       Files.move(staging, target);
     }
   }

@@ -327,8 +327,7 @@ class PowerInspectionApplicationTests {
                         "name", "接口测试站点",
                         "address", "测试地址",
                         "description", "测试站点描述",
-                        "lat", 30.1,
-                        "lng", 120.1)))
+                        "center", Map.of("lat", 30.1, "lng", 120.1))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.id").value("site_test_api"));
 
