@@ -325,6 +325,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scene-assets/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["review"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routes": {
         parameters: {
             query?: never;
@@ -348,7 +364,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_1"];
+        get: operations["list_2"];
         put?: never;
         post: operations["create_1"];
         delete?: never;
@@ -396,7 +412,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_2"];
+        get: operations["list_3"];
         put?: never;
         post: operations["create_2"];
         delete?: never;
@@ -476,7 +492,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_5"];
+        get: operations["list_6"];
         put?: never;
         post: operations["upload"];
         delete?: never;
@@ -494,14 +510,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["review"];
+        post: operations["review_1"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/internal/robot-map-assets": {
+    "/api/v1/internal/robot-scene-assets": {
         parameters: {
             query?: never;
             header?: never;
@@ -517,7 +533,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/internal/robot-inspection-images": {
+    "/api/v1/internal/robot-map-assets": {
         parameters: {
             query?: never;
             header?: never;
@@ -527,6 +543,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["upload_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/internal/robot-inspection-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["upload_3"];
         delete?: never;
         options?: never;
         head?: never;
@@ -844,7 +876,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_7"];
+        get: operations["list_8"];
         put?: never;
         post: operations["create_3"];
         delete?: never;
@@ -1077,6 +1109,22 @@ export interface paths {
         patch: operations["updateRobot"];
         trace?: never;
     };
+    "/api/v1/robots/{id}/local-confirm-start-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateLocalConfirmStartPolicy"];
+        trace?: never;
+    };
     "/api/v1/notifications/{id}/read": {
         parameters: {
             query?: never;
@@ -1285,6 +1333,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scene-assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scene-assets/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get"];
+        put?: never;
+        post?: never;
+        delete: operations["delete_1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scene-assets/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scene-assets/{id}/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["model"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scene-assets/{id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["metadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/routes/{routeId}/draft:check": {
         parameters: {
             query?: never;
@@ -1308,7 +1436,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get"];
+        get: operations["get_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1324,7 +1452,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_1"];
+        get: operations["get_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1381,22 +1509,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/robots/{id}/local-confirm-start-policy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch: operations["updateLocalConfirmStartPolicy"];
-        trace?: never;
-    };
     "/api/v1/robots/{id}/telemetry": {
         parameters: {
             query?: never;
@@ -1420,7 +1532,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_3"];
+        get: operations["list_4"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1452,7 +1564,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_4"];
+        get: operations["list_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1468,7 +1580,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_2"];
+        get: operations["get_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1532,10 +1644,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["metadata"];
+        get: operations["metadata_1"];
         put?: never;
         post?: never;
-        delete: operations["delete_1"];
+        delete: operations["delete_2"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1596,7 +1708,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_6"];
+        get: operations["list_7"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1612,7 +1724,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_3"];
+        get: operations["get_4"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1628,7 +1740,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_4"];
+        get: operations["get_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1884,6 +1996,10 @@ export interface components {
         StartTaskRequest: {
             /** @enum {string} */
             startMode?: "REMOTE_IMMEDIATE" | "LOCAL_CONFIRM";
+        };
+        SceneAssetReviewRequest: {
+            action?: string;
+            comment?: string;
         };
         RobotImageDetectionRequest: {
             imageId?: string;
@@ -2158,6 +2274,9 @@ export interface components {
             bio?: string;
             avatarUrl?: string;
         };
+        LocalConfirmStartPolicyRequest: {
+            enabled: boolean;
+        };
         ListQuery: {
             /** Format: int32 */
             page?: number;
@@ -2234,11 +2353,17 @@ export interface components {
             satellites?: number;
             /** Format: double */
             hdop?: number;
+            robotState?: string;
+            navigationPhase?: string;
+            targetId?: string;
+            /** Format: int32 */
+            cycleIndex?: number;
             /** Format: date-time */
             observedAt?: string;
         };
         RobotTrackView: {
             robotId?: string;
+            executionId?: string;
             /** Format: date-time */
             start?: string;
             /** Format: date-time */
@@ -2272,6 +2397,14 @@ export interface components {
             /** Format: int64 */
             acceptedEventSequence?: number;
             diagnosticSummary?: string;
+            reportedSupportsRemoteImmediateStart?: boolean;
+            reportedSupportsLocalConfirmStart?: boolean;
+            localConfirmProtocolVersion?: string;
+            localConfirmProtocolCompatible?: boolean;
+            localConfirmStartReady?: boolean;
+            localConfirmStartError?: string;
+            /** Format: date-time */
+            capabilityReportedAt?: string;
         };
         Source: {
             name?: string;
@@ -2313,6 +2446,8 @@ export interface components {
             online?: boolean;
             locationAvailable?: boolean;
             realtime?: boolean;
+            state?: string;
+            executionId?: string;
             gnssFix?: components["schemas"]["BridgeGnssFix"];
         };
         ApiResponseRobotHeartbeatStatusPage: {
@@ -3298,6 +3433,32 @@ export interface operations {
             };
         };
     };
+    review: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SceneAssetReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
     routes: {
         parameters: {
             query: {
@@ -3346,7 +3507,7 @@ export interface operations {
             };
         };
     };
-    list_1: {
+    list_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -3466,7 +3627,7 @@ export interface operations {
             };
         };
     };
-    list_2: {
+    list_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -3640,7 +3801,7 @@ export interface operations {
             };
         };
     };
-    list_5: {
+    list_6: {
         parameters: {
             query?: {
                 source?: string;
@@ -3695,7 +3856,7 @@ export interface operations {
             };
         };
     };
-    review: {
+    review_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -3724,6 +3885,49 @@ export interface operations {
         };
     };
     upload_1: {
+        parameters: {
+            query: {
+                modelSha256: string;
+                assetKind: string;
+                format: string;
+                sourceSessionId: string;
+                capturedAt?: string;
+                reconstructedAt: string;
+                coordinateSystem: string;
+                unit: string;
+                pointCount?: number;
+            };
+            header?: {
+                Authorization?: string;
+                "X-Bridge-Robot-Id"?: string;
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    model: string;
+                    /** Format: binary */
+                    metadata: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    upload_2: {
         parameters: {
             query?: {
                 capturedAt?: string;
@@ -3759,7 +3963,7 @@ export interface operations {
             };
         };
     };
-    upload_2: {
+    upload_3: {
         parameters: {
             query: {
                 executionId: string;
@@ -4280,7 +4484,7 @@ export interface operations {
             };
         };
     };
-    list_7: {
+    list_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -4946,6 +5150,32 @@ export interface operations {
             };
         };
     };
+    updateLocalConfirmStartPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalConfirmStartPolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
     markRead: {
         parameters: {
             query?: never;
@@ -5296,6 +5526,142 @@ export interface operations {
             };
         };
     };
+    list_1: {
+        parameters: {
+            query?: {
+                source?: string;
+                status?: string;
+                siteId?: string;
+                robotId?: string;
+                assetKind?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMapStringObject"];
+                };
+            };
+        };
+    };
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    delete_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    model: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    metadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
     getDraftCheck: {
         parameters: {
             query?: never;
@@ -5318,7 +5684,7 @@ export interface operations {
             };
         };
     };
-    get: {
+    get_1: {
         parameters: {
             query?: never;
             header?: {
@@ -5342,7 +5708,7 @@ export interface operations {
             };
         };
     };
-    get_1: {
+    get_2: {
         parameters: {
             query?: never;
             header?: {
@@ -5437,34 +5803,6 @@ export interface operations {
             };
         };
     };
-    updateLocalConfirmStartPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    enabled: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
-                };
-            };
-        };
-    };
     telemetry: {
         parameters: {
             query?: never;
@@ -5487,7 +5825,7 @@ export interface operations {
             };
         };
     };
-    list_3: {
+    list_4: {
         parameters: {
             query?: {
                 online?: boolean;
@@ -5537,7 +5875,7 @@ export interface operations {
             };
         };
     };
-    list_4: {
+    list_5: {
         parameters: {
             query?: {
                 page?: number;
@@ -5565,7 +5903,7 @@ export interface operations {
             };
         };
     };
-    get_2: {
+    get_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -5675,7 +6013,7 @@ export interface operations {
             };
         };
     };
-    metadata: {
+    metadata_1: {
         parameters: {
             query?: never;
             header?: {
@@ -5699,7 +6037,7 @@ export interface operations {
             };
         };
     };
-    delete_1: {
+    delete_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -5789,7 +6127,7 @@ export interface operations {
             };
         };
     };
-    list_6: {
+    list_7: {
         parameters: {
             query?: {
                 page?: number;
@@ -5815,7 +6153,7 @@ export interface operations {
             };
         };
     };
-    get_3: {
+    get_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -5837,7 +6175,7 @@ export interface operations {
             };
         };
     };
-    get_4: {
+    get_5: {
         parameters: {
             query?: never;
             header?: never;

@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8081",
+      "url": "http://127.0.0.1:18080",
       "description": "Generated server url"
     }
   ],
@@ -1139,6 +1139,46 @@
         }
       }
     },
+    "/api/v1/scene-assets/{id}/review": {
+      "post": {
+        "tags": [
+          "scene-asset-controller"
+        ],
+        "operationId": "review",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneAssetReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/routes": {
       "get": {
         "tags": [
@@ -1205,7 +1245,7 @@
         "tags": [
           "route-revision-controller"
         ],
-        "operationId": "list_1",
+        "operationId": "list_2",
         "parameters": [
           {
             "name": "routeId",
@@ -1374,7 +1414,7 @@
         "tags": [
           "route-deployment-controller"
         ],
-        "operationId": "list_2",
+        "operationId": "list_3",
         "parameters": [
           {
             "name": "revisionId",
@@ -1637,7 +1677,7 @@
         "tags": [
           "map-asset-controller"
         ],
-        "operationId": "list_5",
+        "operationId": "list_6",
         "parameters": [
           {
             "name": "source",
@@ -1734,7 +1774,7 @@
         "tags": [
           "map-asset-controller"
         ],
-        "operationId": "review",
+        "operationId": "review_1",
         "parameters": [
           {
             "name": "id",
@@ -1772,12 +1812,154 @@
         }
       }
     },
+    "/api/v1/internal/robot-scene-assets": {
+      "post": {
+        "tags": [
+          "robot-scene-asset-controller"
+        ],
+        "operationId": "upload_1",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bridge-Robot-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "modelSha256",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assetKind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceSessionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "capturedAt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reconstructedAt",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "coordinateSystem",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pointCount",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "metadata",
+                  "model"
+                ],
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "metadata": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/internal/robot-map-assets": {
       "post": {
         "tags": [
           "robot-map-asset-controller"
         ],
-        "operationId": "upload_1",
+        "operationId": "upload_2",
         "parameters": [
           {
             "name": "Authorization",
@@ -1862,7 +2044,7 @@
         "tags": [
           "robot-inspection-image-ingest-controller"
         ],
-        "operationId": "upload_2",
+        "operationId": "upload_3",
         "parameters": [
           {
             "name": "Authorization",
@@ -2580,7 +2762,7 @@
         "tags": [
           "agent-case-controller"
         ],
-        "operationId": "list_7",
+        "operationId": "list_8",
         "responses": {
           "200": {
             "description": "OK",
@@ -3534,6 +3716,46 @@
         }
       }
     },
+    "/api/v1/robots/{id}/local-confirm-start-policy": {
+      "patch": {
+        "tags": [
+          "robot-controller"
+        ],
+        "operationId": "updateLocalConfirmStartPolicy",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalConfirmStartPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/notifications/{id}/read": {
       "patch": {
         "tags": [
@@ -3969,6 +4191,219 @@
         }
       }
     },
+    "/api/v1/scene-assets": {
+      "get": {
+        "tags": [
+          "scene-asset-controller"
+        ],
+        "operationId": "list_1",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "siteId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "robotId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assetKind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseListMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scene-assets/{id}": {
+      "get": {
+        "tags": [
+          "scene-asset-controller"
+        ],
+        "operationId": "get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "scene-asset-controller"
+        ],
+        "operationId": "delete_1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scene-assets/{id}/preview": {
+      "get": {
+        "tags": [
+          "scene-asset-controller"
+        ],
+        "operationId": "preview",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scene-assets/{id}/model": {
+      "get": {
+        "tags": [
+          "scene-asset-controller"
+        ],
+        "operationId": "model",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/scene-assets/{id}/metadata": {
+      "get": {
+        "tags": [
+          "scene-asset-controller"
+        ],
+        "operationId": "metadata",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/routes/{routeId}/draft:check": {
       "get": {
         "tags": [
@@ -4004,7 +4439,7 @@
         "tags": [
           "route-revision-controller"
         ],
-        "operationId": "get",
+        "operationId": "get_1",
         "parameters": [
           {
             "name": "revisionId",
@@ -4042,7 +4477,7 @@
         "tags": [
           "route-deployment-controller"
         ],
-        "operationId": "get_1",
+        "operationId": "get_2",
         "parameters": [
           {
             "name": "deploymentId",
@@ -4200,52 +4635,6 @@
         }
       }
     },
-    "/api/v1/robots/{id}/local-confirm-start-policy": {
-      "patch": {
-        "tags": [
-          "robot-controller"
-        ],
-        "operationId": "updateLocalConfirmStartPolicy",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["enabled"],
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  }
-                }
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponseMapStringObject"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/robots/{id}/telemetry": {
       "get": {
         "tags": [
@@ -4281,7 +4670,7 @@
         "tags": [
           "robot-heartbeat-controller"
         ],
-        "operationId": "list_3",
+        "operationId": "list_4",
         "parameters": [
           {
             "name": "online",
@@ -4395,7 +4784,7 @@
         "tags": [
           "robot-inspection-image-controller"
         ],
-        "operationId": "list_4",
+        "operationId": "list_5",
         "parameters": [
           {
             "name": "page",
@@ -4477,7 +4866,7 @@
         "tags": [
           "robot-inspection-image-controller"
         ],
-        "operationId": "get_2",
+        "operationId": "get_3",
         "parameters": [
           {
             "name": "id",
@@ -4625,7 +5014,7 @@
         "tags": [
           "map-asset-controller"
         ],
-        "operationId": "metadata",
+        "operationId": "metadata_1",
         "parameters": [
           {
             "name": "id",
@@ -4661,7 +5050,7 @@
         "tags": [
           "map-asset-controller"
         ],
-        "operationId": "delete_1",
+        "operationId": "delete_2",
         "parameters": [
           {
             "name": "id",
@@ -4789,7 +5178,7 @@
         "tags": [
           "detection-run-controller"
         ],
-        "operationId": "list_6",
+        "operationId": "list_7",
         "parameters": [
           {
             "name": "page",
@@ -4855,7 +5244,7 @@
         "tags": [
           "detection-run-controller"
         ],
-        "operationId": "get_3",
+        "operationId": "get_4",
         "parameters": [
           {
             "name": "id",
@@ -4885,7 +5274,7 @@
         "tags": [
           "manual-detection-controller"
         ],
-        "operationId": "get_4",
+        "operationId": "get_5",
         "parameters": [
           {
             "name": "requestId",
@@ -5400,6 +5789,17 @@
               "REMOTE_IMMEDIATE",
               "LOCAL_CONFIRM"
             ]
+          }
+        }
+      },
+      "SceneAssetReviewRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "comment": {
+            "type": "string"
           }
         }
       },
@@ -6273,6 +6673,17 @@
           }
         }
       },
+      "LocalConfirmStartPolicyRequest": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
       "ListQuery": {
         "type": "object",
         "properties": {
@@ -6472,6 +6883,19 @@
             "type": "number",
             "format": "double"
           },
+          "robotState": {
+            "type": "string"
+          },
+          "navigationPhase": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "cycleIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
           "observedAt": {
             "type": "string",
             "format": "date-time"
@@ -6482,6 +6906,9 @@
         "type": "object",
         "properties": {
           "robotId": {
+            "type": "string"
+          },
+          "executionId": {
             "type": "string"
           },
           "start": {
@@ -6569,6 +6996,28 @@
           },
           "diagnosticSummary": {
             "type": "string"
+          },
+          "reportedSupportsRemoteImmediateStart": {
+            "type": "boolean"
+          },
+          "reportedSupportsLocalConfirmStart": {
+            "type": "boolean"
+          },
+          "localConfirmProtocolVersion": {
+            "type": "string"
+          },
+          "localConfirmProtocolCompatible": {
+            "type": "boolean"
+          },
+          "localConfirmStartReady": {
+            "type": "boolean"
+          },
+          "localConfirmStartError": {
+            "type": "string"
+          },
+          "capabilityReportedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -6668,6 +7117,12 @@
           },
           "realtime": {
             "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          },
+          "executionId": {
+            "type": "string"
           },
           "gnssFix": {
             "$ref": "#/components/schemas/BridgeGnssFix"
