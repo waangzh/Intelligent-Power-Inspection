@@ -39,8 +39,7 @@ public class DetectionAlarmService {
     if (!StringUtils.hasText(detectionRunId) || findings == null) return created;
     for (LocateAnythingFinding finding : findings) {
       Map<String, Object> item = matchingItem(detections, finding);
-      if (item == null || !Boolean.TRUE.equals(item.get("alarmEnabled"))
-          || !Boolean.TRUE.equals(item.get("alarmOnFinding"))) continue;
+      if (item == null || !DetectionRiskRules.isOnFinding(item)) continue;
       String itemId = text(item.get("itemId"));
       String findingKey = findingKey(detectionRunId, itemId, finding.bbox());
       if (alarmRepository.existsByFindingKey(findingKey)) continue;
@@ -56,6 +55,8 @@ public class DetectionAlarmService {
       alarm.put("sourceType", sourceType);
       alarm.put("detectionRunId", detectionRunId);
       alarm.put("itemId", itemId);
+      alarm.put("itemName", text(item.get("name")));
+      alarm.put("displayLabel", text(item.get("displayLabel")));
       alarm.put("findingKey", findingKey);
       alarm.put("finding", findingToMap(finding));
       alarm.put("createdAt", Instant.now().toString());
@@ -80,11 +81,15 @@ public class DetectionAlarmService {
 
   private Map<String, Object> matchingItem(List<Map<String, Object>> detections, LocateAnythingFinding finding) {
     if (detections == null) return null;
+    String findingItemId = finding.itemId();
+    if (!StringUtils.hasText(findingItemId) && finding.rawResult() != null) {
+      findingItemId = text(finding.rawResult().get("itemId"));
+    }
+    if (!StringUtils.hasText(findingItemId)) return null;
+    String expectedItemId = findingItemId;
     return detections.stream()
         .filter(item -> !Boolean.FALSE.equals(item.get("enabled")))
-        .filter(item -> text(item.get("type")) != null && text(item.get("type")).equals(finding.type()))
-        .filter(item -> !StringUtils.hasText(text(item.get("prompt")))
-            || text(item.get("prompt")).equals(finding.prompt()))
+        .filter(item -> expectedItemId.equals(text(item.get("itemId"))))
         .findFirst().orElse(null);
   }
 
@@ -100,6 +105,7 @@ public class DetectionAlarmService {
 
   private Map<String, Object> findingToMap(LocateAnythingFinding finding) {
     Map<String, Object> result = new LinkedHashMap<>();
+    if (StringUtils.hasText(finding.itemId())) result.put("itemId", finding.itemId());
     result.put("type", finding.type());
     result.put("prompt", finding.prompt());
     result.put("score", finding.score());

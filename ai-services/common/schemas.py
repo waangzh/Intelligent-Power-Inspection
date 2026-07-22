@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class DetectionPrompt(BaseModel):
+    itemId: str | None = None
     type: str
     displayLabel: str | None = None
     prompt: str | None = None
@@ -20,6 +21,7 @@ class LocateCheckpointRequest(BaseModel):
 
 
 class LocateFinding(BaseModel):
+    itemId: str | None = None
     type: str
     prompt: str | None = None
     label: str = "abnormal"

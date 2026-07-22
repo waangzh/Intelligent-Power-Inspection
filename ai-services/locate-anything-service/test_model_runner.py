@@ -62,8 +62,8 @@ class CombinedAnnotationTests(unittest.TestCase):
             imageWidth=400,
             imageHeight=300,
             detections=[
-                DetectionPrompt(type="SWITCH", displayLabel="刀闸开关", prompt="定位红色刀闸开关"),
-                DetectionPrompt(type="METER", displayLabel="压力表", prompt="定位压力表"),
+                DetectionPrompt(itemId="switch_main", type="SWITCH", displayLabel="刀闸开关", prompt="定位红色刀闸开关"),
+                DetectionPrompt(itemId="meter_main", type="METER", displayLabel="压力表", prompt="定位压力表"),
             ],
         )
         answers = ["<box><100><100><300><300></box>", "<box><600><500><900><900></box>"]
@@ -75,6 +75,7 @@ class CombinedAnnotationTests(unittest.TestCase):
             findings, result_image_url = runner.locate_checkpoint(request)
 
         self.assertEqual(result_image_url, combined_url)
+        self.assertEqual([finding.itemId for finding in findings], ["switch_main", "meter_main"])
         self.assertEqual([finding.label for finding in findings], ["刀闸开关", "压力表"])
         self.assertEqual([finding.imageUrl for finding in findings], [combined_url, combined_url])
         save_image.assert_called_once()

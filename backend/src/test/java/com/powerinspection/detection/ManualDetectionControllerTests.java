@@ -53,6 +53,7 @@ class ManualDetectionControllerTests {
   @Test
   void manualDetectionUploadsImageAndReturnsAsyncJobThenModelFindings() throws Exception {
     given(locateAnythingGateway.detectCheckpoint(any())).willReturn(new LocateAnythingResult(List.of(new LocateAnythingFinding(
+      "person_custom",
       "SWITCH",
       "红色刀闸开关",
       0.88,
@@ -72,7 +73,7 @@ class ManualDetectionControllerTests {
       "detections",
       "",
       MediaType.APPLICATION_JSON_VALUE,
-      "[{\"itemId\":\"person_custom\",\"type\":\"CUSTOM_PERSON\",\"name\":\"人员检测\",\"enabled\":true,\"displayLabel\":\"人员\",\"prompt\":\"定位图像中所有清晰可见的人员\",\"threshold\":0.75,\"alarmEnabled\":false,\"alarmOnFinding\":false,\"alarmSeverity\":\"HIGH\",\"alarmMessage\":\"  人员风险  \"}]".getBytes(StandardCharsets.UTF_8)
+      "[{\"itemId\":\"person_custom\",\"type\":\"PERSON\",\"name\":\"人员检测\",\"enabled\":true,\"displayLabel\":\"人员\",\"prompt\":\"定位图像中所有清晰可见的人员\",\"threshold\":0.75,\"alarmMode\":\"OFF\",\"alarmSeverity\":\"HIGH\",\"alarmMessage\":\"  人员风险  \"}]".getBytes(StandardCharsets.UTF_8)
     );
 
     String token = login("admin", "Admin@123");
@@ -115,8 +116,7 @@ class ManualDetectionControllerTests {
     assertThat(snapshot.path("name").asText()).isEqualTo("人员检测");
     assertThat(snapshot.path("displayLabel").asText()).isEqualTo("人员");
     assertThat(snapshot.path("prompt").asText()).isEqualTo("定位图像中所有清晰可见的人员");
-    assertThat(snapshot.path("alarmEnabled").asBoolean()).isFalse();
-    assertThat(snapshot.path("alarmOnFinding").asBoolean()).isFalse();
+    assertThat(snapshot.path("alarmMode").asText()).isEqualTo("OFF");
     assertThat(snapshot.path("alarmSeverity").asText()).isEqualTo("HIGH");
     assertThat(snapshot.path("alarmMessage").asText()).isEqualTo("  人员风险  ");
   }
@@ -142,7 +142,7 @@ class ManualDetectionControllerTests {
       "image", "fire.jpg", MediaType.IMAGE_JPEG_VALUE, testImage());
     MockMultipartFile detections = new MockMultipartFile(
       "detections", "", MediaType.APPLICATION_JSON_VALUE,
-      "[{\"type\":\"FIRE\",\"enabled\":true,\"prompt\":\"定位明火\",\"alarmEnabled\":true,\"alarmOnFinding\":true,\"alarmSeverity\":\"critical\"}]".getBytes(StandardCharsets.UTF_8));
+      "[{\"type\":\"FIRE\",\"enabled\":true,\"prompt\":\"定位明火\",\"alarmMode\":\"ON_FINDING\",\"alarmSeverity\":\"critical\"}]".getBytes(StandardCharsets.UTF_8));
 
     mockMvc.perform(multipart("/api/v1/detections/manual")
         .file(image)

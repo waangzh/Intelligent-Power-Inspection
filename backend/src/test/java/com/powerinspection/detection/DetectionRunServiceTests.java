@@ -35,11 +35,11 @@ class DetectionRunServiceTests {
         repository, imageService, gateway, new ObjectMapper(), properties, detectionAlarmService);
     when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     LocateAnythingFinding finding = new LocateAnythingFinding(
-        "FIRE", "火焰", 0.0, List.of(1, 2, 3, 4), "明火", "/annotated.jpg", Map.of());
+        "fire-risk", "FIRE", "火焰", 0.0, List.of(1, 2, 3, 4), "明火", "/annotated.jpg", Map.of());
     LocateAnythingResult result = new LocateAnythingResult(List.of(finding), List.of(), null);
     List<Map<String, Object>> detections = List.of(Map.of(
         "itemId", "fire-risk", "type", "FIRE", "prompt", "火焰",
-        "enabled", true, "alarmEnabled", true, "alarmOnFinding", true,
+        "enabled", true, "alarmMode", "ON_FINDING",
         "alarmSeverity", "CRITICAL"));
 
     DetectionRunEntity run = service.recordTaskResult(
@@ -86,8 +86,7 @@ class DetectionRunServiceTests {
       var item = objectMapper.readTree(run.getDetectionsJson()).get(0);
       assertThat(item.path("itemId").asText()).isEqualTo("FIRE");
       assertThat(item.path("name").asText()).isEqualTo("FIRE");
-      assertThat(item.path("alarmEnabled").asBoolean()).isFalse();
-      assertThat(item.path("alarmOnFinding").asBoolean()).isFalse();
+      assertThat(item.path("alarmMode").asText()).isEqualTo("OFF");
       assertThat(item.path("alarmSeverity").asText()).isEqualTo("MEDIUM");
       assertThat(item.path("alarmMessage").asText()).isEmpty();
     } finally {
@@ -110,7 +109,7 @@ class DetectionRunServiceTests {
           "image-1",
           List.of(Map.of(
               "type", "FIRE", "enabled", true, "prompt", "定位明火",
-              "alarmEnabled", true, "alarmOnFinding", true, "alarmSeverity", "critical")),
+              "alarmMode", "ON_FINDING", "alarmSeverity", "critical")),
           "user-1",
           "http://localhost/model-files/"))
           .isInstanceOf(ApiException.class)

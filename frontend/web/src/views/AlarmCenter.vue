@@ -359,7 +359,7 @@ function queryText(value: unknown) {
 }
 
 function alarmItemLabel(alarm: Alarm) {
-  return alarm.itemId || DETECTION_LABELS[alarm.type] || alarm.type
+  return alarm.itemName || alarm.displayLabel || alarm.finding?.label || DETECTION_LABELS[alarm.type] || '检测项'
 }
 
 function alarmSourceLabel(alarm: Alarm) {

@@ -67,7 +67,7 @@ class DetectionTemplateControllerTests {
       .andExpect(jsonPath("$.data.items[0].name").value("人员检测"))
       .andExpect(jsonPath("$.data.items[0].displayLabel").value("人员"))
       .andExpect(jsonPath("$.data.items[0].prompt").value("定位图像中所有清晰可见的人员"))
-      .andExpect(jsonPath("$.data.items[0].alarmEnabled").value(false));
+      .andExpect(jsonPath("$.data.items[0].alarmMode").value("OFF"));
   }
 
   @Test
@@ -88,16 +88,14 @@ class DetectionTemplateControllerTests {
               "displayLabel":"明火",
               "enabled":true,
               "prompt":"定位明火",
-              "alarmEnabled":true,
-              "alarmOnFinding":true,
+              "alarmMode":"ON_FINDING",
               "alarmSeverity":"CRITICAL",
               "alarmMessage":"  检查点发现{label}  "
             }]
           }
           """))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.items[0].alarmEnabled").value(true))
-      .andExpect(jsonPath("$.data.items[0].alarmOnFinding").value(true))
+      .andExpect(jsonPath("$.data.items[0].alarmMode").value("ON_FINDING"))
       .andExpect(jsonPath("$.data.items[0].alarmSeverity").value("CRITICAL"))
       .andExpect(jsonPath("$.data.items[0].alarmMessage").value("  检查点发现{label}  "))
       .andReturn()
@@ -108,8 +106,7 @@ class DetectionTemplateControllerTests {
     mockMvc.perform(get("/api/v1/detection-templates/" + id)
         .header("Authorization", bearer(token)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.items[0].alarmEnabled").value(true))
-      .andExpect(jsonPath("$.data.items[0].alarmOnFinding").value(true))
+      .andExpect(jsonPath("$.data.items[0].alarmMode").value("ON_FINDING"))
       .andExpect(jsonPath("$.data.items[0].alarmSeverity").value("CRITICAL"))
       .andExpect(jsonPath("$.data.items[0].alarmMessage").value("  检查点发现{label}  "));
   }
@@ -124,7 +121,7 @@ class DetectionTemplateControllerTests {
         .content("""
           {"name":"非法风险级别","scope":"CHECKPOINT","items":[{
             "type":"FIRE","enabled":true,"prompt":"定位明火",
-            "alarmEnabled":true,"alarmOnFinding":true,"alarmSeverity":"URGENT"
+            "alarmMode":"ON_FINDING","alarmSeverity":"URGENT"
           }]}
           """))
       .andExpect(status().isBadRequest())
@@ -141,7 +138,7 @@ class DetectionTemplateControllerTests {
         .content("""
           {"name":"小写风险级别","scope":"CHECKPOINT","items":[{
             "type":"FIRE","enabled":true,"prompt":"定位明火",
-            "alarmEnabled":true,"alarmOnFinding":true,"alarmSeverity":"critical"
+            "alarmMode":"ON_FINDING","alarmSeverity":"critical"
           }]}
           """))
       .andExpect(status().isBadRequest())
@@ -155,10 +152,66 @@ class DetectionTemplateControllerTests {
     mockMvc.perform(get("/api/v1/detection-templates/tpl_route_001")
         .header("Authorization", bearer(token)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.items[0].alarmEnabled").value(false))
-      .andExpect(jsonPath("$.data.items[0].alarmOnFinding").value(false))
+      .andExpect(jsonPath("$.data.items[0].alarmMode").value("OFF"))
       .andExpect(jsonPath("$.data.items[0].alarmSeverity").value("MEDIUM"))
       .andExpect(jsonPath("$.data.items[0].alarmMessage").value(""));
+  }
+
+  @Test
+  void persistsAlarmModeAndDefaultsLegacyItemsToOff() throws Exception {
+    String token = login("admin", "Admin@123");
+
+    mockMvc.perform(post("/api/v1/detection-templates")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {"name":"人员风险模板","scope":"CHECKPOINT","items":[{
+            "itemId":"person-risk","type":"PERSON","name":"人员检测","enabled":true,
+            "displayLabel":"人员","prompt":"定位人员","alarmMode":"ON_FINDING"
+          }]}
+          """))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items[0].alarmMode").value("ON_FINDING"));
+
+    mockMvc.perform(get("/api/v1/detection-templates/tpl_route_001")
+        .header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items[0].alarmMode").value("OFF"));
+  }
+
+  @Test
+  void rejectsInvalidAlarmMode() throws Exception {
+    String token = login("admin", "Admin@123");
+
+    mockMvc.perform(post("/api/v1/detection-templates")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {"name":"非法告警规则","scope":"CHECKPOINT","items":[{
+            "itemId":"person-risk","type":"PERSON","enabled":true,"prompt":"定位人员",
+            "alarmMode":"ALWAYS"
+          }]}
+          """))
+      .andExpect(status().isBadRequest())
+      .andExpect(jsonPath("$.message").value("告警规则必须是 OFF 或 ON_FINDING"));
+  }
+
+  @Test
+  void allowsMultipleCustomItemsWhenItemIdsAreDistinct() throws Exception {
+    String token = login("admin", "Admin@123");
+
+    mockMvc.perform(post("/api/v1/detection-templates")
+        .header("Authorization", bearer(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {"name":"多个自定义检测项","scope":"CHECKPOINT","items":[
+            {"itemId":"custom-a","type":"CUSTOM","name":"自定义 A","enabled":true,"prompt":"定位目标 A"},
+            {"itemId":"custom-b","type":"CUSTOM","name":"自定义 B","enabled":true,"prompt":"定位目标 B"}
+          ]}
+          """))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items[0].itemId").value("custom-a"))
+      .andExpect(jsonPath("$.data.items[1].itemId").value("custom-b"));
   }
 
   @Test
@@ -181,7 +234,7 @@ class DetectionTemplateControllerTests {
   }
 
   @Test
-  void rejectsTypesThatOnlyDifferByWhitespace() throws Exception {
+  void rejectsDuplicateItemIdsEvenWhenTypesAreShared() throws Exception {
     String token = login("admin", "Admin@123");
 
     mockMvc.perform(post("/api/v1/detection-templates")
@@ -189,16 +242,16 @@ class DetectionTemplateControllerTests {
         .contentType(MediaType.APPLICATION_JSON)
         .content("""
           {
-            "name":"重复检测类型",
+            "name":"重复检测项标识",
             "scope":"CHECKPOINT",
             "items":[
-              {"type":"CUSTOM_PERSON","enabled":false,"prompt":""},
-              {"type":" CUSTOM_PERSON ","enabled":false,"prompt":""}
+              {"itemId":"custom-person","type":"CUSTOM","enabled":false,"prompt":""},
+              {"itemId":" custom-person ","type":"CUSTOM","enabled":false,"prompt":""}
             ]
           }
           """))
       .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.message").value("检测类型不能重复：CUSTOM_PERSON"));
+      .andExpect(jsonPath("$.message").value("检测项标识不能重复：custom-person"));
   }
 
   @Test

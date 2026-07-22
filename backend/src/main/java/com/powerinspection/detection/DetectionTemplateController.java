@@ -31,15 +31,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class DetectionTemplateController extends CrudSupport {
   private static final Set<String> SCOPES = Set.of("ROUTE", "CHECKPOINT");
   private static final Map<String, String> DEFAULT_PROMPTS =
-      Map.of(
-          "PERSON", "巡检区域内的人员",
-          "HELMET", "人员头部佩戴的安全帽",
-          "OBSTACLE", "机器人行进路线上的障碍物",
-          "FIRE", "图像中清晰可见的火焰、火光或明显烟雾区域",
-          "SWITCH", "变电设备上的刀闸开关操作手柄、连杆及触头区域",
-          "METER", "圆形机械压力表的完整表盘和指针区域",
-          "OIL_LEAK", "变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域",
-          "FOREIGN_OBJECT", "设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物");
+      Map.ofEntries(
+          Map.entry("PERSON", "巡检区域内的人员"),
+          Map.entry("HELMET", "人员头部佩戴的安全帽"),
+          Map.entry("NO_HELMET", "定位未佩戴安全帽的人员头部"),
+          Map.entry("OBSTACLE", "机器人行进路线上的障碍物"),
+          Map.entry("FIRE", "图像中清晰可见的火焰、火光或明显烟雾区域"),
+          Map.entry("FIRE_SMOKE", "图像中清晰可见的火焰、火光或明显烟雾区域"),
+          Map.entry("SWITCH", "变电设备上的刀闸开关操作手柄、连杆及触头区域"),
+          Map.entry("SWITCH_STATE", "定位刀闸开关并识别其当前状态"),
+          Map.entry("METER", "圆形机械压力表的完整表盘和指针区域"),
+          Map.entry("METER_READING", "定位表计并读取当前数值或状态"),
+          Map.entry("OIL_LEAK", "变压器或电气设备表面、法兰、阀门、接口及底部可见的油渍、油迹或积油区域"),
+          Map.entry("FOREIGN_OBJECT", "设备操作区域内不属于设备本体的遗留物，例如工具、纸箱、塑料袋、布料或其他杂物"));
   private final PermissionService permissionService;
   private final CurrentUser currentUser;
 
@@ -187,9 +191,7 @@ public class DetectionTemplateController extends CrudSupport {
         throw ApiException.badRequest("检测项类型不能为空");
       }
       String type = rawType.trim();
-      if (!types.add(type)) {
-        throw ApiException.badRequest("检测类型不能重复：" + type);
-      }
+      types.add(type);
       String itemId = text(raw.get("itemId"));
       String normalizedItemId = itemId == null || itemId.isBlank() ? type : itemId.trim();
       if (!itemIds.add(normalizedItemId)) {
@@ -275,12 +277,17 @@ public class DetectionTemplateController extends CrudSupport {
     return switch (type == null ? "" : type) {
       case "PERSON" -> "人员检测";
       case "HELMET" -> "安全帽检测";
+      case "NO_HELMET" -> "未佩戴安全帽";
       case "OBSTACLE" -> "障碍物检测";
       case "FIRE" -> "火源/烟雾检测";
+      case "FIRE_SMOKE" -> "明火/烟雾风险";
       case "SWITCH" -> "开关/刀闸状态";
+      case "SWITCH_STATE" -> "开关/刀闸状态";
       case "METER" -> "表计/指示灯";
+      case "METER_READING" -> "表计读数";
       case "OIL_LEAK" -> "漏油检测";
       case "FOREIGN_OBJECT" -> "异物检测";
+      case "CUSTOM" -> "自定义检测项";
       default -> type == null || type.isBlank() ? "自定义检测项" : type;
     };
   }

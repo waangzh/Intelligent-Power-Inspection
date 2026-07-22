@@ -39,6 +39,8 @@ public class ManualDetectionService {
       ModelFileWebConfig.MODEL_FILE_ROOT.resolve("locate-anything").resolve("results");
   private static final TypeReference<List<LocateAnythingFinding>> FINDING_LIST =
       new TypeReference<>() {};
+  private static final TypeReference<List<Map<String, Object>>> DETECTION_LIST =
+      new TypeReference<>() {};
   private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
 
   private final LocateAnythingGateway locateAnythingGateway;
@@ -202,6 +204,7 @@ public class ManualDetectionService {
                   new LinkedHashMap<>(finding.rawResult() == null ? Map.of() : finding.rawResult());
               rawResult.put("imageUrl", resultImageUrl);
               return new LocateAnythingFinding(
+                  finding.itemId(),
                   finding.type(),
                   finding.prompt(),
                   finding.score(),
@@ -317,6 +320,7 @@ public class ManualDetectionService {
         job.getStatus(),
         job.getInputImageUrl(),
         job.getResultImageUrl(),
+        read(job.getDetectionsJson(), DETECTION_LIST, List.of()),
         read(job.getFindingsJson(), FINDING_LIST, List.of()),
         read(job.getWarningsJson(), STRING_LIST, List.of()),
         job.getErrorMessage(),

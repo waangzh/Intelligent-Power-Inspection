@@ -209,8 +209,8 @@
               </div>
               <el-empty v-else-if="manualResult.status === 'SUCCEEDED'" description="模型未定位到目标" :image-size="56" />
               <el-table :data="manualResult.findings" size="small" border>
-                <el-table-column label="类型" width="110">
-                  <template #default="{ row }: { row: LocateAnythingFinding }">{{ DETECTION_LABELS[row.type] || row.type }}</template>
+                <el-table-column label="检测项" min-width="120">
+                  <template #default="{ row }: { row: LocateAnythingFinding }">{{ findingItemName(row) }}</template>
                 </el-table-column>
                 <el-table-column label="框上名称" min-width="100" show-overflow-tooltip>
                   <template #default="{ row }: { row: LocateAnythingFinding }">{{ row.label || '-' }}</template>
@@ -790,6 +790,11 @@ function openRun(run: DetectionRun) {
 
 function bboxText(bbox: number[]) {
   return bbox && bbox.length ? bbox.join(', ') : '-'
+}
+
+function findingItemName(finding: LocateAnythingFinding) {
+  const item = manualResult.value?.detections?.find((candidate) => candidate.itemId === finding.itemId)
+  return item?.name || DETECTION_LABELS[finding.type] || finding.label || '检测项'
 }
 
 async function openRunFromQuery() {
