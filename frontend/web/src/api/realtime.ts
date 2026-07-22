@@ -12,7 +12,7 @@ interface TopicSubscription {
   handler: MessageHandler<unknown>
 }
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://112.124.49.152:8080/ws'
+const WS_URL = import.meta.env.VITE_WS_URL || 'wss://waang.top/ws'
 const SESSION_KEY = 'pi_session'
 
 let socket: WebSocket | null = null
@@ -157,8 +157,7 @@ function sendSubscribe(subscription: TopicSubscription) {
 
 function sendFrame(command: string, headers: Record<string, string>, body = '') {
   if (!socket || socket.readyState !== WebSocket.OPEN) return
-  const headerText = Object.entries(headers)
+  const headerLines = Object.entries(headers)
     .map(([key, value]) => `${key}:${value}`)
-    .join('\n')
-  socket.send(`${command}\n${headerText}\n\n${body}\0`)
+  socket.send([command, ...headerLines, '', body].join('\n') + '\0')
 }

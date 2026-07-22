@@ -5907,6 +5907,10 @@
           },
           "completedAt": {
             "type": "string"
+          },
+          "alarmCount": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -6735,6 +6739,21 @@
             "type": "string"
           },
           "enabled": {
+            "type": "string"
+          },
+          "sourceType": {
+            "type": "string"
+          },
+          "detectionRunId": {
+            "type": "string"
+          },
+          "imageId": {
+            "type": "string"
+          },
+          "checkpointId": {
+            "type": "string"
+          },
+          "itemId": {
             "type": "string"
           }
         }
