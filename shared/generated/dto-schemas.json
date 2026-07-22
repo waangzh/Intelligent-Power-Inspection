@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T14:19:51.757Z",
+  "generatedAt": "2026-07-22T04:18:13.203Z",
   "schemas": [
     "ActionDecisionRequest",
     "ActionResponse",
@@ -45,6 +45,7 @@
     "HumanInputResponse",
     "JsonNode",
     "ListQuery",
+    "LocalConfirmStartPolicyRequest",
     "LocateAnythingFinding",
     "LoginRequest",
     "LoginResponse",
@@ -68,6 +69,7 @@
     "RunDetail",
     "RunQuestionResponse",
     "RunSummary",
+    "SceneAssetReviewRequest",
     "SendSmsRequest",
     "SendSmsResponse",
     "Source",

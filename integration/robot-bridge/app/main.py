@@ -254,6 +254,15 @@ def create_app() -> FastAPI:
     upload_pgm_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_PGM_MAX_BYTES", str(100 * 1024 * 1024)))
     upload_request_max = int(os.environ.get("BRIDGE_MAP_UPLOAD_REQUEST_MAX_BYTES", str(110 * 1024 * 1024)))
     upload_temp_root = Path(os.environ.get("BRIDGE_MAP_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/map-upload-tmp")).expanduser()
+    scene_upload_enabled = os.environ.get("BRIDGE_SCENE_UPLOAD_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+    scene_upload_connect_timeout = float(os.environ.get("BRIDGE_SCENE_UPLOAD_CONNECT_TIMEOUT_SEC", "10"))
+    scene_upload_read_timeout = float(os.environ.get("BRIDGE_SCENE_UPLOAD_READ_TIMEOUT_SEC", "1800"))
+    scene_upload_model_max = int(os.environ.get("BRIDGE_SCENE_UPLOAD_MAX_MODEL_BYTES", str(1024 * 1024 * 1024)))
+    scene_upload_metadata_max = int(os.environ.get("BRIDGE_SCENE_UPLOAD_MAX_METADATA_BYTES", str(1024 * 1024)))
+    scene_upload_request_max = int(os.environ.get("BRIDGE_SCENE_UPLOAD_REQUEST_MAX_BYTES", str(1080 * 1000 * 1000)))
+    scene_upload_temp_root = Path(os.environ.get(
+        "BRIDGE_SCENE_UPLOAD_TEMP_DIR", "~/.local/share/ylhb/scene-upload-tmp"
+    )).expanduser()
     inspection_upload_enabled = os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
     inspection_upload_connect_timeout = float(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_CONNECT_TIMEOUT_SEC", "10"))
     inspection_upload_read_timeout = float(os.environ.get("BRIDGE_INSPECTION_IMAGE_UPLOAD_READ_TIMEOUT_SEC", "60"))
@@ -762,6 +771,106 @@ def create_app() -> FastAPI:
             })
         finally:
             await image.close()
+            shutil.rmtree(temporary, ignore_errors=True)
+
+    @app.post("/robot-api/v1/scene-assets")
+    async def upload_scene_asset(
+        request: Request,
+        model: UploadFile = File(),
+        metadata: UploadFile = File(),
+        model_sha256: str = Form(alias="modelSha256"),
+        asset_kind: str = Form(alias="assetKind"),
+        scene_format: str = Form(alias="format"),
+        source_session_id: str = Form(alias="sourceSessionId"),
+        captured_at: str = Form(default="", alias="capturedAt"),
+        reconstructed_at: str = Form(alias="reconstructedAt"),
+        coordinate_system: str = Form(alias="coordinateSystem"),
+        unit: str = Form(alias="unit"),
+        point_count: str = Form(default="", alias="pointCount"),
+    ):
+        if not scene_upload_enabled:
+            raise BridgeError("UPLOAD_DISABLED", "scene upload is disabled", 503)
+        robot_id = token_robot(request)
+        idempotency_key = request.headers.get("idempotency-key", "").strip()
+        if not idempotency_key or len(idempotency_key) > 160:
+            raise BridgeError("INVALID_REQUEST", "valid Idempotency-Key is required")
+        key_fingerprint = hashlib.sha256(idempotency_key.encode()).hexdigest()[:12]
+        model_name = safe_name(model.filename, (".ply",))
+        metadata_name = safe_name(metadata.filename, (".json",))
+        if not valid_sha256(model_sha256):
+            raise BridgeError("INVALID_REQUEST", "modelSha256 must be SHA-256")
+        if asset_kind != "POINT_CLOUD" or scene_format != "PLY":
+            raise BridgeError("INVALID_REQUEST", "only POINT_CLOUD/PLY is supported")
+        if coordinate_system != "RIGHT_HANDED_Z_UP" or unit != "METER":
+            raise BridgeError("INVALID_REQUEST", "unsupported coordinate system or unit")
+        if not source_session_id.strip() or len(source_session_id.strip()) > 160 or not reconstructed_at.strip():
+            raise BridgeError("INVALID_REQUEST", "sourceSessionId and reconstructedAt are required")
+        if point_count and (not point_count.isdigit() or int(point_count) < 0):
+            raise BridgeError("INVALID_REQUEST", "pointCount must be a non-negative integer")
+        scene_upload_temp_root.mkdir(parents=True, exist_ok=True)
+        temporary = Path(tempfile.mkdtemp(prefix="scene-upload-", dir=scene_upload_temp_root))
+        model_path, metadata_path = temporary / model_name, temporary / metadata_name
+        try:
+            model_size, actual_model_sha = await save_upload(model, model_path, scene_upload_model_max)
+            metadata_size, _ = await save_upload(metadata, metadata_path, scene_upload_metadata_max)
+            if model_size + metadata_size > scene_upload_request_max:
+                raise BridgeError("PAYLOAD_TOO_LARGE", "scene upload exceeds configured request size", 413)
+            if not hmac.compare_digest(model_sha256.lower(), actual_model_sha):
+                raise BridgeError("CONTENT_MISMATCH", "PLY hash mismatch", 409)
+            try:
+                metadata_value = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise BridgeError("INVALID_REQUEST", "metadata must be a JSON object") from exc
+            if not isinstance(metadata_value, dict):
+                raise BridgeError("INVALID_REQUEST", "metadata must be a JSON object")
+            if not platform_url or not platform_token:
+                raise BridgeError("PLATFORM_UNREACHABLE", "platform configuration is missing", 503)
+            headers = {
+                "Authorization": f"Bearer {platform_token}",
+                "X-Bridge-Robot-Id": robot_id,
+                "Idempotency-Key": idempotency_key,
+            }
+            fields = {
+                "modelSha256": model_sha256.lower(), "assetKind": asset_kind, "format": scene_format,
+                "sourceSessionId": source_session_id.strip(), "capturedAt": captured_at,
+                "reconstructedAt": reconstructed_at, "coordinateSystem": coordinate_system, "unit": unit,
+            }
+            if point_count:
+                fields["pointCount"] = point_count
+            try:
+                with model_path.open("rb") as model_source, metadata_path.open("rb") as metadata_source:
+                    async with httpx.AsyncClient(
+                        timeout=httpx.Timeout(scene_upload_read_timeout, connect=scene_upload_connect_timeout),
+                        trust_env=False,
+                    ) as client:
+                        response = await client.post(
+                            platform_url + "/api/v1/internal/robot-scene-assets",
+                            headers=headers, data=fields,
+                            files={
+                                "model": (model_name, model_source, "application/octet-stream"),
+                                "metadata": (metadata_name, metadata_source, "application/json"),
+                            },
+                        )
+            except httpx.HTTPError as exc:
+                logger.warning("scene upload platform unavailable robot_id=%s key=%s error=%s",
+                               robot_id, key_fingerprint, type(exc).__name__)
+                raise BridgeError("PLATFORM_UNREACHABLE", f"platform upload failed: {type(exc).__name__}", 503) from exc
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise BridgeError("PLATFORM_UNREACHABLE", "platform returned invalid JSON", 503) from exc
+            if response.status_code >= 400:
+                return platform_error(response.status_code, payload)
+            asset = payload.get("data", payload)
+            logger.info("scene upload succeeded robot_id=%s key=%s asset_id=%s bytes=%d",
+                        robot_id, key_fingerprint, asset.get("id"), model_size)
+            return JSONResponse(status_code=response.status_code, content={
+                "sceneAssetId": asset.get("id"), "status": asset.get("status"),
+                "modelSha256": asset.get("modelSha256"), "createdAt": asset.get("createdAt"),
+            })
+        finally:
+            await model.close()
+            await metadata.close()
             shutil.rmtree(temporary, ignore_errors=True)
 
     @app.get("/robot-api/v1/deployments/{deployment_id}/{asset}")

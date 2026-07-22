@@ -63,6 +63,8 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-map-assets")
                     .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-scene-assets")
+                    .permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/internal/robot-inspection-images")
                     .permitAll()
                     .requestMatchers("/h2-console/**")

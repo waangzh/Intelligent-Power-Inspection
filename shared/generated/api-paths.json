@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T14:19:51.734Z",
+  "generatedAt": "2026-07-22T04:18:13.171Z",
   "paths": [
     {
       "apiPath": "/api/v1/agent-actions/{actionId}",
@@ -227,6 +227,11 @@
       "name": "internalRobotMapAssets"
     },
     {
+      "apiPath": "/api/v1/internal/robot-scene-assets",
+      "relPath": "/internal/robot-scene-assets",
+      "name": "internalRobotSceneAssets"
+    },
+    {
       "apiPath": "/api/v1/map-assets",
       "relPath": "/map-assets",
       "name": "mapAssets"
@@ -400,6 +405,36 @@
       "apiPath": "/api/v1/routes/{routeId}/revisions",
       "relPath": "/routes/{routeId}/revisions",
       "name": "routesRouteIdRevisions"
+    },
+    {
+      "apiPath": "/api/v1/scene-assets",
+      "relPath": "/scene-assets",
+      "name": "sceneAssets"
+    },
+    {
+      "apiPath": "/api/v1/scene-assets/{id}",
+      "relPath": "/scene-assets/{id}",
+      "name": "sceneAssetsId"
+    },
+    {
+      "apiPath": "/api/v1/scene-assets/{id}/metadata",
+      "relPath": "/scene-assets/{id}/metadata",
+      "name": "sceneAssetsIdMetadata"
+    },
+    {
+      "apiPath": "/api/v1/scene-assets/{id}/model",
+      "relPath": "/scene-assets/{id}/model",
+      "name": "sceneAssetsIdModel"
+    },
+    {
+      "apiPath": "/api/v1/scene-assets/{id}/preview",
+      "relPath": "/scene-assets/{id}/preview",
+      "name": "sceneAssetsIdPreview"
+    },
+    {
+      "apiPath": "/api/v1/scene-assets/{id}/review",
+      "relPath": "/scene-assets/{id}/review",
+      "name": "sceneAssetsIdReview"
     },
     {
       "apiPath": "/api/v1/sites",

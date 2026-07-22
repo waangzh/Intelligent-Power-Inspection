@@ -9,6 +9,7 @@ export type {
   MapAssetUploadFiles,
   MapAssetUploadInput,
 } from './mapAsset'
+export type { SceneAsset, SceneAssetFormat, SceneAssetKind, SceneAssetQuery, SceneAssetReviewInput, SceneAssetStatus } from './sceneAsset'
 
 export type PresetDetectionType =
   | 'PERSON'

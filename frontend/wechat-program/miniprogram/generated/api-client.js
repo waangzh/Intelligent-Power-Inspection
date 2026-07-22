@@ -69,10 +69,10 @@ const openapiClient = {
   },
   detections: {
     detect(body) { return post(buildPath(API_PATHS.detectionsManual), body) },
-    get4(requestId, query) { return get(buildPath(API_PATHS.detectionsManualRequestId, { requestId }), query) },
+    get5(requestId, query) { return get(buildPath(API_PATHS.detectionsManualRequestId, { requestId }), query) },
     detectRobotImage(body) { return post(buildPath(API_PATHS.detectionsRobotImage), body) },
     getRuns(query) { return get(buildPath(API_PATHS.detectionsRuns), query) },
-    get3(id, query) { return get(buildPath(API_PATHS.detectionsRunsId, { id }), query) },
+    get4(id, query) { return get(buildPath(API_PATHS.detectionsRunsId, { id }), query) },
   },
   detectionTemplates: {
     templates(query) { return get(buildPath(API_PATHS.detectionTemplates), query) },
@@ -85,16 +85,17 @@ const openapiClient = {
     health(query) { return get(buildPath(API_PATHS.health), query) },
   },
   internal: {
-    upload2(body) { return post(buildPath(API_PATHS.internalRobotInspectionImages), body, { 'Idempotency-Key': uid('api') }) },
-    upload1(body) { return post(buildPath(API_PATHS.internalRobotMapAssets), body, { 'Idempotency-Key': uid('api') }) },
+    upload3(body) { return post(buildPath(API_PATHS.internalRobotInspectionImages), body, { 'Idempotency-Key': uid('api') }) },
+    upload2(body) { return post(buildPath(API_PATHS.internalRobotMapAssets), body, { 'Idempotency-Key': uid('api') }) },
+    upload1(body) { return post(buildPath(API_PATHS.internalRobotSceneAssets), body, { 'Idempotency-Key': uid('api') }) },
   },
   mapAssets: {
     getMapAssets(query) { return get(buildPath(API_PATHS.mapAssets), query) },
     upload(body) { return post(buildPath(API_PATHS.mapAssets), body) },
-    delete1(id) { return del(buildPath(API_PATHS.mapAssetsId, { id })) },
-    metadata(id, query) { return get(buildPath(API_PATHS.mapAssetsId, { id }), query) },
+    delete2(id) { return del(buildPath(API_PATHS.mapAssetsId, { id })) },
+    metadata1(id, query) { return get(buildPath(API_PATHS.mapAssetsId, { id }), query) },
     pgm(id, query) { return get(buildPath(API_PATHS.mapAssetsIdPgm, { id }), query) },
-    review(id, body) { return post(buildPath(API_PATHS.mapAssetsIdReview, { id }), body) },
+    review1(id, body) { return post(buildPath(API_PATHS.mapAssetsIdReview, { id }), body) },
     yaml(id, query) { return get(buildPath(API_PATHS.mapAssetsIdYaml, { id }), query) },
   },
   notifications: {
@@ -110,7 +111,7 @@ const openapiClient = {
   },
   robotInspectionImages: {
     getRobotInspectionImages(query) { return get(buildPath(API_PATHS.robotInspectionImages), query) },
-    get2(id, query) { return get(buildPath(API_PATHS.robotInspectionImagesId, { id }), query) },
+    get3(id, query) { return get(buildPath(API_PATHS.robotInspectionImagesId, { id }), query) },
     importImage(body) { return post(buildPath(API_PATHS.robotInspectionImagesImport), body) },
   },
   robots: {
@@ -128,11 +129,11 @@ const openapiClient = {
     getStatus(query) { return get(buildPath(API_PATHS.robotsStatus), query) },
   },
   routeDeployments: {
-    get1(deploymentId, query) { return get(buildPath(API_PATHS.routeDeploymentsDeploymentId, { deploymentId }), query) },
+    get2(deploymentId, query) { return get(buildPath(API_PATHS.routeDeploymentsDeploymentId, { deploymentId }), query) },
     reconcile(deploymentId, body) { return post(buildPath(API_PATHS.routeDeploymentsDeploymentIdReconcile, { deploymentId }), body) },
   },
   routeRevisions: {
-    getRouteRevisions(revisionId, query) { return get(buildPath(API_PATHS.routeRevisionsRevisionId, { revisionId }), query) },
+    get1(revisionId, query) { return get(buildPath(API_PATHS.routeRevisionsRevisionId, { revisionId }), query) },
     getDeployments(revisionId, query) { return get(buildPath(API_PATHS.routeRevisionsRevisionIdDeployments, { revisionId }), query) },
     create2(revisionId, body) { return post(buildPath(API_PATHS.routeRevisionsRevisionIdDeployments, { revisionId }), body, { 'Idempotency-Key': uid('api') }) },
   },
@@ -153,6 +154,15 @@ const openapiClient = {
     validateDraft(routeId, body) { return post(buildPath(API_PATHS.routesRouteIdDraftValidate, { routeId }), body) },
     getRevisions(routeId, query) { return get(buildPath(API_PATHS.routesRouteIdRevisions, { routeId }), query) },
     create1(routeId, body) { return post(buildPath(API_PATHS.routesRouteIdRevisions, { routeId }), body) },
+  },
+  sceneAssets: {
+    getSceneAssets(query) { return get(buildPath(API_PATHS.sceneAssets), query) },
+    delete1(id) { return del(buildPath(API_PATHS.sceneAssetsId, { id })) },
+    getSceneAssets2(id, query) { return get(buildPath(API_PATHS.sceneAssetsId, { id }), query) },
+    metadata(id, query) { return get(buildPath(API_PATHS.sceneAssetsIdMetadata, { id }), query) },
+    model(id, query) { return get(buildPath(API_PATHS.sceneAssetsIdModel, { id }), query) },
+    preview(id, query) { return get(buildPath(API_PATHS.sceneAssetsIdPreview, { id }), query) },
+    review(id, body) { return post(buildPath(API_PATHS.sceneAssetsIdReview, { id }), body) },
   },
   sites: {
     getSites(query) { return get(buildPath(API_PATHS.sites), query) },

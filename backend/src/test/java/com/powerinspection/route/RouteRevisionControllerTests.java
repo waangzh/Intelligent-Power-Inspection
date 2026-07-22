@@ -50,7 +50,8 @@ class RouteRevisionControllerTests {
             post("/api/v1/sites")
                 .header("Authorization", bearer(token))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json("id", siteId, "name", "草稿校验测试站点")))
+                .content(json("id", siteId, "name", "草稿校验测试站点",
+                    "center", map("lat", 30.1, "lng", 120.1))))
         .andExpect(status().isOk());
     mockMvc
         .perform(
@@ -278,7 +279,8 @@ class RouteRevisionControllerTests {
             post("/api/v1/sites")
                 .header("Authorization", bearer(token))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json("id", siteId, "name", "草稿持久化测试站点")))
+                .content(json("id", siteId, "name", "草稿持久化测试站点",
+                    "center", map("lat", 30.1, "lng", 120.1))))
         .andExpect(status().isOk());
     mockMvc
         .perform(

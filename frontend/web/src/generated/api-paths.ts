@@ -44,6 +44,7 @@ export const detectionsRunsId = '/api/v1/detections/runs/{id}' as const
 export const health = '/api/v1/health' as const
 export const internalRobotInspectionImages = '/api/v1/internal/robot-inspection-images' as const
 export const internalRobotMapAssets = '/api/v1/internal/robot-map-assets' as const
+export const internalRobotSceneAssets = '/api/v1/internal/robot-scene-assets' as const
 export const mapAssets = '/api/v1/map-assets' as const
 export const mapAssetsId = '/api/v1/map-assets/{id}' as const
 export const mapAssetsIdPgm = '/api/v1/map-assets/{id}/pgm' as const
@@ -79,6 +80,12 @@ export const routesRouteIdDraft = '/api/v1/routes/{routeId}/draft' as const
 export const routesRouteIdDraftCheck = '/api/v1/routes/{routeId}/draft:check' as const
 export const routesRouteIdDraftValidate = '/api/v1/routes/{routeId}/draft:validate' as const
 export const routesRouteIdRevisions = '/api/v1/routes/{routeId}/revisions' as const
+export const sceneAssets = '/api/v1/scene-assets' as const
+export const sceneAssetsId = '/api/v1/scene-assets/{id}' as const
+export const sceneAssetsIdMetadata = '/api/v1/scene-assets/{id}/metadata' as const
+export const sceneAssetsIdModel = '/api/v1/scene-assets/{id}/model' as const
+export const sceneAssetsIdPreview = '/api/v1/scene-assets/{id}/preview' as const
+export const sceneAssetsIdReview = '/api/v1/scene-assets/{id}/review' as const
 export const sites = '/api/v1/sites' as const
 export const sitesAreas = '/api/v1/sites/areas' as const
 export const sitesAreasAreaId = '/api/v1/sites/areas/{areaId}' as const
@@ -160,6 +167,7 @@ export const API_PATHS = {
   health: '/api/v1/health',
   internalRobotInspectionImages: '/api/v1/internal/robot-inspection-images',
   internalRobotMapAssets: '/api/v1/internal/robot-map-assets',
+  internalRobotSceneAssets: '/api/v1/internal/robot-scene-assets',
   mapAssets: '/api/v1/map-assets',
   mapAssetsId: '/api/v1/map-assets/{id}',
   mapAssetsIdPgm: '/api/v1/map-assets/{id}/pgm',
@@ -195,6 +203,12 @@ export const API_PATHS = {
   routesRouteIdDraftCheck: '/api/v1/routes/{routeId}/draft:check',
   routesRouteIdDraftValidate: '/api/v1/routes/{routeId}/draft:validate',
   routesRouteIdRevisions: '/api/v1/routes/{routeId}/revisions',
+  sceneAssets: '/api/v1/scene-assets',
+  sceneAssetsId: '/api/v1/scene-assets/{id}',
+  sceneAssetsIdMetadata: '/api/v1/scene-assets/{id}/metadata',
+  sceneAssetsIdModel: '/api/v1/scene-assets/{id}/model',
+  sceneAssetsIdPreview: '/api/v1/scene-assets/{id}/preview',
+  sceneAssetsIdReview: '/api/v1/scene-assets/{id}/review',
   sites: '/api/v1/sites',
   sitesAreas: '/api/v1/sites/areas',
   sitesAreasAreaId: '/api/v1/sites/areas/{areaId}',

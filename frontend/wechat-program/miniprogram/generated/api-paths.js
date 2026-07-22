@@ -44,6 +44,7 @@ const detectionsRunsId = '/api/v1/detections/runs/{id}'
 const health = '/api/v1/health'
 const internalRobotInspectionImages = '/api/v1/internal/robot-inspection-images'
 const internalRobotMapAssets = '/api/v1/internal/robot-map-assets'
+const internalRobotSceneAssets = '/api/v1/internal/robot-scene-assets'
 const mapAssets = '/api/v1/map-assets'
 const mapAssetsId = '/api/v1/map-assets/{id}'
 const mapAssetsIdPgm = '/api/v1/map-assets/{id}/pgm'
@@ -79,6 +80,12 @@ const routesRouteIdDraft = '/api/v1/routes/{routeId}/draft'
 const routesRouteIdDraftCheck = '/api/v1/routes/{routeId}/draft:check'
 const routesRouteIdDraftValidate = '/api/v1/routes/{routeId}/draft:validate'
 const routesRouteIdRevisions = '/api/v1/routes/{routeId}/revisions'
+const sceneAssets = '/api/v1/scene-assets'
+const sceneAssetsId = '/api/v1/scene-assets/{id}'
+const sceneAssetsIdMetadata = '/api/v1/scene-assets/{id}/metadata'
+const sceneAssetsIdModel = '/api/v1/scene-assets/{id}/model'
+const sceneAssetsIdPreview = '/api/v1/scene-assets/{id}/preview'
+const sceneAssetsIdReview = '/api/v1/scene-assets/{id}/review'
 const sites = '/api/v1/sites'
 const sitesAreas = '/api/v1/sites/areas'
 const sitesAreasAreaId = '/api/v1/sites/areas/{areaId}'
@@ -164,6 +171,7 @@ module.exports = {
   health,
   internalRobotInspectionImages,
   internalRobotMapAssets,
+  internalRobotSceneAssets,
   mapAssets,
   mapAssetsId,
   mapAssetsIdPgm,
@@ -199,6 +207,12 @@ module.exports = {
   routesRouteIdDraftCheck,
   routesRouteIdDraftValidate,
   routesRouteIdRevisions,
+  sceneAssets,
+  sceneAssetsId,
+  sceneAssetsIdMetadata,
+  sceneAssetsIdModel,
+  sceneAssetsIdPreview,
+  sceneAssetsIdReview,
   sites,
   sitesAreas,
   sitesAreasAreaId,
@@ -279,6 +293,7 @@ module.exports = {
     health: '/api/v1/health',
     internalRobotInspectionImages: '/api/v1/internal/robot-inspection-images',
     internalRobotMapAssets: '/api/v1/internal/robot-map-assets',
+    internalRobotSceneAssets: '/api/v1/internal/robot-scene-assets',
     mapAssets: '/api/v1/map-assets',
     mapAssetsId: '/api/v1/map-assets/{id}',
     mapAssetsIdPgm: '/api/v1/map-assets/{id}/pgm',
@@ -314,6 +329,12 @@ module.exports = {
     routesRouteIdDraftCheck: '/api/v1/routes/{routeId}/draft:check',
     routesRouteIdDraftValidate: '/api/v1/routes/{routeId}/draft:validate',
     routesRouteIdRevisions: '/api/v1/routes/{routeId}/revisions',
+    sceneAssets: '/api/v1/scene-assets',
+    sceneAssetsId: '/api/v1/scene-assets/{id}',
+    sceneAssetsIdMetadata: '/api/v1/scene-assets/{id}/metadata',
+    sceneAssetsIdModel: '/api/v1/scene-assets/{id}/model',
+    sceneAssetsIdPreview: '/api/v1/scene-assets/{id}/preview',
+    sceneAssetsIdReview: '/api/v1/scene-assets/{id}/review',
     sites: '/api/v1/sites',
     sitesAreas: '/api/v1/sites/areas',
     sitesAreasAreaId: '/api/v1/sites/areas/{areaId}',
