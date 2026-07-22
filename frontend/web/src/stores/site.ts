@@ -40,23 +40,21 @@ export const useSiteStore = defineStore('site', () => {
     return site
   }
 
-  function addSite(site: Omit<Site, 'id' | 'createdAt'>) {
+  async function addSite(site: Omit<Site, 'id' | 'createdAt'>) {
     const newSite: Site = {
       ...site,
       id: uid('site'),
       createdAt: new Date().toISOString(),
     }
-    sites.value.push(newSite)
-    void resourcesApi.createSite(newSite).then((saved) => updateLocalSite(saved))
-    return newSite
+    const saved = await resourcesApi.createSite(newSite)
+    updateLocalSite(saved)
+    return saved
   }
 
-  function updateSite(id: string, patch: Partial<Site>) {
-    const idx = sites.value.findIndex((s) => s.id === id)
-    if (idx >= 0) {
-      sites.value[idx] = { ...sites.value[idx], ...patch }
-      void resourcesApi.updateSite(id, patch).then((saved) => updateLocalSite(saved))
-    }
+  async function updateSite(id: string, patch: Partial<Site>) {
+    const saved = await resourcesApi.updateSite(id, patch)
+    updateLocalSite(saved)
+    return saved
   }
 
   function removeSite(id: string) {
