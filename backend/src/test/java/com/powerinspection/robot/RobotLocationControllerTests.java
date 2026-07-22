@@ -4,6 +4,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.data.DataCategory;
@@ -54,8 +57,11 @@ class RobotLocationControllerTests {
     Instant now = Instant.parse("2026-07-15T06:00:00Z");
     BridgeGnssFix fix = new BridgeGnssFix(
         true, false, "gps_link", 31.2304, 121.4737, 12.5, 4, "RTK_FIXED", 18, 0.8, 0.2, "BS-01", 0.5, now);
+    BridgePatrolSnapshot patrol = new BridgePatrolSnapshot(
+        "route-1", "checkpoint-2", "2号配电柜", 1, 6, "target", 2, 5, false, null, "");
     BridgeRobotSnapshot snapshot = new BridgeRobotSnapshot(
-        ROBOT_ID, now, "1.0", "boot-gps", "running", "test-build", 1, Map.of(), fix);
+        ROBOT_ID, now, "1.0", "boot-gps", "running", "execution-1", "test-build", 1,
+        Map.of(), patrol, fix);
     heartbeatService.applyBridgeSnapshot(snapshot, now);
     locationService.applySnapshot(snapshot, now);
 
@@ -65,6 +71,8 @@ class RobotLocationControllerTests {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.robotId").value(ROBOT_ID))
         .andExpect(jsonPath("$.data.locationAvailable").value(true))
+        .andExpect(jsonPath("$.data.state").value("running"))
+        .andExpect(jsonPath("$.data.executionId").value("execution-1"))
         .andExpect(jsonPath("$.data.gnssFix.latitude").value(31.2304))
         .andExpect(jsonPath("$.data.gnssFix.fixType").value("RTK_FIXED"));
 
@@ -75,10 +83,62 @@ class RobotLocationControllerTests {
     mockMvc.perform(get("/api/v1/robots/{id}/track", ROBOT_ID)
             .header("Authorization", bearer(token))
             .param("start", "2026-07-15T05:00:00Z")
-            .param("end", "2026-07-15T07:00:00Z"))
+            .param("end", "2026-07-15T07:00:00Z")
+            .param("executionId", "execution-1"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.robotId").value(ROBOT_ID))
-        .andExpect(jsonPath("$.data.points[0].latitude").value(31.2304));
+        .andExpect(jsonPath("$.data.executionId").value("execution-1"))
+        .andExpect(jsonPath("$.data.points[0].latitude").value(31.2304))
+        .andExpect(jsonPath("$.data.points[0].robotState").value("running"))
+        .andExpect(jsonPath("$.data.points[0].navigationPhase").value("target"))
+        .andExpect(jsonPath("$.data.points[0].targetId").value("checkpoint-2"))
+        .andExpect(jsonPath("$.data.points[0].cycleIndex").value(2));
+  }
+
+  @Test
+  void serverRecomputesStaleAndKeepsLastValidPosition() {
+    Instant observedAt = Instant.parse("2026-07-15T06:00:00Z");
+    BridgeGnssFix fix = new BridgeGnssFix(
+        true, false, "gps_link", 31.2304, 121.4737, 12.5, 4, "RTK_FIXED", 18, 0.8,
+        null, null, 0.1, observedAt);
+    BridgeRobotSnapshot first = new BridgeRobotSnapshot(
+        ROBOT_ID, observedAt, "1.0", "boot-gps", "running", "execution-stale",
+        "test-build", 1, Map.of(), null, fix);
+    locationService.applySnapshot(first, observedAt);
+
+    BridgeRobotSnapshot delayed = new BridgeRobotSnapshot(
+        ROBOT_ID, observedAt.plusSeconds(10), "1.0", "boot-gps", "running",
+        "execution-stale", "test-build", 2, Map.of(), null, fix);
+    locationService.applySnapshot(delayed, observedAt.plusSeconds(10));
+
+    RobotTelemetryEntity telemetry = telemetryRepository.findById(ROBOT_ID).orElseThrow();
+    assertFalse(telemetry.getGpsValid());
+    assertTrue(telemetry.getGpsStale());
+    assertEquals(31.2304, telemetry.getGpsLatitude());
+    assertEquals(1, historyRepository.count());
+  }
+
+  @Test
+  void terminalExecutionStoresAtMostOneTrackPoint() {
+    Instant firstAt = Instant.parse("2026-07-15T06:00:00Z");
+    BridgeGnssFix firstFix = new BridgeGnssFix(
+        true, false, "gps_link", 31.2304, 121.4737, null, 4, "RTK_FIXED", 18, 0.8,
+        null, null, 0.1, firstAt);
+    BridgeRobotSnapshot first = new BridgeRobotSnapshot(
+        ROBOT_ID, firstAt, "1.0", "boot-gps", "succeeded", "execution-terminal",
+        "test-build", 1, Map.of(), null, firstFix);
+    locationService.applySnapshot(first, firstAt);
+
+    Instant secondAt = firstAt.plusSeconds(10);
+    BridgeGnssFix secondFix = new BridgeGnssFix(
+        true, false, "gps_link", 31.2304, 121.4737, null, 4, "RTK_FIXED", 18, 0.8,
+        null, null, 0.1, secondAt);
+    BridgeRobotSnapshot second = new BridgeRobotSnapshot(
+        ROBOT_ID, secondAt, "1.0", "boot-gps", "succeeded", "execution-terminal",
+        "test-build", 2, Map.of(), null, secondFix);
+    locationService.applySnapshot(second, secondAt);
+
+    assertEquals(1, historyRepository.count());
   }
 
   @Test

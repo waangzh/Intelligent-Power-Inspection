@@ -3,7 +3,6 @@ package com.powerinspection.robot;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
-import com.powerinspection.task.TaskExecutionEntity;
 import com.powerinspection.task.TaskExecutionRepository;
 import java.time.Duration;
 import java.time.Instant;
@@ -14,6 +13,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -25,9 +25,9 @@ public class RobotLocationService {
   private static final Duration MAX_TRACK_RANGE = Duration.ofDays(7);
   private static final int DEFAULT_TRACK_LIMIT = 2000;
   private static final int MAX_TRACK_LIMIT = 10000;
-  private static final double MAX_GPS_SPEED_MPS = 5.0;
   private static final Set<String> ACTIVE_STATES = Set.of(
       "starting", "running", "paused", "manual_takeover", "returning_home", "waiting_loop");
+  private static final Set<String> TERMINAL_STATES = Set.of("succeeded", "failed", "canceled");
 
   private final RobotTelemetryRepository telemetryRepository;
   private final RobotLocationHistoryRepository historyRepository;
@@ -54,8 +54,24 @@ public class RobotLocationService {
   @Transactional
   public void applySnapshot(BridgeRobotSnapshot snapshot, Instant receivedAt) {
     if (snapshot == null || !StringUtils.hasText(snapshot.robotId())) return;
-    BridgeGnssFix fix = snapshot.gnssFix();
-    if (fix == null) return;
+    BridgeGnssFix fix = normalizeFreshness(snapshot.gnssFix(), receivedAt);
+    if (fix == null) {
+      telemetryRepository.findById(snapshot.robotId()).ifPresent(telemetry -> {
+        telemetry.applyContext(snapshot);
+        BridgeGnssFix previous = telemetry.toGnssFix();
+        if (previous != null) {
+          BridgeGnssFix stale = new BridgeGnssFix(
+              false, true, previous.frame(), previous.latitude(), previous.longitude(),
+              previous.altitude(), previous.quality(), previous.fixType(), previous.satellites(),
+              previous.hdop(), previous.differentialAge(), previous.baseStationId(),
+              previous.ageSec(), previous.observedAt());
+          telemetry.applyGnssFix(stale, receivedAt, true);
+        }
+        telemetry.setUpdatedAt(receivedAt.toString());
+        telemetryRepository.save(telemetry);
+      });
+      return;
+    }
 
     RobotTelemetryEntity telemetry = telemetryRepository.findById(snapshot.robotId()).orElseGet(() -> {
       RobotTelemetryEntity created = new RobotTelemetryEntity();
@@ -63,11 +79,22 @@ public class RobotLocationService {
       created.setUpdatedAt(receivedAt.toString());
       return created;
     });
+    telemetry.applyContext(snapshot);
 
-    if (Boolean.TRUE.equals(fix.valid()) && GnssFixParser.coordinateValid(fix.latitude(), fix.longitude())) {
+    if (fix.valid() && GnssFixParser.coordinateValid(fix.latitude(), fix.longitude())) {
       RobotLocationHistoryEntity lastPoint = historyRepository.findTopByRobotIdOrderByObservedAtDesc(snapshot.robotId());
-      if (lastPoint != null && shouldRejectJump(lastPoint, fix)) {
+      Instant observedAt = fix.observedAt();
+      if (lastPoint != null && (observedAt == null || !observedAt.isAfter(lastPoint.getObservedAt()))) {
+        telemetry.applyGnssFix(unavailableFix(fix), receivedAt, telemetry.hasStoredCoordinates());
+        telemetry.setUpdatedAt(receivedAt.toString());
+        telemetryRepository.save(telemetry);
+        return;
+      }
+      if (lastPoint != null && shouldRejectJump(lastPoint, fix, observedAt)) {
         log.warn("robot_location_jump_rejected robotId={} fixType={}", snapshot.robotId(), fix.fixType());
+        telemetry.applyGnssFix(unavailableFix(fix), receivedAt, telemetry.hasStoredCoordinates());
+        telemetry.setUpdatedAt(receivedAt.toString());
+        telemetryRepository.save(telemetry);
         return;
       }
       telemetry.applyGnssFix(fix, receivedAt);
@@ -77,26 +104,7 @@ public class RobotLocationService {
       return;
     }
 
-    if (telemetry.hasStoredCoordinates()) {
-      BridgeGnssFix staleFix = new BridgeGnssFix(
-          false,
-          true,
-          fix.frame(),
-          telemetry.getGpsLatitude(),
-          telemetry.getGpsLongitude(),
-          telemetry.getGpsAltitude(),
-          telemetry.getGpsQuality(),
-          telemetry.getGpsFixType() == null ? "UNKNOWN" : telemetry.getGpsFixType(),
-          telemetry.getGpsSatellites(),
-          telemetry.getGpsHdop(),
-          telemetry.getGpsDifferentialAge(),
-          telemetry.getGpsBaseStationId(),
-          fix.ageSec(),
-          telemetry.getGpsObservedAt());
-      telemetry.applyGnssFix(staleFix, receivedAt);
-    } else {
-      telemetry.applyGnssFix(fix, receivedAt);
-    }
+    telemetry.applyGnssFix(fix, receivedAt, telemetry.hasStoredCoordinates());
     telemetry.setUpdatedAt(receivedAt.toString());
     telemetryRepository.save(telemetry);
   }
@@ -150,18 +158,34 @@ public class RobotLocationService {
             row.getFixType(),
             row.getSatellites(),
             row.getHdop(),
+            row.getRobotState(),
+            row.getNavigationPhase(),
+            row.getTargetId(),
+            row.getCycleIndex(),
             row.getObservedAt()))
         .toList();
-    return new RobotTrackView(robotId, resolvedStart, resolvedEnd, points);
+    return new RobotTrackView(
+        robotId,
+        StringUtils.hasText(executionId) ? executionId : null,
+        resolvedStart,
+        resolvedEnd,
+        points);
   }
 
   private RobotLocationView toView(String robotId, boolean online, RobotTelemetryEntity telemetry) {
     if (telemetry == null || !telemetry.hasStoredCoordinates()) {
-      return new RobotLocationView(robotId, online, false, false, null);
+      return new RobotLocationView(robotId, online, false, false, null, null, null);
     }
     BridgeGnssFix fix = telemetry.toGnssFix();
     boolean realtime = online && fix != null && fix.valid() && !fix.stale();
-    return new RobotLocationView(robotId, online, true, realtime, fix);
+    return new RobotLocationView(
+        robotId,
+        online,
+        true,
+        realtime,
+        telemetry.getGpsRobotState(),
+        telemetry.getGpsExecutionId(),
+        fix);
   }
 
   private void maybeSaveTrackPoint(
@@ -171,8 +195,15 @@ public class RobotLocationService {
       RobotLocationHistoryEntity lastPoint) {
     Instant observedAt = fix.observedAt() != null ? fix.observedAt() : receivedAt;
     if (lastPoint != null && !observedAt.isAfter(lastPoint.getObservedAt())) return;
-    if (lastPoint != null && !shouldSample(snapshot.state(), lastPoint, fix, observedAt)) return;
     if (historyRepository.existsByRobotIdAndObservedAt(snapshot.robotId(), observedAt)) return;
+    String executionId = StringUtils.hasText(snapshot.executionId()) ? snapshot.executionId() : null;
+    if (TERMINAL_STATES.contains(snapshot.state())) {
+      if (executionId == null
+          || historyRepository.existsByRobotIdAndExecutionIdAndRobotStateIn(
+              snapshot.robotId(), executionId, TERMINAL_STATES)) return;
+    } else if (lastPoint != null && !shouldSample(snapshot.state(), lastPoint, fix, observedAt)) {
+      return;
+    }
 
     RobotLocationHistoryEntity point = new RobotLocationHistoryEntity();
     point.setRobotId(snapshot.robotId());
@@ -185,16 +216,26 @@ public class RobotLocationService {
     point.setFixType(fix.fixType());
     point.setSatellites(fix.satellites());
     point.setHdop(fix.hdop());
-    bindExecution(point, snapshot.robotId());
+    bindExecution(point, snapshot);
     historyRepository.save(point);
   }
 
-  private void bindExecution(RobotLocationHistoryEntity point, String robotId) {
-    executionRepository.findFirstByRobotIdAndStatusInOrderByUpdatedAtDesc(
-        robotId, List.of("RUNNING", "PAUSED", "MANUAL_TAKEOVER", "STARTING")).ifPresent(execution -> {
-      point.setExecutionId(execution.getExecutionId());
-      point.setTaskId(execution.getTaskId());
-    });
+  private void bindExecution(RobotLocationHistoryEntity point, BridgeRobotSnapshot snapshot) {
+    point.setRobotState(snapshot.state());
+    String executionId = StringUtils.hasText(snapshot.executionId()) ? snapshot.executionId() : null;
+    point.setExecutionId(executionId);
+    if (executionId != null) {
+      executionRepository.findByExecutionId(executionId)
+          .filter(execution -> snapshot.robotId().equals(execution.getRobotId()))
+          .ifPresent(execution -> point.setTaskId(execution.getTaskId()));
+    }
+    BridgePatrolSnapshot patrol = snapshot.patrol();
+    if (patrol != null) {
+      point.setRouteId(patrol.routeId());
+      point.setTargetId(patrol.targetId());
+      point.setCycleIndex(patrol.cycleIndex());
+      point.setNavigationPhase(patrol.navigationPhase());
+    }
   }
 
   private boolean shouldSample(String state, RobotLocationHistoryEntity lastPoint, BridgeGnssFix fix, Instant observedAt) {
@@ -207,13 +248,52 @@ public class RobotLocationService {
     return distanceMeters >= 5.0 || elapsedSec >= 30.0;
   }
 
-  private boolean shouldRejectJump(RobotLocationHistoryEntity lastPoint, BridgeGnssFix fix) {
+  private boolean shouldRejectJump(
+      RobotLocationHistoryEntity lastPoint, BridgeGnssFix fix, Instant observedAt) {
     double distanceMeters = haversineMeters(
         lastPoint.getLatitude(), lastPoint.getLongitude(), fix.latitude(), fix.longitude());
-    Instant observedAt = fix.observedAt() != null ? fix.observedAt() : Instant.now();
     double elapsedSec = Math.max(0.001, Duration.between(lastPoint.getObservedAt(), observedAt).toMillis() / 1000.0);
     double speedMps = distanceMeters / elapsedSec;
     return speedMps > Math.max(0.1, properties.getMaxGpsSpeedMps());
+  }
+
+  private BridgeGnssFix normalizeFreshness(BridgeGnssFix fix, Instant receivedAt) {
+    if (fix == null) return null;
+    Instant observedAt = fix.observedAt();
+    long timeoutSeconds = Math.max(1, properties.getGpsStaleTimeoutSeconds());
+    boolean stale = fix.stale()
+        || observedAt == null
+        || observedAt.isBefore(receivedAt.minusSeconds(timeoutSeconds))
+        || observedAt.isAfter(receivedAt.plusSeconds(30));
+    Double ageSec = observedAt == null
+        ? null
+        : Math.max(0.0, Duration.between(observedAt, receivedAt).toMillis() / 1000.0);
+    boolean valid = fix.valid()
+        && GnssFixParser.coordinateValid(fix.latitude(), fix.longitude())
+        && fix.quality() != null
+        && fix.quality() > 0
+        && !stale;
+    return new BridgeGnssFix(
+        valid, stale, fix.frame(), fix.latitude(), fix.longitude(), fix.altitude(),
+        fix.quality(), fix.fixType(), fix.satellites(), fix.hdop(), fix.differentialAge(),
+        fix.baseStationId(), ageSec, observedAt);
+  }
+
+  private BridgeGnssFix unavailableFix(BridgeGnssFix fix) {
+    return new BridgeGnssFix(
+        false, fix.stale(), fix.frame(), fix.latitude(), fix.longitude(), fix.altitude(),
+        fix.quality(), fix.fixType(), fix.satellites(), fix.hdop(), fix.differentialAge(),
+        fix.baseStationId(), fix.ageSec(), fix.observedAt());
+  }
+
+  @Scheduled(cron = "${app.robot.track-retention-cleanup-cron:0 15 3 * * *}")
+  @Transactional
+  public void cleanupExpiredTrackPoints() {
+    Instant cutoff = Instant.now().minus(Duration.ofDays(Math.max(1, properties.getTrackRetentionDays())));
+    long deletedCount = historyRepository.deleteByObservedAtBefore(cutoff);
+    if (deletedCount > 0) {
+      log.info("robot_track_retention_cleanup deletedCount={} cutoffTime={}", deletedCount, cutoff);
+    }
   }
 
   private void requireRobotExists(String robotId) {

@@ -65,9 +65,10 @@ public class RobotBridgeHeartbeatClient {
     String localProtocolVersion = nullableText(capabilityMap.get("localConfirmProtocolVersion"));
     boolean localReady = bool(healthMap.get("localConfirmStartReady"), false);
     String localError = nullableText(healthMap.get("localConfirmStartError"));
+    String executionId = nullableText(body.containsKey("executionId") ? body.get("executionId") : body.get("activeExecutionId"));
     return new BridgeRobotSnapshot(robotId, lastHeartbeatAt, text(body.get("protocolVersion")), text(body.get("bootId")), text(body.get("state")),
-      text(body.get("softwareVersion")), number(body.get("acceptedEventSequence")), Map.copyOf(normalizedHealth),
-      GnssFixParser.parse(body.get("gnssFix")), reportedRemote, reportedLocal, localProtocolVersion,
+      executionId, text(body.get("softwareVersion")), number(body.get("acceptedEventSequence")), Map.copyOf(normalizedHealth),
+      BridgePatrolSnapshot.parse(body.get("patrol")), GnssFixParser.parse(body.get("gnssFix"), Instant.now()), reportedRemote, reportedLocal, localProtocolVersion,
       localReady, localError, instant(body.get("capabilityReportedAt")));
   }
 

@@ -23,6 +23,10 @@ public class RobotProperties {
   private int heartbeatTimeoutSeconds = 12;
   /** 轨迹跳点过滤：相邻两点推算速度超过该值（m/s）则丢弃。 */
   private double maxGpsSpeedMps = 5.0;
+  /** 服务端允许的 GPS 快照最大年龄。 */
+  private int gpsStaleTimeoutSeconds = 5;
+  /** 历史轨迹保留天数。 */
+  private int trackRetentionDays = 90;
   /** 平台 robotId 到 Bridge/Jetson robotId 的显式映射。 */
   private Map<String, String> bridgeRobotIdMappings = new LinkedHashMap<>();
   /** 与 Bridge 的 PLATFORM_BEARER_TOKEN 相同，仅用于识别 Bridge 回读部署的请求。 */
@@ -106,6 +110,10 @@ public class RobotProperties {
   public void setHeartbeatTimeoutSeconds(int heartbeatTimeoutSeconds) { this.heartbeatTimeoutSeconds = heartbeatTimeoutSeconds; }
   public double getMaxGpsSpeedMps() { return maxGpsSpeedMps; }
   public void setMaxGpsSpeedMps(double maxGpsSpeedMps) { this.maxGpsSpeedMps = maxGpsSpeedMps; }
+  public int getGpsStaleTimeoutSeconds() { return gpsStaleTimeoutSeconds; }
+  public void setGpsStaleTimeoutSeconds(int gpsStaleTimeoutSeconds) { this.gpsStaleTimeoutSeconds = gpsStaleTimeoutSeconds; }
+  public int getTrackRetentionDays() { return trackRetentionDays; }
+  public void setTrackRetentionDays(int trackRetentionDays) { this.trackRetentionDays = trackRetentionDays; }
   public Map<String, String> getBridgeRobotIdMappings() { return bridgeRobotIdMappings; }
   public void setBridgeRobotIdMappings(Map<String, String> bridgeRobotIdMappings) {
     this.bridgeRobotIdMappings = bridgeRobotIdMappings == null ? new LinkedHashMap<>() : new LinkedHashMap<>(bridgeRobotIdMappings);

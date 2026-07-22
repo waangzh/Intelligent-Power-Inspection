@@ -185,13 +185,19 @@
                 </span>
               </div>
               <div class="track-toolbar">
+                <el-input
+                  v-model="trackExecutionId"
+                  class="execution-filter"
+                  clearable
+                  size="small"
+                  placeholder="执行 ID（可选）"
+                />
                 <el-date-picker
                   v-model="trackRange"
                   type="datetimerange"
                   range-separator="至"
                   start-placeholder="开始时间"
                   end-placeholder="结束时间"
-                  value-format="YYYY-MM-DDTHH:mm:ss.SSS[Z]"
                   size="small"
                 />
                 <el-button size="small" type="primary" :loading="trackLoading" @click="queryTrack">查询轨迹</el-button>
@@ -290,13 +296,14 @@ const policySaving = ref(false)
 const mapRef = ref<InstanceType<typeof Map2D> | null>(null)
 const followRobot = ref(false)
 const trackLoading = ref(false)
-const trackRange = ref<[string, string] | null>(null)
+const trackExecutionId = ref('')
+const trackRange = ref<[Date, Date] | null>(null)
 const trackPoints = ref<RobotTrackPoint[]>([])
 
-function defaultTrackRange(): [string, string] {
+function defaultTrackRange(): [Date, Date] {
   const end = new Date()
   const start = new Date(end.getTime() - 60 * 60 * 1000)
-  return [start.toISOString(), end.toISOString()]
+  return [start, end]
 }
 
 function loadRobotPage(page: number) {
@@ -333,9 +340,11 @@ watch(
 
 let heartbeatRequestId = 0
 
-watch(selectedRobotId, (robotId) => {
+watch(selectedRobotId, (robotId, previousRobotId) => {
   void loadHeartbeatStatus(robotId)
+  if (previousRobotId) locationStore.clearTrack(previousRobotId)
   trackPoints.value = []
+  trackExecutionId.value = ''
   followRobot.value = false
   trackRange.value = defaultTrackRange()
   locationStore.stopPolling()
@@ -451,8 +460,9 @@ async function queryTrack() {
   try {
     const range = trackRange.value ?? defaultTrackRange()
     trackPoints.value = await locationStore.fetchTrack(selectedRobotId.value, {
-      start: range[0],
-      end: range[1],
+      start: range[0].toISOString(),
+      end: range[1].toISOString(),
+      executionId: trackExecutionId.value.trim() || undefined,
       limit: 2000,
     })
     if (!trackPoints.value.length) ElMessage.info('该时间范围内暂无轨迹点')
@@ -821,6 +831,10 @@ function fmt(iso?: string | null) {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 12px;
+}
+
+.execution-filter {
+  width: min(240px, 100%);
 }
 
 .location-map {

@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -35,6 +36,9 @@ LOCAL_CONFIRM_VERSION_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 HEARTBEAT_FORBIDDEN_POLICY_FIELDS = {
     "localConfirmStartEnabled", "supportsLocalConfirmStart",
     "reportedSupportsLocalConfirmStart", "reportedLocalConfirmStart",
+}
+GNSS_FIX_TYPES = {
+    "NO_FIX", "SINGLE_POINT", "DGPS", "RTK_FIXED", "RTK_FLOAT", "UNKNOWN",
 }
 
 
@@ -131,6 +135,106 @@ def normalize_health(value):
     normalized["localConfirmStartReady"] = ready
     normalized["localConfirmStartError"] = error
     return normalized
+
+
+def _finite_number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    result = float(value)
+    return result if math.isfinite(result) else None
+
+
+def _non_negative_number(value):
+    result = _finite_number(value)
+    return result if result is not None and result >= 0 else None
+
+
+def _non_negative_int(value):
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
+def _normalize_instant(value):
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def normalize_gnss_fix(value):
+    if value is None:
+        return None, ""
+    if not isinstance(value, dict):
+        return None, "not_object"
+
+    issues = []
+    latitude = _finite_number(value.get("latitude"))
+    longitude = _finite_number(value.get("longitude"))
+    if (
+        (value.get("latitude") is not None and latitude is None)
+        or (value.get("longitude") is not None and longitude is None)
+        or (latitude is None) != (longitude is None)
+        or (latitude is not None and not -90.0 <= latitude <= 90.0)
+        or (longitude is not None and not -180.0 <= longitude <= 180.0)
+        or (latitude == 0.0 and longitude == 0.0)
+    ):
+        return None, "invalid_coordinate"
+
+    altitude = _finite_number(value.get("altitude"))
+    quality = _non_negative_int(value.get("quality"))
+    satellites = _non_negative_int(value.get("satellites"))
+    hdop = _non_negative_number(value.get("hdop"))
+    differential_age = _non_negative_number(value.get("differentialAge"))
+    age_sec = _non_negative_number(value.get("ageSec"))
+    observed_at = _normalize_instant(value.get("observedAt"))
+    fix_type = value.get("fixType") if value.get("fixType") in GNSS_FIX_TYPES else "UNKNOWN"
+
+    for field, normalized in (
+        ("altitude", altitude),
+        ("quality", quality),
+        ("satellites", satellites),
+        ("hdop", hdop),
+        ("differentialAge", differential_age),
+        ("ageSec", age_sec),
+        ("observedAt", observed_at),
+    ):
+        if value.get(field) is not None and normalized is None:
+            issues.append(field)
+    if value.get("fixType") not in GNSS_FIX_TYPES:
+        issues.append("fixType")
+
+    stale = value.get("stale") is True
+    coordinate_valid = latitude is not None and longitude is not None
+    valid = (
+        value.get("valid") is True
+        and coordinate_valid
+        and quality is not None
+        and quality > 0
+        and observed_at is not None
+        and not stale
+    )
+    return {
+        "valid": valid,
+        "stale": stale,
+        "frame": str(value.get("frame") or ""),
+        "latitude": latitude,
+        "longitude": longitude,
+        "altitude": altitude,
+        "quality": quality,
+        "fixType": fix_type,
+        "satellites": satellites,
+        "hdop": hdop,
+        "differentialAge": differential_age,
+        "baseStationId": str(value.get("baseStationId") or ""),
+        "ageSec": age_sec,
+        "observedAt": observed_at,
+    }, ",".join(issues)
 
 
 def create_app() -> FastAPI:
@@ -375,6 +479,8 @@ def create_app() -> FastAPI:
             "lastSeen": robot.get("last_seen", ""),
             "acceptedEventSequence": int(robot.get("last_event_sequence", 0)),
             "protocolVersion": status.get("protocolVersion", ""),
+            "executionId": status.get("executionId", status.get("activeExecutionId")),
+            "patrol": status.get("patrol") if isinstance(status.get("patrol"), dict) else None,
             "activeExecutionId": status.get("activeExecutionId"),
             "activeDeploymentId": status.get("activeDeploymentId"),
             "softwareVersion": status.get("softwareVersion"),
@@ -417,6 +523,13 @@ def create_app() -> FastAPI:
         ):
             raise BridgeError("INVALID_REQUEST", "invalid heartbeat payload")
         body["health"] = normalize_health(body.get("health"))
+        if "gnssFix" in body:
+            body["gnssFix"], gps_issue = normalize_gnss_fix(body.get("gnssFix"))
+            if gps_issue:
+                logger.warning(
+                    "event=bridge_gnss_fix_invalid robot_id=%s reason=%s",
+                    robot_id, gps_issue,
+                )
         capabilities = normalize_capabilities(body.get("capabilities"))
         if capabilities is not None:
             body["capabilities"] = capabilities

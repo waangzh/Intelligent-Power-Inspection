@@ -239,6 +239,26 @@ def run_smoke(base_url, store, platform) -> None:
     }
     status, reply = request(base_url, "POST", "/robot-api/v1/heartbeat", heartbeat, "token-placeholder")
     assert status == 200 and reply["command"] is None
+    gps_heartbeat = {
+        **heartbeat,
+        "state": "running",
+        "executionId": "execution-gps",
+        "patrol": {"routeId": "route-1", "targetId": "checkpoint-1", "navigationPhase": "target", "cycleIndex": 1},
+        "gnssFix": {
+            "valid": True, "stale": False, "frame": "gps_link",
+            "latitude": 31.2304, "longitude": 121.4737, "altitude": 12.5,
+            "quality": 4, "fixType": "RTK_FIXED", "satellites": 18,
+            "hdop": 0.8, "ageSec": 0.2, "observedAt": "2026-07-21T10:30:00Z",
+        },
+    }
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", gps_heartbeat, "token-placeholder")[0] == 200
+    gps_status = request(base_url, "GET", "/bridge/v1/robots/robot-001", token="admin-placeholder")[1]
+    assert gps_status["executionId"] == "execution-gps" and gps_status["patrol"]["targetId"] == "checkpoint-1"
+    assert gps_status["gnssFix"]["fixType"] == "RTK_FIXED" and gps_status["gnssFix"]["valid"] is True
+    invalid_gps = {**heartbeat, "gnssFix": {"valid": True, "latitude": 200.0, "longitude": 121.0}}
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", invalid_gps, "token-placeholder")[0] == 200
+    assert request(base_url, "GET", "/bridge/v1/robots/robot-001", token="admin-placeholder")[1]["gnssFix"] is None
+    assert request(base_url, "POST", "/robot-api/v1/heartbeat", gps_heartbeat, "token-placeholder")[0] == 200
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "robotId": "robot-unknown"}, "token-placeholder")[0] == 401
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "health": []}, "token-placeholder")[0] == 400
     assert request(base_url, "POST", "/robot-api/v1/heartbeat", {**heartbeat, "capabilities": {"localConfirmStart": "true"}}, "token-placeholder")[0] == 400

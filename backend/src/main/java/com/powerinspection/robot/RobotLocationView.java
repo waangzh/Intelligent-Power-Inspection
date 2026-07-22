@@ -7,5 +7,7 @@ public record RobotLocationView(
     boolean online,
     boolean locationAvailable,
     boolean realtime,
+    String state,
+    String executionId,
     BridgeGnssFix gnssFix
 ) {}

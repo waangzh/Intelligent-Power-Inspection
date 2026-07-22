@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -64,6 +65,18 @@ public class RobotTelemetryEntity {
   private Instant gpsObservedAt;
   @Column(name = "gps_received_at")
   private Instant gpsReceivedAt;
+  @Column(name = "gps_robot_state")
+  private String gpsRobotState;
+  @Column(name = "gps_execution_id")
+  private String gpsExecutionId;
+  @Column(name = "gps_route_id")
+  private String gpsRouteId;
+  @Column(name = "gps_target_id")
+  private String gpsTargetId;
+  @Column(name = "gps_navigation_phase")
+  private String gpsNavigationPhase;
+  @Column(name = "gps_cycle_index")
+  private Integer gpsCycleIndex;
   @Column(name = "payload_json", columnDefinition = "LONGTEXT")
   private String payloadJson;
   @Column(name = "updated_at", nullable = false)
@@ -141,9 +154,33 @@ public class RobotTelemetryEntity {
   public String getGpsBaseStationId() { return gpsBaseStationId; }
   public Instant getGpsObservedAt() { return gpsObservedAt; }
   public Instant getGpsReceivedAt() { return gpsReceivedAt; }
+  public String getGpsRobotState() { return gpsRobotState; }
+  public String getGpsExecutionId() { return gpsExecutionId; }
+  public String getGpsRouteId() { return gpsRouteId; }
+  public String getGpsTargetId() { return gpsTargetId; }
+  public String getGpsNavigationPhase() { return gpsNavigationPhase; }
+  public Integer getGpsCycleIndex() { return gpsCycleIndex; }
+
+  public void applyContext(BridgeRobotSnapshot snapshot) {
+    gpsRobotState = snapshot.state();
+    gpsExecutionId = snapshot.executionId();
+    BridgePatrolSnapshot patrol = snapshot.patrol();
+    gpsRouteId = patrol == null ? null : patrol.routeId();
+    gpsTargetId = patrol == null ? null : patrol.targetId();
+    gpsNavigationPhase = patrol == null ? null : patrol.navigationPhase();
+    gpsCycleIndex = patrol == null ? null : patrol.cycleIndex();
+  }
 
   public void applyGnssFix(BridgeGnssFix fix, Instant receivedAt) {
+    applyGnssFix(fix, receivedAt, false);
+  }
+
+  public void applyGnssFix(BridgeGnssFix fix, Instant receivedAt, boolean preserveStoredPosition) {
     if (fix == null) return;
+    Double storedLatitude = gpsLatitude;
+    Double storedLongitude = gpsLongitude;
+    Double storedAltitude = gpsAltitude;
+    Instant storedObservedAt = gpsObservedAt;
     gpsValid = fix.valid();
     gpsStale = fix.stale();
     gpsLatitude = fix.latitude();
@@ -157,14 +194,25 @@ public class RobotTelemetryEntity {
     gpsBaseStationId = fix.baseStationId();
     gpsObservedAt = fix.observedAt() != null ? fix.observedAt() : receivedAt;
     gpsReceivedAt = receivedAt;
-    if (!Boolean.TRUE.equals(gpsValid) && !GnssFixParser.coordinateValid(gpsLatitude, gpsLongitude)) {
+    if (preserveStoredPosition && GnssFixParser.coordinateValid(storedLatitude, storedLongitude)) {
+      gpsLatitude = storedLatitude;
+      gpsLongitude = storedLongitude;
+      gpsAltitude = storedAltitude;
+      gpsObservedAt = storedObservedAt;
+    }
+    if (!Boolean.TRUE.equals(gpsValid)
+        && !GnssFixParser.coordinateValid(storedLatitude, storedLongitude)) {
       gpsLatitude = null;
       gpsLongitude = null;
+      gpsAltitude = null;
     }
   }
 
   public BridgeGnssFix toGnssFix() {
     if (gpsLatitude == null || gpsLongitude == null) return null;
+    double ageSec = gpsObservedAt == null || gpsReceivedAt == null
+        ? 0.0
+        : Math.max(0.0, Duration.between(gpsObservedAt, gpsReceivedAt).toMillis() / 1000.0);
     return new BridgeGnssFix(
         Boolean.TRUE.equals(gpsValid),
         Boolean.TRUE.equals(gpsStale),
@@ -178,7 +226,7 @@ public class RobotTelemetryEntity {
         gpsHdop,
         gpsDifferentialAge,
         gpsBaseStationId,
-        null,
+        ageSec,
         gpsObservedAt);
   }
 
