@@ -91,12 +91,15 @@ flowchart LR
 | `bootId` | string | 是 | 本次进程启动身份 |
 | `softwareVersion` | string | 是 | Jetson 软件版本 |
 | `state` | string | 是 | `idle/starting/running/paused/manual_takeover/returning_home/waiting_loop/succeeded/failed/canceled` |
-| `activeExecutionId` | string/null | 否 | 当前 execution |
+| `executionId` | string/null | 否 | 当前 execution；GPS 与巡逻上下文统一使用该字段 |
+| `activeExecutionId` | string/null | 否 | 旧客户端兼容字段；新客户端应发送 `executionId` |
 | `activeDeploymentId` | string/null | 否 | 当前 deployment |
 | `lastReceivedCommandId` | string/null | 否 | 最近持久化命令 |
 | `latestLocalEventSequence` | integer | 是 | Jetson 本地最新事件序号 |
 | `mapPose` | object/null | 否 | map 坐标位姿 |
 | `odomPose` | object/null | 否 | odom 坐标位姿 |
+| `patrol` | object/null | 否 | 当前路线、目标、巡逻阶段和轮次快照 |
+| `gnssFix` | object/null | 否 | WGS84 GPS/RTK 快照；异常 GPS 不得阻断 heartbeat |
 | `health` | object | 是 | 传感器 age、Nav2、系统模式和最后错误 |
 | `capabilities` | object | 否 | 静态软件能力；缺失时本地确认按不支持处理，远程启动保持兼容 |
 
@@ -113,7 +116,7 @@ flowchart LR
   "bootId": "robot-001",
   "softwareVersion": "79df249",
   "state": "idle",
-  "activeExecutionId": null,
+  "executionId": null,
   "activeDeploymentId": null,
   "lastReceivedCommandId": null,
   "latestLocalEventSequence": 0,
@@ -124,6 +127,8 @@ flowchart LR
   },
   "mapPose": null,
   "odomPose": {"frame": "odom", "x": 0.0, "y": 0.0, "yaw": 0.0},
+  "patrol": null,
+  "gnssFix": null,
   "health": {"odomAgeSec": 0.1, "scanAgeSec": 0.1, "imuAgeSec": 0.1, "nav2": "not_running", "systemMode": "ready", "lastError": "", "localConfirmStartReady": true, "localConfirmStartError": null}
 }
 ```

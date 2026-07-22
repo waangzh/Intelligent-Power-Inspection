@@ -2,6 +2,7 @@ package com.powerinspection.robot;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -9,6 +10,9 @@ import org.springframework.data.repository.query.Param;
 
 public interface RobotLocationHistoryRepository extends JpaRepository<RobotLocationHistoryEntity, Long> {
   boolean existsByRobotIdAndObservedAt(String robotId, Instant observedAt);
+  boolean existsByRobotIdAndExecutionIdAndRobotStateIn(
+      String robotId, String executionId, Set<String> robotStates);
+  long deleteByObservedAtBefore(Instant cutoff);
 
   @Query("""
       select h from RobotLocationHistoryEntity h

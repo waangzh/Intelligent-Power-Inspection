@@ -121,8 +121,7 @@ function toLeaflet(latlng: LatLng): L.LatLngExpression {
 }
 
 function resolveRobotLatLng(): LatLng | null {
-  const fromLocation = locationLatLng(props.robotLocation)
-  if (fromLocation) return fromLocation
+  if (props.robotLocation !== undefined) return locationLatLng(props.robotLocation)
   if (props.robotPosition && canDrawOnGeoMap(props.robotPosition)) return props.robotPosition
   return null
 }
@@ -130,9 +129,9 @@ function resolveRobotLatLng(): LatLng | null {
 function robotMarkerHtml(): string {
   const fix = props.robotLocation?.gnssFix
   const fixType = fix?.fixType ?? 'NO_FIX'
-  const color = GNSS_FIX_COLORS[fixType]
   const stale = fix?.stale || props.robotLocation?.realtime === false
   const offline = props.robotLocation?.online === false
+  const color = offline || stale ? '#64748b' : GNSS_FIX_COLORS[fixType]
   const opacity = offline || stale ? 0.55 : 1
   const ring = stale ? 'dashed' : 'solid'
   return `
@@ -162,6 +161,8 @@ function robotPopupHtml(): string {
     lines.push(`定位时间：${formatGnssObservedAt(fix.observedAt)}`)
     if (fix.ageSec != null) lines.push(`数据延迟：${fix.ageSec.toFixed(1)}s`)
   }
+  if (location?.state) lines.push(`巡逻状态：${escapeHtml(location.state)}`)
+  if (location?.executionId) lines.push(`执行 ID：${escapeHtml(location.executionId)}`)
   return lines.join('<br/>')
 }
 
@@ -253,16 +254,17 @@ function renderTrack() {
     .filter((item): item is LatLng => item !== null)
     .map(toLeaflet)
 
-  if (latlngs.length < 2) return
+  if (latlngs.length === 0) return
 
-  trackLayer = L.polyline(latlngs, {
-    color: '#0ea5e9',
-    weight: 4,
-    opacity: 0.85,
-  }).addTo(map)
+  if (latlngs.length >= 2) {
+    trackLayer = L.polyline(latlngs, {
+      color: '#0ea5e9',
+      weight: 4,
+      opacity: 0.85,
+    }).addTo(map)
+  }
 
   const start = latlngs[0] as L.LatLngTuple
-  const end = latlngs[latlngs.length - 1] as L.LatLngTuple
   trackStartMarker = L.circleMarker(start, {
     radius: 7,
     color: '#fff',
@@ -272,15 +274,18 @@ function renderTrack() {
   })
     .bindTooltip('起点')
     .addTo(map)
-  trackEndMarker = L.circleMarker(end, {
-    radius: 7,
-    color: '#fff',
-    weight: 2,
-    fillColor: '#dc2626',
-    fillOpacity: 1,
-  })
-    .bindTooltip('终点')
-    .addTo(map)
+  if (latlngs.length >= 2) {
+    const end = latlngs[latlngs.length - 1] as L.LatLngTuple
+    trackEndMarker = L.circleMarker(end, {
+      radius: 7,
+      color: '#fff',
+      weight: 2,
+      fillColor: '#dc2626',
+      fillOpacity: 1,
+    })
+      .bindTooltip('终点')
+      .addTo(map)
+  }
 }
 
 function maybeFollowRobot(latlng: LatLng) {
@@ -350,8 +355,17 @@ function clearPath() {
 }
 
 function fitToTrack() {
-  if (!map || !trackLayer) return
-  map.fitBounds(trackLayer.getBounds(), { padding: [24, 24] })
+  if (!map) return
+  const latlngs = (props.trackPoints ?? [])
+    .map(trackPointLatLng)
+    .filter((item): item is LatLng => item !== null)
+    .map((item) => L.latLng(item.lat, item.lng))
+  if (latlngs.length === 0) return
+  if (latlngs.length === 1) {
+    map.setView(latlngs[0]!, Math.max(map.getZoom(), 17), { animate: true })
+    return
+  }
+  map.fitBounds(L.latLngBounds(latlngs), { padding: [24, 24] })
 }
 
 function fitToRobot() {

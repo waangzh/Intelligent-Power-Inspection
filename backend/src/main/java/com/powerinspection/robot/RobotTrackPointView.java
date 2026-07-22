@@ -9,5 +9,9 @@ public record RobotTrackPointView(
     String fixType,
     Integer satellites,
     Double hdop,
+    String robotState,
+    String navigationPhase,
+    String targetId,
+    Integer cycleIndex,
     Instant observedAt
 ) {}
