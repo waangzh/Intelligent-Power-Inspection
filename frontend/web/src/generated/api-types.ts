@@ -2036,6 +2036,8 @@ export interface components {
             createdAt?: string;
             startedAt?: string;
             completedAt?: string;
+            /** Format: int64 */
+            alarmCount?: number;
         };
         SendSmsRequest: {
             phone: string;
@@ -2296,6 +2298,11 @@ export interface components {
             read?: string;
             type?: string;
             enabled?: string;
+            sourceType?: string;
+            detectionRunId?: string;
+            imageId?: string;
+            checkpointId?: string;
+            itemId?: string;
         };
         ApiResponsePageResultMapStringObject: {
             /** Format: int32 */
