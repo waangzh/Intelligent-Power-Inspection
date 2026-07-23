@@ -1,6 +1,10 @@
 {
+  "description": "电力智能巡检平台 - 微信小程序（私有配置，勿删 miniprogramRoot）",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "miniprogram/",
+  "appid": "wx1c7328cd369d11ba",
+  "projectname": "power-inspection-wechat",
   "libVersion": "2.30.4",
-  "projectname": "wechat-program",
   "condition": {},
   "setting": {
     "urlCheck": false,
@@ -10,6 +14,7 @@
     "preloadBackgroundData": false,
     "autoAudits": false,
     "useApiHook": true,
+    "useApiHostProcess": false,
     "showShadowRootInWxmlPanel": true,
     "useStaticServer": false,
     "useLanDebug": false,
@@ -18,6 +23,8 @@
     "checkInvalidKey": true,
     "ignoreDevUnusedFiles": false,
     "bigPackageSizeSupport": false,
-    "useIsolateContext": true
+    "useIsolateContext": true,
+    "enhance": true,
+    "useMultiFrameRuntime": true
   }
 }

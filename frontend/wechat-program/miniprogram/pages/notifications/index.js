@@ -1,9 +1,8 @@
 const api = require('../../services/index')
-const { mapNotificationLink } = require('../../config/menu')
-const { isTabPage } = require('../../config/tab-bar')
 const { NOTIFICATION_TYPE_LABELS } = require('../../utils/constants')
 const { formatBusinessMessage } = require('../../utils/display-text')
 const { formatDateTimeShort } = require('../../utils/date-time')
+const { getUiPreferences } = require('../../utils/ui-preferences')
 
 const TYPE_OPTIONS = [
   { value: '', label: '全部类型' },
@@ -21,13 +20,18 @@ Page({
     typeLabel: '全部类型',
     typeOptions: TYPE_OPTIONS,
     unreadOnly: false,
+    showDetail: false,
+    detail: null,
   },
 
   onShow() {
     const app = getApp()
     if (!app.requireAuth('/pages/notifications/index')) return
-    this.load()
-    app.refreshBadges()
+    const unreadOnly = getUiPreferences().notificationsUnreadOnly
+    this.setData({ unreadOnly }, () => {
+      this.load()
+      app.refreshBadges()
+    })
   },
 
   async load() {
@@ -109,16 +113,28 @@ Page({
   },
 
   async openItem(e) {
-    const item = this.data.list.find((n) => n.id === e.currentTarget.dataset.id)
+    const id = e.currentTarget.dataset.id
+    let item = this.data.filtered.find((n) => n.id === id) || this.data.list.find((n) => n.id === id)
     if (!item) return
-    if (!item.read) await api.markNotificationRead(item.id)
-    getApp().refreshBadges()
-    if (item.link) {
-      const role = getApp().globalData.user?.role
-      const path = mapNotificationLink(item.link, role)
-      if (isTabPage(path)) wx.switchTab({ url: path.split('?')[0] })
-      else wx.navigateTo({ url: path })
+    if (!item.read) {
+      try {
+        await api.markNotificationRead(item.id)
+        item = { ...item, read: true }
+        const list = this.data.list.map((n) => (n.id === item.id ? item : n))
+        this.setData({ list })
+        this.applyFilter()
+        getApp().refreshBadges()
+      } catch (err) {
+        wx.showToast({ title: err.message || '标记已读失败', icon: 'none' })
+      }
     }
-    this.load()
+    this.setData({
+      showDetail: true,
+      detail: item,
+    })
+  },
+
+  closeDetail() {
+    this.setData({ showDetail: false, detail: null })
   },
 })

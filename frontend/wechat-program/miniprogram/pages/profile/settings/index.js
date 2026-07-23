@@ -1,6 +1,7 @@
 const api = require('../../../services/index')
 const { hasPermission } = require('../../../utils/permission')
 const alarmPolicy = require('../../../utils/alarm-policy')
+const { getUiPreferences, saveUiPreferences } = require('../../../utils/ui-preferences')
 
 Page({
   data: {
@@ -9,10 +10,12 @@ Page({
       notifyTask: true,
       notifySystem: true,
       defaultSiteId: '',
+      sidebarCollapsed: false,
     },
-    sites: [],
-    siteIndex: 0,
-    siteLabel: '未设置',
+    uiPrefs: {
+      showGpsTrack: true,
+      notificationsUnreadOnly: false,
+    },
     canManagePolicy: false,
     policyRows: [],
   },
@@ -48,16 +51,16 @@ Page({
 
   async load() {
     try {
-      const [prefs, sites] = await Promise.all([api.getPreferences(), api.getSites()])
-      const siteIndex = prefs.defaultSiteId
-        ? Math.max(0, sites.findIndex((s) => s.id === prefs.defaultSiteId))
-        : -1
-      const siteLabel = siteIndex >= 0 ? sites[siteIndex].name : '未设置'
+      const prefs = await api.getPreferences()
       this.setData({
-        prefs: { ...prefs, defaultSiteId: prefs.defaultSiteId || '' },
-        sites,
-        siteIndex: siteIndex >= 0 ? siteIndex : 0,
-        siteLabel,
+        prefs: {
+          notifyAlarm: !!prefs?.notifyAlarm,
+          notifyTask: !!prefs?.notifyTask,
+          notifySystem: !!prefs?.notifySystem,
+          defaultSiteId: prefs?.defaultSiteId || '',
+          sidebarCollapsed: !!prefs?.sidebarCollapsed,
+        },
+        uiPrefs: getUiPreferences(),
       })
       if (this.data.canManagePolicy) await this.refreshPolicyRows()
     } catch (e) {
@@ -77,21 +80,10 @@ Page({
     }
   },
 
-  onSiteChange(e) {
-    const idx = Number(e.detail.value)
-    const site = this.data.sites[idx]
-    const prefs = { ...this.data.prefs, defaultSiteId: site ? site.id : '' }
-    this.setData({ prefs, siteIndex: idx, siteLabel: site ? site.name : '未设置' })
-    api.savePreferences(prefs).catch(() => {
-      wx.showToast({ title: '保存失败', icon: 'none' })
-      this.load()
-    })
-  },
-
-  clearSite() {
-    const prefs = { ...this.data.prefs, defaultSiteId: '' }
-    this.setData({ prefs, siteLabel: '未设置' })
-    api.savePreferences(prefs)
+  onUiSwitch(e) {
+    const key = e.currentTarget.dataset.key
+    const uiPrefs = saveUiPreferences({ [key]: e.detail.value })
+    this.setData({ uiPrefs })
   },
 
   async setPolicyMode(e) {
