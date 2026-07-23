@@ -1,13 +1,30 @@
 <view class="container">
-  <page-header title="实时监控" description="机器人位姿、任务进度与 Bridge 遥测（数据来自后端 API）" />
+  <page-header title="实时监控" description="机器人 GPS 位置、巡检路线与 Bridge 遥测（数据来自后端 API）" />
 
   <view wx:if="{{loadError}}" class="empty-hint card">{{loadError}}</view>
 
   <view class="card">
-    <view class="card-title flex-between">
+    <view class="card-title map-head">
       <text>地图实时追踪 · {{selected.name || '巡检机器人'}}</text>
+      <text wx:if="{{canViewTrack && trackPoints.length}}" class="track-toggle" bindtap="toggleTrack">{{showTrack ? '隐藏实际路线' : '显示实际路线'}}</text>
     </view>
-    <map-view center="{{mapCenter}}" route="{{activeRoute}}" robotPosition="{{robotPos}}" />
+    <view wx:if="{{canViewLocation}}" class="gps-meta">
+      <text class="tag tag-{{locationSummary.modeLabel === '实时 GPS' ? 'success' : (locationSummary.modeLabel === 'GPS 接口未部署' ? 'warning' : 'warning')}}">{{locationSummary.modeLabel}}</text>
+      <text class="gps-meta-text" wx:if="{{locationSummary.fixLabel !== '-'}}">{{locationSummary.fixLabel}}</text>
+      <text class="gps-meta-text muted" wx:if="{{locationSummary.meta}}">{{locationSummary.meta}}</text>
+      <text class="gps-meta-text muted" wx:if="{{routeReference && activeRoute}}">参考路线：{{activeRoute.name}}</text>
+    </view>
+    <map-view
+      center="{{mapCenter}}"
+      route="{{activeRoute}}"
+      robotPosition="{{robotPos}}"
+      trackPoints="{{trackPoints}}"
+      showTrack="{{showTrack}}"
+    />
+    <view class="map-legend">
+      <text class="legend-item"><text class="legend-line route" />规划路线</text>
+      <text class="legend-item"><text class="legend-line track" />实际路线</text>
+    </view>
   </view>
 
   <view class="card video-card">

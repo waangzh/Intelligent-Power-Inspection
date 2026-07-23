@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.notification.NotificationService;
 import com.powerinspection.record.InspectionRecordService;
 import com.powerinspection.robot.RobotBridgeExecutionEvent;
 import com.powerinspection.route.RouteRevisionEntity;
@@ -32,13 +33,15 @@ class RobotEventIngestionServiceTests {
   @Mock private RouteRevisionRepository revisions;
   @Mock private DataStoreService dataStore;
   @Mock private InspectionRecordService inspectionRecordService;
+  @Mock private NotificationService notificationService;
   private RobotEventIngestionService service;
   private TaskExecutionEntity execution;
 
   @BeforeEach
   void setUp() {
     service = new RobotEventIngestionService(
-        executions, events, controls, revisions, new ObjectMapper(), dataStore, inspectionRecordService);
+        executions, events, controls, revisions, new ObjectMapper(), dataStore, inspectionRecordService,
+        notificationService);
     execution = execution(TaskExecutionStatus.STARTING.name());
     when(executions.findByExecutionId("exec-1")).thenReturn(Optional.of(execution));
     when(events.findByRobotIdAndSequence(anyString(), anyLong())).thenReturn(Optional.empty());

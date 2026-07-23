@@ -7,6 +7,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +26,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -43,9 +50,13 @@ class NotificationSecurityTests {
   @Autowired
   NotificationRecipientRepository recipientRepository;
 
+  @SpyBean
+  SimpMessagingTemplate messagingTemplate;
+
   @BeforeEach
   void setUp() {
     recipientRepository.deleteAll();
+    reset(messagingTemplate);
     removeIfPresent(ADMIN_NOTIFICATION);
     removeIfPresent(GLOBAL_NOTIFICATION);
     dataStore.upsert(DataCategory.NOTIFICATION, notification(
@@ -118,6 +129,48 @@ class NotificationSecurityTests {
 
     assertThat(dataStore.find(DataCategory.NOTIFICATION, GLOBAL_NOTIFICATION)).isNotNull();
     assertThat(dataStore.find(DataCategory.NOTIFICATION, GLOBAL_NOTIFICATION).get("read")).isEqualTo(false);
+  }
+
+  @Test
+  void workOrderEventIsPersistedPublishedListedAndMarkedRead() throws Exception {
+    String adminToken = login("admin", "Admin@123");
+    String dispatcherToken = login("dispatcher", "Disp@123");
+    String created = mockMvc.perform(post("/api/v1/work-orders")
+        .header("Authorization", bearer(adminToken))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"title\":\"通知闭环测试工单\",\"description\":\"验证消息中心闭环\",\"priority\":\"HIGH\"}"))
+      .andExpect(status().isOk())
+      .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    String workOrderId = objectMapper.readTree(created).path("data").path("id").asText();
+
+    verify(messagingTemplate, timeout(5000)).convertAndSend(
+        eq("/topic/notifications/user_dispatcher"), any(Object.class));
+
+    String listed = mockMvc.perform(get("/api/v1/notifications?type=WORKORDER&size=200")
+        .header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isOk())
+      .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    JsonNode notification = null;
+    for (JsonNode item : objectMapper.readTree(listed).path("data").path("items")) {
+      if (workOrderId.equals(item.path("resourceId").asText())
+          && "WORKORDER_CREATED".equals(item.path("eventCode").asText())) {
+        notification = item;
+        break;
+      }
+    }
+    assertThat(notification).isNotNull();
+    String notificationId = notification.path("id").asText();
+    assertThat(dataStore.find(DataCategory.NOTIFICATION, notificationId)).isNotNull();
+    assertThat(notification.path("read").asBoolean()).isFalse();
+
+    mockMvc.perform(patch("/api/v1/notifications/" + notificationId + "/read")
+        .header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.read").value(true));
+    mockMvc.perform(get("/api/v1/notifications/" + notificationId)
+        .header("Authorization", bearer(dispatcherToken)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.read").value(true));
   }
 
   private Map<String, Object> notification(String id, String userId, String title) {

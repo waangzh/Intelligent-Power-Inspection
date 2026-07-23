@@ -3,12 +3,14 @@ package com.powerinspection.robot;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.notification.NotificationService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,15 +23,26 @@ public class RobotHeartbeatService {
   private final DataStoreService dataStore;
   private final RobotProperties properties;
   private final Duration timeout;
+  private final NotificationService notificationService;
 
   public RobotHeartbeatService(
       RobotHeartbeatStatusRepository repository,
       DataStoreService dataStore,
       RobotProperties properties) {
+    this(repository, dataStore, properties, null);
+  }
+
+  @Autowired
+  public RobotHeartbeatService(
+      RobotHeartbeatStatusRepository repository,
+      DataStoreService dataStore,
+      RobotProperties properties,
+      NotificationService notificationService) {
     this.repository = repository;
     this.dataStore = dataStore;
     this.properties = properties;
     this.timeout = Duration.ofSeconds(Math.max(1, properties.getHeartbeatTimeoutSeconds()));
+    this.notificationService = notificationService;
   }
 
   @Transactional
@@ -44,6 +57,7 @@ public class RobotHeartbeatService {
       return;
     }
     RobotHeartbeatStatusEntity status = status(snapshot.robotId(), observedAt);
+    String previous = status.getConnectionStatus();
     Instant current = status.getLastHeartbeatAt();
     if (current != null && snapshot.lastHeartbeatAt().isBefore(current)) return;
     if (current != null && snapshot.lastHeartbeatAt().equals(current)) {
@@ -53,6 +67,7 @@ public class RobotHeartbeatService {
       status.setStatusUpdatedAt(observedAt);
       repository.save(status);
       syncInventoryPresence(snapshot.robotId(), isOnline(status, observedAt));
+      notifyRobotTransition(snapshot.robotId(), previous, status.getConnectionStatus(), "HEARTBEAT_CONNECTED");
       return;
     }
     status.setLastHeartbeatAt(snapshot.lastHeartbeatAt());
@@ -76,6 +91,7 @@ public class RobotHeartbeatService {
     status.setStatusUpdatedAt(observedAt);
     repository.save(status);
     syncInventoryPresence(snapshot.robotId(), isOnline(status, observedAt));
+    notifyRobotTransition(snapshot.robotId(), previous, status.getConnectionStatus(), "HEARTBEAT_CONNECTED");
   }
 
   @Transactional
@@ -89,18 +105,21 @@ public class RobotHeartbeatService {
   public void markBridgeUnreachable(String robotId, Instant now) {
     if (dataStore.find(DataCategory.ROBOT, robotId) == null) return;
     RobotHeartbeatStatusEntity status = status(robotId, now);
+    String previous = status.getConnectionStatus();
     status.setConnectionStatus(RobotConnectionStatus.BRIDGE_UNREACHABLE.name());
     status.setOfflineReason("BRIDGE_UNREACHABLE");
     status.setSourceName(SOURCE_NAME);
     status.setStatusUpdatedAt(now);
     repository.save(status);
     syncInventoryPresence(robotId, false);
+    notifyRobotTransition(robotId, previous, status.getConnectionStatus(), "ROBOT_UNREACHABLE");
   }
 
   @Transactional
   public void markBridgeUnconfigured(String robotId, Instant now) {
     if (dataStore.find(DataCategory.ROBOT, robotId) == null) return;
     RobotHeartbeatStatusEntity status = status(robotId, now);
+    String previous = status.getConnectionStatus();
     status.setConnectionStatus(RobotConnectionStatus.BRIDGE_UNCONFIGURED.name());
     status.setOfflineReason("BRIDGE_UNCONFIGURED");
     status.setSourceName(SOURCE_NAME);
@@ -108,11 +127,13 @@ public class RobotHeartbeatService {
     status.setStatusUpdatedAt(now);
     repository.save(status);
     syncInventoryPresence(robotId, false);
+    notifyRobotTransition(robotId, previous, status.getConnectionStatus(), "ROBOT_UNCONFIGURED");
   }
 
   @Transactional
   public void markInvalidSnapshot(String robotId, Instant now) {
     RobotHeartbeatStatusEntity status = status(robotId, now);
+    String previous = status.getConnectionStatus();
     status.setConnectionStatus(RobotConnectionStatus.UNKNOWN.name());
     status.setOfflineReason("INVALID_BRIDGE_SNAPSHOT");
     status.setSourceName(SOURCE_NAME);
@@ -120,6 +141,7 @@ public class RobotHeartbeatService {
     status.setStatusUpdatedAt(now);
     repository.save(status);
     syncInventoryPresence(robotId, false);
+    notifyRobotTransition(robotId, previous, status.getConnectionStatus(), "ROBOT_INVALID_HEARTBEAT");
   }
 
   @Transactional
@@ -128,11 +150,13 @@ public class RobotHeartbeatService {
       if (status.getLastHeartbeatAt() == null
           || !RobotConnectionStatus.CONNECTED.name().equals(status.getConnectionStatus())) continue;
       if (status.getLastHeartbeatAt().plus(timeout).isAfter(now)) continue;
+      String previous = status.getConnectionStatus();
       status.setConnectionStatus(RobotConnectionStatus.OFFLINE.name());
       status.setOfflineReason("HEARTBEAT_TIMEOUT");
       status.setStatusUpdatedAt(now);
       repository.save(status);
       syncInventoryPresence(status.getRobotId(), false);
+      notifyRobotTransition(status.getRobotId(), previous, status.getConnectionStatus(), "ROBOT_OFFLINE");
     }
   }
 
@@ -349,5 +373,13 @@ public class RobotHeartbeatService {
 
   private static String blankToNull(String value) {
     return value == null || value.isBlank() ? null : value;
+  }
+
+  private void notifyRobotTransition(String robotId, String previous, String current, String eventCode) {
+    if (notificationService == null || current == null || current.equals(previous)) return;
+    String title = "CONNECTED".equals(current) ? "机器人已恢复在线" : "机器人状态异常";
+    String content = "机器人 " + robotId + " 状态由 " + previous + " 变更为 " + current + "。";
+    notificationService.pushEvent("*", "SYSTEM", eventCode, "ROBOT", robotId, title, content,
+        "/robots/status", null);
   }
 }

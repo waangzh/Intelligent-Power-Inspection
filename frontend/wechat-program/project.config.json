@@ -61,5 +61,6 @@
     "tabSize": 2
   },
   "miniprogramRoot": "miniprogram/",
+  "srcMiniprogramRoot": "miniprogram/",
   "simulatorPluginLibVersion": {}
 }

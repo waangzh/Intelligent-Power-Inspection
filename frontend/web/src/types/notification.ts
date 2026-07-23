@@ -16,5 +16,9 @@ export interface AppNotification {
   content: string
   read: boolean
   link?: string
+  eventCode?: string
+  resourceType?: string
+  resourceId?: string
+  idempotencyKey?: string
   createdAt: string
 }
