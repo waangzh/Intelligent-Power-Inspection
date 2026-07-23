@@ -292,7 +292,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   CircleCheck,
   Clock,
@@ -328,16 +328,17 @@ const PAGE_SIZE = 20
 const LOAD_SIZE = 500
 
 const router = useRouter()
+const route = useRoute()
 const workOrderStore = useWorkOrderStore()
 const authStore = useAuthStore()
 const { can, role } = usePermission()
 
 const keyword = ref('')
-const statusFilter = ref<string>('ALL')
+const statusFilter = ref<string>(queryText(route.query.status) || 'ALL')
 const priorityFilter = ref<string>('ALL')
 const assigneeFilter = ref<string>('ALL')
 const highPriorityOnly = ref(false)
-const activeStatCard = ref<string>('ALL')
+const activeStatCard = ref<string>(statusFilter.value)
 const orderPage = ref(0)
 const scopeFilter = ref<'ALL' | 'POOL' | 'MINE'>('ALL')
 const detailVisible = ref(false)
@@ -509,6 +510,11 @@ function resetFilters() {
 
 function canClaimOrder(row: WorkOrder) {
   return can('workorder:process') && row.status === 'PENDING' && isWorkOrderUnassigned(row)
+}
+
+function queryText(value: unknown) {
+  if (Array.isArray(value)) return value.length ? String(value[0] ?? '') : ''
+  return typeof value === 'string' ? value : ''
 }
 
 function canProcessOrder(row: WorkOrder) {

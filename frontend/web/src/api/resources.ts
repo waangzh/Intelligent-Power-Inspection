@@ -23,6 +23,7 @@ import type {
   Robot,
   RobotInspectionImage,
   Route,
+  RouteDeletionResult,
   RouteRevision,
   TaskEvent,
 } from '@/types'
@@ -72,7 +73,7 @@ export const resourcesApi = {
   getRoute: (id: string) => http.get<Route>(`/routes/${encodeURIComponent(id)}`),
   createRoute: (route: Route) => http.post<Route>('/routes', route),
   updateRoute: (id: string, patch: Partial<Route>) => http.patch<Route>(`/routes/${id}`, patch),
-  removeRoute: (id: string) => http.delete<void>(`/routes/${id}`),
+  removeRoute: (id: string) => http.delete<RouteDeletionResult>(`/routes/${id}`),
   listRouteRevisions: (routeId: string) => http.get<RouteRevision[]>(`/routes/${routeId}/revisions`),
   createRouteRevision: (routeId: string) => http.post<RouteRevision>(`/routes/${routeId}/revisions`),
   listRouteDeployments: (revisionId: string) => http.get<RouteDeployment[]>(`/route-revisions/${encodeURIComponent(revisionId)}/deployments`),

@@ -54,6 +54,9 @@ public class RouteDeploymentService {
     Map<String, Object> robot = dataStore.find(DataCategory.ROBOT, robotId);
     if (robot == null) throw ApiException.badRequest("机器人不存在");
     Map<String, Object> route = dataStore.get(DataCategory.ROUTE, revision.getRouteId());
+    if ("ARCHIVED".equals(text(route.get("status")))) {
+      throw ApiException.conflict("路线已归档，不能创建新的部署");
+    }
     String routeSiteId = text(route.get("siteId"));
     String robotSiteId = text(robot.get("siteId"));
     if (routeSiteId == null || robotSiteId == null || !routeSiteId.equals(robotSiteId)) {

@@ -229,7 +229,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   CircleCheck,
   Clock,
@@ -262,11 +262,12 @@ const PENDING_STATUSES: TaskStatus[] = ['CREATED', 'DISPATCHED', 'START_FAILED']
 const DONE_STATUSES: TaskStatus[] = ['COMPLETED', 'CANCELLED', 'ESTOPPED', 'FAILED']
 
 const router = useRouter()
+const route = useRoute()
 const { can, canAny } = usePermission()
 const taskPage = ref(0)
 const keyword = ref('')
-const statusFilter = ref('')
-const activeStatKey = ref('ALL')
+const statusFilter = ref(queryText(route.query.status) === 'RUNNING' ? 'RUNNING' : '')
+const activeStatKey = ref(statusFilter.value || 'ALL')
 const statIcons = [List, VideoPlay, Clock, CircleCheck]
 
 const taskStore = useTaskStore()
@@ -394,6 +395,11 @@ const defaultRobotLabel = computed(() => {
 
 function routeName(id: string) {
   return routeStore.getRouteById(id)?.name ?? '-'
+}
+
+function queryText(value: unknown) {
+  if (Array.isArray(value)) return value.length ? String(value[0] ?? '') : ''
+  return typeof value === 'string' ? value : ''
 }
 
 function robotName(id: string) {
