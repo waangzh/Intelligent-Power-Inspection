@@ -13,6 +13,8 @@ const { canViewWorkOrders } = require('../utils/permission')
 const { DEFAULT_POLICY } = require('../utils/alarm-policy')
 const { del, post, uploadFile, markSessionApiBase } = require('../utils/request')
 const { API_PATHS, apiRel } = require('../generated/api-paths')
+const { latestReadyRevision } = require('../utils/task-bridge')
+const { assertStartEligible } = require('../utils/task-start')
 
 function taskControlPath(apiPath, id) {
   return apiRel(apiPath).replace('{id}', encodeURIComponent(String(id)))
@@ -332,12 +334,108 @@ async function getTaskEvents(taskId) {
   return fetchAllPages((query) => services.tasks.listEvents(taskId, query))
 }
 
-async function createTask(name, routeId, robotId) {
-  return services.tasks.create({ name, routeId, robotId })
+async function listRouteRevisions(routeId) {
+  const res = await openapiClient.routes.getRevisions(routeId)
+  if (Array.isArray(res)) return res
+  return Array.isArray(res?.items) ? res.items : []
+}
+
+async function listRouteDeployments(revisionId) {
+  const res = await openapiClient.routeRevisions.getDeployments(revisionId)
+  if (Array.isArray(res)) return res
+  return Array.isArray(res?.items) ? res.items : []
+}
+
+async function findReadyRevision(routeId, robotId) {
+  const revisions = await listRouteRevisions(routeId)
+  if (!revisions.length) return null
+  const deploymentGroups = await Promise.all(
+    revisions.map((revision) => listRouteDeployments(revision.id).catch(() => [])),
+  )
+  const deployments = deploymentGroups.flat()
+  return latestReadyRevision(revisions, deployments, robotId) || null
+}
+
+async function getTaskExecution(taskId) {
+  try {
+    return await openapiClient.tasks.execution(taskId)
+  } catch (err) {
+    if (err?.statusCode === 404) return null
+    throw err
+  }
+}
+
+async function getTaskStartEligibility(taskId) {
+  return openapiClient.tasks.startEligibility(taskId)
+}
+
+async function enrichTasksWithExecutions(tasks) {
+  const bridgeTasks = (tasks || []).filter((task) => task.executionId)
+  if (!bridgeTasks.length) return tasks || []
+  const executions = await Promise.all(
+    bridgeTasks.map((task) => getTaskExecution(task.id).catch(() => null)),
+  )
+  const executionById = {}
+  bridgeTasks.forEach((task, index) => {
+    executionById[task.id] = executions[index]
+  })
+  return (tasks || []).map((task) => ({
+    ...task,
+    execution: executionById[task.id] || null,
+  }))
+}
+
+async function createTask(name, routeId, robotId, options = {}) {
+  let routeRevisionId = options.routeRevisionId
+  if (routeRevisionId === undefined) {
+    const ready = await findReadyRevision(routeId, robotId)
+    if (ready) {
+      routeRevisionId = ready.id
+    } else {
+      const revisions = await listRouteRevisions(routeId).catch(() => [])
+      if (revisions.length > 0) {
+        throw new Error('该路线没有已发布且待机器人就绪的版本，请先在 Web 发布路线并同步部署')
+      }
+    }
+  }
+  const body = {
+    id: uid('task'),
+    name,
+    routeId,
+    robotId,
+  }
+  if (routeRevisionId) body.routeRevisionId = routeRevisionId
+  return services.tasks.create(body)
 }
 
 async function dispatchTask(id) {
   await services.tasks.dispatch(id)
+}
+
+async function startTask(id, startMode = 'REMOTE_IMMEDIATE', options = {}) {
+  const eligibility = options.eligibility || await getTaskStartEligibility(id)
+  assertStartEligible(eligibility, startMode)
+  return openapiClient.tasks.start(id, { startMode })
+}
+
+async function launchTask(id, { startMode, task, eligibility } = {}) {
+  let current = task
+  if (!current) {
+    const tasks = await getTasks()
+    current = tasks.find((item) => item.id === id)
+  }
+  if (!current) throw new Error('任务不存在')
+  if (current.executionId || current.routeRevisionId) {
+    if (!startMode) {
+      const err = new Error('请选择启动方式')
+      err.code = 'NEED_START_MODE'
+      throw err
+    }
+    await startTask(id, startMode, { eligibility })
+    return { mode: 'start', startMode }
+  }
+  await dispatchTask(id)
+  return { mode: 'dispatch' }
 }
 
 async function pauseTask(id) {
@@ -534,6 +632,78 @@ async function getRobotTelemetry(robotId) {
   }
 }
 
+async function getRobotLocation(robotId) {
+  if (!robotId) return null
+  return openapiClient.robots.location(robotId)
+}
+
+async function listRobotLocations(query = {}) {
+  return openapiClient.robots.listLocations(query)
+}
+
+async function getRobotTrack(robotId, query = {}) {
+  if (!robotId) return null
+  return openapiClient.robots.track(robotId, query)
+}
+
+/** GPS 接口在旧版后端会 404；探测一次后缓存，避免轮询反复请求 */
+async function fetchRobotGpsData(robotId, { canViewLocation = false, canViewTrack = false, trackQuery = {} } = {}) {
+  if (!robotId) return { robotLocation: null, track: null, gpsApiUnavailable: false }
+  const apiConfig = require('../config/api')
+  const baseUrl = apiConfig.baseUrl
+  const {
+    isGpsApiMissingError,
+    isGpsApiCachedUnavailable,
+    markGpsApiUnavailable,
+  } = require('../utils/robot-location')
+
+  if (isGpsApiCachedUnavailable(baseUrl)) {
+    return { robotLocation: null, track: null, gpsApiUnavailable: true }
+  }
+
+  let robotLocation = null
+  let track = null
+  let gpsApiUnavailable = false
+
+  if (canViewLocation) {
+    try {
+      robotLocation = await getRobotLocation(robotId)
+    } catch (err) {
+      if (isGpsApiMissingError(err)) {
+        gpsApiUnavailable = true
+        markGpsApiUnavailable(baseUrl)
+      }
+    }
+  } else if (canViewTrack) {
+    // 无 location 权限时，用 track 探测一次即可
+    try {
+      track = await getRobotTrack(robotId, trackQuery)
+    } catch (err) {
+      if (isGpsApiMissingError(err)) {
+        gpsApiUnavailable = true
+        markGpsApiUnavailable(baseUrl)
+      }
+    }
+    return { robotLocation, track, gpsApiUnavailable }
+  }
+
+  if (gpsApiUnavailable) {
+    return { robotLocation: null, track: null, gpsApiUnavailable: true }
+  }
+
+  if (canViewTrack) {
+    try {
+      track = await getRobotTrack(robotId, trackQuery)
+    } catch (err) {
+      if (isGpsApiMissingError(err)) {
+        gpsApiUnavailable = true
+        markGpsApiUnavailable(baseUrl)
+      }
+    }
+  }
+  return { robotLocation, track, gpsApiUnavailable }
+}
+
 async function addRobot(robot) {
   return services.robots.create(robot)
 }
@@ -615,7 +785,15 @@ module.exports = {
   getRecords,
   getTaskEvents,
   createTask,
+  findReadyRevision,
+  listRouteRevisions,
+  listRouteDeployments,
+  getTaskExecution,
+  getTaskStartEligibility,
+  enrichTasksWithExecutions,
   dispatchTask,
+  startTask,
+  launchTask,
   pauseTask,
   resumeTask,
   takeoverTask,
@@ -639,6 +817,10 @@ module.exports = {
   getRobots,
   getRobotHeartbeatStatus,
   getRobotTelemetry,
+  getRobotLocation,
+  listRobotLocations,
+  getRobotTrack,
+  fetchRobotGpsData,
   addRobot,
   removeRobot,
   getDetectionTemplates,

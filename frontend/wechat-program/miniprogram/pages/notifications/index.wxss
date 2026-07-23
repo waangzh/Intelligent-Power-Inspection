@@ -13,3 +13,55 @@
   border-top: 1rpx solid var(--pi-border-soft);
 }
 .ntf-actions .link { padding: 8rpx 0; }
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 42, 86, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 99;
+}
+
+.detail-sheet {
+  width: 100%;
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  border: 1rpx solid var(--pi-border);
+  box-shadow: 0 -8rpx 32rpx rgba(16, 42, 86, 0.12);
+}
+
+.detail-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.detail-sheet-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: var(--pi-text);
+  line-height: 1.45;
+  margin-bottom: 16rpx;
+}
+
+.detail-sheet-content {
+  font-size: 28rpx;
+  color: var(--pi-muted);
+  line-height: 1.6;
+  margin-bottom: 20rpx;
+}
+
+.detail-sheet-meta {
+  margin-bottom: 28rpx;
+}
+
+.detail-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+}

@@ -46,6 +46,30 @@
   background: #fff;
 }
 
+.form-readonly {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1rpx solid var(--pi-border);
+  border-radius: 16rpx;
+  padding: 24rpx;
+  font-size: 26rpx;
+  color: var(--pi-muted);
+  background: var(--pi-bg);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.form-hint {
+  margin: -8rpx 0 20rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--pi-muted);
+}
+
+.form-hint.warning {
+  color: #b45309;
+}
+
 .task-name {
   color: var(--pi-primary);
   font-weight: 600;

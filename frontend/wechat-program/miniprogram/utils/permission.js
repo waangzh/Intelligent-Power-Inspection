@@ -37,19 +37,33 @@ function canEstopTask(permissions) {
 }
 
 const TERMINAL_TASK_STATUSES = ['COMPLETED', 'CANCELLED', 'ESTOPPED']
-const ESTOP_TASK_STATUSES = ['RUNNING', 'PAUSED', 'DISPATCHED', 'MANUAL_TAKEOVER', 'STARTING']
-const CANCEL_TASK_STATUSES = ['CREATED', ...ESTOP_TASK_STATUSES]
+const ESTOP_TASK_STATUSES = [
+  'RUNNING', 'PAUSED', 'DISPATCHED', 'MANUAL_TAKEOVER', 'STARTING',
+  'WAITING_LOCAL_CONFIRM', 'DISCONNECTED', 'RECOVERING',
+]
+const CANCEL_TASK_STATUSES = [
+  'CREATED', 'START_FAILED', 'DISPATCHED', 'RUNNING', 'PAUSED', 'MANUAL_TAKEOVER',
+  'STARTING', 'WAITING_LOCAL_CONFIRM',
+]
 
 function canShowTaskEstop(task, permissions) {
   if (!canEstopTask(permissions)) return false
-  const status = task?.status
-  return !!status && ESTOP_TASK_STATUSES.includes(status)
+  const status = task?.displayStatus || task?.status
+  if (!status || ['COMPLETED', 'CANCELLED', 'ESTOPPED', 'ESTOPPING', 'CANCELLING', 'FAILED'].includes(status)) {
+    return false
+  }
+  if (task?.executionId) return ESTOP_TASK_STATUSES.includes(status)
+  return ['CREATED', ...ESTOP_TASK_STATUSES].includes(status)
 }
 
 function canShowTaskCancel(task, permissions) {
   if (!hasPermission(permissions, 'task:control')) return false
-  const status = task?.status
-  return !!status && CANCEL_TASK_STATUSES.includes(status)
+  const status = task?.displayStatus || task?.status
+  if (!status || ['COMPLETED', 'CANCELLED', 'ESTOPPED'].includes(status)) return false
+  if (task?.executionId) {
+    return ['STARTING', 'WAITING_LOCAL_CONFIRM', 'RUNNING', 'PAUSED'].includes(status)
+  }
+  return CANCEL_TASK_STATUSES.includes(status)
 }
 
 function isEmergencyCancel(permissions) {

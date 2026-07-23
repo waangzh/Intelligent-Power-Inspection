@@ -21,12 +21,17 @@
     </view>
     <view class="form-item">
       <view class="form-label">执行机器人</view>
-      <picker mode="selector" range="{{availableRobots}}" range-key="label" value="{{form.robotIndex}}" bindchange="onRobotChange">
-        <view class="form-picker">{{availableRobots[form.robotIndex].label || '请选择'}} ▾</view>
+      <picker mode="selector" range="{{robotOptions}}" range-key="label" value="{{form.robotIndex}}" bindchange="onRobotChange">
+        <view class="form-picker">{{robotOptions[form.robotIndex].label || '请选择'}} ▾</view>
       </picker>
     </view>
+    <view class="form-item" wx:if="{{readyRevisionLabel}}">
+      <view class="form-label">可部署版本</view>
+      <view class="form-readonly">{{readyRevisionLabel}}</view>
+    </view>
+    <view class="form-hint warning" wx:if="{{revisionHint}}">{{revisionHint}}</view>
     <view class="form-actions">
-      <button type="primary" bindtap="submitCreate">创建任务</button>
+      <button type="primary" bindtap="submitCreate" loading="{{revisionLoading}}" disabled="{{createDisabled || revisionLoading}}">创建任务</button>
       <button class="btn-plain" bindtap="toggleCreate">取消</button>
     </view>
   </view>
@@ -42,7 +47,7 @@
     <view class="voice-hint" wx:if="{{activeTask.status==='RUNNING'}}">🎙 行进中持续检测人员/安全帽/障碍物/火源；到点播报「已到达指定位置，开始检查」</view>
     <map-view wx:if="{{activeRoute}}" center="{{mapCenter}}" route="{{activeRoute}}" robotPosition="{{robotPos}}" />
     <view class="task-actions">
-      <button wx:if="{{canDispatch && activeTask.status==='CREATED'}}" size="mini" type="primary" catchtap="dispatch" data-id="{{activeTask.id}}">下发</button>
+      <button wx:if="{{canLaunch && activeTask.showLaunch}}" size="mini" type="primary" catchtap="launch" data-id="{{activeTask.id}}">{{activeTask.launchLabel}}</button>
       <button wx:if="{{canControl && activeTask.status==='RUNNING'}}" size="mini" catchtap="pause" data-id="{{activeTask.id}}">暂停</button>
       <button wx:if="{{canControl && activeTask.status==='PAUSED'}}" size="mini" type="primary" catchtap="resume" data-id="{{activeTask.id}}">恢复</button>
       <button wx:if="{{canTakeover && activeTask.status==='RUNNING'}}" size="mini" catchtap="takeover" data-id="{{activeTask.id}}">接管</button>
@@ -64,7 +69,7 @@
       </view>
       <progress percent="{{item.progress}}" stroke-width="6" activeColor="#1768f2" />
       <view class="task-actions">
-        <button wx:if="{{canDispatch && item.status==='CREATED'}}" size="mini" type="primary" catchtap="dispatch" data-id="{{item.id}}">下发</button>
+        <button wx:if="{{canLaunch && item.showLaunch}}" size="mini" type="primary" catchtap="launch" data-id="{{item.id}}">{{item.launchLabel}}</button>
         <button wx:if="{{canControl && item.status==='RUNNING'}}" size="mini" catchtap="pause" data-id="{{item.id}}">暂停</button>
         <button wx:if="{{canControl && item.status==='PAUSED'}}" size="mini" type="primary" catchtap="resume" data-id="{{item.id}}">恢复</button>
         <button wx:if="{{canTakeover && item.status==='RUNNING'}}" size="mini" catchtap="takeover" data-id="{{item.id}}">接管</button>

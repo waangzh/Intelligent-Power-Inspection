@@ -28,17 +28,19 @@
 
   <view class="card settings-card">
     <view class="group-title">界面偏好</view>
-    <view class="setting-row setting-row-picker">
+    <view class="setting-row">
       <view class="setting-main">
-        <text class="setting-label">默认站点</text>
-        <text class="hint">进入总览时默认站点</text>
+        <text class="setting-label">默认显示实际路线</text>
+        <text class="hint">监控/任务详情地图默认展示绿色实际路线</text>
       </view>
-      <picker mode="selector" range="{{sites}}" range-key="name" bindchange="onSiteChange">
-        <view class="picker-val">{{siteLabel}} ▾</view>
-      </picker>
+      <switch checked="{{uiPrefs.showGpsTrack}}" data-key="showGpsTrack" bindchange="onUiSwitch" color="#1768f2" />
     </view>
-    <view class="setting-row setting-row-action" wx:if="{{prefs.defaultSiteId}}">
-      <text class="link" bindtap="clearSite">清除默认站点</text>
+    <view class="setting-row">
+      <view class="setting-main">
+        <text class="setting-label">消息默认仅未读</text>
+        <text class="hint">进入消息中心时默认筛选未读</text>
+      </view>
+      <switch checked="{{uiPrefs.notificationsUnreadOnly}}" data-key="notificationsUnreadOnly" bindchange="onUiSwitch" color="#1768f2" />
     </view>
   </view>
 

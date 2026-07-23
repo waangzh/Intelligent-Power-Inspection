@@ -13,17 +13,35 @@
     <view class="info-row"><text class="muted">创建时间</text><text>{{createdLabel}}</text></view>
     <view class="info-row"><text class="muted">开始时间</text><text>{{startedLabel}}</text></view>
     <view class="task-actions">
-      <button wx:if="{{canDispatch && task.status==='CREATED'}}" size="mini" type="primary" bindtap="dispatch">下发</button>
-      <button wx:if="{{canControl && task.status==='RUNNING'}}" size="mini" bindtap="pause">暂停</button>
-      <button wx:if="{{canControl && task.status==='PAUSED'}}" size="mini" type="primary" bindtap="resume">恢复</button>
-      <button wx:if="{{canTakeover && task.status==='RUNNING'}}" size="mini" type="warn" bindtap="takeover">接管</button>
-      <button wx:if="{{canCancel && task.status!=='COMPLETED' && task.status!=='CANCELLED'}}" size="mini" bindtap="cancel">{{cancelLabel}}</button>
+      <button wx:if="{{canLaunch && showLaunch}}" size="mini" type="primary" bindtap="launch">{{launchLabel}}</button>
+      <button wx:if="{{canControl && displayStatus==='RUNNING'}}" size="mini" bindtap="pause">暂停</button>
+      <button wx:if="{{canControl && displayStatus==='PAUSED'}}" size="mini" type="primary" bindtap="resume">恢复</button>
+      <button wx:if="{{canTakeover && displayStatus==='RUNNING'}}" size="mini" type="warn" bindtap="takeover">接管</button>
+      <button wx:if="{{canCancel}}" size="mini" bindtap="cancel">{{cancelLabel}}</button>
     </view>
   </view>
 
   <view class="card" wx:if="{{route}}">
-    <view class="card-title">轨迹地图</view>
-    <map-view center="{{mapCenter}}" route="{{route}}" robotPosition="{{robotPos}}" />
+    <view class="card-title map-head">
+      <text>轨迹地图</text>
+      <text wx:if="{{canViewTrack && trackPoints.length}}" class="track-toggle" bindtap="toggleTrack">{{showTrack ? '隐藏实际路线' : '显示实际路线'}}</text>
+    </view>
+    <view wx:if="{{canViewLocation}}" class="gps-meta">
+      <text class="tag tag-{{locationSummary.modeLabel === '实时 GPS' ? 'success' : 'warning'}}">{{locationSummary.modeLabel}}</text>
+      <text class="gps-meta-text" wx:if="{{locationSummary.fixLabel !== '-'}}">{{locationSummary.fixLabel}}</text>
+      <text class="gps-meta-text muted" wx:if="{{locationSummary.meta}}">{{locationSummary.meta}}</text>
+    </view>
+    <map-view
+      center="{{mapCenter}}"
+      route="{{route}}"
+      robotPosition="{{robotPos}}"
+      trackPoints="{{trackPoints}}"
+      showTrack="{{showTrack}}"
+    />
+    <view class="map-legend">
+      <text class="legend-item"><text class="legend-line route" />规划路线</text>
+      <text class="legend-item"><text class="legend-line track" />实际路线</text>
+    </view>
   </view>
 
   <view class="card">
