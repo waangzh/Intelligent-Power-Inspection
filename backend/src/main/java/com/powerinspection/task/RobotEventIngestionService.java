@@ -2,6 +2,9 @@ package com.powerinspection.task;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.data.DataCategory;
+import com.powerinspection.data.DataStoreService;
+import com.powerinspection.record.InspectionRecordService;
 import com.powerinspection.common.Ids;
 import com.powerinspection.robot.RobotBridgeExecutionEvent;
 import com.powerinspection.route.RouteRevisionEntity;
@@ -25,15 +28,20 @@ public class RobotEventIngestionService {
   private final TaskExecutionControlCommandRepository controlCommands;
   private final RouteRevisionRepository revisions;
   private final ObjectMapper objectMapper;
+  private final DataStoreService dataStore;
+  private final InspectionRecordService inspectionRecordService;
 
   public RobotEventIngestionService(TaskExecutionRepository executions, RobotExecutionEventRepository eventRepository,
       TaskExecutionControlCommandRepository controlCommands,
-      RouteRevisionRepository revisions, ObjectMapper objectMapper) {
+      RouteRevisionRepository revisions, ObjectMapper objectMapper,
+      DataStoreService dataStore, InspectionRecordService inspectionRecordService) {
     this.executions = executions;
     this.eventRepository = eventRepository;
     this.controlCommands = controlCommands;
     this.revisions = revisions;
     this.objectMapper = objectMapper;
+    this.dataStore = dataStore;
+    this.inspectionRecordService = inspectionRecordService;
   }
 
   @Transactional
@@ -162,6 +170,7 @@ public class RobotEventIngestionService {
       execution.setStatus(TaskExecutionStatus.COMPLETED.name());
       execution.setRecoveryStatus(null);
       execution.setProgress(100);
+      completeTask(execution, occurredAt);
       audit.setProcessingResult("APPLIED");
     } else if ("route_failed".equals(type) || "command_rejected".equals(type) || "command_failed".equals(type)) {
       if (starting) execution.setStatus(TaskExecutionStatus.START_FAILED.name());
@@ -386,6 +395,36 @@ public class RobotEventIngestionService {
   private static boolean nonBlank(String value) { return value != null && !value.isBlank(); }
   private static boolean validOccurredAt(String value) {
     try { Instant.parse(value); return true; } catch (Exception ignored) { return false; }
+  }
+
+  private void completeTask(TaskExecutionEntity execution, String completedAt) {
+    Map<String, Object> task = dataStore.get(DataCategory.TASK, execution.getTaskId());
+    task.put("status", TaskExecutionStatus.COMPLETED.name());
+    task.put("progress", 100);
+    task.put("completedAt", completedAt);
+    if (nonBlank(execution.getStartedAt())) task.put("startedAt", execution.getStartedAt());
+    dataStore.upsert(DataCategory.TASK, task);
+
+    Map<String, Object> route = dataStore.get(DataCategory.ROUTE, text(task.get("routeId")));
+    inspectionRecordService.createForCompletedTask(
+        task,
+        route,
+        checkpointCount(execution.getRouteRevisionId()),
+        execution.getStartedAt(),
+        completedAt,
+        execution.getExecutionId());
+  }
+
+  private int checkpointCount(String revisionId) {
+    try {
+      RouteRevisionEntity revision = revisions.findById(revisionId).orElse(null);
+      if (revision == null) return 0;
+      Map<String, Object> document = objectMapper.readValue(revision.getExecutorJson(), new TypeReference<Map<String, Object>>() {});
+      Object targets = document.get("targets");
+      return targets instanceof List<?> values ? values.size() : 0;
+    } catch (Exception ignored) {
+      return 0;
+    }
   }
   private static String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }
 }
