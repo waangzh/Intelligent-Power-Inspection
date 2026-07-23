@@ -7,7 +7,7 @@
     >
       <div class="brand">
         <span class="brand-mark">
-          <el-icon :size="23"><Lightning /></el-icon>
+          <img class="brand-logo" :src="logoUrl" alt="" aria-hidden="true" />
         </span>
         <strong v-show="!isSidebarCollapsed">电力智能巡检</strong>
       </div>
@@ -121,7 +121,7 @@
       <aside class="sidebar mobile-sidebar">
         <div class="brand">
           <span class="brand-mark">
-            <el-icon :size="23"><Lightning /></el-icon>
+            <img class="brand-logo" :src="logoUrl" alt="" aria-hidden="true" />
           </span>
           <strong>电力智能巡检</strong>
         </div>
@@ -158,6 +158,7 @@ import { useNotificationStore } from '@/stores/notification'
 import { ROLE_LABELS } from '@/types/auth'
 import { canAccess } from '@/utils/permission'
 import UserAvatar from '@/components/UserAvatar.vue'
+import logoUrl from '../../img/logo.png'
 
 const route = useRoute()
 const router = useRouter()
@@ -303,6 +304,13 @@ function handleUserCommand(command: string) {
   flex: 0 0 34px;
   place-items: center;
   color: #ffd529;
+}
+
+.brand-logo {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .brand strong {

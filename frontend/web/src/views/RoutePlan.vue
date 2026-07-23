@@ -1,8 +1,8 @@
 <template>
-  <div class="route-page">
+  <div v-loading="initialLoading" class="route-page">
     <PageHeader
       title="巡检路线规划"
-      description="基于 ROS 建图（YAML/PGM）标注起点、巡检点与导航方向，导出 route.json"
+      description="基于 ROS 地图配置起点、巡检点、朝向、禁行区及执行参数，校验通过后发布至机器人执行。"
       :breadcrumbs="[{ label: '巡检业务' }, { label: '巡检规划' }]"
     >
       <template #actions>
@@ -16,14 +16,82 @@
       </template>
     </PageHeader>
 
+    <el-alert v-if="initialLoadError" class="load-alert" type="error" :closable="false" :title="initialLoadError" />
+
+    <template v-if="currentRoute">
+      <section class="route-context" aria-label="当前路线信息">
+        <div class="context-identity">
+          <span class="context-kicker">路线信息</span>
+          <div class="context-title-row">
+            <h2>{{ currentRoute.name }}</h2>
+            <el-tag size="small" effect="plain">草稿 v{{ draftState?.draft?.version ?? 1 }}</el-tag>
+          </div>
+          <p>{{ currentRouteSiteName }} <span /> {{ targetCount(currentRoute) }} 个巡检点</p>
+        </div>
+
+        <dl class="context-facts">
+          <div class="context-map">
+            <dt>地图资产</dt>
+            <dd>
+              <el-select v-model="selectedMapAssetId" clearable filterable placeholder="选择地图资产" :loading="mapAssetsLoading" @change="onMapAssetChange">
+                <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id" />
+              </el-select>
+            </dd>
+          </div>
+          <div>
+            <dt>保存状态</dt>
+            <dd><span class="status-dot" :class="draftSaveState" />{{ draftSaveLabel }}</dd>
+            <small>{{ currentSavedAt }}</small>
+          </div>
+          <div>
+            <dt>发布检查</dt>
+            <dd :class="validationTone"><el-icon><CircleCheckFilled v-if="draftValidation?.publishable" /><WarningFilled v-else /></el-icon>{{ validationLabel }}</dd>
+          </div>
+        </dl>
+
+        <div v-if="can('route:edit')" class="context-actions">
+          <el-button :loading="validatingRoute" :disabled="hasUnsavedChanges || savingRoute" @click="validateDraft">校验</el-button>
+          <el-button :loading="savingRoute" @click="saveDraft">保存草稿</el-button>
+          <el-button type="primary" :title="publishBlockReason" :disabled="!canCreateRevision" :loading="creatingRevision" @click="createRevision">发布</el-button>
+          <el-dropdown trigger="click" @command="handleMoreCommand">
+            <el-button>更多<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="revision" :disabled="!canCreateRevision">新建修订</el-dropdown-item>
+                <el-dropdown-item command="export">导出 route.json</el-dropdown-item>
+                <el-dropdown-item command="delete" divided class="danger-menu-item">删除路线</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </section>
+
+      <nav class="route-steps" aria-label="路线发布流程">
+        <template v-for="(step, index) in workflowSteps" :key="step.title">
+          <div class="step" :class="{ 'is-complete': workflowStage > index + 1, 'is-active': workflowStage === index + 1 }">
+            <span><el-icon v-if="workflowStage > index + 1"><Check /></el-icon><template v-else>{{ index + 1 }}</template></span>
+            <div><strong>{{ step.title }}</strong><small>{{ step.description }}</small></div>
+          </div>
+          <i v-if="index < workflowSteps.length - 1" :class="{ 'is-complete': workflowStage > index + 1 }" />
+        </template>
+      </nav>
+    </template>
+
     <el-card shadow="never" class="workspace-card">
       <div class="route-workspace">
         <aside class="route-nav">
-          <el-input v-model="routeKeyword" size="small" placeholder="搜索路线" clearable class="nav-search">
+          <div class="nav-heading"><strong>路线列表</strong><span>{{ siteRoutes.length }}</span></div>
+          <el-input v-model="routeKeyword" placeholder="搜索路线名称" clearable class="nav-search">
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
+          <div class="nav-filters" aria-label="路线筛选">
+            <button type="button" :class="{ active: routeStatusFilter === 'all' }" @click="routeStatusFilter = 'all'">全部</button>
+            <button type="button" :class="{ active: routeStatusFilter === 'draft' }" @click="routeStatusFilter = 'draft'">草稿</button>
+            <button type="button" :class="{ active: routeStatusFilter === 'published' }" @click="routeStatusFilter = 'published'">已发布</button>
+            <button type="button" :title="routeSort === 'time' ? '当前按创建时间排序，点击改为按名称排序' : '当前按名称排序，点击改为按创建时间排序'" @click="routeSort = routeSort === 'time' ? 'name' : 'time'"><el-icon><Sort /></el-icon></button>
+          </div>
           <div class="nav-list">
             <button
               v-for="r in filteredSiteRoutes"
@@ -35,47 +103,29 @@
               @click="selectRoute(r.id)"
             >
               <span class="nav-dot" :class="targetCount(r) > 0 ? 'ok' : 'idle'" />
-              <span class="nav-name">{{ r.name }}</span>
-              <span class="nav-badge">{{ targetCount(r) }}</span>
+              <span class="nav-content">
+                <strong class="nav-name">{{ r.name }}</strong>
+                <small>{{ targetCount(r) }} 个点 · {{ routeLifecycleLabel(r) }}</small>
+                <time>{{ formatRouteTime(r.createdAt) }}</time>
+              </span>
+              <el-icon class="nav-more"><MoreFilled /></el-icon>
             </button>
             <div v-if="!filteredSiteRoutes.length" class="nav-empty">
               {{ siteRoutes.length ? '无匹配路线' : '暂无路线，请先新建' }}
             </div>
           </div>
           <ListPagination :total="routeStore.total" :page="routePage" @change="loadRoutePage" />
+          <div v-if="can('route:edit')" class="nav-footer">
+            <el-button type="primary" plain :disabled="!selectedSiteId || savingRoute" :loading="creatingRoute" @click="createRoute"><el-icon><Plus /></el-icon>新建路线</el-button>
+            <div class="nav-footer-secondary">
+              <el-button :disabled="!currentRoute || savingRoute || creatingCopy" :loading="creatingCopy" @click="copyRoute"><el-icon><CopyDocument /></el-icon>复制路线</el-button>
+              <el-button :disabled="!currentRoute || savingRoute" @click="openRouteImport"><el-icon><Download /></el-icon>导入路线</el-button>
+            </div>
+          </div>
         </aside>
 
         <main class="route-main">
           <template v-if="currentRoute">
-            <div class="route-toolbar">
-              <div class="toolbar-info">
-                <h3>{{ currentRoute.name }}</h3>
-                <p>{{ currentRouteSiteName }} · {{ targetCount(currentRoute) }} 个巡检点</p>
-              </div>
-              <div class="toolbar-tags">
-                <el-tag size="small" :type="draftSaveTagType" effect="light">{{ draftSaveLabel }}</el-tag>
-                <el-tag v-if="draftValidation" size="small" effect="plain" :type="draftValidation.publishable ? 'success' : draftValidation.valid ? 'warning' : 'danger'">
-                  {{ draftValidation.publishable ? '可发布' : draftValidation.valid ? '待完善' : '有错误' }}
-                </el-tag>
-              </div>
-              <div v-if="can('route:edit')" class="toolbar-actions">
-                <el-button plain size="small" class="action-btn action-submit" :loading="savingRoute" @click="saveDraft">保存草稿</el-button>
-                <el-button plain size="small" class="action-btn action-detail" :title="publishBlockReason" :disabled="!canCreateRevision" :loading="creatingRevision" @click="createRevision">创建修订</el-button>
-                <el-button plain size="small" class="action-btn action-danger" :disabled="savingRoute" :loading="deletingRoute" @click="deleteRoute">删除</el-button>
-              </div>
-            </div>
-
-            <div class="map-asset-bar">
-              <div class="map-asset-info">
-                <span class="map-kicker">路线地图</span>
-                <strong>已审核可用地图</strong>
-                <small>也可在编辑器内直接上传 YAML + PGM</small>
-              </div>
-              <el-select v-model="selectedMapAssetId" clearable filterable placeholder="选择地图资产" :loading="mapAssetsLoading" class="map-asset-select" @change="onMapAssetChange">
-                <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.id} · ${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id" />
-              </el-select>
-            </div>
-
             <div class="editor-shell">
               <RosMapRouteEditor
                 ref="editorRef"
@@ -94,7 +144,7 @@
               <el-collapse-item v-if="draftValidation" name="validation">
                 <template #title>
                   <div class="panel-title">
-                    <span class="table-title">发布前检查</span>
+                    <span class="table-title">发布检查</span>
                     <el-tag size="small" :type="draftValidation.publishable ? 'success' : draftValidation.valid ? 'warning' : 'danger'" effect="light">
                       {{ draftValidation.publishable ? '允许发布' : draftValidation.valid ? '不可发布' : '存在错误' }}
                     </el-tag>
@@ -130,7 +180,7 @@
               <el-collapse-item name="deployment">
                 <template #title>
                   <div class="panel-title">
-                    <span class="table-title">机器人与部署</span>
+                    <span class="table-title">机器人部署</span>
                     <el-tag size="small" effect="plain" type="info">{{ currentSiteRobots.length }} 台已绑定</el-tag>
                   </div>
                 </template>
@@ -235,9 +285,11 @@ const pendingDoc = shallowRef<RouteExecutorDocument | null>(null)
 const editorInitialJson = shallowRef<RouteExecutorDocument | null>(null)
 const editorRef = ref<InstanceType<typeof RosMapRouteEditor> | null>(null)
 const creatingRoute = ref(false)
+const creatingCopy = ref(false)
 const savingRoute = ref(false)
 const deletingRoute = ref(false)
 const creatingRevision = ref(false)
+const validatingRoute = ref(false)
 const pendingMapFiles = ref<MapAssetUploadFiles | null>(null)
 const draftValidation = shallowRef<(RouteDraftValidationReport | PersistedRouteDraftReport) | null>(null)
 const draftState = shallowRef<PersistedRouteDraftReport | null>(null)
@@ -262,22 +314,46 @@ const initialLoadError = ref('')
 const initializing = ref(false)
 let initializeRequest = 0
 const routeKeyword = ref('')
+const routeStatusFilter = ref<'all' | 'draft' | 'published'>('all')
+const routeSort = ref<'time' | 'name'>('time')
 const bottomPanels = ref<string[]>(['validation'])
 
 const siteRoutes = computed<Route[]>(() => routeStore.getRoutesBySite(selectedSiteId.value))
 const filteredSiteRoutes = computed(() => {
   const keyword = routeKeyword.value.trim().toLowerCase()
-  if (!keyword) return siteRoutes.value
-  return siteRoutes.value.filter((route) => route.name.toLowerCase().includes(keyword))
+  return [...siteRoutes.value]
+    .filter((route) => !keyword || route.name.toLowerCase().includes(keyword))
+    .filter((route) => routeStatusFilter.value === 'all' || (routeStatusFilter.value === 'published' ? routeLifecycleLabel(route) === '已发布' : routeLifecycleLabel(route) !== '已发布'))
+    .sort((left, right) => routeSort.value === 'name' ? left.name.localeCompare(right.name, 'zh-CN') : right.createdAt.localeCompare(left.createdAt))
 })
 const currentRoute = computed<Route | null>(() => siteRoutes.value.find((route) => route.id === selectedRouteId.value) ?? null)
 const availableAssets = computed(() => availableMapAssets(mapAssets.value, selectedSiteId.value))
 const effectiveMapAssetId = computed(() => selectedMapAssetId.value || draftState.value?.mapAssetId || currentRoute.value?.mapId)
 const draftSaveLabel = computed(() => ({ unsaved: '未保存', saving: '保存中', saved: '已保存', failed: '保存失败' })[draftSaveState.value])
-const draftSaveTagType = computed(() => ({ unsaved: 'warning', saving: 'info', saved: 'success', failed: 'danger' })[draftSaveState.value])
 const publishBlockReason = computed(() => routePublishBlockReason(Boolean(currentRoute.value), hasUnsavedChanges.value, draftState.value))
 const canCreateRevision = computed(() => Boolean(can('route:edit') && !publishBlockReason.value))
 const currentRouteSiteName = computed(() => currentRoute.value ? siteStore.getSiteById(currentRoute.value.siteId)?.name ?? currentRoute.value.siteId : '-')
+const currentSavedAt = computed(() => draftState.value?.draft?.updatedAt ? `最近保存 ${formatTime(draftState.value.draft.updatedAt)}` : '尚未保存')
+const validationLabel = computed(() => {
+  if (!draftValidation.value) return '待校验'
+  if (draftValidation.value.publishable) return '已通过'
+  return draftValidation.value.valid ? '待完善' : '有错误'
+})
+const validationTone = computed(() => draftValidation.value?.publishable ? 'is-success' : draftValidation.value?.valid ? 'is-warning' : 'is-muted')
+const workflowSteps = [
+  { title: '地图准备', description: '地图已上传' },
+  { title: '路线标注', description: '设置起点与巡检点' },
+  { title: '参数配置', description: '配置执行参数' },
+  { title: '发布校验', description: '检查路线与配置' },
+  { title: '发布部署', description: '发布到机器人' },
+]
+const workflowStage = computed(() => {
+  if (revisions.value.length) return 5
+  if (draftValidation.value?.checkedAt && !hasUnsavedChanges.value && draftSaveState.value === 'saved') return 4
+  if (draftSaveState.value === 'saved') return 3
+  if (effectiveMapAssetId.value || pendingMapFiles.value) return 2
+  return 1
+})
 const currentSiteRobots = computed(() => deploymentRobotStatuses.value.flatMap((status) => {
   const robot = robotStore.getRobotById(status.robotId)
   if (!robot || robot.siteId !== currentRoute.value?.siteId) return []
@@ -332,6 +408,17 @@ watch(selectedSiteId, (siteId) => {
 function targetCount(route: Route) {
   if (Array.isArray(route.executorJson?.targets)) return route.executorJson.targets.length
   return Array.isArray(route.checkpoints) ? route.checkpoints.length : 0
+}
+
+function routeLifecycleLabel(route: Route) {
+  if (route.id === selectedRouteId.value && revisions.value.length) return '已发布'
+  return route.executorJson ? '草稿' : '未配置'
+}
+
+function formatRouteTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '更新时间未知'
+  return `${date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })} ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}`
 }
 
 async function initializeRoutePlan() {
@@ -568,6 +655,84 @@ async function saveDraft() {
     ElMessage.error(errorMessage(error, '草稿保存失败'))
   } finally {
     savingRoute.value = false
+  }
+}
+
+async function copyRoute() {
+  const sourceRoute = currentRoute.value
+  if (!sourceRoute || creatingCopy.value || savingRoute.value) return
+  if (pendingMapFiles.value) {
+    ElMessage.warning('当前地图尚未保存，请先保存草稿再复制路线')
+    return
+  }
+  creatingCopy.value = true
+  try {
+    const siteId = sourceRoute.siteId
+    const copyName = `${sourceRoute.name} 副本`
+    const created = await routeStore.createRoute(siteId, copyName, sourceRoute.description)
+    const sourceDocument = pendingDoc.value ?? sourceRoute.executorJson ?? null
+    const mapId = effectiveMapAssetId.value
+
+    if (sourceDocument && mapId) {
+      const copiedDocument = JSON.parse(JSON.stringify(sourceDocument)) as RouteExecutorDocument
+      copiedDocument.active_route_id = created.id
+      if (copiedDocument.routes[0]) {
+        copiedDocument.routes[0].id = created.id
+        copiedDocument.routes[0].name = copyName
+      }
+      const saved = await resourcesApi.saveRouteDraft(created.id, copiedDocument, undefined, mapId)
+      await routeStore.saveExecutorRoute(created.id, applySavedRouteDraft(saved), mapId)
+    }
+
+    routePage.value = 0
+    try {
+      const applied = await routeStore.load(siteId, { page: 0, size: 20 })
+      if (!applied || selectedSiteId.value !== siteId) return
+      routeStore.ensureRoute(created)
+    } catch (error) {
+      ElMessage.warning(errorMessage(error, '路线已复制，但列表刷新失败，请稍后重试'))
+    }
+    selectedRouteId.value = created.id
+    await loadDraft(created.id)
+    ElMessage.success('路线已复制')
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '复制路线失败'))
+  } finally {
+    creatingCopy.value = false
+  }
+}
+
+function openRouteImport() {
+  editorRef.value?.openRouteImport()
+}
+
+async function validateDraft() {
+  if (!currentRoute.value || validatingRoute.value) return
+  if (hasUnsavedChanges.value) {
+    ElMessage.warning('请先保存当前草稿，再执行发布校验')
+    return
+  }
+  validatingRoute.value = true
+  try {
+    const check = await resourcesApi.getRouteDraftCheck(currentRoute.value.id)
+    draftState.value = check
+    draftValidation.value = check
+    ElMessage[check.publishable ? 'success' : 'warning'](check.publishable ? '发布检查已通过' : '发布检查未通过，请查看底部检查结果')
+    if (!bottomPanels.value.includes('validation')) bottomPanels.value.push('validation')
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '发布检查失败'))
+  } finally {
+    validatingRoute.value = false
+  }
+}
+
+function handleMoreCommand(command: string) {
+  if (command === 'revision') {
+    void createRevision()
+  } else if (command === 'export') {
+    editorRef.value?.downloadJson()
+  } else if (command === 'delete') {
+    void deleteRoute()
   }
 }
 
@@ -1281,5 +1446,371 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
   .panel-meta {
     display: none;
   }
+}
+
+/* Route planning workbench */
+.route-page {
+  --route-border: #dfe6ef;
+  --route-border-strong: #cbd6e4;
+  --route-blue: #1768e5;
+  --route-text: #172b4d;
+  --route-muted: #6b7f99;
+  min-width: 0;
+}
+
+.route-page :deep(.page-header-wrap) {
+  margin-bottom: 10px;
+}
+
+.route-page :deep(.page-header h2) {
+  color: #12294b;
+  font-size: 19px;
+}
+
+.load-alert {
+  margin-bottom: 10px;
+}
+
+.route-context {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.1fr) minmax(500px, 2.2fr) auto;
+  align-items: stretch;
+  min-height: 94px;
+  margin-bottom: 8px;
+  border: 1px solid var(--route-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(37, 60, 88, 0.04);
+}
+
+.context-identity {
+  padding: 13px 18px;
+  border-right: 1px solid var(--route-border);
+}
+
+.context-kicker,
+.context-facts dt {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--route-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.context-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-title-row h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--route-text);
+  font-size: 17px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-identity p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  color: var(--route-muted);
+  font-size: 12px;
+}
+
+.context-identity p span {
+  width: 1px;
+  height: 12px;
+  background: var(--route-border-strong);
+}
+
+.context-facts {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.4fr) minmax(125px, .75fr) minmax(110px, .65fr);
+  min-width: 0;
+  margin: 0;
+}
+
+.context-facts > div {
+  min-width: 0;
+  padding: 13px 18px;
+  border-right: 1px solid var(--route-border);
+}
+
+.context-facts dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  margin: 0;
+  color: var(--route-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.context-facts small {
+  display: block;
+  margin-top: 2px;
+  color: var(--route-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.context-map :deep(.el-select) {
+  width: 100%;
+}
+
+.context-map :deep(.el-select__wrapper) {
+  min-height: 28px;
+  padding-left: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.status-dot.saved { background: #24a866; }
+.status-dot.unsaved { background: #e5a01c; }
+.status-dot.failed { background: #e54d5d; }
+.status-dot.saving { background: #4d86df; }
+.context-facts .is-success { color: #239b5c; }
+.context-facts .is-warning { color: #d88910; }
+.context-facts .is-muted { color: #74869d; }
+
+.context-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+.context-actions :deep(.el-button) {
+  min-width: 74px;
+  height: 34px;
+  margin: 0;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.route-steps {
+  display: grid;
+  grid-template-columns: auto minmax(24px, 1fr) auto minmax(24px, 1fr) auto minmax(24px, 1fr) auto minmax(24px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  max-width: 920px;
+  height: 62px;
+  margin: 0 auto 8px;
+  padding: 0 12px;
+}
+
+.route-steps > i {
+  height: 1px;
+  background: #ccd7e5;
+}
+
+.route-steps > i:first-of-type {
+  background: #ccd7e5;
+}
+
+.route-steps > i.is-complete {
+  background: #2dac78;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #7e8fa6;
+}
+
+.step > span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #9baac0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.step div { min-width: 0; }
+.step strong,
+.step small { display: block; white-space: nowrap; }
+.step strong { color: #52647d; font-size: 13px; }
+.step small { margin-top: 2px; font-size: 10px; }
+.step.is-complete > span { background: #2dac78; }
+.step.is-complete strong { color: #2b465f; }
+.step.is-active > span { background: var(--route-blue); box-shadow: 0 0 0 4px #e7f0ff; }
+.step.is-active strong { color: #163a72; }
+
+.workspace-card {
+  border-color: var(--route-border);
+  border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(30, 56, 85, 0.05);
+}
+
+.route-workspace {
+  grid-template-columns: 270px minmax(0, 1fr);
+  min-height: 600px;
+}
+
+.route-nav {
+  gap: 10px;
+  padding: 14px 10px 10px;
+  border-right-color: var(--route-border);
+  background: #fbfcfe;
+}
+
+.nav-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  color: var(--route-text);
+  font-size: 15px;
+}
+
+.nav-heading span {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  color: #58708d;
+  background: #edf2f8;
+  font-size: 11px;
+  text-align: center;
+}
+
+.nav-search :deep(.el-input__wrapper) {
+  min-height: 32px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--route-border-strong) inset;
+}
+
+.nav-filters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) 30px;
+  gap: 4px;
+}
+
+.nav-filters button {
+  min-width: 0;
+  height: 26px;
+  padding: 0 5px;
+  border: 1px solid var(--route-border);
+  border-radius: 5px;
+  color: #657892;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nav-filters button.active {
+  border-color: #a9c9f7;
+  color: var(--route-blue);
+  background: #eef5ff;
+  font-weight: 600;
+}
+
+.nav-list {
+  max-height: none;
+  gap: 3px;
+}
+
+.nav-item {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 16px;
+  align-items: start;
+  gap: 8px;
+  min-height: 74px;
+  padding: 11px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.nav-item:hover:not(:disabled) {
+  border-color: #dce5f0;
+  background: #f3f7fb;
+}
+
+.nav-item.active {
+  border-color: #bdd5f7;
+  background: #edf4ff;
+}
+
+.nav-dot { margin-top: 6px; }
+.nav-content { display: grid; min-width: 0; gap: 2px; }
+.nav-name { color: #243a57; font-size: 14px; line-height: 20px; }
+.nav-content small,
+.nav-content time { color: #71849e; font-size: 12px; line-height: 17px; }
+.nav-more { margin-top: 3px; color: #8ca0bb; font-size: 14px; }
+.nav-footer { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--route-border); }
+.nav-footer :deep(.el-button) { width: 100%; margin: 0; border-radius: 6px; }
+.nav-footer-secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.nav-footer-secondary :deep(.el-button) { min-width: 0; padding-inline: 7px; font-size: 12px; }
+
+.route-main {
+  padding: 0;
+  background: #fff;
+}
+
+.editor-shell {
+  border: 0;
+  border-radius: 0;
+}
+
+.bottom-panels {
+  margin: 10px;
+  border-radius: 7px;
+}
+
+.bottom-panels :deep(.el-collapse-item__header) {
+  min-height: 44px;
+  height: 44px;
+}
+
+:global(.danger-menu-item) { color: #df4051 !important; }
+
+@media (max-width: 1280px) {
+  .route-context {
+    grid-template-columns: minmax(210px, .9fr) minmax(420px, 1.8fr);
+  }
+
+  .context-actions {
+    grid-column: 1 / -1;
+    min-height: 48px;
+    border-top: 1px solid var(--route-border);
+  }
+
+  .route-steps { max-width: 820px; }
+  .step small { display: none; }
+}
+
+@media (max-width: 960px) {
+  .route-context { grid-template-columns: 1fr; }
+  .context-identity { border-right: 0; border-bottom: 1px solid var(--route-border); }
+  .context-facts { grid-template-columns: 1fr 1fr; }
+  .context-facts > div { border-bottom: 1px solid var(--route-border); }
+  .context-map { grid-column: 1 / -1; }
+  .context-actions { grid-column: auto; justify-content: flex-start; flex-wrap: wrap; padding-block: 8px; }
+  .route-steps { overflow-x: auto; justify-content: start; }
+  .route-steps > i { min-width: 28px; }
+  .route-workspace { grid-template-columns: 1fr; }
 }
 </style>

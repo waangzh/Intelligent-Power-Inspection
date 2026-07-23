@@ -121,7 +121,7 @@ export interface PersistedRouteDraftReport extends Omit<RouteDraftValidationRepo
 }
 
 /** 兼容地图画布的轻量状态，不属于执行 JSON。 */
-export type EditorMode = 'start' | 'target' | 'yaw' | 'keepout' | 'pan'
+export type EditorMode = 'select' | 'start' | 'target' | 'yaw' | 'keepout' | 'pan'
 export interface RosMapState {
   width: number; height: number; pixels: Uint8Array | null; yamlName: string; pgmName: string
   image: string; resolution: number; origin: [number, number, number]; negate: number

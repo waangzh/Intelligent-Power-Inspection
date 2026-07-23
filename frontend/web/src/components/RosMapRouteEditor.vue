@@ -2,29 +2,39 @@
   <div class="ros-route-editor" :class="{ embedded }" @dragenter.prevent @dragover.prevent @drop.prevent="onDrop">
     <section class="workspace">
       <div class="toolbar">
+        <input ref="yamlInputRef" type="file" accept=".yaml,.yml,.pgm,text/yaml,image/x-portable-graymap" multiple hidden @change="onMapFilesChange" />
+        <input ref="pgmInputRef" type="file" accept=".pgm,image/x-portable-graymap" hidden @change="onPgmChange" />
+        <input ref="jsonInputRef" type="file" accept=".json,application/json" hidden @change="onJsonChange" />
         <div class="toolbar-group">
-          <span class="toolbar-label">地图</span>
-          <input ref="yamlInputRef" type="file" accept=".yaml,.yml,.pgm,text/yaml,image/x-portable-graymap" multiple hidden @change="onMapFilesChange" />
-          <input ref="pgmInputRef" type="file" accept=".pgm,image/x-portable-graymap" hidden @change="onPgmChange" />
-          <input ref="jsonInputRef" type="file" accept=".json,application/json" hidden @change="onJsonChange" />
-          <el-button size="small" plain @click="yamlInputRef?.click()">YAML + PGM</el-button>
-          <el-button size="small" plain @click="pgmInputRef?.click()">仅 PGM</el-button>
-          <el-button size="small" plain @click="jsonInputRef?.click()">导入 JSON</el-button>
+          <el-dropdown trigger="click" @command="handleUploadCommand">
+            <el-button size="small" plain><el-icon><Upload /></el-icon>上传地图<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="yaml">上传 YAML + PGM</el-dropdown-item>
+                <el-dropdown-item command="pgm">上传 PGM</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button size="small" plain @click="jsonInputRef?.click()"><el-icon><Download /></el-icon>导入路线</el-button>
         </div>
         <el-divider direction="vertical" />
         <div class="toolbar-group">
-          <span class="toolbar-label">视图</span>
-          <el-button size="small" plain title="保持比例填满画布，边缘可能被裁剪" @click="fitToScreen">铺满</el-button>
-          <el-button size="small" plain @click="fitMapToScreen">适配</el-button>
-          <el-button size="small" plain @click="zoomIn">放大</el-button>
-          <el-button size="small" plain @click="zoomOut">缩小</el-button>
+          <el-button size="small" plain title="适应窗口" @click="fitMapToScreen"><el-icon><FullScreen /></el-icon>适应窗口</el-button>
+          <el-button size="small" plain title="原始比例" @click="fitToScreen"><el-icon><ScaleToOriginal /></el-icon>原始比例</el-button>
+          <el-button size="small" plain title="放大" aria-label="放大" @click="zoomIn"><el-icon><ZoomIn /></el-icon></el-button>
+          <el-button size="small" plain title="缩小" aria-label="缩小" @click="zoomOut"><el-icon><ZoomOut /></el-icon></el-button>
         </div>
         <div class="mode-group">
-          <button type="button" :class="{ active: mode === 'start' }" @click="setMode('start')">起点</button>
-          <button type="button" :class="{ active: mode === 'target' }" @click="setMode('target')">巡检点</button>
-          <button type="button" :class="{ active: mode === 'yaw' }" @click="setMode('yaw')">方向</button>
-          <button type="button" :class="{ active: mode === 'keepout' }" @click="setMode('keepout')">禁行区</button>
-          <button type="button" :class="{ active: mode === 'pan' }" @click="setMode('pan')">拖动</button>
+          <button type="button" :class="{ active: mode === 'select' }" title="选择并拖动对象" @click="activateMode('select')"><el-icon><Mouse /></el-icon><span>选择</span></button>
+          <button type="button" :class="{ active: mode === 'start' }" title="设置路线起点" @click="activateMode('start')"><el-icon><Flag /></el-icon><span>起点</span></button>
+          <button type="button" :class="{ active: mode === 'target' }" title="添加巡检点" @click="activateMode('target')"><el-icon><MapLocation /></el-icon><span>巡检点</span></button>
+          <button type="button" :class="{ active: mode === 'yaw' }" title="设置点位朝向" @click="activateMode('yaw')"><el-icon><Position /></el-icon><span>方向</span></button>
+          <button type="button" :class="{ active: mode === 'keepout' }" title="绘制禁行区域" @click="activateMode('keepout')"><el-icon><Warning /></el-icon><span>禁行区</span></button>
+          <button type="button" :class="{ active: mode === 'pan' }" title="拖动画布" @click="activateMode('pan')"><el-icon><Rank /></el-icon><span>拖动</span></button>
+          <button type="button" title="删除当前对象" :disabled="!canDeleteSelection" @click="deleteSelection"><el-icon><Delete /></el-icon><span>删除</span></button>
+          <span class="mode-separator" />
+          <button type="button" title="撤销" :disabled="!canUndo" @click="undo"><el-icon><RefreshLeft /></el-icon><span>撤销</span></button>
+          <button type="button" title="重做" :disabled="!canRedo" @click="redo"><el-icon><RefreshRight /></el-icon><span>重做</span></button>
         </div>
       </div>
 
@@ -53,7 +63,7 @@
     <aside class="sidebar">
       <el-alert v-if="isLegacyDraft" type="warning" :closable="false" title="旧版草稿：保存后将转换为 v3，才能创建路线修订" />
       <el-tabs v-model="activeTab" class="config-tabs">
-        <el-tab-pane label="巡检点" name="targets">
+        <el-tab-pane label="对象" name="targets">
           <div class="tab-toolbar">
             <el-button size="small" @click="addTargetAtCenter">追加中心点</el-button>
             <el-button size="small" type="danger" plain :disabled="!targets.length" @click="confirmClearTargets">
@@ -73,12 +83,12 @@
               <span class="target-badge">{{ index + 1 }}</span>
               <span class="target-summary">
                 <strong>{{ target.name }}</strong>
-                <small>({{ target.x.toFixed(2) }}, {{ target.y.toFixed(2) }})</small>
+                <small>x {{ target.x.toFixed(2) }} · y {{ target.y.toFixed(2) }} · yaw {{ target.yaw.toFixed(1) }}</small>
               </span>
               <span class="target-actions" @click.stop>
-                <el-button size="small" link @click="moveTarget(target.id, -1)">↑</el-button>
-                <el-button size="small" link @click="moveTarget(target.id, 1)">↓</el-button>
-                <el-button size="small" link type="danger" @click="deleteTarget(target.id)">删</el-button>
+                <el-button size="small" link title="上移" aria-label="上移" @click="moveTarget(target.id, -1)"><el-icon><Top /></el-icon></el-button>
+                <el-button size="small" link title="下移" aria-label="下移" @click="moveTarget(target.id, 1)"><el-icon><Bottom /></el-icon></el-button>
+                <el-button size="small" link type="danger" title="删除" aria-label="删除" @click="deleteTarget(target.id)"><el-icon><Delete /></el-icon></el-button>
               </span>
             </button>
           </div>
@@ -95,7 +105,7 @@
                 <label>yaw(rad)<el-input-number v-model="selectedTarget.yaw" size="small" :step="0.001" controls-position="right" @change="updateTargetField(selectedTarget.id, 'yaw', selectedTarget.yaw)" /></label>
                 <label>停留(s)<el-input-number v-model="selectedTarget.taskDuration" size="small" :step="0.1" controls-position="right" @change="updateTargetField(selectedTarget.id, 'taskDuration', selectedTarget.taskDuration)" /></label>
               </div>
-              <el-button size="small" @click="orientTarget(selectedTarget.id)">设置方向</el-button>
+              <el-button size="small" @click="orientTarget(selectedTarget.id)"><el-icon><Position /></el-icon>在地图上设置朝向</el-button>
             </div>
           </template>
 
@@ -261,13 +271,16 @@ const jsonInputRef = ref<HTMLInputElement | null>(null)
 const activeTab = ref('targets')
 const yamlSourceFile = ref<File | null>(null)
 const pgmSourceFile = ref<File | null>(null)
+const history = ref<string[]>([])
+const historyIndex = ref(-1)
+const replayingHistory = ref(false)
 let mapLoadVersion = 0
 
 const editor = useRosMapRouteEditor(canvasRef, wrapRef, {
   initialJson: () => props.initialJson,
   defaultRouteId: props.defaultRouteId,
   defaultRouteName: props.defaultRouteName,
-  onChange: (doc) => emit('change', doc),
+  onChange: handleEditorChange,
 })
 
 const {
@@ -327,6 +340,61 @@ const selectedTarget = computed(() =>
 const activeKeepoutZone = computed(() =>
   keepoutZones.value.find((zone) => zone.id === activeZoneId.value) ?? null,
 )
+const canUndo = computed(() => historyIndex.value > 0)
+const canRedo = computed(() => historyIndex.value >= 0 && historyIndex.value < history.value.length - 1)
+const canDeleteSelection = computed(() => activeTab.value === 'targets' ? Boolean(selectedTarget.value) : activeTab.value === 'keepout' ? Boolean(activeKeepoutZone.value) : false)
+
+function resetHistory(document: RouteExecutorDocument | null | undefined) {
+  history.value = document ? [JSON.stringify(document as unknown)] : []
+  historyIndex.value = document ? 0 : -1
+  replayingHistory.value = false
+}
+
+function handleEditorChange(document: RouteExecutorDocument) {
+  emit('change', document)
+  if (replayingHistory.value) {
+    replayingHistory.value = false
+    return
+  }
+  const serialized = JSON.stringify(document as unknown)
+  const current = history.value[historyIndex.value]
+  if (current === serialized) return
+  const nextHistory = [...history.value.slice(0, historyIndex.value + 1), serialized].slice(-50)
+  history.value = nextHistory
+  historyIndex.value = nextHistory.length - 1
+}
+
+function activateMode(next: typeof mode.value) {
+  setMode(next)
+  if (next === 'target') activeTab.value = 'targets'
+  if (next === 'start') activeTab.value = 'start'
+  if (next === 'keepout') activeTab.value = 'keepout'
+}
+
+function undo() {
+  if (!canUndo.value) return
+  historyIndex.value -= 1
+  replayingHistory.value = true
+  importRouteJson(JSON.parse(history.value[historyIndex.value]) as RouteExecutorDocument)
+}
+
+function redo() {
+  if (!canRedo.value) return
+  historyIndex.value += 1
+  replayingHistory.value = true
+  importRouteJson(JSON.parse(history.value[historyIndex.value]) as RouteExecutorDocument)
+}
+
+async function deleteSelection() {
+  if (!canDeleteSelection.value) return
+  try {
+    await ElMessageBox.confirm(activeTab.value === 'keepout' ? '确定删除当前禁行区？' : '确定删除当前巡检点？', '删除对象', { type: 'warning' })
+  } catch {
+    return
+  }
+  if (activeTab.value === 'keepout') deleteActiveZone()
+  else if (selectedTarget.value) deleteTarget(selectedTarget.value.id)
+}
 
 function syncForm() {
   emit('change', exportDocument())
@@ -335,6 +403,11 @@ function syncForm() {
 function onRouteIdChange() {
   onFormFieldChange('routeId', form.routeId)
   emit('change', exportDocument())
+}
+
+function handleUploadCommand(command: string) {
+  if (command === 'yaml') yamlInputRef.value?.click()
+  if (command === 'pgm') pgmInputRef.value?.click()
 }
 
 function rememberMapFiles(files: FileList | File[]) {
@@ -500,8 +573,9 @@ function onZoneFieldChange(field: 'name' | 'id' | 'enabled' | 'maskPaddingM', va
 }
 
 watch(() => props.mapId, (mapId) => void loadPersistedMap(mapId), { immediate: true })
+watch(() => props.initialJson, (document) => resetHistory(document ?? exportDocument()), { immediate: true })
 
-defineExpose({ exportDocument, validateForExport })
+defineExpose({ exportDocument, validateForExport, downloadJson, openRouteImport: () => jsonInputRef.value?.click() })
 </script>
 
 <style scoped>
@@ -871,6 +945,323 @@ label {
 
   .config-tabs {
     height: 520px;
+  }
+}
+
+/* Dense industrial route editor */
+.ros-route-editor {
+  grid-template-columns: minmax(430px, 1fr) 350px;
+  height: clamp(600px, 70vh, 760px);
+  color: #1d334f;
+}
+
+.workspace {
+  position: relative;
+  grid-template-rows: 47px minmax(0, 1fr) 34px;
+  background: #e9edf2;
+}
+
+.toolbar {
+  position: relative;
+  z-index: 4;
+  flex-wrap: nowrap;
+  min-width: 0;
+  padding: 8px 10px;
+  border-bottom-color: #dbe3ed;
+  background: #fbfcfe;
+}
+
+.toolbar-group {
+  min-width: 0;
+  gap: 6px;
+}
+
+.toolbar-group:nth-of-type(2) {
+  margin-left: auto;
+}
+
+.toolbar :deep(.el-button) {
+  height: 30px;
+  margin: 0;
+  border-radius: 5px;
+  color: #405a78;
+}
+
+.toolbar :deep(.el-button:hover) {
+  color: #1768e5;
+  background: #eef5ff;
+}
+
+.mode-group {
+  position: absolute;
+  z-index: 5;
+  top: 57px;
+  left: 8px;
+  display: grid;
+  width: 84px;
+  margin: 0;
+  border: 1px solid #cbd6e4;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 14px rgba(34, 55, 82, 0.12);
+}
+
+.mode-group button {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 9px;
+  color: #40536b;
+  font-size: 13px;
+  text-align: left;
+}
+
+.mode-group button + button {
+  border-top: 1px solid #e4eaf1;
+  border-left: 0;
+}
+
+.mode-group button .el-icon {
+  font-size: 18px;
+}
+
+.mode-group button.active {
+  color: #1768e5;
+  background: #eaf3ff;
+  box-shadow: inset 3px 0 #1768e5;
+}
+
+.mode-group button:disabled {
+  color: #aeb9c8;
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+
+.mode-separator {
+  height: 1px;
+  margin: 5px 9px;
+  background: #d9e1eb;
+}
+
+.map-wrap {
+  margin: 7px;
+  border: 1px solid #cbd5e1;
+  background-color: #e9edf2;
+  background-image:
+    linear-gradient(rgba(118, 137, 160, .08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(118, 137, 160, .08) 1px, transparent 1px);
+  background-size: 24px 24px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45);
+}
+
+canvas {
+  filter: drop-shadow(0 2px 4px rgba(28, 47, 70, .12));
+}
+
+.map-empty {
+  background: transparent;
+}
+
+.map-empty-inner {
+  border-radius: 6px;
+}
+
+.hud {
+  align-items: center;
+  min-width: 0;
+  padding: 7px 11px;
+  border-top-color: #d5dee9;
+  color: #4b607b;
+  background: #f8fafc;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar {
+  border-left-color: #dbe3ed !important;
+  background: #fff;
+}
+
+.config-tabs :deep(.el-tabs__header) {
+  height: 47px;
+  padding: 0 12px;
+  border-bottom-color: #dbe3ed;
+  background: #fbfcfe;
+}
+
+.config-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+  background: #dbe3ed;
+}
+
+.config-tabs :deep(.el-tabs__item) {
+  height: 47px;
+  padding: 0 12px;
+  color: #60748e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.config-tabs :deep(.el-tabs__item.is-active) {
+  color: #1768e5;
+}
+
+.config-tabs :deep(.el-tabs__content) {
+  padding: 12px 10px 16px;
+  scrollbar-color: #becadd transparent;
+  scrollbar-width: thin;
+}
+
+.tab-toolbar {
+  justify-content: flex-end;
+  margin-bottom: 9px;
+}
+
+.target-list {
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.target-item {
+  min-height: 52px;
+  padding: 7px 8px;
+  border-color: #dfe6ef;
+  border-radius: 6px;
+}
+
+.target-item:hover {
+  border-color: #b8cae0;
+  background: #f8fbff;
+}
+
+.target-item.selected {
+  border-color: #5d9df6;
+  background: #edf5ff;
+  box-shadow: inset 3px 0 #1768e5;
+}
+
+.target-badge {
+  width: 22px;
+  height: 22px;
+  background: #1768e5;
+  font-size: 11px;
+}
+
+.target-summary strong {
+  color: #253b57;
+  font-size: 12px;
+}
+
+.target-summary small {
+  color: #6d819b;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.target-actions {
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.target-item:hover .target-actions,
+.target-item.selected .target-actions {
+  opacity: 1;
+}
+
+.target-actions :deep(.el-button) {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+}
+
+.edit-block {
+  gap: 12px;
+  padding: 12px 2px 0;
+  border-top: 1px solid #e3e9f1;
+}
+
+.edit-block::before {
+  content: "属性配置";
+  color: #354c68;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+label {
+  color: #60748e;
+  font-size: 11px;
+}
+
+.edit-block :deep(.el-input__wrapper),
+.edit-block :deep(.el-select__wrapper) {
+  min-height: 31px;
+  border-radius: 5px;
+}
+
+.status {
+  padding: 8px;
+  border-radius: 5px;
+  background: #f6f8fb;
+}
+
+.json-preview {
+  border-radius: 5px;
+  background: #f6f8fb;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+@media (max-width: 1200px) {
+  .ros-route-editor {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .workspace {
+    min-height: 600px;
+  }
+
+  .mode-group {
+    top: 57px;
+    width: 78px;
+  }
+
+  .config-tabs {
+    height: 520px;
+  }
+}
+
+@media (max-width: 680px) {
+  .toolbar-group:nth-of-type(2) {
+    display: none;
+  }
+
+  .workspace {
+    min-height: 520px;
+  }
+
+  .mode-group {
+    width: 42px;
+  }
+
+  .mode-group button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .mode-group button span {
+    display: none;
   }
 }
 </style>

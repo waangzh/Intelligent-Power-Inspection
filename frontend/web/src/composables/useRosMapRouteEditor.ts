@@ -79,7 +79,7 @@ export function useRosMapRouteEditor(
 ) {
   const map = reactive<RosMapState>(createDefaultMapState())
   const view = reactive({ scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 })
-  const mode = ref<EditorMode>('start')
+  const mode = ref<EditorMode>('select')
   const targets = shallowRef<RouteExecutorTarget[]>([])
   const keepoutZones = shallowRef<EditableKeepoutZone[]>([])
   const activeZoneId = ref<string | null>(null)
