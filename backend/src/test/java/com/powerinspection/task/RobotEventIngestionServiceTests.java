@@ -5,9 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.powerinspection.data.DataCategory;
+import com.powerinspection.data.DataStoreService;
+import com.powerinspection.notification.NotificationService;
+import com.powerinspection.record.InspectionRecordService;
 import com.powerinspection.robot.RobotBridgeExecutionEvent;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionRepository;
@@ -26,12 +31,17 @@ class RobotEventIngestionServiceTests {
   @Mock private RobotExecutionEventRepository events;
   @Mock private TaskExecutionControlCommandRepository controls;
   @Mock private RouteRevisionRepository revisions;
+  @Mock private DataStoreService dataStore;
+  @Mock private InspectionRecordService inspectionRecordService;
+  @Mock private NotificationService notificationService;
   private RobotEventIngestionService service;
   private TaskExecutionEntity execution;
 
   @BeforeEach
   void setUp() {
-    service = new RobotEventIngestionService(executions, events, controls, revisions, new ObjectMapper());
+    service = new RobotEventIngestionService(
+        executions, events, controls, revisions, new ObjectMapper(), dataStore, inspectionRecordService,
+        notificationService);
     execution = execution(TaskExecutionStatus.STARTING.name());
     when(executions.findByExecutionId("exec-1")).thenReturn(Optional.of(execution));
     when(events.findByRobotIdAndSequence(anyString(), anyLong())).thenReturn(Optional.empty());
@@ -43,6 +53,12 @@ class RobotEventIngestionServiceTests {
     RouteRevisionEntity revision = new RouteRevisionEntity();
     revision.setExecutorJson("{\"targets\":[{},{}]}");
     when(revisions.findById("rev-1")).thenReturn(Optional.of(revision));
+    Map<String, Object> task = new LinkedHashMap<>(Map.of(
+        "id", "task-1", "name", "巡检任务", "routeId", "route-1", "robotId", "robot-1"));
+    Map<String, Object> route = Map.of("id", "route-1", "siteId", "site-1", "name", "巡检路线");
+    when(dataStore.get(DataCategory.TASK, "task-1")).thenReturn(task);
+    when(dataStore.get(DataCategory.ROUTE, "route-1")).thenReturn(route);
+    when(dataStore.upsert(DataCategory.TASK, task)).thenReturn(task);
 
     service.ingest("exec-1", event(1, "route_started", Map.of()));
     service.ingest("exec-1", event(2, "target_reached", Map.of("target_id", "target-1", "target_index", 0)));
@@ -52,6 +68,9 @@ class RobotEventIngestionServiceTests {
     assertEquals("target-1", execution.getCurrentTargetId());
     assertEquals(100, execution.getProgress());
     assertEquals(3, execution.getLastRobotSequence());
+    assertEquals(TaskExecutionStatus.COMPLETED.name(), task.get("status"));
+    verify(inspectionRecordService).createForCompletedTask(
+        task, route, 2, execution.getStartedAt(), "2026-07-14T00:00:00Z", "exec-1");
   }
 
   @Test

@@ -18,6 +18,7 @@ import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotInspectionImage;
 import com.powerinspection.robot.RobotProgressSnapshot;
 import com.powerinspection.robot.RobotProperties;
+import com.powerinspection.record.InspectionRecordService;
 import com.powerinspection.route.RouteExecutorSupport;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionService;
@@ -75,6 +76,7 @@ public class TaskService {
   private final TaskExecutionService taskExecutionService;
   private final DetectionRunService detectionRunService;
   private final RobotProperties robotProperties;
+  private final InspectionRecordService inspectionRecordService;
   private final NotificationService notificationService;
 
   @Autowired
@@ -87,6 +89,7 @@ public class TaskService {
       TaskExecutionService taskExecutionService,
       RobotProperties robotProperties,
       DetectionRunService detectionRunService,
+      InspectionRecordService inspectionRecordService,
       NotificationService notificationService) {
     this.dataStore = dataStore;
     this.messagingTemplate = messagingTemplate;
@@ -96,20 +99,8 @@ public class TaskService {
     this.taskExecutionService = taskExecutionService;
     this.robotProperties = robotProperties;
     this.detectionRunService = detectionRunService;
+    this.inspectionRecordService = inspectionRecordService;
     this.notificationService = notificationService;
-  }
-
-  public TaskService(
-      DataStoreService dataStore,
-      SimpMessagingTemplate messagingTemplate,
-      RobotGateway robotGateway,
-      LocateAnythingGateway locateAnythingGateway,
-      RouteRevisionService routeRevisionService,
-      TaskExecutionService taskExecutionService,
-      RobotProperties robotProperties,
-      DetectionRunService detectionRunService) {
-    this(dataStore, messagingTemplate, robotGateway, locateAnythingGateway, routeRevisionService,
-        taskExecutionService, robotProperties, detectionRunService, null);
   }
 
   public List<Map<String, Object>> tasks() {
@@ -417,46 +408,13 @@ public class TaskService {
     addEvent(taskId, "COMPLETE", "巡检任务已全部完成", null, null);
     notifyTask(task, "TASK_COMPLETED", "任务已完成", "任务「" + text(task.get("name")) + "」已完成巡检。");
 
-    Map<String, Object> robot = dataStore.find(DataCategory.ROBOT, text(task.get("robotId")));
-    Map<String, Object> site = dataStore.find(DataCategory.SITE, text(route.get("siteId")));
-    long alarmCount =
-        dataStore.list(DataCategory.ALARM).stream()
-            .filter(alarm -> taskId.equals(text(alarm.get("taskId"))))
-            .count();
-    String routeName = text(route.getOrDefault("name", "-"));
-    String robotName = robot == null ? "-" : text(robot.getOrDefault("name", "-"));
-    String siteName = site == null ? "未知站点" : text(site.getOrDefault("name", "未知站点"));
-    dataStore.upsert(
-        DataCategory.RECORD,
-        map(
-            "id",
-            Ids.next("record"),
-            "taskId",
-            taskId,
-            "siteId",
-            text(route.get("siteId")),
-            "routeId",
-            text(route.get("id")),
-            "robotId",
-            text(task.get("robotId")),
-            "taskName",
-            text(task.get("name")),
-            "routeName",
-            routeName,
-            "robotName",
-            robotName,
-            "alarmCount",
-            alarmCount,
-            "checkpointCount",
-            checkpointCount,
-            "duration",
-            "1 分钟",
-            "summary",
-            "完成 " + siteName + " 巡检，共 " + checkpointCount + " 个检查点，触发 " + alarmCount + " 条告警",
-            "completedAt",
-            now,
-            "createdAt",
-            now));
+    inspectionRecordService.createForCompletedTask(
+        task,
+        route,
+        checkpointCount,
+        text(task.get("startedAt")),
+        now,
+        text(task.get("executionId")));
   }
 
   private Map<String, Object> saveTask(Map<String, Object> task) {

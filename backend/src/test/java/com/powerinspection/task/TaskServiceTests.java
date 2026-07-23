@@ -15,6 +15,7 @@ import com.powerinspection.model.LocateAnythingGateway;
 import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotProperties;
+import com.powerinspection.record.InspectionRecordService;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionService;
 import java.util.HashMap;
@@ -35,6 +36,7 @@ class TaskServiceTests {
   @Mock private RouteRevisionService routeRevisionService;
   @Mock private TaskExecutionService taskExecutionService;
   @Mock private DetectionRunService detectionRunService;
+  @Mock private InspectionRecordService inspectionRecordService;
   @Mock private NotificationService notificationService;
   private TaskService service;
 
@@ -52,6 +54,7 @@ class TaskServiceTests {
             taskExecutionService,
             properties,
             detectionRunService,
+            inspectionRecordService,
             notificationService);
   }
 
