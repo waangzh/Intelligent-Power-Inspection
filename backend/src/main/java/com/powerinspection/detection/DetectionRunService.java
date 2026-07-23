@@ -13,6 +13,7 @@ import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.LocateAnythingResult;
 import com.powerinspection.model.ModelProperties;
 import com.powerinspection.model.ModelServiceException;
+import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotInspectionImage;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -53,15 +54,17 @@ public class DetectionRunService {
   private final URI modelBaseUri;
   private final Duration timeout;
   private final HttpClient httpClient;
+  private final NotificationService notificationService;
   private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
     Thread thread = new Thread(runnable, "detection-run-worker");
     thread.setDaemon(true);
     return thread;
   });
 
+  @org.springframework.beans.factory.annotation.Autowired
   public DetectionRunService(DetectionRunRepository repository, RobotInspectionImageService imageService,
       LocateAnythingGateway gateway, ObjectMapper objectMapper, ModelProperties properties,
-      DetectionAlarmService detectionAlarmService) {
+      DetectionAlarmService detectionAlarmService, NotificationService notificationService) {
     this.repository = repository;
     this.imageService = imageService;
     this.gateway = gateway;
@@ -70,6 +73,13 @@ public class DetectionRunService {
     this.modelBaseUri = URI.create(properties.getLocateAnything().getBaseUrl());
     this.timeout = Duration.ofSeconds(properties.getLocateAnything().getTimeoutSeconds());
     this.httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
+    this.notificationService = notificationService;
+  }
+
+  public DetectionRunService(DetectionRunRepository repository, RobotInspectionImageService imageService,
+      LocateAnythingGateway gateway, ObjectMapper objectMapper, ModelProperties properties,
+      DetectionAlarmService detectionAlarmService) {
+    this(repository, imageService, gateway, objectMapper, properties, detectionAlarmService, null);
   }
 
   @PostConstruct
@@ -81,6 +91,7 @@ public class DetectionRunService {
       run.setCompletedAt(now);
       run.setUpdatedAt(now);
       repository.save(run);
+      notifyFailure(run, "DETECTION_RUN_INTERRUPTED", "检测任务已中断", "检测运行 " + run.getId() + " 因后端重启被终止。", "recovered");
     }
   }
 
@@ -228,6 +239,16 @@ public class DetectionRunService {
     run.setCompletedAt(completedAt);
     run.setUpdatedAt(completedAt);
     repository.save(run);
+    if ("FAILED".equals(run.getStatus())) {
+      notifyFailure(run, "DETECTION_RUN_FAILED", "检测任务失败", "检测运行 " + run.getId() + " 执行失败：" + run.getErrorMessage(), "failed");
+    }
+  }
+
+  private void notifyFailure(DetectionRunEntity run, String eventCode, String title, String content, String suffix) {
+    if (notificationService == null) return;
+    String recipient = StringUtils.hasText(run.getCreatedBy()) ? run.getCreatedBy() : "*";
+    notificationService.pushEvent(recipient, "SYSTEM", eventCode, "DETECTION_RUN", run.getId(), title, content,
+        "/detections/runs/" + run.getId(), "detection-run:" + run.getId() + ":" + eventCode + ":" + suffix);
   }
 
   private void createAlarms(

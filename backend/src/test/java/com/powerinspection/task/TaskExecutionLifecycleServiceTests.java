@@ -6,12 +6,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.common.ApiException;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
+import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotConnectionStatus;
 import com.powerinspection.robot.RobotHeartbeatService;
 import com.powerinspection.robot.RobotHeartbeatStatusView;
@@ -42,6 +46,7 @@ class TaskExecutionLifecycleServiceTests {
   @Mock private RouteDeploymentRepository deployments;
   @Mock private RobotHeartbeatService heartbeats;
   @Mock private DataStoreService dataStore;
+  @Mock private NotificationService notificationService;
   private TaskExecutionLifecycleService service;
   private TaskExecutionEntity execution;
   private RouteRevisionEntity revision;
@@ -50,7 +55,7 @@ class TaskExecutionLifecycleServiceTests {
   void setUp() {
     RobotProperties properties = new RobotProperties();
     properties.setMode("bridge");
-    service = new TaskExecutionLifecycleService(executions, controlCommands, revisions, deployments, heartbeats, dataStore, new ObjectMapper(), properties);
+    service = new TaskExecutionLifecycleService(executions, controlCommands, revisions, deployments, heartbeats, dataStore, new ObjectMapper(), properties, notificationService);
     execution = execution(TaskExecutionStatus.CREATED.name());
     revision = revision();
     when(executions.findById("task-1")).thenReturn(Optional.of(execution));
@@ -226,6 +231,36 @@ class TaskExecutionLifecycleServiceTests {
     assertNull(service.claimStartAttempt("exec-1", Instant.now()));
     assertEquals(TaskExecutionStatus.START_FAILED.name(), execution.getStatus());
     assertEquals("LOCAL_CONFIRM_NOT_READY", execution.getLastErrorCode());
+  }
+
+  @Test
+  void lifecycleFailureTimeoutAndRecoveryPublishOncePerStateTransition() {
+    execution.setStatus(TaskExecutionStatus.STARTING.name());
+    execution.setStartRequestId("start-1");
+    execution.setStartRequestedAt("2026-07-14T00:00:00Z");
+
+    service.startFailed("exec-1", "BRIDGE_REJECTED", "bridge rejected", Instant.parse("2026-07-14T00:01:00Z"));
+    verify(notificationService).pushEvent(eq("*"), eq("TASK"), eq("TASK_EXECUTION_START_FAILED"), eq("TASK"),
+      eq("task-1"), anyString(), anyString(), eq("/tasks/task-1"), anyString());
+
+    execution.setStatus(TaskExecutionStatus.STARTING.name());
+    execution.setStartRequestedAt("2026-07-14T00:00:00Z");
+    service.timeoutIfNeeded("exec-1", Instant.parse("2026-07-14T00:10:00Z"), 60, 60, 60);
+    verify(notificationService, times(2)).pushEvent(eq("*"), eq("TASK"), eq("TASK_EXECUTION_START_FAILED"), eq("TASK"),
+      eq("task-1"), anyString(), anyString(), eq("/tasks/task-1"), anyString());
+
+    execution.setStatus(TaskExecutionStatus.RUNNING.name());
+    service.disconnected("exec-1", "BRIDGE_UNREACHABLE", "bridge timeout", Instant.parse("2026-07-14T00:11:00Z"));
+    service.disconnected("exec-1", "BRIDGE_UNREACHABLE", "bridge timeout", Instant.parse("2026-07-14T00:12:00Z"));
+    verify(notificationService, times(1)).pushEvent(eq("*"), eq("TASK"), eq("TASK_EXECUTION_DISCONNECTED"), eq("TASK"),
+      eq("task-1"), anyString(), anyString(), eq("/tasks/task-1"), anyString());
+
+    service.beginRecovery("exec-1", Instant.parse("2026-07-14T00:13:00Z"));
+    service.completeRecovery("exec-1", Instant.parse("2026-07-14T00:14:00Z"));
+    verify(notificationService).pushEvent(eq("*"), eq("TASK"), eq("TASK_EXECUTION_RECOVERING"), eq("TASK"),
+      eq("task-1"), anyString(), anyString(), eq("/tasks/task-1"), anyString());
+    verify(notificationService).pushEvent(eq("*"), eq("TASK"), eq("TASK_EXECUTION_RECOVERED"), eq("TASK"),
+      eq("task-1"), anyString(), anyString(), eq("/tasks/task-1"), anyString());
   }
 
   private Map<String, Object> start(String key) {

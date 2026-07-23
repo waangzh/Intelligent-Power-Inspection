@@ -52,7 +52,7 @@ public class RouteEntity {
     siteId = first(map.get("siteId"), "");
     name = first(map.get("name"), id);
     mapId = text(map.get("mapId"));
-    status = text(map.get("status"));
+    status = first(map.get("status"), "ACTIVE");
     Object executor = map.get("executor") != null ? map.get("executor") : map.get("executorJson");
     executorJson = EntityPayloadCodec.write(executor);
     checkpointsJson = EntityPayloadCodec.write(map.get("checkpoints"));

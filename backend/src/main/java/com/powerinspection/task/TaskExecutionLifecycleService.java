@@ -9,6 +9,7 @@ import com.powerinspection.robot.RobotConnectionStatus;
 import com.powerinspection.robot.RobotHeartbeatService;
 import com.powerinspection.robot.RobotHeartbeatStatusView;
 import com.powerinspection.robot.RobotProperties;
+import com.powerinspection.notification.NotificationService;
 import com.powerinspection.route.RouteDeploymentEntity;
 import com.powerinspection.route.RouteDeploymentRepository;
 import com.powerinspection.route.RouteDeploymentState;
@@ -39,10 +40,12 @@ public class TaskExecutionLifecycleService {
   private final DataStoreService dataStore;
   private final ObjectMapper objectMapper;
   private final RobotProperties robotProperties;
+  private final NotificationService notificationService;
 
+  @org.springframework.beans.factory.annotation.Autowired
   public TaskExecutionLifecycleService(TaskExecutionRepository executions, TaskExecutionControlCommandRepository controlCommands, RouteRevisionRepository revisions,
       RouteDeploymentRepository deployments, RobotHeartbeatService heartbeatService, DataStoreService dataStore,
-      ObjectMapper objectMapper, RobotProperties robotProperties) {
+      ObjectMapper objectMapper, RobotProperties robotProperties, NotificationService notificationService) {
     this.executions = executions;
     this.controlCommands = controlCommands;
     this.revisions = revisions;
@@ -51,6 +54,13 @@ public class TaskExecutionLifecycleService {
     this.dataStore = dataStore;
     this.objectMapper = objectMapper;
     this.robotProperties = robotProperties;
+    this.notificationService = notificationService;
+  }
+
+  public TaskExecutionLifecycleService(TaskExecutionRepository executions, TaskExecutionControlCommandRepository controlCommands, RouteRevisionRepository revisions,
+      RouteDeploymentRepository deployments, RobotHeartbeatService heartbeatService, DataStoreService dataStore,
+      ObjectMapper objectMapper, RobotProperties robotProperties) {
+    this(executions, controlCommands, revisions, deployments, heartbeatService, dataStore, objectMapper, robotProperties, null);
   }
 
   @Transactional
@@ -94,6 +104,7 @@ public class TaskExecutionLifecycleService {
     execution.setManualReconciliationRequired(false);
     execution.setUpdatedAt(now);
     executions.save(execution);
+    notifyTransition(execution, "TASK_EXECUTION_STARTING", "任务启动请求已受理", "任务 " + taskId + " 已进入启动中状态。", execution.getStartRequestId());
     log.info("event=task_start_accepted taskId={} robotId={} executionId={} deploymentId={} requestId={} startMode={} operatorId={} executionStatus={}",
       taskId, execution.getRobotId(), execution.getExecutionId(), execution.getDeploymentId(), idempotencyKey,
       startMode, operatorId, execution.getStatus());
@@ -197,6 +208,7 @@ public class TaskExecutionLifecycleService {
     execution.setStartCommandId(commandId);
     execution.setUpdatedAt(now.toString());
     executions.save(execution);
+    notifyTransition(execution, "TASK_EXECUTION_DISPATCHED", "任务启动命令已下发", "任务 " + execution.getTaskId() + " 的启动命令已下发至机器人。", commandId);
     log.info("event=robot_start_command_dispatched taskId={} robotId={} executionId={} deploymentId={} requestId={} commandId={} startMode={} executionStatus={}",
       execution.getTaskId(), execution.getRobotId(), executionId, execution.getDeploymentId(),
       execution.getStartRequestId(), commandId, execution.getStartMode(), execution.getStatus());
@@ -229,6 +241,7 @@ public class TaskExecutionLifecycleService {
     log.warn("event=task_execution_timeout taskId={} robotId={} executionId={} deploymentId={} requestId={} startMode={} executionStatus={} errorCode={}",
       execution.getTaskId(), execution.getRobotId(), executionId, execution.getDeploymentId(),
       execution.getStartRequestId(), execution.getStartMode(), execution.getStatus(), code);
+    notifyTransition(execution, "TASK_EXECUTION_" + execution.getStatus(), "任务执行超时", "任务 " + execution.getTaskId() + " 执行超时：" + message, execution.getStartRequestId());
     return true;
   }
 
@@ -242,6 +255,7 @@ public class TaskExecutionLifecycleService {
   public void disconnected(String executionId, String code, String message, Instant now) {
     TaskExecutionEntity execution = requireByExecutionId(executionId);
     if (TaskExecutionStatus.TERMINAL.contains(execution.getStatus())) return;
+    String previousStatus = execution.getStatus();
     if (!TaskExecutionStatus.DISCONNECTED.name().equals(execution.getStatus())) {
       execution.setRecoveryStatus(TaskExecutionStatus.RECOVERING.name().equals(execution.getStatus()) ? execution.getRecoveryStatus() : execution.getStatus());
       execution.setStatus(TaskExecutionStatus.DISCONNECTED.name());
@@ -250,6 +264,9 @@ public class TaskExecutionLifecycleService {
     execution.setLastErrorMessage(safeMessage(message));
     execution.setUpdatedAt(now.toString());
     executions.save(execution);
+    if (!TaskExecutionStatus.DISCONNECTED.name().equals(previousStatus)) {
+      notifyTransition(execution, "TASK_EXECUTION_DISCONNECTED", "任务执行连接中断", "任务 " + execution.getTaskId() + " 与机器人连接中断。", execution.getUpdatedAt());
+    }
     controlCommands.findFirstByExecutionIdAndStatusInOrderByRequestedAtDesc(executionId, List.of(
       TaskExecutionControlCommandStatus.PENDING_SEND.name(), TaskExecutionControlCommandStatus.SENDING.name(),
       TaskExecutionControlCommandStatus.QUEUED.name(), TaskExecutionControlCommandStatus.ACKED.name(),
@@ -269,7 +286,9 @@ public class TaskExecutionLifecycleService {
     if (!TaskExecutionStatus.DISCONNECTED.name().equals(execution.getStatus())) return execution;
     execution.setStatus(TaskExecutionStatus.RECOVERING.name());
     execution.setUpdatedAt(now.toString());
-    return executions.save(execution);
+    executions.save(execution);
+    notifyTransition(execution, "TASK_EXECUTION_RECOVERING", "任务执行正在恢复", "任务 " + execution.getTaskId() + " 正在尝试恢复执行。", execution.getUpdatedAt());
+    return execution;
   }
 
   @Transactional
@@ -287,6 +306,7 @@ public class TaskExecutionLifecycleService {
     execution.setRecoveryStatus(null);
     execution.setUpdatedAt(now.toString());
     executions.save(execution);
+    notifyTransition(execution, "TASK_EXECUTION_RECOVERED", "任务执行已恢复", "任务 " + execution.getTaskId() + " 已恢复到 " + previous + " 状态。", execution.getUpdatedAt());
   }
 
   @Transactional
@@ -501,12 +521,20 @@ public class TaskExecutionLifecycleService {
     try { return Instant.parse(value).plusSeconds(Math.max(1, timeoutSeconds)).isBefore(now); }
     catch (Exception ignored) { return false; }
   }
-  private static void startFailed(TaskExecutionEntity item, String code, String message, Instant now, boolean manual) {
+  private void startFailed(TaskExecutionEntity item, String code, String message, Instant now, boolean manual) {
     item.setStatus(TaskExecutionStatus.START_FAILED.name());
     item.setLastErrorCode(safeCode(code));
     item.setLastErrorMessage(safeMessage(message));
     item.setManualReconciliationRequired(manual);
     item.setUpdatedAt(now.toString());
+    notifyTransition(item, "TASK_EXECUTION_START_FAILED", "任务启动失败", "任务 " + item.getTaskId() + " 启动失败：" + safeMessage(message), item.getStartRequestId());
+  }
+
+  private void notifyTransition(TaskExecutionEntity execution, String eventCode, String title, String content, String discriminator) {
+    if (notificationService == null) return;
+    String key = "task-execution:" + execution.getExecutionId() + ":" + eventCode + ":" + (discriminator == null ? "" : discriminator);
+    notificationService.pushEvent("*", "TASK", eventCode, "TASK", execution.getTaskId(), title, content,
+        "/tasks/" + execution.getTaskId(), key);
   }
   private static String safeCode(String value) {
     String result = value == null ? "EXECUTION_ERROR" : value.replaceAll("[^A-Za-z0-9_]", "_").toUpperCase();

@@ -50,6 +50,7 @@ public class RouteRevisionService {
   @Transactional
   public Map<String, Object> create(String routeId, String createdBy) {
     Map<String, Object> route = dataStore.get(DataCategory.ROUTE, routeId);
+    ensureRouteEditable(route);
     RouteDraftEntity draft = draftRepository.findByRouteId(routeId).orElse(null);
     if (draft != null && !isDraftPublishable(draft)) {
       throw ApiException.conflict("草稿当前不可发布，请处理校验问题或地图身份不一致的问题");
@@ -180,6 +181,7 @@ public class RouteRevisionService {
 
   private DraftCheck inspectDraft(String routeId, JsonNode executorJson, String requestedMapAssetId) {
     Map<String, Object> route = dataStore.get(DataCategory.ROUTE, routeId);
+    ensureRouteEditable(route);
     String mapId = requestedMapAssetId == null ? text(route.get("mapId")) : requestedMapAssetId;
     if (mapId == null) throw ApiException.badRequest("路线尚未绑定地图资产");
     mapAssetService.ensureAvailableForSite(mapId, requiredText(route.get("siteId"), "路线缺少站点"));
@@ -433,6 +435,12 @@ public class RouteRevisionService {
   private String text(Object value) {
     if (value == null || value.toString().isBlank() || "null".equals(value.toString())) return null;
     return value.toString();
+  }
+
+  private void ensureRouteEditable(Map<String, Object> route) {
+    if ("ARCHIVED".equals(text(route.get("status")))) {
+      throw ApiException.conflict("路线已归档，不能继续编辑");
+    }
   }
 
   private double number(Object value, String message) {
