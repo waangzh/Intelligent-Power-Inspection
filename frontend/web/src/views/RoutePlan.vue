@@ -33,8 +33,13 @@
           <div class="context-map">
             <dt>地图资产</dt>
             <dd>
-              <el-select :model-value="selectedMapAssetId" filterable placeholder="选择地图资产" :loading="mapAssetsLoading || mapSwitching" :disabled="mapSwitching" @change="onMapAssetChange">
-                <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id" />
+              <el-select :model-value="selectedMapAssetId" filterable placeholder="选择地图资产" popper-class="route-map-asset-popper" :loading="mapAssetsLoading || mapSwitching" :disabled="mapSwitching" @change="onMapAssetChange">
+                <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id">
+                  <span class="map-asset-option">
+                    <span class="map-asset-option-name">{{ asset.yamlName }} · {{ asset.width }}×{{ asset.height }}</span>
+                    <time class="map-asset-option-time">{{ mapAssetTimeLabel(asset) }}</time>
+                  </span>
+                </el-option>
               </el-select>
             </dd>
           </div>
@@ -1055,6 +1060,22 @@ function formatTime(value?: string | null) {
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false })
 }
 
+function mapAssetTimeLabel(asset: MapAsset) {
+  const value = asset.capturedAt || asset.createdAt
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '时间未知'
+  const prefix = asset.capturedAt ? '建图' : '上传'
+  const time = date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  return `${prefix} ${time}`
+}
+
 async function confirmDiscardChanges() {
   if (!hasUnsavedChanges.value) return true
   try {
@@ -1833,6 +1854,33 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
   border: 0;
   box-shadow: none;
   background: transparent;
+}
+
+.map-asset-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+  width: 100%;
+}
+
+.map-asset-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-asset-option-time {
+  flex: 0 0 auto;
+  color: #7a8ba3;
+  font-size: 12px;
+}
+
+:global(.route-map-asset-popper) {
+  min-width: min(460px, calc(100vw - 24px)) !important;
+  max-width: calc(100vw - 24px);
 }
 
 .status-dot {
