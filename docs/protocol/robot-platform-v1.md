@@ -47,6 +47,8 @@ flowchart LR
 | `sequence` | Jetson SQLite | robot 全局事件流 | Jetson 与 Bridge | 事件去重/顺序键 | 同一 robot 永不复用 |
 | `leaseToken` | Robot Bridge | 一次命令租约 | Bridge；随 heartbeat 下发 | ACK 租约校验键 | 过期后不可复用 |
 
+任务在 `START_FAILED` 后由用户重新启动时，Spring 必须创建新的 `executionId`；旧执行保持终态并保留审计。网络不确定性下重投同一次启动请求时复用原 `requestId` 和 `executionId`，不得为同一 `executionId` 创建第二条 `START` 命令。
+
 ## 4. 鉴权与凭据
 
 | 边界 | 凭据 | 存放位置 | 可读取方 | 绝对禁止读取方 |

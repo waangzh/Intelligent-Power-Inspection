@@ -1,6 +1,7 @@
 package com.powerinspection.task;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -26,6 +27,7 @@ import com.powerinspection.route.RouteDeploymentState;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionRepository;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,6 +52,7 @@ class TaskExecutionLifecycleServiceTests {
   private TaskExecutionLifecycleService service;
   private TaskExecutionEntity execution;
   private RouteRevisionEntity revision;
+  private Map<String, Object> currentTask;
 
   @BeforeEach
   void setUp() {
@@ -58,12 +61,16 @@ class TaskExecutionLifecycleServiceTests {
     service = new TaskExecutionLifecycleService(executions, controlCommands, revisions, deployments, heartbeats, dataStore, new ObjectMapper(), properties, notificationService);
     execution = execution(TaskExecutionStatus.CREATED.name());
     revision = revision();
-    when(executions.findById("task-1")).thenReturn(Optional.of(execution));
-    when(executions.findByTaskIdForStart("task-1")).thenReturn(Optional.of(execution));
+    currentTask = new LinkedHashMap<>(task());
+    when(executions.findByExecutionIdForUpdate("exec-1")).thenReturn(Optional.of(execution));
     when(executions.findByExecutionId("exec-1")).thenReturn(Optional.of(execution));
     when(revisions.findById("rev-1")).thenReturn(Optional.of(revision));
     when(deployments.findById("dep-1")).thenAnswer(ignored -> Optional.of(deployment("a".repeat(64))));
-    when(dataStore.get(any(), anyString())).thenReturn(task());
+    when(dataStore.get(any(), anyString())).thenAnswer(ignored -> currentTask);
+    when(dataStore.upsert(eq(DataCategory.TASK), any())).thenAnswer(invocation -> {
+      currentTask = new LinkedHashMap<>(invocation.getArgument(1));
+      return currentTask;
+    });
     when(heartbeats.detail("robot-1")).thenReturn(online());
   }
 
@@ -130,8 +137,12 @@ class TaskExecutionLifecycleServiceTests {
     Map<String, Object> result = start("retry-start");
 
     assertEquals(TaskExecutionStatus.STARTING.name(), result.get("status"));
-    assertEquals("retry-start", execution.getStartRequestId());
-    assertNull(execution.getStartCommandId());
+    assertNotEquals("exec-1", result.get("executionId"));
+    assertEquals("exec-1", result.get("previousExecutionId"));
+    assertEquals(result.get("executionId"), currentTask.get("executionId"));
+    assertEquals(TaskExecutionStatus.START_FAILED.name(), execution.getStatus());
+    assertEquals("failed-start", execution.getStartRequestId());
+    assertEquals("failed-command", execution.getStartCommandId());
   }
 
   @Test

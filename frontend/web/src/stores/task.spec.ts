@@ -69,6 +69,20 @@ describe('任务执行轮询与启动状态', () => {
     store.stopExecutionPolling()
   })
 
+  it('启动失败后重启会同步后端返回的新执行 ID', async () => {
+    const store = useTaskStore()
+    const retry = { ...execution('STARTING'), executionId: 'exec-2', previousExecutionId: 'exec-1' }
+    vi.mocked(resourcesApi.startTask).mockResolvedValue(retry)
+    vi.mocked(resourcesApi.getTaskExecution).mockResolvedValue(retry)
+
+    await store.loadDynamic()
+    await store.startInspection('task-1', 'REMOTE_IMMEDIATE')
+
+    expect(store.getTaskById('task-1')?.executionId).toBe('exec-2')
+    expect(store.executionFor('task-1')?.previousExecutionId).toBe('exec-1')
+    store.stopExecutionPolling()
+  })
+
   it('启动资格不足时保留后端返回的禁用原因', async () => {
     vi.mocked(resourcesApi.getTaskStartEligibility).mockResolvedValue(eligibility(false))
     const store = useTaskStore()

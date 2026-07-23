@@ -9,11 +9,13 @@ import jakarta.persistence.Version;
 @Entity
 @Table(name = "task_executions")
 public class TaskExecutionEntity {
-  @Id
   @Column(name = "task_id")
   private String taskId;
+  @Id
   @Column(name = "execution_id", nullable = false, unique = true)
   private String executionId;
+  @Column(name = "previous_execution_id")
+  private String previousExecutionId;
   @Column(name = "route_revision_id", nullable = false)
   private String routeRevisionId;
   @Column(name = "robot_id", nullable = false)
@@ -77,6 +79,8 @@ public class TaskExecutionEntity {
   public void setTaskId(String taskId) { this.taskId = taskId; }
   public String getExecutionId() { return executionId; }
   public void setExecutionId(String executionId) { this.executionId = executionId; }
+  public String getPreviousExecutionId() { return previousExecutionId; }
+  public void setPreviousExecutionId(String previousExecutionId) { this.previousExecutionId = previousExecutionId; }
   public String getRouteRevisionId() { return routeRevisionId; }
   public void setRouteRevisionId(String routeRevisionId) { this.routeRevisionId = routeRevisionId; }
   public String getRobotId() { return robotId; }
