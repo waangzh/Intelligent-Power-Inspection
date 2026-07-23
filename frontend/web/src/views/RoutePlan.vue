@@ -745,11 +745,11 @@ async function deleteRoute() {
   }
   deletingRoute.value = true
   try {
-    await routeStore.removeRoute(currentRoute.value.id)
+    const result = await routeStore.removeRoute(currentRoute.value.id)
     const nextRouteId = siteRoutes.value[0]?.id ?? ''
     selectedRouteId.value = nextRouteId
     await loadDraft(nextRouteId)
-    ElMessage.success('已删除')
+    ElMessage.success(result.archived ? '路线已归档，历史任务和发布记录已保留' : '路线已删除')
   } catch (error) {
     ElMessage.error(errorMessage(error, '路线删除失败'))
   } finally {

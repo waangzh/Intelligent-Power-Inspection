@@ -41,6 +41,50 @@ class RouteRevisionControllerTests {
   @Autowired RobotHeartbeatService heartbeatService;
 
   @Test
+  void deleteRouteArchivesHistoricalReferencesAndKeepsRouteReadOnly() throws Exception {
+    String token = login("dispatcher", "Disp@123");
+    String siteId = "site_route_archive";
+    String routeId = "route_archive_history";
+    String robotId = "robot_route_archive";
+    String taskId = "task_route_archive";
+    dataStore.upsert(DataCategory.SITE, map("id", siteId, "name", "路线归档测试站点"));
+    dataStore.upsert(DataCategory.ROUTE, map("id", routeId, "siteId", siteId, "name", "历史任务路线"));
+    dataStore.upsert(DataCategory.ROBOT, map(
+      "id", robotId, "siteId", siteId, "name", "归档测试机器人", "status", "ONLINE"));
+    dataStore.upsert(DataCategory.TASK, map(
+      "id", taskId, "name", "已完成历史任务", "siteId", siteId, "routeId", routeId,
+      "robotId", robotId, "status", "COMPLETED", "progress", 100, "currentCheckpointSeq", 1));
+
+    mockMvc.perform(delete("/api/v1/routes/{id}", routeId).header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.routeId").value(routeId))
+      .andExpect(jsonPath("$.data.archived").value(true));
+    assertEquals("ARCHIVED", dataStore.get(DataCategory.ROUTE, routeId).get("status"));
+    mockMvc.perform(get("/api/v1/routes").param("siteId", siteId).header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items.length()").value(0));
+    mockMvc.perform(get("/api/v1/routes").param("siteId", siteId).param("status", "ARCHIVED")
+        .header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.items[0].id").value(routeId));
+
+    mockMvc.perform(
+        patch("/api/v1/routes/{id}", routeId)
+          .header("Authorization", bearer(token))
+          .contentType(MediaType.APPLICATION_JSON)
+          .content(json("name", "不允许修改")))
+      .andExpect(status().isConflict())
+      .andExpect(jsonPath("$.message").value("路线已归档，不能继续编辑"));
+
+    dataStore.delete(DataCategory.TASK, taskId);
+    mockMvc.perform(delete("/api/v1/routes/{id}", routeId).header("Authorization", bearer(token)))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.archived").value(false));
+    dataStore.delete(DataCategory.ROBOT, robotId);
+    dataStore.delete(DataCategory.SITE, siteId);
+  }
+
+  @Test
   void draftValidationOverwritesMapIdentityReportsAllIssuesAndDoesNotPersist() throws Exception {
     String token = login("dispatcher", "Disp@123");
     String siteId = "site_draft_validate";

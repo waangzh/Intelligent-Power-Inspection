@@ -670,6 +670,9 @@ public class TaskService {
     if (route == null) {
       throw ApiException.badRequest("巡检路线不存在");
     }
+    if ("ARCHIVED".equals(text(route.get("status")))) {
+      throw ApiException.conflict("路线已归档，不能创建或执行新任务");
+    }
     return route;
   }
 

@@ -10,13 +10,18 @@ import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.mapasset.MapAssetService;
 import com.powerinspection.security.CurrentUser;
+import com.powerinspection.task.TaskExecutionRepository;
+import com.powerinspection.task.TaskExecutionStatus;
 import com.powerinspection.user.Permission;
 import com.powerinspection.user.PermissionService;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -35,19 +40,29 @@ public class RouteController extends CrudSupport {
   private final CurrentUser currentUser;
   private final MapAssetService mapAssetService;
   private final RouteRevisionService routeRevisionService;
+  private final RouteRevisionRepository routeRevisionRepository;
+  private final TaskExecutionRepository taskExecutionRepository;
 
-  public RouteController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser, MapAssetService mapAssetService, RouteRevisionService routeRevisionService) {
+  public RouteController(DataStoreService dataStore, PermissionService permissionService, CurrentUser currentUser,
+      MapAssetService mapAssetService, RouteRevisionService routeRevisionService,
+      RouteRevisionRepository routeRevisionRepository, TaskExecutionRepository taskExecutionRepository) {
     super(dataStore);
     this.permissionService = permissionService;
     this.currentUser = currentUser;
     this.mapAssetService = mapAssetService;
     this.routeRevisionService = routeRevisionService;
+    this.routeRevisionRepository = routeRevisionRepository;
+    this.taskExecutionRepository = taskExecutionRepository;
   }
 
   @GetMapping
   public ApiResponse<PageResult<Map<String, Object>>> routes(ListQuery query) {
     permissionService.require(currentUser.get(), Permission.TASK_VIEW);
-    PageResult<Map<String, Object>> result = page(DataCategory.ROUTE, query, "siteId", "status");
+    Map<String, String> filters = query.filters("siteId", "status");
+    if (query.getStatus() == null || query.getStatus().isBlank()) filters.put("status", "ACTIVE");
+    PageResult<Map<String, Object>> result = dataStore.page(
+      DataCategory.ROUTE, query.getPage(), query.getSize(), query.getSort(), query.getDirection(),
+      query.getUpdatedAfter(), query.getQ(), filters);
     return ApiResponse.ok(new PageResult<>(
       result.items().stream().map(RouteExecutorSupport::attachRosAlias).toList(),
       result.total(), result.page(), result.size(), result.hasMore(), result.nextCursor()
@@ -70,6 +85,7 @@ public class RouteController extends CrudSupport {
     body.putIfAbsent("path", List.of());
     body.putIfAbsent("checkpoints", List.of());
     body.putIfAbsent("mapMode", "2d");
+    body.put("status", "ACTIVE");
     RouteExecutorSupport.normalizeRoute(body);
     return ApiResponse.ok(RouteExecutorSupport.attachRosAlias(create(DataCategory.ROUTE, "route", body)));
   }
@@ -93,6 +109,8 @@ public class RouteController extends CrudSupport {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(id);
     Map<String, Object> current = dataStore.get(DataCategory.ROUTE, id);
+    ensureRouteEditable(current);
+    body.remove("status");
     String siteId = body.containsKey("siteId") ? String.valueOf(body.get("siteId")) : String.valueOf(current.get("siteId"));
     ensureSiteExists(siteId);
     Object mapId = body.containsKey("mapId") ? body.get("mapId") : current.get("mapId");
@@ -110,15 +128,26 @@ public class RouteController extends CrudSupport {
   }
 
   @DeleteMapping("/{id}")
-  public ApiResponse<Void> deleteRoute(@PathVariable String id) {
+  @Transactional
+  public ApiResponse<RouteDeletionResult> deleteRoute(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(id);
-    String mapId = text(dataStore.get(DataCategory.ROUTE, id).get("mapId"));
+    Map<String, Object> route = dataStore.get(DataCategory.ROUTE, id);
+    String mapId = text(route.get("mapId"));
+    List<Map<String, Object>> tasks = dataStore.list(DataCategory.TASK).stream()
+      .filter(task -> id.equals(text(task.get("routeId"))))
+      .toList();
+    List<RouteRevisionEntity> revisions = routeRevisionRepository.findByRouteIdOrderByRevisionNoDesc(id);
+    if (!tasks.isEmpty() || !revisions.isEmpty()) {
+      route.put("status", "ARCHIVED");
+      dataStore.upsert(DataCategory.ROUTE, route);
+      return ApiResponse.ok(new RouteDeletionResult(id, true));
+    }
     String draftMapId = routeRevisionService.deleteDraft(id);
     delete(DataCategory.ROUTE, id);
     mapAssetService.deleteIfUnreferenced(mapId);
     if (draftMapId != null && !draftMapId.equals(mapId)) mapAssetService.deleteIfUnreferenced(draftMapId);
-    return ApiResponse.ok();
+    return ApiResponse.ok(new RouteDeletionResult(id, false));
   }
 
   @PostMapping("/{id}/checkpoints")
@@ -126,6 +155,7 @@ public class RouteController extends CrudSupport {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(id);
     Map<String, Object> route = dataStore.get(DataCategory.ROUTE, id);
+    ensureRouteEditable(route);
     List<Map<String, Object>> checkpoints = checkpoints(route);
     body.putIfAbsent("id", Ids.next("cp"));
     body.put("routeId", id);
@@ -141,6 +171,7 @@ public class RouteController extends CrudSupport {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(routeId);
     Map<String, Object> route = dataStore.get(DataCategory.ROUTE, routeId);
+    ensureRouteEditable(route);
     List<Map<String, Object>> checkpoints = checkpoints(route);
     Map<String, Object> checkpoint = checkpoints.stream()
       .filter(item -> checkpointId.equals(String.valueOf(item.get("id"))))
@@ -158,6 +189,7 @@ public class RouteController extends CrudSupport {
     permissionService.require(currentUser.get(), Permission.ROUTE_EDIT);
     ensureNoActiveTaskForRoute(routeId);
     Map<String, Object> route = dataStore.get(DataCategory.ROUTE, routeId);
+    ensureRouteEditable(route);
     List<Map<String, Object>> checkpoints = checkpoints(route).stream()
       .filter(item -> !checkpointId.equals(String.valueOf(item.get("id"))))
       .sorted(Comparator.comparing(item -> Integer.parseInt(String.valueOf(item.getOrDefault("seq", "0")))))
@@ -201,13 +233,24 @@ public class RouteController extends CrudSupport {
 
   private void ensureNoActiveTaskForRoute(String routeId) {
     boolean active = dataStore.list(DataCategory.TASK).stream()
-      .anyMatch(task -> routeId.equals(String.valueOf(task.get("routeId"))) && isActiveStatus(String.valueOf(task.get("status"))));
-    if (active) {
-      throw ApiException.badRequest("路线正在被任务使用，不能修改");
+      .anyMatch(task -> routeId.equals(text(task.get("routeId"))) && isActiveStatus(text(task.get("status"))));
+    if (active) throw ApiException.conflict("路线正在执行，不能修改或归档");
+
+    Set<String> revisionIds = new HashSet<>(routeRevisionRepository.findByRouteIdOrderByRevisionNoDesc(routeId).stream()
+      .map(RouteRevisionEntity::getId).toList());
+    if (!revisionIds.isEmpty() && taskExecutionRepository.findByRouteRevisionIdIn(revisionIds).stream()
+        .anyMatch(execution -> TaskExecutionStatus.ACTIVE.contains(execution.getStatus()))) {
+      throw ApiException.conflict("路线正在执行或等待机器人确认，不能修改或归档");
     }
   }
 
   private boolean isActiveStatus(String status) {
-    return List.of("DISPATCHED", "RUNNING", "PAUSED", "MANUAL_TAKEOVER").contains(status);
+    return TaskExecutionStatus.ACTIVE.contains(status) || "DISPATCHED".equals(status);
+  }
+
+  private void ensureRouteEditable(Map<String, Object> route) {
+    if ("ARCHIVED".equals(text(route.get("status")))) {
+      throw ApiException.conflict("路线已归档，不能继续编辑");
+    }
   }
 }

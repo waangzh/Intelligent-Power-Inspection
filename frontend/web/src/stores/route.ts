@@ -81,9 +81,10 @@ export const useRouteStore = defineStore('route', () => {
   }
 
   async function removeRoute(id: string) {
-    await resourcesApi.removeRoute(id)
+    const result = await resourcesApi.removeRoute(id)
     latestLoadRequest += 1
     routes.value = routes.value.filter((r) => r.id !== id)
+    return result
   }
 
   function addCheckpoint(routeId: string, checkpoint: Omit<Checkpoint, 'id' | 'routeId' | 'seq' | 'detections'>) {

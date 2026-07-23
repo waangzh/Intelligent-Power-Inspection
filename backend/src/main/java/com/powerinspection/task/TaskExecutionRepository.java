@@ -22,6 +22,7 @@ public interface TaskExecutionRepository extends JpaRepository<TaskExecutionEnti
   Optional<TaskExecutionEntity> findByExecutionIdForUpdate(@Param("executionId") String executionId);
 
   List<TaskExecutionEntity> findByStatusIn(Collection<String> statuses);
+  List<TaskExecutionEntity> findByRouteRevisionIdIn(Collection<String> routeRevisionIds);
   List<TaskExecutionEntity> findByRobotIdAndStatusIn(String robotId, Collection<String> statuses);
   java.util.Optional<TaskExecutionEntity> findFirstByRobotIdAndStatusInOrderByUpdatedAtDesc(
       String robotId, Collection<String> statuses);
