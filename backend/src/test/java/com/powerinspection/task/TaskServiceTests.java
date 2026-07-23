@@ -12,6 +12,7 @@ import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.detection.DetectionRunService;
 import com.powerinspection.model.LocateAnythingGateway;
+import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotProperties;
 import com.powerinspection.route.RouteRevisionEntity;
@@ -34,6 +35,7 @@ class TaskServiceTests {
   @Mock private RouteRevisionService routeRevisionService;
   @Mock private TaskExecutionService taskExecutionService;
   @Mock private DetectionRunService detectionRunService;
+  @Mock private NotificationService notificationService;
   private TaskService service;
 
   @BeforeEach
@@ -49,7 +51,8 @@ class TaskServiceTests {
             routeRevisionService,
             taskExecutionService,
             properties,
-            detectionRunService);
+            detectionRunService,
+            notificationService);
   }
 
   @Test
@@ -98,6 +101,9 @@ class TaskServiceTests {
 
     assertEquals("exec-1", saved.get("executionId"));
     assertEquals(TaskExecutionStatus.CREATED.name(), saved.get("status"));
+    verify(notificationService).pushEvent(
+        eq("*"), eq("TASK"), eq("TASK_CREATED"), eq("TASK"), eq("task-1"),
+        eq("任务已创建"), any(String.class), eq("/tasks/task-1"), eq("task:task-1:TASK_CREATED"));
     verify(taskExecutionService).bind(any(), eq(revision));
   }
 }

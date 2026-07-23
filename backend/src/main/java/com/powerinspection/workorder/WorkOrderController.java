@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/api/v1/work-orders")
@@ -114,6 +115,7 @@ public class WorkOrderController {
   }
 
   @PostMapping
+  @Transactional
   public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
     UserEntity user = currentUser.get();
     permissionService.require(user, Permission.WORKORDER_CREATE);
@@ -135,7 +137,7 @@ public class WorkOrderController {
     order.put("createdAt", now);
     order.put("updatedAt", now);
     Map<String, Object> saved = dataStore.upsert(DataCategory.WORK_ORDER, order);
-    notifyDispatchersNewWorkOrder(saved);
+    notifyDispatchersNewWorkOrder(saved, "WORKORDER_CREATED");
     return ApiResponse.ok(saved);
   }
 
@@ -152,6 +154,7 @@ public class WorkOrderController {
   }
 
   @PostMapping("/{id}/claim")
+  @Transactional
   public ApiResponse<Map<String, Object>> claim(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.WORKORDER_PROCESS);
     UserEntity user = currentUser.get();
@@ -168,7 +171,12 @@ public class WorkOrderController {
     patch.put("status", "PROCESSING");
     patch.put("claimedAt", Instant.now().toString());
     patch.put("updatedAt", Instant.now().toString());
-    return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, patch));
+    Map<String, Object> saved = dataStore.patch(DataCategory.WORK_ORDER, id, patch);
+    notificationService.pushEvent(
+        user.getId(), "WORKORDER", "WORKORDER_CLAIMED", "WORK_ORDER", id,
+        "工单已接单", "工单「" + text(saved.get("title")) + "」已由" + user.getDisplayName() + "接单。",
+        "/workorders", "workorder:" + id + ":CLAIMED");
+    return ApiResponse.ok(saved);
   }
 
   @PatchMapping("/{id}")
@@ -254,6 +262,7 @@ public class WorkOrderController {
   }
 
   @PatchMapping("/{id}/status")
+  @Transactional
   public ApiResponse<Map<String, Object>> updateStatus(
       @PathVariable String id, @RequestBody Map<String, Object> body) {
     UserEntity user = currentUser.get();
@@ -302,17 +311,36 @@ public class WorkOrderController {
     if ("CANCELLED".equals(status)) {
       patch.put("cancelledAt", Instant.now().toString());
     }
-    return ApiResponse.ok(dataStore.patch(DataCategory.WORK_ORDER, id, patch));
+    Map<String, Object> saved = dataStore.patch(DataCategory.WORK_ORDER, id, patch);
+    notifyWorkOrderTransition(saved, from, status, user);
+    return ApiResponse.ok(saved);
   }
 
-  private void notifyDispatchersNewWorkOrder(Map<String, Object> order) {
+  private void notifyDispatchersNewWorkOrder(Map<String, Object> order, String eventCode) {
     String title = String.valueOf(order.get("title"));
     userRepository
         .findByRoleAndEnabledTrue(UserRole.DISPATCHER)
         .forEach(
             dispatcher ->
-                notificationService.push(
-                    dispatcher.getId(), "WORKORDER", "新工单待接单", title, "/workorders"));
+                notificationService.pushEvent(
+                    dispatcher.getId(), "WORKORDER", eventCode, "WORK_ORDER", String.valueOf(order.get("id")),
+                    "新工单待接单", title, "/workorders",
+                    "workorder:" + order.get("id") + ":" + eventCode + ":" + dispatcher.getId()));
+  }
+
+  private void notifyWorkOrderTransition(Map<String, Object> order, String from, String to, UserEntity user) {
+    String id = text(order.get("id"));
+    String title = text(order.get("title"));
+    String eventCode = "WORKORDER_" + to;
+    String content = "工单「" + title + "」由" + from + "变更为" + to + "，操作人：" + user.getDisplayName() + "。";
+    notificationService.pushEvent("*", "WORKORDER", eventCode, "WORK_ORDER", id,
+        "工单状态已更新", content, "/workorders",
+        "workorder:" + id + ":" + from + ":" + to + ":" + savedUpdatedAt(order));
+  }
+
+  private String savedUpdatedAt(Map<String, Object> order) {
+    String value = text(order.get("updatedAt"));
+    return value == null ? String.valueOf(System.nanoTime()) : value;
   }
 
   private boolean isUnassigned(Map<String, Object> order) {
