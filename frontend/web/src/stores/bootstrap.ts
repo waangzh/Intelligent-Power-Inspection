@@ -13,6 +13,7 @@ let unsubscribePageRealtime: Array<() => void> = []
 let pageChangeHandler: (() => void) | undefined
 
 export async function loadAppData() {
+  void useNotificationStore().load({ size: 20 }).catch(() => {})
   startRealtime()
 }
 
@@ -24,7 +25,15 @@ export function startRealtime() {
   const userId = currentUserId()
   if (userId) {
     const refreshNotification = (event: ResourceChangeEvent) => {
-      void resourcesApi.getNotification(event.resourceId).then(useNotificationStore().applyRemoteNotification)
+      const apply = (attempt = 0): Promise<void> => resourcesApi.getNotification(event.resourceId)
+        .then(useNotificationStore().applyRemoteNotification)
+        .catch((error) => {
+          if (attempt >= 2) throw error
+          return new Promise((resolve) => {
+            window.setTimeout(() => { void apply(attempt + 1).then(resolve).catch(() => resolve()) }, 500)
+          })
+        })
+      void apply().catch(() => {})
     }
     unsubscribeUserRealtime = [
       subscribeTopic<ResourceChangeEvent>('/topic/notifications', refreshNotification),

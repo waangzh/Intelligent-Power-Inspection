@@ -13,6 +13,7 @@ import com.powerinspection.model.LocateAnythingGateway;
 import com.powerinspection.model.LocateAnythingRequest;
 import com.powerinspection.model.LocateAnythingResult;
 import com.powerinspection.model.ModelServiceException;
+import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotGateway;
 import com.powerinspection.robot.RobotInspectionImage;
 import com.powerinspection.robot.RobotProgressSnapshot;
@@ -30,6 +31,7 @@ import java.util.Set;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class TaskService {
@@ -73,6 +75,29 @@ public class TaskService {
   private final TaskExecutionService taskExecutionService;
   private final DetectionRunService detectionRunService;
   private final RobotProperties robotProperties;
+  private final NotificationService notificationService;
+
+  @Autowired
+  public TaskService(
+      DataStoreService dataStore,
+      SimpMessagingTemplate messagingTemplate,
+      RobotGateway robotGateway,
+      LocateAnythingGateway locateAnythingGateway,
+      RouteRevisionService routeRevisionService,
+      TaskExecutionService taskExecutionService,
+      RobotProperties robotProperties,
+      DetectionRunService detectionRunService,
+      NotificationService notificationService) {
+    this.dataStore = dataStore;
+    this.messagingTemplate = messagingTemplate;
+    this.robotGateway = robotGateway;
+    this.locateAnythingGateway = locateAnythingGateway;
+    this.routeRevisionService = routeRevisionService;
+    this.taskExecutionService = taskExecutionService;
+    this.robotProperties = robotProperties;
+    this.detectionRunService = detectionRunService;
+    this.notificationService = notificationService;
+  }
 
   public TaskService(
       DataStoreService dataStore,
@@ -83,14 +108,8 @@ public class TaskService {
       TaskExecutionService taskExecutionService,
       RobotProperties robotProperties,
       DetectionRunService detectionRunService) {
-    this.dataStore = dataStore;
-    this.messagingTemplate = messagingTemplate;
-    this.robotGateway = robotGateway;
-    this.locateAnythingGateway = locateAnythingGateway;
-    this.routeRevisionService = routeRevisionService;
-    this.taskExecutionService = taskExecutionService;
-    this.robotProperties = robotProperties;
-    this.detectionRunService = detectionRunService;
+    this(dataStore, messagingTemplate, robotGateway, locateAnythingGateway, routeRevisionService,
+        taskExecutionService, robotProperties, detectionRunService, null);
   }
 
   public List<Map<String, Object>> tasks() {
@@ -165,7 +184,9 @@ public class TaskService {
       payload.put("routeContentSha256", execution.getRouteContentSha256());
       payload.put("mapImageSha256", execution.getMapImageSha256());
     }
-    return saveTask(payload);
+    Map<String, Object> saved = saveTask(payload);
+    notifyTask(saved, "TASK_CREATED", "任务已创建", "任务「" + text(saved.get("name")) + "」已创建。");
+    return saved;
   }
 
   @Transactional
@@ -207,6 +228,7 @@ public class TaskService {
     saveTask(task);
     updateRobot(text(task.get("robotId")), map("status", "BUSY", "currentTaskId", id));
     addEvent(id, "DISPATCH", "任务已下发至机器人", null, null);
+    notifyTask(task, "TASK_DISPATCHED", "任务已下发", "任务「" + text(task.get("name")) + "」已下发至机器人。");
     return task;
   }
 
@@ -220,6 +242,7 @@ public class TaskService {
     task.put("status", "PAUSED");
     saveTask(task);
     addEvent(id, "PAUSE", "任务已暂停", null, null);
+    notifyTask(task, "TASK_PAUSED", "任务已暂停", "任务「" + text(task.get("name")) + "」已暂停。");
     return task;
   }
 
@@ -241,6 +264,7 @@ public class TaskService {
       saveTask(task);
       updateRobot(text(task.get("robotId")), map("status", "BUSY", "currentTaskId", id));
       addEvent(id, "RESUME", "任务开始执行，路线级检测已启动", null, null);
+      notifyTask(task, "TASK_RUNNING", "任务开始执行", "任务「" + text(task.get("name")) + "」已开始执行。");
     } else {
       throw ApiException.badRequest("当前状态不能恢复任务");
     }
@@ -257,6 +281,7 @@ public class TaskService {
     task.put("status", "MANUAL_TAKEOVER");
     saveTask(task);
     addEvent(id, "PAUSE", "调度员已人工接管机器人", null, null);
+    notifyTask(task, "TASK_MANUAL_TAKEOVER", "任务已人工接管", "任务「" + text(task.get("name")) + "」已进入人工接管。");
     return task;
   }
 
@@ -276,6 +301,7 @@ public class TaskService {
     saveTask(task);
     updateRobot(text(task.get("robotId")), map("status", "ONLINE", "currentTaskId", null));
     addEvent(id, "PAUSE", "任务已取消", null, null);
+    notifyTask(task, "TASK_CANCELLED", "任务已取消", "任务「" + text(task.get("name")) + "」已取消。");
     return task;
   }
 
@@ -306,6 +332,7 @@ public class TaskService {
     saveTask(task);
     updateRobot(text(task.get("robotId")), map("status", "ONLINE", "currentTaskId", null));
     addEvent(id, "ESTOP", "远程急停已执行。原因：" + reason + "（操作人：" + operatorName + "）", null, null);
+    notifyTask(task, "TASK_ESTOPPED", "任务已急停", "任务「" + text(task.get("name")) + "」已执行远程急停：" + reason);
     return task;
   }
 
@@ -388,6 +415,7 @@ public class TaskService {
     saveTask(task);
     updateRobot(text(task.get("robotId")), map("status", "ONLINE", "currentTaskId", null));
     addEvent(taskId, "COMPLETE", "巡检任务已全部完成", null, null);
+    notifyTask(task, "TASK_COMPLETED", "任务已完成", "任务「" + text(task.get("name")) + "」已完成巡检。");
 
     Map<String, Object> robot = dataStore.find(DataCategory.ROBOT, text(task.get("robotId")));
     Map<String, Object> site = dataStore.find(DataCategory.SITE, text(route.get("siteId")));
@@ -758,6 +786,18 @@ public class TaskService {
     ResourceChangeEvent event = ResourceChangeEvent.updated(resource, resourceId);
     messagingTemplate.convertAndSend(detailTopic, event);
     messagingTemplate.convertAndSend(collectionTopic, event);
+  }
+
+  private void notifyTask(Map<String, Object> task, String eventCode, String title, String content) {
+    if (notificationService == null) return;
+    String taskId = text(task.get("id"));
+    String idempotencyKey = switch (eventCode) {
+      case "TASK_CREATED", "TASK_DISPATCHED", "TASK_CANCELLED", "TASK_ESTOPPED", "TASK_COMPLETED" ->
+          "task:" + taskId + ":" + eventCode;
+      default -> null;
+    };
+    notificationService.pushEvent("*", "TASK", eventCode, "TASK", taskId, title, content,
+        "/tasks/" + taskId, idempotencyKey);
   }
 
   private String text(Object value) {

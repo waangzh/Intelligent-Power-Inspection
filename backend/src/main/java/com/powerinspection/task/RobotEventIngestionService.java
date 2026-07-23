@@ -3,6 +3,7 @@ package com.powerinspection.task;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.common.Ids;
+import com.powerinspection.notification.NotificationService;
 import com.powerinspection.robot.RobotBridgeExecutionEvent;
 import com.powerinspection.route.RouteRevisionEntity;
 import com.powerinspection.route.RouteRevisionRepository;
@@ -13,6 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,15 +27,24 @@ public class RobotEventIngestionService {
   private final TaskExecutionControlCommandRepository controlCommands;
   private final RouteRevisionRepository revisions;
   private final ObjectMapper objectMapper;
+  private final NotificationService notificationService;
 
+  @Autowired
   public RobotEventIngestionService(TaskExecutionRepository executions, RobotExecutionEventRepository eventRepository,
       TaskExecutionControlCommandRepository controlCommands,
-      RouteRevisionRepository revisions, ObjectMapper objectMapper) {
+      RouteRevisionRepository revisions, ObjectMapper objectMapper, NotificationService notificationService) {
     this.executions = executions;
     this.eventRepository = eventRepository;
     this.controlCommands = controlCommands;
     this.revisions = revisions;
     this.objectMapper = objectMapper;
+    this.notificationService = notificationService;
+  }
+
+  public RobotEventIngestionService(TaskExecutionRepository executions, RobotExecutionEventRepository eventRepository,
+      TaskExecutionControlCommandRepository controlCommands,
+      RouteRevisionRepository revisions, ObjectMapper objectMapper) {
+    this(executions, eventRepository, controlCommands, revisions, objectMapper, null);
   }
 
   @Transactional
@@ -80,11 +91,13 @@ public class RobotEventIngestionService {
       return;
     }
 
+    String previousStatus = execution.getStatus();
     apply(execution, input, audit);
     execution.setLastRobotSequence(sequence);
     execution.setLastEventAt(nonBlank(input.text("occurred_at")) ? input.text("occurred_at") : receivedAt);
     execution.setUpdatedAt(receivedAt);
     executions.save(execution);
+    notifyStatusChange(execution, previousStatus, execution.getStatus(), eventType, eventId);
   }
 
   @Transactional
@@ -184,6 +197,16 @@ public class RobotEventIngestionService {
       audit.setProcessingResult("AUDITED");
     }
     eventRepository.save(audit);
+  }
+
+  private void notifyStatusChange(TaskExecutionEntity execution, String previous, String current,
+      String sourceEvent, String eventId) {
+    if (notificationService == null || current == null || current.equals(previous)) return;
+    String code = "TASK_EXECUTION_" + current;
+    String content = "任务 " + execution.getTaskId() + " 执行状态由 " + previous + " 变更为 " + current + "。";
+    notificationService.pushEvent("*", "TASK", code, "TASK", execution.getTaskId(),
+        "任务执行状态更新", content, "/tasks/" + execution.getTaskId(),
+        "task-execution:" + execution.getExecutionId() + ":" + code + ":" + eventId);
   }
 
   private void updateProgress(TaskExecutionEntity execution, Map<String, Object> payload) {
