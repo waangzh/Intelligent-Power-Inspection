@@ -20,7 +20,12 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 
-const props = defineProps<{ blob?: Blob | null; pointCount?: number }>()
+const props = defineProps<{
+  blob?: Blob | null
+  pointCount?: number
+  robotPose?: { x: number; y: number; yaw: number } | null
+  sceneToReferenceTransform?: number[] | null
+}>()
 const hostRef = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -33,6 +38,9 @@ let camera: THREE.PerspectiveCamera | null = null
 let renderer: THREE.WebGLRenderer | null = null
 let controls: OrbitControls | null = null
 let resizeObserver: ResizeObserver | null = null
+let robotMarker: THREE.Group | null = null
+let cloudCenter = new THREE.Vector3()
+let markerScale = 1
 let animationFrame = 0
 let loadVersion = 0
 
@@ -82,6 +90,7 @@ async function loadCloud(blob?: Blob | null) {
     points.value = new THREE.Points(geometry, material)
     scene?.add(points.value)
     fitCamera()
+    updateRobotMarker()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'PLY 点云解析失败'
   } finally {
@@ -99,15 +108,66 @@ function fitCamera() {
     return
   }
   const center = box.getCenter(new THREE.Vector3())
+  cloudCenter.copy(center)
   points.value.geometry.translate(-center.x, -center.y, -center.z)
   points.value.geometry.computeBoundingSphere()
   const radius = Math.max(points.value.geometry.boundingSphere?.radius ?? 1, 0.1)
+  markerScale = Math.max(radius / 45, 0.08)
   camera.near = Math.max(radius / 1000, 0.001)
   camera.far = Math.max(radius * 100, 100)
   camera.position.set(radius * 1.45, -radius * 1.75, radius * 1.15)
   camera.updateProjectionMatrix()
   controls.target.set(0, 0, 0)
   controls.update()
+  updateRobotMarker()
+}
+
+function removeRobotMarker() {
+  if (!robotMarker) return
+  scene?.remove(robotMarker)
+  robotMarker.traverse(child => {
+    if (!(child instanceof THREE.Mesh)) return
+    child.geometry.dispose()
+    const material = child.material
+    if (Array.isArray(material)) material.forEach(item => item.dispose())
+    else material.dispose()
+  })
+  robotMarker = null
+}
+
+function updateRobotMarker() {
+  removeRobotMarker()
+  const transform = props.sceneToReferenceTransform
+  if (!scene || !points.value || !props.robotPose || transform?.length !== 16) return
+
+  // Metadata contract stores the scene-to-reference matrix as a row-major array.
+  const referenceToScene = new THREE.Matrix4().fromArray(transform).transpose().invert()
+  const referenceOrigin = new THREE.Vector3(props.robotPose.x, props.robotPose.y, 0)
+  const referenceForward = new THREE.Vector3(
+    props.robotPose.x + Math.cos(props.robotPose.yaw),
+    props.robotPose.y + Math.sin(props.robotPose.yaw),
+    0,
+  )
+  const sceneOrigin = referenceOrigin.applyMatrix4(referenceToScene)
+  const sceneForward = referenceForward.applyMatrix4(referenceToScene)
+  const direction = sceneForward.sub(sceneOrigin).normalize()
+
+  const group = new THREE.Group()
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.42, 0.28, 18),
+    new THREE.MeshStandardMaterial({ color: 0x2f80ed, emissive: 0x0a2f68, roughness: 0.45 }),
+  )
+  body.rotation.x = Math.PI / 2
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.62, 0.08, 8, 28),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  )
+  const arrow = new THREE.ArrowHelper(direction, new THREE.Vector3(0, 0, 0.12), 1.15, 0x57a5ff, 0.35, 0.22)
+  group.add(body, halo, arrow)
+  group.position.copy(sceneOrigin.sub(cloudCenter))
+  group.scale.setScalar(markerScale)
+  scene.add(group)
+  robotMarker = group
 }
 
 function resize() {
@@ -126,6 +186,7 @@ function renderLoop() {
 }
 
 function disposePoints() {
+  removeRobotMarker()
   if (!points.value) return
   scene?.remove(points.value)
   points.value.geometry.dispose()
@@ -140,6 +201,11 @@ watch(pointSize, value => {
   const material = points.value?.material
   if (material && !Array.isArray(material) && material instanceof THREE.PointsMaterial) material.size = value
 })
+watch(
+  () => [props.robotPose, props.sceneToReferenceTransform],
+  updateRobotMarker,
+  { deep: true },
+)
 
 onMounted(initialize)
 onBeforeUnmount(() => {
