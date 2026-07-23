@@ -245,11 +245,17 @@ const alarmStore = useAlarmStore()
 const authStore = useAuthStore()
 const workOrderStore = useWorkOrderStore()
 const { can } = usePermission()
-const severityFilter = ref('')
+const severityFilter = ref(queryText(route.query.severity))
+const acknowledgedFilter = computed<boolean | undefined>(() => {
+  const value = queryText(route.query.acknowledged)
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return undefined
+})
 const keyword = ref('')
 const selected = ref<Alarm | null>(alarmStore.alarms[0] ?? null)
 const alarmPage = ref(0)
-const activeStatKey = ref('ALL')
+const activeStatKey = ref(severityFilter.value || 'ALL')
 const policyDialogVisible = ref(false)
 const policySaving = ref(false)
 const statIcons = [WarningFilled, Warning, InfoFilled, Bell]
@@ -293,6 +299,7 @@ const filteredAlarms = computed(() => {
   let list = alarmStore.alarms
   if (detectionRunFilter.value) list = list.filter((a) => a.detectionRunId === detectionRunFilter.value)
   if (severityFilter.value) list = list.filter((a) => a.severity === severityFilter.value)
+  if (acknowledgedFilter.value !== undefined) list = list.filter((a) => a.acknowledged === acknowledgedFilter.value)
   if (keyword.value) list = list.filter((a) => a.message.includes(keyword.value))
   return list
 })
@@ -333,6 +340,7 @@ function loadAlarmPage(page: number) {
     size: 20,
     q: keyword.value,
     severity: severityFilter.value || undefined,
+    acknowledged: acknowledgedFilter.value,
     detectionRunId: detectionRunFilter.value || undefined,
   })
 }
