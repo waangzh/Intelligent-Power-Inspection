@@ -7,6 +7,8 @@ import com.powerinspection.data.DataStoreService;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -17,14 +19,25 @@ public class NotificationService {
   private final DataStoreService dataStore;
   private final SimpMessagingTemplate messagingTemplate;
   private final NotificationRecipientRepository recipientRepository;
+  private final boolean systemEnabled;
 
   public NotificationService(
       DataStoreService dataStore,
       SimpMessagingTemplate messagingTemplate,
       NotificationRecipientRepository recipientRepository) {
+    this(dataStore, messagingTemplate, recipientRepository, true);
+  }
+
+  @Autowired
+  public NotificationService(
+      DataStoreService dataStore,
+      SimpMessagingTemplate messagingTemplate,
+      NotificationRecipientRepository recipientRepository,
+      @Value("${app.notification.system-enabled:false}") boolean systemEnabled) {
     this.dataStore = dataStore;
     this.messagingTemplate = messagingTemplate;
     this.recipientRepository = recipientRepository;
+    this.systemEnabled = systemEnabled;
   }
 
   public Map<String, Object> push(String userId, String type, String title, String content, String link) {
@@ -55,6 +68,7 @@ public class NotificationService {
       String link,
       String idempotencyKey,
       Map<String, Object> extras) {
+    if (isDisabled(type)) return Map.of();
     if (idempotencyKey != null && !idempotencyKey.isBlank()) {
       Map<String, Object> existing = dataStore.list(DataCategory.NOTIFICATION).stream()
           .filter(item -> idempotencyKey.equals(String.valueOf(item.get("idempotencyKey"))))
@@ -70,6 +84,7 @@ public class NotificationService {
   }
 
   public Map<String, Object> pushForAgentAction(String userId, String type, String title, String content, String link, String actionId) {
+    if (isDisabled(type)) return Map.of();
     return dataStore.list(DataCategory.NOTIFICATION).stream()
       .filter(item -> actionId.equals(String.valueOf(item.get("agentActionId"))))
       .findFirst()
@@ -77,6 +92,7 @@ public class NotificationService {
   }
 
   private Map<String, Object> push(String userId, String type, String title, String content, String link, Map<String, Object> extras) {
+    if (isDisabled(type)) return Map.of();
     Map<String, Object> item = new LinkedHashMap<>();
     item.put("id", Ids.next("ntf"));
     item.put("userId", userId);
@@ -99,6 +115,10 @@ public class NotificationService {
     ResourceChangeEvent event = ResourceChangeEvent.created("notification", saved.get("id"));
     publishAfterCommit(userId, event);
     return saved;
+  }
+
+  private boolean isDisabled(String type) {
+    return !systemEnabled && "SYSTEM".equalsIgnoreCase(type);
   }
 
   private void publishAfterCommit(String userId, ResourceChangeEvent event) {

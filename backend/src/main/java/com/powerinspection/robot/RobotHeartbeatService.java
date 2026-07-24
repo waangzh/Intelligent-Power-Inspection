@@ -61,13 +61,7 @@ public class RobotHeartbeatService {
     Instant current = status.getLastHeartbeatAt();
     if (current != null && snapshot.lastHeartbeatAt().isBefore(current)) return;
     if (current != null && snapshot.lastHeartbeatAt().equals(current)) {
-      status.setConnectionStatus(RobotConnectionStatus.CONNECTED.name());
-      status.setOfflineReason(null);
-      status.setBridgeConfigured(true);
-      status.setStatusUpdatedAt(observedAt);
-      repository.save(status);
       syncInventoryPresence(snapshot.robotId(), isOnline(status, observedAt));
-      notifyRobotTransition(snapshot.robotId(), previous, status.getConnectionStatus(), "HEARTBEAT_CONNECTED");
       return;
     }
     status.setLastHeartbeatAt(snapshot.lastHeartbeatAt());
