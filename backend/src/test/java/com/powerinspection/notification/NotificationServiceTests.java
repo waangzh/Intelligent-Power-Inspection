@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.powerinspection.data.DataCategory;
@@ -48,5 +49,47 @@ class NotificationServiceTests {
     verify(dataStore).upsert(any(), any());
     verify(messagingTemplate).convertAndSend(org.mockito.ArgumentMatchers.eq("/topic/notifications/user-1"), any(Object.class));
     verify(messagingTemplate, never()).convertAndSend(org.mockito.ArgumentMatchers.eq("/topic/notifications"), any(Object.class));
+  }
+
+  @Test
+  void disabledSystemNotificationsAreNotPersistedOrPublished() {
+    NotificationService service = new NotificationService(
+        dataStore, messagingTemplate, recipientRepository, false);
+
+    Map<String, Object> result = service.pushEvent(
+        "*", "SYSTEM", "ROBOT_OFFLINE", "ROBOT", "robot-1",
+        "机器人状态异常", "机器人已离线", "/robots/status", null);
+
+    assertThat(result).isEmpty();
+    verifyNoInteractions(dataStore, messagingTemplate, recipientRepository);
+  }
+
+  @Test
+  void disabledSystemNotificationsDoNotBlockTaskNotifications() {
+    NotificationService service = new NotificationService(
+        dataStore, messagingTemplate, recipientRepository, false);
+    when(dataStore.upsert(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
+
+    Map<String, Object> result = service.pushEvent(
+        "user-1", "TASK", "TASK_CREATED", "TASK", "task-1",
+        "任务已创建", "任务已创建", "/tasks/task-1", null);
+
+    assertThat(result).containsEntry("type", "TASK");
+    verify(dataStore).upsert(any(), any());
+    verify(recipientRepository).save(any(NotificationRecipientEntity.class));
+    verify(messagingTemplate).convertAndSend(
+        org.mockito.ArgumentMatchers.eq("/topic/notifications/user-1"), any(Object.class));
+  }
+
+  @Test
+  void disabledSystemNotificationsAreNotResolvedForAgentActions() {
+    NotificationService service = new NotificationService(
+        dataStore, messagingTemplate, recipientRepository, false);
+
+    Map<String, Object> result = service.pushForAgentAction(
+        "user-1", "SYSTEM", "系统异常", "后台任务失败", "/system", "action-1");
+
+    assertThat(result).isEmpty();
+    verifyNoInteractions(dataStore, messagingTemplate, recipientRepository);
   }
 }
