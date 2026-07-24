@@ -26,6 +26,8 @@ spring:
     enabled: true
 
 app:
+  notification:
+    system-enabled: ${APP_NOTIFICATION_SYSTEM_ENABLED:false}
   robot-inspection:
     max-image-bytes: ${ROBOT_INSPECTION_MAX_IMAGE_BYTES:20971520}
     max-image-pixels: ${ROBOT_INSPECTION_MAX_IMAGE_PIXELS:40000000}

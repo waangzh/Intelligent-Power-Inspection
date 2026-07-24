@@ -11,6 +11,8 @@ spring:
     enabled: true
 
 app:
+  notification:
+    system-enabled: true
   scheduling:
     enabled: false
   jwt:
