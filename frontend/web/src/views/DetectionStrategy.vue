@@ -204,7 +204,14 @@
               <div v-else-if="manualResult.status === 'RUNNING'" class="result-image">
                 <figure>
                   <figcaption>待检测原图</figcaption>
-                  <img :src="activePreviewUrl || manualResult.inputImageUrl" alt="待检测原图" />
+                  <div class="result-image__canvas">
+                    <el-image
+                      :src="activePreviewUrl || manualResult.inputImageUrl"
+                      fit="contain"
+                      class="result-image__preview"
+                      alt="待检测原图"
+                    />
+                  </div>
                 </figure>
               </div>
               <el-empty v-else-if="manualResult.status === 'SUCCEEDED'" description="模型未定位到目标" :image-size="56" />
@@ -1171,18 +1178,22 @@ watch(sourceMode, (mode) => {
 
 .result-image__canvas {
   position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #0f172a;
 }
 
 .result-image__preview {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  background: #0f172a;
+  height: 100%;
 }
 
 .result-image__preview :deep(img) {
   display: block;
   width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 

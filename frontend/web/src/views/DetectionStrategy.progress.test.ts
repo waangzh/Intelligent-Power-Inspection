@@ -26,6 +26,15 @@ describe('DetectionStrategy running progress', () => {
     expect(source).toContain('resultImageRef.value?.showPreview?.()')
   })
 
+  it('uses the same constrained canvas for running and completed images', () => {
+    expect(source.match(/class="result-image__canvas"/g)).toHaveLength(2)
+    expect(source.match(/class="result-image__preview"/g)).toHaveLength(2)
+    expect(source).not.toContain('<img :src="activePreviewUrl || manualResult.inputImageUrl"')
+    expect(source).toContain('aspect-ratio: 4 / 3')
+    expect(source).toContain('height: 100%')
+    expect(source).toContain('object-fit: contain')
+  })
+
   it('shows the alarm count and links a completed run to its alarms', () => {
     expect(source).toContain('alarmCount')
     expect(source).toContain('查看告警')
