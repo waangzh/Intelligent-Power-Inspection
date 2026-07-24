@@ -78,7 +78,7 @@ public class AgentToolRegistry {
       case TASK_EVENT -> Map.of("items", list(value.get("items"), Set.of("id", "taskId", "type", "message", "createdAt", "status")));
       case ROBOT -> fields(value, Set.of("id", "name", "status", "battery", "siteId", "updatedAt", "missing"));
       case ROUTE -> fields(value, Set.of("id", "name", "siteId", "status", "checkpointCount", "updatedAt", "missing"));
-      case VISION_RESULT -> Map.of("items", list(value.get("items"), Set.of("title", "content", "sourceId", "imageUrl")));
+      case VISION_RESULT -> Map.of("items", visionItems(value.get("items")));
       default -> fields(value, Set.of("reason", "text", "missing"));
     };
   }
@@ -108,6 +108,49 @@ public class AgentToolRegistry {
       if (item instanceof Map<?, ?> map) result.add(fields(copy(map), allowed));
     }
     return result;
+  }
+  private List<Map<String, Object>> visionItems(Object value) {
+    if (!(value instanceof List<?> values)) return List.of();
+    List<Map<String, Object>> result = new ArrayList<>();
+    for (Object item : values) {
+      if (result.size() >= 20) break;
+      if (!(item instanceof Map<?, ?> raw)) continue;
+      Map<String, Object> source = copy(raw);
+      Map<String, Object> sanitized = fields(source, Set.of("title", "content", "sourceId", "imageUrl"));
+      if (source.get("payload") instanceof Map<?, ?> payload) sanitized.put("payload", visionPayload(copy(payload)));
+      result.add(sanitized);
+    }
+    return result;
+  }
+  private Map<String, Object> visionPayload(Map<String, Object> value) {
+    Set<String> allowed = Set.of("type", "prompt", "score", "bbox", "label", "rawResult", "imageUrl", "findings", "reason", "errorMessage");
+    Map<String, Object> result = new LinkedHashMap<>();
+    for (String key : allowed) {
+      if (value.containsKey(key)) result.put(key, jsonSafe(value.get(key), 0));
+    }
+    return result;
+  }
+  private Object jsonSafe(Object value, int depth) {
+    if (value == null || value instanceof Number || value instanceof Boolean) return value;
+    if (value instanceof String text) return abbreviate(text, 2000);
+    if (depth >= 6) return "[truncated]";
+    if (value instanceof Map<?, ?> map) {
+      Map<String, Object> result = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        if (result.size() >= 50) break;
+        result.put(abbreviate(String.valueOf(entry.getKey()), 200), jsonSafe(entry.getValue(), depth + 1));
+      }
+      return result;
+    }
+    if (value instanceof List<?> list) {
+      List<Object> result = new ArrayList<>();
+      for (Object item : list) {
+        if (result.size() >= 50) break;
+        result.add(jsonSafe(item, depth + 1));
+      }
+      return result;
+    }
+    return null;
   }
   private Map<String, Object> copy(Map<?, ?> source) { Map<String, Object> value = new LinkedHashMap<>(); source.forEach((key, item) -> value.put(String.valueOf(key), item)); return value; }
   private String summary(String title, Map<String, Object> payload) { return Boolean.TRUE.equals(payload.get("missing")) ? title + "不存在" : title + "已采集"; }

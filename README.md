@@ -269,11 +269,11 @@ AgentCase（处置案件）
 
 ### 核心能力
 
-- **Plan-Act-Observe 循环**：LLM 规划 → 只读工具 → 观察结果 → 重新规划
+- **Plan-Act-Observe 循环**：LLM 每轮根据当前 Evidence 动态选择只读工具、观察结果并重新规划；模型不可用或决策不合法时降级到确定性规则 Planner
 - **WAITING_HUMAN 闭环**：Agent 提问 → 人工回答 → OPERATOR_INPUT Evidence → 继续编排
 - **Policy Engine**：AUTO_EXECUTE / REQUIRE_APPROVAL / DENY 三级决策
 - **Action 状态机**：PROPOSED → APPROVED → EXECUTING → SUCCEEDED/FAILED，乐观锁 + 幂等键
-- **Action Handler**：通知本人、创建工单草稿
+- **Action Handler**：通知本人、创建工单草稿、确认告警、请求暂停任务；后两者必须经过人工审批
 
 ### 安全边界
 

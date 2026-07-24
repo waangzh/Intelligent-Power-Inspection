@@ -48,6 +48,22 @@ class RuleBasedAgentPlannerTests {
   }
 
   @Test
+  void collectsTaskEventsRobotAndRouteOnFallbackPath() {
+    Map<String, Object> input = Map.of("alarmId", "alarm_1", "taskId", "task_1");
+    PlanningEvidence task = evidence("task", AgentEnums.EvidenceSourceType.TASK,
+      Map.of("task", Map.of("id", "task_1", "robotId", "robot_1", "routeId", "route_1")));
+    PlanningEvidence events = evidence("events", AgentEnums.EvidenceSourceType.TASK_EVENT, Map.of("items", List.of()));
+    PlanningEvidence robot = evidence("robot", AgentEnums.EvidenceSourceType.ROBOT, Map.of("id", "robot_1"));
+    PlanningEvidence route = evidence("route", AgentEnums.EvidenceSourceType.ROUTE, Map.of("id", "route_1"));
+
+    assertThat(planner.decide(context(input, List.of())).toolName()).isEqualTo("get_task");
+    assertThat(planner.decide(context(input, List.of(task))).toolName()).isEqualTo("get_task_events");
+    assertThat(planner.decide(context(input, List.of(task, events))).toolName()).isEqualTo("get_robot");
+    assertThat(planner.decide(context(input, List.of(task, events, robot))).toolName()).isEqualTo("get_route");
+    assertThat(planner.decide(context(input, List.of(task, events, robot, route))).toolName()).isEqualTo("get_alarm");
+  }
+
+  @Test
   void rejectsUnknownToolAndArguments() {
     PlannerDecisionValidator validator = validator();
     assertThatThrownBy(() -> validator.validate(PlannerDecision.callTool("bad", "unknown", Map.of("alarmId", "alarm_1"), List.of()), context(List.of())))
@@ -78,7 +94,11 @@ class RuleBasedAgentPlannerTests {
   }
 
   private AgentPlanningContext context(List<PlanningEvidence> evidence) {
-    return new AgentPlanningContext("case_1", "run_1", "user_1", "review alarm", Map.of("alarmId", "alarm_1"), evidence, List.of(), Instant.now());
+    return context(Map.of("alarmId", "alarm_1"), evidence);
+  }
+
+  private AgentPlanningContext context(Map<String, Object> input, List<PlanningEvidence> evidence) {
+    return new AgentPlanningContext("case_1", "run_1", "user_1", "review alarm", input, evidence, List.of(), Instant.now());
   }
 
   private PlanningEvidence alarm(boolean image) {

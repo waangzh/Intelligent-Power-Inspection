@@ -61,7 +61,7 @@ public class AlarmController {
   @PostMapping("/{id}/ack")
   public ApiResponse<Map<String, Object>> acknowledge(@PathVariable String id) {
     permissionService.require(currentUser.get(), Permission.ALARM_ACK);
-    return ApiResponse.ok(dataStore.patch(DataCategory.ALARM, id, Map.of("acknowledged", true)));
+    return ApiResponse.ok(alarmService.acknowledge(id));
   }
 
   @PostMapping("/ack-all")
