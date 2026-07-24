@@ -253,12 +253,17 @@ function request({ url, method = 'GET', data, auth = true, headers = {}, retried
           if (body.code === 0) {
             resolve(body.data)
           } else {
-            reject(new Error(body.message || '请求失败'))
+            const err = new Error(body.message || '请求失败')
+            err.statusCode = res.statusCode
+            err.apiCode = body.code
+            reject(err)
           }
         } else if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(body)
         } else {
-          reject(new Error(`HTTP ${res.statusCode}`))
+          const err = new Error(`HTTP ${res.statusCode}`)
+          err.statusCode = res.statusCode
+          reject(err)
         }
       },
       fail(err) {
@@ -269,8 +274,18 @@ function request({ url, method = 'GET', data, auth = true, headers = {}, retried
   })
 }
 
+function sanitizeQueryParams(params) {
+  if (!params || typeof params !== 'object') return params
+  const out = {}
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    out[key] = value
+  })
+  return out
+}
+
 function get(url, params) {
-  return request({ url, method: 'GET', data: params })
+  return request({ url, method: 'GET', data: sanitizeQueryParams(params) })
 }
 
 function post(url, data, headers) {

@@ -24,4 +24,21 @@
     </view>
   </view>
   <view wx:if="{{!filtered.length}}" class="empty-hint">暂无消息</view>
+
+  <view class="modal-mask" wx:if="{{showDetail && detail}}" bindtap="closeDetail">
+    <view class="detail-sheet" catchtap="stop">
+      <view class="detail-sheet-head">
+        <text class="tag tag-primary">{{detail.typeLabel}}</text>
+        <text class="muted">{{detail.time}}</text>
+      </view>
+      <view class="detail-sheet-title">{{detail.title}}</view>
+      <view class="detail-sheet-content">{{detail.content}}</view>
+      <view class="detail-sheet-meta">
+        <text class="tag {{detail.read ? 'tag-info' : 'tag-warning'}}">{{detail.read ? '已读' : '未读'}}</text>
+      </view>
+      <view class="detail-sheet-actions">
+        <button size="mini" bindtap="closeDetail">关闭</button>
+      </view>
+    </view>
+  </view>
 </view>

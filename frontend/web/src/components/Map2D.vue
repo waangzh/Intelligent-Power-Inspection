@@ -14,7 +14,7 @@ import L from 'leaflet'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import type { Area, LatLng, Route } from '@/types'
+import type { Alarm, Area, LatLng, Route } from '@/types'
 import type { RobotLocation, RobotTrackPoint } from '@/types/robotLocation'
 import { defaultGeoCenter, isValidGeoCoordinate } from '@/utils/geoCoordinate'
 import {
@@ -32,6 +32,8 @@ const props = defineProps<{
   zoom?: number
   route?: Route | null
   areas?: Area[]
+  areaStyle?: 'default' | 'restricted'
+  alarms?: Alarm[]
   /** @deprecated Prefer robotLocation for GPS-backed positions */
   robotPosition?: LatLng | null
   robotLocation?: RobotLocation | null
@@ -200,6 +202,20 @@ function renderRoute() {
       .bindTooltip(`${cp.seq}`)
       .addTo(markersLayer!)
   })
+
+  props.alarms?.forEach((alarm) => {
+    const checkpoint = route.checkpoints.find((item) => item.id === alarm.checkpointId)
+    if (!checkpoint || !canDrawOnGeoMap(checkpoint.position)) return
+    const icon = L.divIcon({
+      className: 'alarm-map-marker',
+      html: '<span class="alarm-map-triangle"></span>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 18],
+    })
+    L.marker(toLeaflet(checkpoint.position), { icon })
+      .bindPopup(`<b>${escapeHtml(alarm.message)}</b><br/>${escapeHtml(alarm.routeName)}${alarm.checkpointName ? ` · ${escapeHtml(alarm.checkpointName)}` : ''}`)
+      .addTo(markersLayer!)
+  })
 }
 
 function renderAreas() {
@@ -209,10 +225,11 @@ function renderAreas() {
     const polygon = area.polygon.filter(canDrawOnGeoMap)
     if (polygon.length >= 3) {
       L.polygon(polygon.map(toLeaflet), {
-        color: '#67c23a',
-        fillColor: '#67c23a',
-        fillOpacity: 0.12,
+        color: props.areaStyle === 'restricted' ? '#df8b31' : '#67c23a',
+        fillColor: props.areaStyle === 'restricted' ? '#f59e0b' : '#67c23a',
+        fillOpacity: props.areaStyle === 'restricted' ? 0.18 : 0.12,
         weight: 2,
+        dashArray: props.areaStyle === 'restricted' ? '6 4' : undefined,
       })
         .bindPopup(escapeHtml(area.name))
         .addTo(areasLayer!)
@@ -408,7 +425,7 @@ onUnmounted(() => {
 })
 
 watch(
-  () => props.route,
+  () => [props.route, props.alarms],
   () => {
     if (props.route) currentPath = [...props.route.path]
     renderRoute()
@@ -467,6 +484,21 @@ watch(
 .robot-marker {
   background: transparent;
   border: none;
+}
+
+.alarm-map-marker {
+  background: transparent;
+  border: 0;
+}
+
+.alarm-map-triangle {
+  display: block;
+  width: 0;
+  height: 0;
+  border-right: 10px solid transparent;
+  border-bottom: 18px solid #f04438;
+  border-left: 10px solid transparent;
+  filter: drop-shadow(0 2px 3px rgba(110, 24, 19, 0.35));
 }
 
 .robot-gnss-marker {

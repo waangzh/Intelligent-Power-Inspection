@@ -680,6 +680,14 @@ export function useRosMapRouteEditor(
   }
 
   function clearRouteAnnotations() {
+    form.startName = '初始起点'
+    form.startX = 0
+    form.startY = 0
+    form.startYaw = 0
+    form.publishInitialPose = true
+    form.covX = 0.25
+    form.covY = 0.25
+    form.covYaw = 0.0685
     targets.value = []
     keepoutZones.value = []
     activeZoneId.value = null

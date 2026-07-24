@@ -5,6 +5,7 @@ const { ALARM_SEVERITY_LABELS, DETECTION_LABELS } = require('../../utils/constan
 const { formatDateTimeShort } = require('../../utils/date-time')
 const { formatBusinessMessage } = require('../../utils/display-text')
 const { resolveSession } = require('../../utils/session-user')
+const { resolvePhotoSrc } = require('../../utils/work-order-photo')
 
 const SEVERITY_OPTIONS = [
   { value: '', label: '全部级别' },
@@ -58,6 +59,7 @@ Page({
       })
       const enriched = alarms.map((a) => ({
         ...a,
+        imageUrl: resolvePhotoSrc(a.imageUrl),
         message: formatBusinessMessage(a.message),
         severityLabel: ALARM_SEVERITY_LABELS[a.severity],
         typeLabel: DETECTION_LABELS[a.type] || a.type,

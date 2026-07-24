@@ -158,18 +158,7 @@
         </el-table-column>
         <el-table-column label="进度" width="160">
           <template #default="{ row }">
-            <div class="progress-cell">
-              <el-button
-                v-if="taskStore.executionFor(row.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(row))"
-                plain
-                size="small"
-                class="action-btn action-detail"
-                :disabled="!!startDisabledReason(row.id)"
-                :title="startDisabledReason(row.id)"
-                @click="openStartOptions(row.id)"
-              >启动</el-button>
-              <el-progress :percentage="taskStore.executionFor(row.id)?.progress ?? row.progress" :stroke-width="8" />
-            </div>
+            <el-progress :percentage="taskStore.executionFor(row.id)?.progress ?? row.progress" :stroke-width="8" />
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="160">
@@ -186,6 +175,15 @@
               <el-button v-if="can('task:control') && row.executionId && taskStore.statusOf(row) === 'PAUSED'" plain size="small" class="action-btn action-detail" @click="controlTask(row.id, 'RESUME')">恢复</el-button>
               <el-button v-if="can('task:takeover') && row.executionId && taskStore.statusOf(row) === 'RUNNING'" plain size="small" class="action-btn action-claim" @click="controlTask(row.id, 'TAKEOVER')">接管</el-button>
               <el-button v-if="can('task:dispatch')" plain size="small" class="action-btn action-submit" @click="openAgentForTask(row.id)">Agent</el-button>
+              <el-button
+                v-if="taskStore.executionFor(row.id) && ['CREATED', 'START_FAILED'].includes(taskStore.statusOf(row))"
+                plain
+                size="small"
+                class="action-btn action-detail"
+                :disabled="!!startDisabledReason(row.id)"
+                :title="startDisabledReason(row.id)"
+                @click="openStartOptions(row.id)"
+              >启动</el-button>
               <el-button plain size="small" class="action-btn action-detail" @click="router.push(`/tasks/${row.id}`)">详情</el-button>
               <el-button v-if="canCancelTask(row)" plain size="small" class="action-btn action-danger" @click="cancelTask(row.id)">取消</el-button>
               <el-button v-if="canEstopTask(row)" plain size="small" class="action-btn action-danger" @click="emergencyStopTask(row.id)">急停</el-button>
@@ -229,7 +227,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   CircleCheck,
   Clock,
@@ -262,11 +260,12 @@ const PENDING_STATUSES: TaskStatus[] = ['CREATED', 'DISPATCHED', 'START_FAILED']
 const DONE_STATUSES: TaskStatus[] = ['COMPLETED', 'CANCELLED', 'ESTOPPED', 'FAILED']
 
 const router = useRouter()
+const route = useRoute()
 const { can, canAny } = usePermission()
 const taskPage = ref(0)
 const keyword = ref('')
-const statusFilter = ref('')
-const activeStatKey = ref('ALL')
+const statusFilter = ref(queryText(route.query.status) === 'RUNNING' ? 'RUNNING' : '')
+const activeStatKey = ref(statusFilter.value || 'ALL')
 const statIcons = [List, VideoPlay, Clock, CircleCheck]
 
 const taskStore = useTaskStore()
@@ -394,6 +393,11 @@ const defaultRobotLabel = computed(() => {
 
 function routeName(id: string) {
   return routeStore.getRouteById(id)?.name ?? '-'
+}
+
+function queryText(value: unknown) {
+  if (Array.isArray(value)) return value.length ? String(value[0] ?? '') : ''
+  return typeof value === 'string' ? value : ''
 }
 
 function robotName(id: string) {
@@ -583,17 +587,6 @@ function openAgentForTask(taskId: string) {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.progress-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.progress-cell :deep(.el-progress) {
-  flex: 1;
-  min-width: 60px;
 }
 
 @media (max-width: 768px) {

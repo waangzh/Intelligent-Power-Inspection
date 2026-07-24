@@ -218,7 +218,13 @@ export interface Route {
   mapId?: string
   /** ROS map route executor JSON (version 2). */
   executorJson?: import('@/types/routeExecutor').RouteExecutorDocument | null
+  status?: 'ACTIVE' | 'ARCHIVED'
   createdAt: string
+}
+
+export interface RouteDeletionResult {
+  routeId: string
+  archived: boolean
 }
 
 export interface RobotPose {
@@ -384,6 +390,7 @@ export interface InspectionTask {
 export interface TaskExecution {
   taskId: string
   executionId: string
+  previousExecutionId?: string | null
   routeRevisionId: string
   robotId: string
   deploymentId?: string | null

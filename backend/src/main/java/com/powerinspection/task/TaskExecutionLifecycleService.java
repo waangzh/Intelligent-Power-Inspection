@@ -3,6 +3,7 @@ package com.powerinspection.task;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerinspection.common.ApiException;
+import com.powerinspection.common.Ids;
 import com.powerinspection.data.DataCategory;
 import com.powerinspection.data.DataStoreService;
 import com.powerinspection.robot.RobotConnectionStatus;
@@ -68,12 +69,10 @@ public class TaskExecutionLifecycleService {
     TaskStartMode startMode = TaskStartMode.defaulted(requestedMode);
     requireKey(idempotencyKey);
     TaskExecutionEntity execution = requireExecutionForStart(taskId);
-    log.info("event=task_start_requested taskId={} robotId={} executionId={} startMode={} operatorId={}",
-      taskId, execution.getRobotId(), execution.getExecutionId(), startMode, operatorId);
-    String fingerprint = fingerprint(taskId, execution, startMode);
     TaskExecutionEntity sameKey = executions.findByStartRequestId(idempotencyKey).orElse(null);
     if (sameKey != null) {
-      if (!sameKey.getTaskId().equals(taskId) || !fingerprint.equals(sameKey.getStartRequestFingerprint())) {
+      String sameKeyFingerprint = fingerprint(taskId, sameKey, startMode);
+      if (!sameKey.getTaskId().equals(taskId) || !sameKeyFingerprint.equals(sameKey.getStartRequestFingerprint())) {
         throw ApiException.conflict("Idempotency-Key 已用于不同的启动请求");
       }
       return detail(sameKey);
@@ -86,6 +85,12 @@ public class TaskExecutionLifecycleService {
     }
     StartContext context = requireStartContext(taskId, execution, startMode);
     String now = Instant.now().toString();
+    if (TaskExecutionStatus.START_FAILED.name().equals(execution.getStatus())) {
+      execution = createRetryExecution(taskId, execution, now);
+    }
+    log.info("event=task_start_requested taskId={} robotId={} executionId={} startMode={} operatorId={}",
+      taskId, execution.getRobotId(), execution.getExecutionId(), startMode, operatorId);
+    String fingerprint = fingerprint(taskId, execution, startMode);
     execution.setDeploymentId(context.deployment().getId());
     execution.setExecutorRouteId(context.executorRouteId());
     execution.setStartRequestId(idempotencyKey);
@@ -158,7 +163,7 @@ public class TaskExecutionLifecycleService {
 
   public Map<String, Object> detail(String taskId) { return detail(requireExecution(taskId)); }
 
-  public boolean hasExecution(String taskId) { return executions.existsById(taskId); }
+  public boolean hasExecution(String taskId) { return executions.existsByTaskId(taskId); }
 
   public List<String> nonTerminalExecutionIds() {
     return executions.findByStatusIn(TaskExecutionStatus.NON_TERMINAL).stream().map(TaskExecutionEntity::getExecutionId).toList();
@@ -323,6 +328,7 @@ public class TaskExecutionLifecycleService {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("taskId", item.getTaskId());
     result.put("executionId", item.getExecutionId());
+    result.put("previousExecutionId", item.getPreviousExecutionId());
     result.put("routeRevisionId", item.getRouteRevisionId());
     result.put("robotId", item.getRobotId());
     result.put("deploymentId", item.getDeploymentId());
@@ -446,12 +452,48 @@ public class TaskExecutionLifecycleService {
   }
 
   private TaskExecutionEntity requireExecution(String taskId) {
-    return executions.findById(taskId).orElseThrow(() -> ApiException.conflict("任务未绑定不可变路线修订执行快照"));
+    String executionId = currentExecutionId(taskId);
+    return executions.findByExecutionId(executionId)
+      .orElseThrow(() -> ApiException.conflict("任务当前执行快照不存在"));
   }
 
   private TaskExecutionEntity requireExecutionForStart(String taskId) {
-    return executions.findByTaskIdForStart(taskId)
-      .orElseThrow(() -> ApiException.conflict("任务未绑定不可变路线修订执行快照"));
+    String executionId = currentExecutionId(taskId);
+    return executions.findByExecutionIdForUpdate(executionId)
+      .orElseThrow(() -> ApiException.conflict("任务当前执行快照不存在"));
+  }
+
+  private String currentExecutionId(String taskId) {
+    Map<String, Object> task = dataStore.get(DataCategory.TASK, taskId);
+    String executionId = text(task.get("executionId"));
+    if (!nonBlank(executionId)) throw ApiException.conflict("任务未绑定不可变路线修订执行快照");
+    return executionId;
+  }
+
+  private TaskExecutionEntity createRetryExecution(String taskId, TaskExecutionEntity previous, String now) {
+    TaskExecutionEntity retry = new TaskExecutionEntity();
+    retry.setTaskId(taskId);
+    retry.setExecutionId(Ids.next("exec"));
+    retry.setPreviousExecutionId(previous.getExecutionId());
+    retry.setRouteRevisionId(previous.getRouteRevisionId());
+    retry.setRobotId(previous.getRobotId());
+    retry.setRouteContentSha256(previous.getRouteContentSha256());
+    retry.setMapImageSha256(previous.getMapImageSha256());
+    retry.setStatus(TaskExecutionStatus.CREATED.name());
+    retry.setLastRobotSequence(0);
+    retry.setCreatedAt(now);
+    retry.setUpdatedAt(now);
+    executions.save(retry);
+
+    Map<String, Object> task = new LinkedHashMap<>(dataStore.get(DataCategory.TASK, taskId));
+    if (!Objects.equals(text(task.get("executionId")), previous.getExecutionId())) {
+      throw ApiException.conflict("任务当前执行已变化，请刷新后重试");
+    }
+    task.put("executionId", retry.getExecutionId());
+    dataStore.upsert(DataCategory.TASK, task);
+    log.info("event=task_execution_retry_created taskId={} previousExecutionId={} executionId={}",
+      taskId, previous.getExecutionId(), retry.getExecutionId());
+    return retry;
   }
 
   private TaskExecutionEntity requireByExecutionId(String executionId) {

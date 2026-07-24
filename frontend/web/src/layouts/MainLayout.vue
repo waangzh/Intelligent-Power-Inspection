@@ -158,7 +158,7 @@ import { useNotificationStore } from '@/stores/notification'
 import { ROLE_LABELS } from '@/types/auth'
 import { canAccess } from '@/utils/permission'
 import UserAvatar from '@/components/UserAvatar.vue'
-import logoUrl from '../../img/logo.png'
+import logoUrl from '../../img/logo2.png'
 
 const route = useRoute()
 const router = useRouter()
@@ -299,17 +299,17 @@ function handleUserCommand(command: string) {
 
 .brand-mark {
   display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   place-items: center;
   color: #ffd529;
 }
 
 .brand-logo {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
 }
 

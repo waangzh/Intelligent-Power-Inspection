@@ -257,7 +257,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import ListPagination from '@/components/ListPagination.vue'
 import Map2D from '@/components/Map2D.vue'
@@ -282,10 +282,12 @@ const robotStore = useRobotStore()
 const locationStore = useRobotLocationStore()
 const siteStore = useSiteStore()
 const router = useRouter()
+const route = useRoute()
 
 const selectedRobotId = ref('')
 const robotPage = ref(0)
 const robotKeyword = ref('')
+const robotStatusFilter = computed(() => queryText(route.query.status))
 const bindingDialogVisible = ref(false)
 const bindingSaving = ref(false)
 const bindingSiteId = ref('')
@@ -323,15 +325,31 @@ const mapCenter = computed(() => {
 
 const filteredRobots = computed(() => {
   const q = robotKeyword.value.trim().toLowerCase()
-  const list = robotStore.robots
+  let list = robotStore.robots
+  if (robotStatusFilter.value === 'ABNORMAL') {
+    list = list.filter((item) => item.status === 'OFFLINE' || item.telemetry?.bridgeReachable === false || (item.telemetry?.lastScanAgeSec ?? 0) > 15 || item.telemetry?.patrolState === 'failed' || item.telemetry?.nav2Status === 'not_running' && item.status === 'BUSY')
+  }
   if (!q) return list
   return list.filter(
     (item) => item.name.toLowerCase().includes(q) || item.model.toLowerCase().includes(q) || item.serialNo.toLowerCase().includes(q),
   )
 })
 
+function queryText(value: unknown) {
+  if (Array.isArray(value)) return value.length ? String(value[0] ?? '') : ''
+  return typeof value === 'string' ? value : ''
+}
+
 watch(
   () => robotStore.robots.map((item) => item.id),
+  (ids) => {
+    if (!ids.includes(selectedRobotId.value)) selectedRobotId.value = ids[0] ?? ''
+  },
+  { immediate: true },
+)
+
+watch(
+  () => filteredRobots.value.map((item) => item.id),
   (ids) => {
     if (!ids.includes(selectedRobotId.value)) selectedRobotId.value = ids[0] ?? ''
   },
