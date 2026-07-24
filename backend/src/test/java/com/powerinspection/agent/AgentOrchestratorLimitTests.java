@@ -86,7 +86,7 @@ class AgentOrchestratorLimitTests {
     run.setStatus(AgentEnums.RunStatus.RUNNING);
     run.setGoalSnapshot(created.goal());
     run.setInputSnapshotJson("{}");
-    run.setPlannerType("LLM_CONSTRAINED");
+    run.setPlannerType("LLM_DYNAMIC");
     run.setStartedAt(now);
     run.setCreatedById(dispatcher.getId());
     run.setCreatedAt(now);

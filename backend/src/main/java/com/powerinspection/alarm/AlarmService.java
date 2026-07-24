@@ -61,6 +61,13 @@ public class AlarmService {
     return saved;
   }
 
+  @Transactional
+  public Map<String, Object> acknowledge(String alarmId) {
+    Map<String, Object> saved = dataStore.patch(DataCategory.ALARM, alarmId, Map.of("acknowledged", true));
+    publish(saved);
+    return saved;
+  }
+
   private Map<String, Object> autoConvert(String alarmId) {
     try {
       workOrderCommandService.createFromAlarm(alarmId, ConversionSource.AUTO, null, new CreateWorkOrderFromAlarmRequest());

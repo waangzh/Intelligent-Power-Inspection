@@ -98,7 +98,7 @@ public class AgentOrchestrator {
       try {
         decision = llmPlanner.decide(context);
         decisionValidator.validate(decision, context);
-        run.setPlannerType("LLM_CONSTRAINED");
+        run.setPlannerType("LLM_DYNAMIC");
       } catch (Exception ex) {
         degraded = true;
         run.setPlannerType("RULE_BASED");

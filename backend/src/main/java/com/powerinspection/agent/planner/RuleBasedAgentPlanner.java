@@ -12,6 +12,23 @@ public class RuleBasedAgentPlanner implements AgentPlanner {
   public PlannerDecision decide(AgentPlanningContext context) {
     String alarmId = text(context.input().get("alarmId"));
     String taskId = text(context.input().get("taskId"));
+    if (hasText(taskId)) {
+      if (!context.hasEvidence(AgentEnums.EvidenceSourceType.TASK)) {
+        return PlannerDecision.callTool("读取关联任务上下文", "get_task", Map.of("taskId", taskId), context.evidenceIds());
+      }
+      if (!context.hasEvidence(AgentEnums.EvidenceSourceType.TASK_EVENT)) {
+        return PlannerDecision.callTool("读取任务事件轨迹", "get_task_events", Map.of("taskId", taskId), context.evidenceIds());
+      }
+      Map<String, Object> task = taskDetails(context.firstEvidence(AgentEnums.EvidenceSourceType.TASK));
+      String robotId = text(task.get("robotId"));
+      if (hasText(robotId) && !context.hasEvidence(AgentEnums.EvidenceSourceType.ROBOT)) {
+        return PlannerDecision.callTool("读取任务关联机器人状态", "get_robot", Map.of("robotId", robotId), context.evidenceIds());
+      }
+      String routeId = text(task.get("routeId"));
+      if (hasText(routeId) && !context.hasEvidence(AgentEnums.EvidenceSourceType.ROUTE)) {
+        return PlannerDecision.callTool("读取任务关联路线", "get_route", Map.of("routeId", routeId), context.evidenceIds());
+      }
+    }
     if (!hasText(alarmId)) {
       if (hasText(taskId) && !context.hasEvidence(AgentEnums.EvidenceSourceType.ALARM)) {
         return PlannerDecision.callTool("先读取任务关联告警", "list_task_alarms", Map.of("taskId", taskId), context.evidenceIds());
@@ -45,6 +62,15 @@ public class RuleBasedAgentPlanner implements AgentPlanner {
 
   private Map<String, Object> args(String alarmId, String taskId) {
     return hasText(taskId) ? Map.of("alarmId", alarmId, "taskId", taskId) : Map.of("alarmId", alarmId);
+  }
+
+  private Map<String, Object> taskDetails(PlanningEvidence evidence) {
+    if (evidence != null && evidence.payload().get("task") instanceof Map<?, ?> raw) {
+      Map<String, Object> task = new java.util.LinkedHashMap<>();
+      raw.forEach((key, value) -> task.put(String.valueOf(key), value));
+      return task;
+    }
+    return Map.of();
   }
 
   private boolean hasImage(PlanningEvidence evidence) {

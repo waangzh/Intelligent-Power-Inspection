@@ -50,7 +50,7 @@ public class DefaultAgentPolicyService implements AgentPolicyService {
           approval(
               AgentEnums.RiskLevel.HIGH,
               "AGENT_TASK_PAUSE_APPROVAL",
-              "任务暂停请求必须经过人工审批，且本阶段不会控制机器人。");
+              "任务暂停请求必须经过人工审批；审批后仅进入受控执行队列，最终状态以设备事件为准。");
       case PUSH_NOTIFICATION ->
           approval(
               AgentEnums.RiskLevel.LOW,

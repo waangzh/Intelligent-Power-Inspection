@@ -168,7 +168,7 @@ public class AuditedAgentService {
     run.setStatus(AgentEnums.RunStatus.RUNNING);
     run.setGoalSnapshot(agentCase.getGoal());
     run.setInputSnapshotJson(json(input));
-    run.setPlannerType("LLM_CONSTRAINED");
+    run.setPlannerType("LLM_DYNAMIC");
     run.setDegraded(false);
     run.setModelName("configured-agent-llm");
     run.setPromptVersion("phase2-v1");
