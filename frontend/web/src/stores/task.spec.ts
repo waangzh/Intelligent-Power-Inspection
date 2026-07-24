@@ -69,6 +69,17 @@ describe('任务执行轮询与启动状态', () => {
     store.stopExecutionPolling()
   })
 
+  it('首次加载任务列表时同步执行快照状态', async () => {
+    const store = useTaskStore()
+    vi.mocked(resourcesApi.getTaskExecution).mockResolvedValue(execution('FAILED'))
+
+    await store.loadDynamic()
+
+    expect(resourcesApi.getTaskExecution).toHaveBeenCalledWith('task-1')
+    expect(store.statusOf(task)).toBe('FAILED')
+    store.stopExecutionPolling()
+  })
+
   it('启动失败后重启会同步后端返回的新执行 ID', async () => {
     const store = useTaskStore()
     const retry = { ...execution('STARTING'), executionId: 'exec-2', previousExecutionId: 'exec-1' }

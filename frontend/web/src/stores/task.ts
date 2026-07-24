@@ -40,6 +40,8 @@ export const useTaskStore = defineStore('task', () => {
     const result = await resourcesApi.listTasks(query)
     tasks.value = result.items
     total.value = result.total
+    await refreshExecutions()
+    startExecutionPolling()
   }
 
   async function loadRecords(query: ListQuery = { size: 20 }) {
