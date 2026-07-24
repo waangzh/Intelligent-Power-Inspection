@@ -344,6 +344,14 @@ const canUndo = computed(() => historyIndex.value > 0)
 const canRedo = computed(() => historyIndex.value >= 0 && historyIndex.value < history.value.length - 1)
 const canDeleteSelection = computed(() => activeTab.value === 'targets' ? Boolean(selectedTarget.value) : activeTab.value === 'keepout' ? Boolean(activeKeepoutZone.value) : false)
 
+function hasRouteAnnotations() {
+  return targets.value.length > 0
+    || keepoutZones.value.some(zone => zone.polygon.length > 0)
+    || Math.abs(form.startX) > Number.EPSILON
+    || Math.abs(form.startY) > Number.EPSILON
+    || Math.abs(form.startYaw) > Number.EPSILON
+}
+
 function resetHistory(document: RouteExecutorDocument | null | undefined) {
   history.value = document ? [JSON.stringify(document as unknown)] : []
   historyIndex.value = document ? 0 : -1
@@ -575,7 +583,14 @@ function onZoneFieldChange(field: 'name' | 'id' | 'enabled' | 'maskPaddingM', va
 watch(() => props.mapId, (mapId) => void loadPersistedMap(mapId), { immediate: true })
 watch(() => props.initialJson, (document) => resetHistory(document ?? exportDocument()), { immediate: true })
 
-defineExpose({ exportDocument, validateForExport, downloadJson, openRouteImport: () => jsonInputRef.value?.click() })
+defineExpose({
+  exportDocument,
+  validateForExport,
+  downloadJson,
+  openRouteImport: () => jsonInputRef.value?.click(),
+  hasRouteAnnotations,
+  clearRouteAnnotations,
+})
 </script>
 
 <style scoped>

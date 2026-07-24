@@ -33,8 +33,13 @@
           <div class="context-map">
             <dt>地图资产</dt>
             <dd>
-              <el-select v-model="selectedMapAssetId" clearable filterable placeholder="选择地图资产" :loading="mapAssetsLoading" @change="onMapAssetChange">
-                <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id" />
+              <el-select :model-value="selectedMapAssetId" filterable placeholder="选择地图资产" popper-class="route-map-asset-popper" :loading="mapAssetsLoading || mapSwitching" :disabled="mapSwitching" @change="onMapAssetChange">
+                <el-option v-for="asset in availableAssets" :key="asset.id" :label="`${asset.yamlName} · ${asset.width}×${asset.height}`" :value="asset.id">
+                  <span class="map-asset-option">
+                    <span class="map-asset-option-name">{{ asset.yamlName }} · {{ asset.width }}×{{ asset.height }}</span>
+                    <time class="map-asset-option-time">{{ mapAssetTimeLabel(asset) }}</time>
+                  </span>
+                </el-option>
               </el-select>
             </dd>
           </div>
@@ -247,14 +252,49 @@
         </main>
       </div>
     </el-card>
+
+    <el-dialog
+      v-model="planningHandoffVisible"
+      title="选择规划路线"
+      width="min(620px, 92vw)"
+      :close-on-click-modal="!applyingPlanningHandoff"
+      :close-on-press-escape="!applyingPlanningHandoff"
+      :show-close="!applyingPlanningHandoff"
+      @closed="clearPlanningHandoffQuery"
+    >
+      <div v-if="planningHandoffAsset" class="planning-handoff">
+        <div class="planning-handoff-map">
+          <span><el-icon><MapLocation /></el-icon></span>
+          <div>
+            <small>已审核二维地图</small>
+            <strong>{{ planningHandoffAsset.yamlName }}</strong>
+            <p>{{ currentHandoffSiteName }} · {{ planningHandoffAsset.width }}×{{ planningHandoffAsset.height }} px · {{ planningHandoffAsset.resolution }} m/px</p>
+          </div>
+          <el-tag type="success" effect="light">可用于规划</el-tag>
+        </div>
+        <p class="planning-handoff-intro">选择一个现有草稿，或新建路线。确认后地图会自动加载到规划画布。</p>
+        <el-radio-group v-model="planningHandoffRouteId" class="planning-route-options">
+          <el-radio value="__new__" border>
+            <span class="route-option-copy"><strong>新建路线</strong><small>创建空白路线并从该地图开始标注</small></span>
+          </el-radio>
+          <el-radio v-for="routeOption in siteRoutes" :key="routeOption.id" :value="routeOption.id" border>
+            <span class="route-option-copy"><strong>{{ routeOption.name }}</strong><small>{{ targetCount(routeOption) }} 个巡检点 · {{ routeLifecycleLabel(routeOption) }}</small></span>
+          </el-radio>
+        </el-radio-group>
+      </div>
+      <template #footer>
+        <el-button :disabled="applyingPlanningHandoff" @click="planningHandoffVisible = false">取消</el-button>
+        <el-button type="primary" :loading="applyingPlanningHandoff" :disabled="!planningHandoffRouteId" @click="applyPlanningHandoff">加载地图并规划</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { resourcesApi } from '@/api/resources'
 import PageHeader from '@/components/PageHeader.vue'
 import ListPagination from '@/components/ListPagination.vue'
@@ -276,6 +316,7 @@ const siteStore = useSiteStore()
 const routeStore = useRouteStore()
 const { can } = usePermission()
 const robotStore = useRobotStore()
+const pageRoute = useRoute()
 const router = useRouter()
 
 const selectedSiteId = ref(siteStore.sites[0]?.id ?? '')
@@ -308,7 +349,12 @@ const deploymentError = ref('')
 const reconcilingDeploymentId = ref('')
 const mapAssets = ref<MapAsset[]>([])
 const mapAssetsLoading = ref(false)
+const mapSwitching = ref(false)
 const selectedMapAssetId = ref('')
+const planningHandoffVisible = ref(false)
+const planningHandoffAsset = shallowRef<MapAsset | null>(null)
+const planningHandoffRouteId = ref('')
+const applyingPlanningHandoff = ref(false)
 const initialLoading = ref(false)
 const initialLoadError = ref('')
 const initializing = ref(false)
@@ -333,6 +379,7 @@ const draftSaveLabel = computed(() => ({ unsaved: '未保存', saving: '保存�
 const publishBlockReason = computed(() => routePublishBlockReason(Boolean(currentRoute.value), hasUnsavedChanges.value, draftState.value))
 const canCreateRevision = computed(() => Boolean(can('route:edit') && !publishBlockReason.value))
 const currentRouteSiteName = computed(() => currentRoute.value ? siteStore.getSiteById(currentRoute.value.siteId)?.name ?? currentRoute.value.siteId : '-')
+const currentHandoffSiteName = computed(() => planningHandoffAsset.value ? siteStore.getSiteById(planningHandoffAsset.value.siteId)?.name ?? planningHandoffAsset.value.siteId : '-')
 const currentSavedAt = computed(() => draftState.value?.draft?.updatedAt ? `最近保存 ${formatTime(draftState.value.draft.updatedAt)}` : '尚未保存')
 const validationLabel = computed(() => {
   if (!draftValidation.value) return '待校验'
@@ -433,7 +480,12 @@ async function initializeRoutePlan() {
     await siteStore.loadSites()
     if (requestId !== initializeRequest) return
 
-    selectedSiteId.value = siteStore.sites[0]?.id ?? ''
+    const handoffSiteId = queryText(pageRoute.query.siteId)
+    const handoffMapAssetId = queryText(pageRoute.query.mapAssetId)
+    if (handoffMapAssetId && !handoffSiteId) throw new Error('路线规划链接缺少站点信息，请从建图审核页重新进入')
+    if (handoffSiteId && !siteStore.sites.some(site => site.id === handoffSiteId)) throw new Error('目标地图所属站点不存在或当前账号不可访问')
+
+    selectedSiteId.value = handoffSiteId || siteStore.sites[0]?.id || ''
     if (!selectedSiteId.value) return
 
     const applied = await routeStore.load(selectedSiteId.value, { page: 0, size: 20 })
@@ -442,9 +494,11 @@ async function initializeRoutePlan() {
     const firstRouteId = siteRoutes.value[0]?.id ?? ''
     selectedRouteId.value = firstRouteId
     await loadDraft(firstRouteId)
+    if (handoffMapAssetId) await preparePlanningHandoff(handoffSiteId, handoffMapAssetId)
   } catch (error) {
     if (requestId === initializeRequest) {
       initialLoadError.value = errorMessage(error, '请检查网络连接、登录状态和后端服务')
+      if (pageRoute.query.mapAssetId) clearPlanningHandoffQuery()
     }
   } finally {
     if (requestId === initializeRequest) {
@@ -480,10 +534,11 @@ async function loadRoutePage(page: number) {
 }
 
 async function selectRoute(id: string) {
-  if (id === selectedRouteId.value) return
-  if (!(await confirmDiscardChanges())) return
+  if (id === selectedRouteId.value) return true
+  if (!(await confirmDiscardChanges())) return false
   selectedRouteId.value = id
   await loadDraft(id)
+  return true
 }
 
 async function loadDraft(routeId: string) {
@@ -541,11 +596,9 @@ async function loadAvailableMapAssets(siteId: string) {
   }
 }
 
-function onMapAssetChange(mapAssetId: string) {
-  selectedMapAssetId.value = mapAssetId || ''
-  pendingMapFiles.value = null
-  hasUnsavedChanges.value = true
-  draftSaveState.value = 'unsaved'
+async function onMapAssetChange(value: unknown) {
+  const mapAssetId = typeof value === 'string' ? value : ''
+  if (mapAssetId) await applyMapAssetSelection(mapAssetId)
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -553,8 +606,8 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 async function createRoute() {
-  if (creatingRoute.value || savingRoute.value) return
-  if (!(await confirmDiscardChanges())) return
+  if (creatingRoute.value || savingRoute.value) return null
+  if (!(await confirmDiscardChanges())) return null
   creatingRoute.value = true
   try {
     const siteId = selectedSiteId.value
@@ -571,8 +624,10 @@ async function createRoute() {
     selectedRouteId.value = route.id
     await loadDraft(route.id)
     ElMessage.success('路线已创建，请加载 YAML/PGM 地图并开始标注')
+    return route
   } catch (error) {
     ElMessage.error(errorMessage(error, '路线创建失败'))
+    return null
   } finally {
     creatingRoute.value = false
   }
@@ -704,6 +759,120 @@ async function copyRoute() {
 
 function openRouteImport() {
   editorRef.value?.openRouteImport()
+}
+
+function queryText(value: unknown) {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+
+async function preparePlanningHandoff(siteId: string, mapAssetId: string) {
+  const asset = await requireUsableMapAsset(mapAssetId, siteId)
+  mapAssets.value = availableMapAssets([...mapAssets.value.filter(item => item.id !== asset.id), asset], siteId)
+  planningHandoffAsset.value = asset
+  planningHandoffRouteId.value = '__new__'
+  planningHandoffVisible.value = true
+}
+
+function clearPlanningHandoffQuery() {
+  if (!pageRoute.query.siteId && !pageRoute.query.mapAssetId) return
+  const query = { ...pageRoute.query }
+  delete query.siteId
+  delete query.mapAssetId
+  void router.replace({ query })
+}
+
+async function applyPlanningHandoff() {
+  const asset = planningHandoffAsset.value
+  if (!asset || !planningHandoffRouteId.value || applyingPlanningHandoff.value) return
+  applyingPlanningHandoff.value = true
+  try {
+    if (planningHandoffRouteId.value === '__new__') {
+      const created = await createRoute()
+      if (!created) return
+    } else if (!(await selectRoute(planningHandoffRouteId.value))) {
+      return
+    }
+    await nextTick()
+    const applied = await applyMapAssetSelection(asset.id)
+    if (!applied && selectedMapAssetId.value !== asset.id) return
+    planningHandoffVisible.value = false
+    ElMessage.success('审核地图已加载，可以开始路线标注')
+  } finally {
+    applyingPlanningHandoff.value = false
+  }
+}
+
+async function requireUsableMapAsset(mapAssetId: string, siteId: string) {
+  const asset = await resourcesApi.getMapAsset(mapAssetId)
+  if (asset.status !== 'AVAILABLE') throw new Error('目标地图已不再是审核通过状态，请返回建图审核页确认')
+  if (asset.siteId !== siteId) throw new Error('目标地图不属于当前站点，已拒绝加载')
+  if (asset.filesReady === false) throw new Error('目标地图文件不完整，请让机器人重新上传')
+  return asset
+}
+
+async function applyMapAssetSelection(mapAssetId: string) {
+  if (!currentRoute.value) {
+    ElMessage.warning('请先选择或新建路线')
+    return false
+  }
+  if (mapAssetId === selectedMapAssetId.value) return true
+  mapSwitching.value = true
+  try {
+    const asset = await requireUsableMapAsset(mapAssetId, currentRoute.value.siteId)
+    if (!(await confirmUnsavedMapSwitch())) return false
+    const annotationMode = await chooseAnnotationModeForMapSwitch()
+    if (!annotationMode) return false
+    if (annotationMode === 'clear') editorRef.value?.clearRouteAnnotations()
+
+    mapAssets.value = availableMapAssets([...mapAssets.value.filter(item => item.id !== asset.id), asset], currentRoute.value.siteId)
+    pendingMapFiles.value = null
+    selectedMapAssetId.value = asset.id
+    draftValidation.value = null
+    hasUnsavedChanges.value = true
+    draftSaveState.value = 'unsaved'
+    ElMessage.info(`正在加载地图 ${asset.yamlName}`)
+    return true
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '地图加载前校验失败'))
+    return false
+  } finally {
+    mapSwitching.value = false
+  }
+}
+
+async function confirmUnsavedMapSwitch() {
+  if (!hasUnsavedChanges.value) return true
+  try {
+    await ElMessageBox.confirm(
+      '当前路线存在未保存修改。切换地图会继续修改本地草稿，请确认是否继续。',
+      '未保存的路线',
+      { type: 'warning', confirmButtonText: '继续切换', cancelButtonText: '暂不切换' },
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function chooseAnnotationModeForMapSwitch(): Promise<'clear' | 'keep' | null> {
+  if (!editorRef.value?.hasRouteAnnotations()) return 'clear'
+  try {
+    await ElMessageBox.confirm(
+      '现有起点、巡检点和禁行区坐标基于旧地图。清空后更安全；如确认两张地图坐标系完全一致，也可以保留。',
+      '处理已有地图标注',
+      {
+        type: 'warning',
+        distinguishCancelAndClose: true,
+        closeOnClickModal: false,
+        confirmButtonText: '清空并切换',
+        cancelButtonText: '保留坐标',
+      },
+    )
+    return 'clear'
+  } catch (action) {
+    return action === 'cancel' ? 'keep' : null
+  }
 }
 
 async function validateDraft() {
@@ -891,6 +1060,22 @@ function formatTime(value?: string | null) {
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false })
 }
 
+function mapAssetTimeLabel(asset: MapAsset) {
+  const value = asset.capturedAt || asset.createdAt
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '时间未知'
+  const prefix = asset.capturedAt ? '建图' : '上传'
+  const time = date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  return `${prefix} ${time}`
+}
+
 async function confirmDiscardChanges() {
   if (!hasUnsavedChanges.value) return true
   try {
@@ -937,6 +1122,105 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
 <style scoped>
 .site-select {
   width: 220px;
+}
+
+.planning-handoff {
+  display: grid;
+  gap: 16px;
+}
+
+.planning-handoff-map {
+  min-width: 0;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #cfe0d9;
+  border-left: 4px solid #0b9a61;
+  border-radius: 6px;
+  background: #f5faf8;
+}
+
+.planning-handoff-map > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: #173f4a;
+  color: #fff;
+  font-size: 21px;
+}
+
+.planning-handoff-map small,
+.planning-handoff-map strong,
+.planning-handoff-map p,
+.route-option-copy strong,
+.route-option-copy small {
+  display: block;
+}
+
+.planning-handoff-map small {
+  color: #6e817b;
+  font-size: 11px;
+}
+
+.planning-handoff-map strong {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #163942;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planning-handoff-map p {
+  margin: 3px 0 0;
+  color: #687d78;
+  font-size: 11px;
+}
+
+.planning-handoff-intro {
+  margin: 0;
+  color: #65758a;
+  font-size: 13px;
+}
+
+.planning-route-options {
+  max-height: 310px;
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.planning-route-options :deep(.el-radio.is-bordered) {
+  width: 100%;
+  height: auto;
+  min-height: 58px;
+  margin: 0;
+  padding: 10px 14px;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.planning-route-options :deep(.el-radio__label) {
+  min-width: 0;
+  flex: 1;
+}
+
+.route-option-copy strong {
+  overflow: hidden;
+  color: #263b54;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-option-copy small {
+  margin-top: 3px;
+  color: #8290a2;
+  font-size: 11px;
 }
 
 .workspace-card :deep(.el-card__body) {
@@ -1570,6 +1854,33 @@ onBeforeRouteLeave(() => confirmDiscardChanges())
   border: 0;
   box-shadow: none;
   background: transparent;
+}
+
+.map-asset-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+  width: 100%;
+}
+
+.map-asset-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-asset-option-time {
+  flex: 0 0 auto;
+  color: #7a8ba3;
+  font-size: 12px;
+}
+
+:global(.route-map-asset-popper) {
+  min-width: min(460px, calc(100vw - 24px)) !important;
+  max-width: calc(100vw - 24px);
 }
 
 .status-dot {

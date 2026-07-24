@@ -57,8 +57,12 @@ public class TaskExecutionControlService {
       return lifecycle.detail(taskId);
     }
     if (!robotProperties.isBridgeMode()) throw ApiException.conflict("当前环境未启用 Bridge 任务控制模式");
-    TaskExecutionEntity execution = executions.findByTaskIdForStart(taskId)
-      .orElseThrow(() -> ApiException.conflict("任务未绑定不可变执行快照"));
+    Map<String, Object> task = dataStore.get(DataCategory.TASK, taskId);
+    String executionId = text(task.get("executionId"));
+    TaskExecutionEntity execution = nonBlank(executionId)
+      ? executions.findByExecutionIdForUpdate(executionId).orElse(null)
+      : null;
+    if (execution == null) throw ApiException.conflict("任务未绑定不可变执行快照");
     requireBoundTask(taskId, execution);
     requireLegalStatus(execution, action);
     RobotHeartbeatStatusView heartbeat = heartbeats.detail(execution.getRobotId());
@@ -241,6 +245,7 @@ public class TaskExecutionControlService {
     try { return Instant.parse(value).plusSeconds(2).isAfter(now); } catch (Exception ignored) { return false; }
   }
   private static boolean same(Object actual, String expected) { return Objects.equals(actual == null ? "" : String.valueOf(actual).trim(), expected); }
+  private static String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }
   private static boolean nonBlank(String value) { return value != null && !value.isBlank(); }
   private static String safeCode(String value) {
     String result = nonBlank(value) ? value.replaceAll("[^A-Za-z0-9_]", "_").toUpperCase() : "CONTROL_ERROR";

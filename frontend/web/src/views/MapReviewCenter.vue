@@ -80,7 +80,12 @@
               <dt>点数量</dt><dd>{{ formatPoints(selectedScene.pointCount) }}</dd><dt>文件大小</dt><dd>{{ formatSceneFileSize(selectedScene.fileSize) }}</dd>
               <dt>坐标系</dt><dd>{{ selectedScene.coordinateSystem }}</dd><dt>单位</dt><dd>{{ selectedScene.unit }}</dd>
             </dl>
-            <div v-if="selectedMap" class="file-actions"><el-button size="small" :disabled="!yamlText" @click="yamlVisible = !yamlVisible"><el-icon><Document /></el-icon>{{ yamlVisible ? '收起 YAML' : '查看 YAML' }}</el-button><el-button size="small" :disabled="selectedMap.filesReady === false" @click="downloadMapYaml(selectedMap)">YAML</el-button><el-button size="small" :disabled="selectedMap.filesReady === false" @click="downloadMapPgm(selectedMap)">PGM</el-button></div>
+            <div v-if="selectedMap" class="file-actions">
+              <el-button v-if="selectedMap.status === 'AVAILABLE' && can('route:edit')" type="primary" size="small" :disabled="selectedMap.filesReady === false" @click="planWithMap(selectedMap)"><el-icon><MapLocation /></el-icon>用于路线规划</el-button>
+              <el-button size="small" :disabled="!yamlText" @click="yamlVisible = !yamlVisible"><el-icon><Document /></el-icon>{{ yamlVisible ? '收起 YAML' : '查看 YAML' }}</el-button>
+              <el-button size="small" :disabled="selectedMap.filesReady === false" @click="downloadMapYaml(selectedMap)">YAML</el-button>
+              <el-button size="small" :disabled="selectedMap.filesReady === false" @click="downloadMapPgm(selectedMap)">PGM</el-button>
+            </div>
             <div v-else-if="selectedScene" class="file-actions"><el-button size="small" :disabled="!selectedScene.filesReady" @click="downloadSceneMetadata(selectedScene)">Metadata</el-button><el-button size="small" :disabled="!selectedScene.filesReady" @click="downloadSceneModel(selectedScene)">原始模型</el-button></div>
             <pre v-if="selectedMap && yamlVisible && yamlText" class="yaml-source">{{ yamlText }}</pre>
           </section>
@@ -103,7 +108,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PointCloudViewer from '@/components/PointCloudViewer.vue'
@@ -127,6 +132,7 @@ const typeOptions = [{ label: '全部', value: 'all' }, { label: '二维地图',
 const stageTypeOptions = [{ label: '二维地图', value: 'map' }, { label: '三维场景', value: 'scene' }]
 const statusOptions = [{ label: '待审核', value: 'PENDING_REVIEW' }, { label: '已通过', value: 'AVAILABLE' }, { label: '已驳回', value: 'REJECTED' }]
 const route = useRoute()
+const router = useRouter()
 const siteStore = useSiteStore(); const robotStore = useRobotStore(); const authStore = useAuthStore(); const { can } = usePermission()
 const mapAssets = ref<MapAsset[]>([]); const sceneAssets = ref<SceneAsset[]>([])
 const typeFilter = ref<AssetTypeFilter>(route.query.type === 'scene' ? 'scene' : 'all'); const statusFilter = ref<ReviewStatus>('PENDING_REVIEW'); const siteFilter = ref(''); const robotFilter = ref(''); const selectedKey = ref(''); const currentPage = ref(1); const pageSize = 10
@@ -263,6 +269,13 @@ async function submitSelectedReview() {
 }
 
 function resetReviewDraft() { reviewChoice.value = 'APPROVE'; reviewDraft.value = '' }
+function planWithMap(asset: MapAsset) {
+  if (asset.status !== 'AVAILABLE' || asset.filesReady === false) {
+    ElMessage.warning('地图当前不可用于路线规划，请刷新后重试')
+    return
+  }
+  void router.push({ path: '/routes', query: { siteId: asset.siteId, mapAssetId: asset.id } })
+}
 async function downloadMapYaml(asset: MapAsset) { await download(resourcesApi.getMapAssetYaml(asset.id), asset.yamlName) }
 async function downloadMapPgm(asset: MapAsset) { await download(resourcesApi.getMapAssetPgm(asset.id), asset.pgmName) }
 async function downloadSceneMetadata(asset: SceneAsset) { await download(resourcesApi.getSceneAssetMetadata(asset.id), `${asset.id}-metadata.json`) }

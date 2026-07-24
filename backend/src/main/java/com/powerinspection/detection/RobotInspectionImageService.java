@@ -262,10 +262,15 @@ public class RobotInspectionImageService {
     Map<String, Object> route = dataStore.find(DataCategory.ROUTE, routeId);
     if (route == null) throw ApiException.notFound("任务关联路线不存在");
 
-    TaskExecutionEntity execution = executionRepository.findById(normalizedTaskId).orElse(null);
+    String currentExecutionId = text(task.get("executionId"));
+    String requestedExecutionId = text(executionId);
+    String resolvedExecutionId = requestedExecutionId != null ? requestedExecutionId : currentExecutionId;
+    TaskExecutionEntity execution = resolvedExecutionId == null
+      ? null
+      : executionRepository.findByExecutionId(resolvedExecutionId).orElse(null);
     if (requireExecution && execution == null) throw ApiException.badRequest("正式机器人图片必须关联执行实例");
     if (execution != null) {
-      if (StringUtils.hasText(executionId) && !Objects.equals(executionId, execution.getExecutionId())) {
+      if (currentExecutionId != null && !Objects.equals(currentExecutionId, execution.getExecutionId())) {
         throw ApiException.badRequest("executionId 与任务执行实例不匹配");
       }
       if (!Objects.equals(normalizedRobotId, execution.getRobotId())) {

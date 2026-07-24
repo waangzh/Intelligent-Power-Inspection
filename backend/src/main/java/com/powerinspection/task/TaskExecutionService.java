@@ -19,7 +19,7 @@ public class TaskExecutionService {
   @Transactional
   public TaskExecutionEntity bind(Map<String, Object> task, RouteRevisionEntity revision) {
     String taskId = String.valueOf(task.get("id"));
-    TaskExecutionEntity existing = repository.findById(taskId).orElse(null);
+    TaskExecutionEntity existing = repository.findByTaskIdOrderByCreatedAtDesc(taskId).stream().findFirst().orElse(null);
     if (existing != null) {
       if (!revision.getId().equals(existing.getRouteRevisionId())) {
         throw ApiException.conflict("任务已绑定其他路线修订");
@@ -43,18 +43,13 @@ public class TaskExecutionService {
 
   @Transactional
   public void delete(String taskId) {
-    repository.deleteById(taskId);
+    repository.deleteAllByTaskId(taskId);
   }
 
   public void requireDeletable(String taskId) {
-    repository
-        .findById(taskId)
-        .ifPresent(
-            execution -> {
-              if (!TaskExecutionStatus.CREATED.name().equals(execution.getStatus())
-                  && !TaskExecutionStatus.TERMINAL.contains(execution.getStatus())) {
-                throw ApiException.badRequest("任务执行中不能删除");
-              }
-            });
+    boolean active = repository.findByTaskIdOrderByCreatedAtDesc(taskId).stream()
+        .anyMatch(execution -> !TaskExecutionStatus.CREATED.name().equals(execution.getStatus())
+            && !TaskExecutionStatus.TERMINAL.contains(execution.getStatus()));
+    if (active) throw ApiException.badRequest("任务执行中不能删除");
   }
 }

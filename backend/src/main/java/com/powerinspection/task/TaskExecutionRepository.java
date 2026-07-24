@@ -12,10 +12,9 @@ import org.springframework.data.repository.query.Param;
 public interface TaskExecutionRepository extends JpaRepository<TaskExecutionEntity, String> {
   Optional<TaskExecutionEntity> findByExecutionId(String executionId);
   Optional<TaskExecutionEntity> findByStartRequestId(String startRequestId);
-
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("select e from TaskExecutionEntity e where e.taskId = :taskId")
-  Optional<TaskExecutionEntity> findByTaskIdForStart(@Param("taskId") String taskId);
+  List<TaskExecutionEntity> findByTaskIdOrderByCreatedAtDesc(String taskId);
+  boolean existsByTaskId(String taskId);
+  long deleteAllByTaskId(String taskId);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select e from TaskExecutionEntity e where e.executionId = :executionId")

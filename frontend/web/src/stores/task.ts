@@ -40,6 +40,8 @@ export const useTaskStore = defineStore('task', () => {
     const result = await resourcesApi.listTasks(query)
     tasks.value = result.items
     total.value = result.total
+    await refreshExecutions()
+    startExecutionPolling()
   }
 
   async function loadRecords(query: ListQuery = { size: 20 }) {
@@ -84,6 +86,8 @@ export const useTaskStore = defineStore('task', () => {
   async function startInspection(taskId: string, startMode: TaskStartMode) {
     const execution = await resourcesApi.startTask(taskId, startMode, uid('start'))
     executions.value = { ...executions.value, [taskId]: execution }
+    const task = getTaskById(taskId)
+    if (task) updateLocalTask({ ...task, executionId: execution.executionId })
     await refreshExecution(taskId)
     startExecutionPolling()
     return execution

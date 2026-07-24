@@ -390,6 +390,7 @@ export interface InspectionTask {
 export interface TaskExecution {
   taskId: string
   executionId: string
+  previousExecutionId?: string | null
   routeRevisionId: string
   robotId: string
   deploymentId?: string | null
